@@ -1,8 +1,28 @@
-CLAUDE.md
-images/
-.swarm/
-.claude-flow/
-.claude/
-.firebase/
-.agents/
-.superpowers/
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Environment — real env files never committed; the example is
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Flutter/Dart (sdk/ sub-project)
+.dart_tool/
+sdk/**/pubspec.lock
+.flutter-plugins*
