@@ -4,7 +4,7 @@
 
 **Goal:** Stand up the MyAmpMix monorepo root (pnpm 10 workspace, Node 22, ESLint 9 flat + Prettier 3), the local Docker Compose infrastructure (ClickHouse 24.8 with the authoritative schema, Postgres 17, Redis 7, all healthchecked), and a path-filtered GitHub Actions CI skeleton that passes today and picks up backend/dashboard/sdk packages automatically when they land.
 
-**Architecture:** A pnpm workspace at the repo root fans out lint/typecheck/test to future packages via `--if-present`, so root scripts and CI are stable interfaces from day zero. Local databases run in one Compose project with healthchecks and named volumes; ClickHouse is initialized from `infra/clickhouse/init.sql`, which is the contracts §5 DDL verbatim. CI uses `dorny/paths-filter` plus in-job existence guards so jobs for not-yet-scaffolded packages skip gracefully.
+**Architecture:** A pnpm workspace at the repo root fans out lint/typecheck/test to future packages via `--if-present`, so root scripts and CI are stable interfaces from day zero. Local databases run in one Compose project with healthchecks and named volumes; ClickHouse is initialized from `infra/clickhouse/init.sql`, which is schema-identical to contracts §5, wrapped for idempotent container init (adds `SET allow_experimental_json_type`, `CREATE DATABASE IF NOT EXISTS`, and `IF NOT EXISTS` guards). CI uses `dorny/paths-filter` plus in-job existence guards so jobs for not-yet-scaffolded packages skip gracefully.
 
 **Tech Stack:** pnpm 10 · Node 22 · TypeScript 5.8 · ESLint 9 (flat) · Prettier 3 · Docker Compose · `clickhouse/clickhouse-server:24.8` · `postgres:17-alpine` · `redis:7-alpine` · GitHub Actions.
 
@@ -22,7 +22,7 @@ Copied from `docs/superpowers/specs/2026-07-02-shared-contracts.md` — these ex
 - Redis `redis:7-alpine` — host port **6379** — no auth locally.
 - Backend dev port **8080**; dashboard dev port **5173** (owned by those sub-projects; documented here only in `.env.example`/README).
 - Backend env vars (contracts §3): `NODE_ENV`, `PORT=8080`, `DATABASE_URL=postgresql://myampmix:myampmix_dev@localhost:5432/myampmix`, `CLICKHOUSE_URL=http://localhost:8123`, `CLICKHOUSE_USER=default`, `CLICKHOUSE_PASSWORD=myampmix_dev`, `CLICKHOUSE_DB=analytics`, `REDIS_URL=redis://localhost:6379`, `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` (min 32 chars), `INGEST_MAX_BATCH=100`, `INGEST_MAX_BODY_KB=1024`.
-- ClickHouse DDL: contracts §5 **verbatim** (tables `analytics.events`, `analytics.user_profiles`, `analytics.identity_mappings`).
+- ClickHouse DDL: schema-identical to contracts §5 (tables `analytics.events`, `analytics.user_profiles`, `analytics.identity_mappings`); `infra/clickhouse/init.sql` wraps it for idempotent container init (adds `SET allow_experimental_json_type`, `CREATE DATABASE IF NOT EXISTS`, and `IF NOT EXISTS` guards) rather than reproducing it byte-for-byte.
 - Commit style: Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`, `ci:`).
 - Coverage floors (enforced later inside each package's test command): backend 85%, SDK 85%, dashboard 75%.
 - **No paid services anywhere.**
@@ -173,7 +173,7 @@ Expected output: `[main (root-commit) …] chore: scaffold monorepo root (pnpm 1
 
 **Interfaces:**
 - Consumes: root devDependencies and `lint`/`format:check` scripts from Task 1.
-- Produces: root flat config `eslint.config.mjs` that per-package configs will import and extend (`import rootConfig from '../eslint.config.mjs'`); Prettier settings inherited by every package (Prettier resolves the nearest config upward). Task 5's `root` CI job runs exactly `pnpm lint` and `pnpm format:check`.
+- Produces: root flat config `eslint.config.mjs` that per-package configs will import and extend (`import rootConfig from '../eslint.config.mjs'`); Prettier settings inherited by every package (Prettier resolves the nearest config upward); `.prettierignore` excludes all YAML (`*.yml`/`*.yaml`) so workflow/compose/Dependabot files keep hand-controlled quoting instead of being reformatted. Task 5's `root` CI job runs exactly `pnpm lint` and `pnpm format:check`.
 
 - [ ] **Step 1: Create `eslint.config.mjs`** with this complete content:
 
@@ -226,7 +226,7 @@ export default tseslint.config(
 }
 ```
 
-- [ ] **Step 3: Create `.prettierignore`** with this complete content:
+- [ ] **Step 3: Create `.prettierignore`** (YAML is excluded from Prettier entirely — workflow, compose, and Dependabot YAML keep hand-controlled quoting rather than being reformatted to fight `singleQuote: true` on their double-quoted scalars) with this complete content:
 
 ```
 node_modules/
@@ -234,6 +234,8 @@ dist/
 build/
 coverage/
 pnpm-lock.yaml
+*.yml
+*.yaml
 # Dart is formatted by `dart format`
 sdk/
 # Hand-authored specs/plans are not reformatted
@@ -266,7 +268,7 @@ Expected output: `[main …] chore: add ESLint 9 flat config and Prettier 3 root
 - Create: `/infra/clickhouse/init.sql`
 
 **Interfaces:**
-- Consumes: DDL from contracts §5 (copied verbatim below — do not "improve" it).
+- Consumes: DDL from contracts §5 — schema-identical to contracts §5, wrapped below for idempotent container init (adds `SET allow_experimental_json_type`, `CREATE DATABASE IF NOT EXISTS`, and `IF NOT EXISTS` guards); do not alter the table/column definitions themselves.
 - Produces: `infra/clickhouse/init.sql`, mounted by Task 4's compose file at `/docker-entrypoint-initdb.d/init.sql`; tables `analytics.events`, `analytics.user_profiles`, `analytics.identity_mappings` that the backend sub-project's ingestion module writes to.
 
 - [ ] **Step 1: Create `infra/clickhouse/init.sql`** with this complete content:
@@ -454,6 +456,7 @@ JWT_REFRESH_SECRET=dev_only_refresh_secret_min_32_chars_long!
 # Ingestion limits
 INGEST_MAX_BATCH=100
 INGEST_MAX_BODY_KB=1024
+INGEST_RATE_LIMIT_PER_MIN=1000 # optional; backend falls back to this default when unset
 ```
 
 - [ ] **Step 3: Start the stack and wait for health.**
@@ -712,7 +715,7 @@ jobs:
         working-directory: sdk/flutter_analytics
 ```
 
-- [ ] **Step 2: Create `.github/dependabot.yml`** with this complete content (`pub` ecosystem is added by the SDK sub-project when `sdk/flutter_analytics/` exists — Dependabot errors on missing directories):
+- [ ] **Step 2: Create `.github/dependabot.yml`** with this complete content (`pub` ecosystem is added by the SDK sub-project when `sdk/flutter_analytics/` exists — Dependabot errors on missing directories; the `/infra` entry uses the `docker-compose` ecosystem, not `docker`, since `/infra` holds Compose files, not a Dockerfile):
 
 ```yaml
 version: 2
@@ -730,7 +733,7 @@ updates:
     schedule:
       interval: weekly
 
-  - package-ecosystem: docker
+  - package-ecosystem: docker-compose
     directory: "/infra"
     schedule:
       interval: weekly

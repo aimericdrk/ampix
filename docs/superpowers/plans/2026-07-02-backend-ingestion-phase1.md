@@ -121,7 +121,7 @@ module.exports = {
 };
 ```
 
-- [ ] Run `pnpm install` at the repo root (links the new workspace package).
+- [ ] Run `pnpm install` at the repo root (links the new workspace package; this rewrites the root `pnpm-lock.yaml` — stage and commit it alongside `packages/contracts` in this task's commit, since it's the one file outside `backend/`/`packages/contracts/` that legitimately changes).
 - [ ] Write the failing test `packages/contracts/test/ingest.spec.ts` (COMPLETE file):
 
 ```ts
@@ -375,12 +375,12 @@ export interface IngestResponse {
 export * from './ingest';
 ```
 
-- [ ] Run `pnpm --filter @myampmix/contracts test` — expected **PASS**: `Tests: 18 passed`.
+- [ ] Run `pnpm --filter @myampmix/contracts test` — expected **PASS**: `Tests: 24 passed`.
 - [ ] Run `pnpm --filter @myampmix/contracts build` — expected: `dist/` emitted with `.d.ts` files, no errors.
 - [ ] Commit:
 
 ```bash
-git add packages/contracts
+git add packages/contracts pnpm-lock.yaml
 git commit -m "feat(contracts): zod schemas and types for ingest event/profile payloads"
 ```
 
@@ -422,7 +422,7 @@ git commit -m "feat(contracts): zod schemas and types for ingest event/profile p
     "start:dev": "nest start --watch",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:cov": "jest --coverage",
+    "test:cov": "jest --config jest.config.coverage.js --coverage --runInBand",
     "test:int": "jest --config test/jest-integration.config.js --runInBand",
     "test:e2e": "jest --config test/jest-e2e.config.js --runInBand",
     "prisma": "prisma"
@@ -434,6 +434,7 @@ git commit -m "feat(contracts): zod schemas and types for ingest event/profile p
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
     "@prisma/client": "^6.8.0",
+    "express": "^5.1.0",
     "ioredis": "^5.6.0",
     "nestjs-pino": "^4.4.0",
     "pino": "^9.6.0",
@@ -1451,7 +1452,7 @@ git commit -m "feat(backend): prisma schema per contracts §6 with first migrati
 - Produces: `REDIS = 'REDIS_CLIENT'` (injection token for an `ioredis` `Redis` instance), `RedisModule` (global, closes connection on shutdown)
 - Produces: `interface EventRow` (one field per contracts §5 `events` column; `timestamp`/`server_timestamp` as `'YYYY-MM-DD HH:mm:ss.SSS'` strings; `properties: Record<string, unknown>`), `interface ProfileRow { project_id: string; distinct_id: string; properties: Record<string, unknown>; updated_at: string }`, `toChDateTime64(ms: number): string`
 - Produces: `class ClickHouseService implements EventSink, OnApplicationShutdown { insertEvents(rows: EventRow[]): Promise<void>; insertProfiles(rows: ProfileRow[]): Promise<void>; query<T>(sql: string, params?: Record<string, unknown>): Promise<T[]>; ping(): Promise<boolean> }`, `interface EventSink { insertEvents(rows: EventRow[]): Promise<void> }`, `ClickHouseModule` (global)
-- Produces test helper: `applyClickHouseSchema(client: ClickHouseClient): Promise<void>` (DDL verbatim from contracts §5, `CREATE TABLE IF NOT EXISTS` variant)
+- Produces test helper: `applyClickHouseSchema(client: ClickHouseClient): Promise<void>` (reads and executes `infra/clickhouse/init.sql` — the contracts §5 DDL created by the infra plan — verbatim, so there is no second copy of the DDL to keep in sync)
 - Consumes: `APP_CONFIG`/`AppConfig` (Task 2).
 
 **Steps:**
@@ -1625,51 +1626,36 @@ export class RedisModule implements OnApplicationShutdown {
 }
 ```
 
-- [ ] Create `backend/test/integration/helpers/clickhouse-schema.ts` (COMPLETE file — DDL verbatim from shared contracts §5 with `IF NOT EXISTS` added; keep in sync with `infra/clickhouse/init.sql`):
+- [ ] Create `backend/test/integration/helpers/clickhouse-schema.ts` (COMPLETE file — reads `infra/clickhouse/init.sql` (contracts §5 DDL, created by the infra plan; already exists by the time this plan runs) at test time, splits it into statements on `;` filtering out empty/comment-only fragments, and executes them sequentially against the test ClickHouse container — no second copy of the DDL to keep in sync):
 
 ```ts
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { ClickHouseClient } from '@clickhouse/client';
 
-/** Verbatim from docs/superpowers/specs/2026-07-02-shared-contracts.md §5 (+ IF NOT EXISTS). */
-export const CLICKHOUSE_DDL: string[] = [
-  `CREATE TABLE IF NOT EXISTS analytics.events (
-    project_id    UUID,
-    insert_id     UUID,
-    event         LowCardinality(String) CODEC(ZSTD(3)),
-    distinct_id   String CODEC(ZSTD(3)),
-    anon_id       String CODEC(ZSTD(3)),
-    session_id    UUID,
-    timestamp     DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),
-    server_timestamp DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),
-    properties    JSON,
-    app_version   LowCardinality(String), app_build LowCardinality(String),
-    os            LowCardinality(String), os_version LowCardinality(String),
-    device_model  LowCardinality(String), device_manufacturer LowCardinality(String),
-    locale        LowCardinality(String), timezone LowCardinality(String),
-    screen_width  UInt16, screen_height UInt16,
-    network       LowCardinality(String), sdk_version LowCardinality(String),
-    utm_source    LowCardinality(String), utm_medium LowCardinality(String),
-    utm_campaign  String, utm_content String, utm_term String,
-    first_utm_source LowCardinality(String), first_utm_campaign String,
-    install_referrer String CODEC(ZSTD(3))
-  )
-  ENGINE = ReplacingMergeTree
-  PARTITION BY toYYYYMM(timestamp)
-  ORDER BY (project_id, event, timestamp, insert_id)`,
-  `CREATE TABLE IF NOT EXISTS analytics.user_profiles (
-    project_id UUID, distinct_id String,
-    properties JSON, updated_at DateTime64(3, 'UTC')
-  ) ENGINE = ReplacingMergeTree(updated_at)
-  ORDER BY (project_id, distinct_id)`,
-  `CREATE TABLE IF NOT EXISTS analytics.identity_mappings (
-    project_id UUID, anon_id String, canonical_id String,
-    created_at DateTime64(3, 'UTC')
-  ) ENGINE = ReplacingMergeTree(created_at)
-  ORDER BY (project_id, anon_id)`,
-];
+/** `infra/clickhouse/init.sql` (shared contracts §5 DDL), resolved from the repo root. */
+const INIT_SQL_PATH = path.resolve(__dirname, '../../../..', 'infra/clickhouse/init.sql');
 
+function isCommentOrBlankLine(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.length === 0 || trimmed.startsWith('--');
+}
+
+/** Splits a `.sql` file into individual statements on `;`, dropping empty/comment-only fragments. */
+export function splitSqlStatements(sql: string): string[] {
+  return sql
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0 && !statement.split('\n').every(isCommentOrBlankLine));
+}
+
+/**
+ * Applies the exact same DDL the production ClickHouse container runs on first boot
+ * (`infra/clickhouse/init.sql`) to a Testcontainers instance, statement by statement.
+ */
 export async function applyClickHouseSchema(client: ClickHouseClient): Promise<void> {
-  for (const statement of CLICKHOUSE_DDL) {
+  const sql = readFileSync(INIT_SQL_PATH, 'utf-8');
+  for (const statement of splitSqlStatements(sql)) {
     await client.command({
       query: statement,
       clickhouse_settings: { allow_experimental_json_type: 1 },
@@ -3446,7 +3432,7 @@ export class AppModule {}
 ```
 
 - [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 55 passed` (48 + 5 health + 2 shutdown).
-- [ ] Manual SIGTERM check (optional but recommended): `docker compose -f infra/docker-compose.yml up -d`, `pnpm --filter @myampmix/backend start:dev`, then `kill -TERM <pid>` — expected: process logs shutdown and exits 0 within ~2 s (drained connections, closed pools).
+- [ ] Manual SIGTERM check (optional but recommended): `docker compose -f infra/docker-compose.yml up -d`; dev boot needs the env vars from Task 2's `.env.example` (Zod-validated config crashes on missing `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` otherwise), so run `cp backend/.env.example backend/.env` if `backend/.env` doesn't already exist, then start the server with those vars loaded: `env $(grep -v '^#' backend/.env | xargs) pnpm --filter @myampmix/backend start:dev`; in another terminal, `kill -TERM <pid>` — expected: process logs shutdown and exits 0 within ~2 s (drained connections, closed pools).
 - [ ] Commit:
 
 ```bash
@@ -3459,11 +3445,12 @@ git commit -m "feat(backend): health/readiness endpoints and graceful sigterm sh
 ### Task 12: Hardening e2e — auth matrix, rate limit, dedup, body limit — and the coverage gate
 
 **Files:**
+- Create: `backend/jest.config.coverage.js`
 - Test: `backend/test/e2e/ingest-hardening.e2e-spec.ts`
 
 **Interfaces:**
 - Consumes: `startTestStack(envOverrides)` (Task 9) with `INGEST_RATE_LIMIT_PER_MIN=5` and `INGEST_MAX_BODY_KB=2` so 429/413 are cheap to trigger; everything else is the production wiring.
-- Produces: nothing new — this task proves the contract end to end and locks the 85% coverage floor.
+- Produces: `backend/jest.config.coverage.js`, the config `test:cov` (Task 2's `package.json`) runs — combines the unit (`jest.config.js`, Task 2) and integration (`test/jest-integration.config.js`, Task 4) projects into one coverage report, since unit tests alone under-cover files only exercised by the integration suite (`ClickHouseService`, `PrismaService`, `jsonBodyParser`, `rate-limiter.ts`). This task otherwise proves the contract end to end and locks the 85% coverage floor.
 
 **Steps:**
 
@@ -3604,7 +3591,17 @@ describe('/ingest hardening (e2e): auth, limits, dedup, health', () => {
 ```
 
 - [ ] Run `pnpm --filter @myampmix/backend test:e2e` — expected **PASS**: `Tests: 17 passed` (6 events + 3 profiles + 8 hardening). No implementation change should be needed; if any hardening test fails, fix the implementation (not the test) — every assertion is a direct contracts §4 requirement.
-- [ ] Run the coverage gate: `pnpm --filter @myampmix/backend test:cov` — expected **PASS** with `All files` lines coverage ≥ 85% (jest exits non-zero below the `coverageThreshold`, which is the CI gate).
+- [ ] Create `backend/jest.config.coverage.js` (COMPLETE file — the unit suite alone under-covers files only exercised by the integration suite, e.g. `ClickHouseService`, `PrismaService`, `jsonBodyParser`, `rate-limiter.ts`; `test:cov` therefore runs both projects together with coverage collected across both):
+
+```js
+module.exports = {
+  projects: ['<rootDir>/jest.config.js', '<rootDir>/test/jest-integration.config.js'],
+  collectCoverageFrom: ['src/**/*.ts', '!src/main.ts', '!src/**/*.module.ts', '!src/**/*.spec.ts'],
+  coverageThreshold: { global: { lines: 85 } },
+};
+```
+
+- [ ] Run the coverage gate: `pnpm --filter @myampmix/backend test:cov` — expected **PASS**: runs the unit suite and the integration suite (Testcontainers; Docker must be running) together, with coverage collected across both, `All files` lines coverage ≥ 85% (jest exits non-zero below the `coverageThreshold`, which is the CI gate).
 - [ ] Full verification sweep (all must pass):
 
 ```bash
@@ -3643,7 +3640,7 @@ git commit -m "test(backend): e2e hardening for auth matrix, rate limit, insert_
 - `GET /health` is I/O-free 200; `GET /health/ready` probes Postgres/ClickHouse/Redis and 503s with per-check booleans.
 - SIGTERM drains in-flight requests and closes the Prisma pool, Redis connection, and ClickHouse client (exercised by `app.close()` in every e2e teardown).
 - pino JSON logs carry a request id (honoring inbound `x-request-id`, echoing it back) and redact `authorization`.
-- No files created or modified outside `backend/` and `packages/contracts/`; all commits follow Conventional Commits.
+- No files created or modified outside `backend/` and `packages/contracts/`, except the root `pnpm-lock.yaml`, which is committed whenever dependencies change; all commits follow Conventional Commits.
 
 **Explicitly out of scope for phase 1:** `/api/v1` dashboard endpoints, JWT auth flows, identity-mapping writes, query engine, BullMQ worker, metrics endpoint, OpenAPI emission (phases 2–3 per the backend design spec).
 

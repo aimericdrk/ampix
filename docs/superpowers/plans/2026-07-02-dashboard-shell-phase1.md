@@ -1305,7 +1305,7 @@ export const handlers = [
       access_token: VALID_ACCESS_TOKEN,
       user: { ...TEST_USER, email: body.email, name: body.name },
     };
-    return HttpResponse.json(response, { status: 201 });
+    return HttpResponse.json(response); // 200, per contracts §7 (same as login/refresh)
   }),
 
   http.post('/api/v1/auth/refresh', () => {
@@ -2800,7 +2800,7 @@ export function AppLayout() {
 
 **Interfaces:**
 - Consumes: MSW `handlers` + fixtures (Task 7), full app (Tasks 8–10), `pnpm build` pipeline (Task 1).
-- Produces: `worker` (MSW browser worker, started only when `VITE_ENABLE_MSW=true`); CI-runnable `pnpm e2e`; verified `dist/` (single-page + `config.js` template).
+- Produces: `worker` (MSW browser worker, started only in dev builds (`import.meta.env.DEV`) with `VITE_ENABLE_MSW=true`); CI-runnable `pnpm e2e` (runs against `vite dev`, not a production preview); verified `dist/` (single-page + `config.js` template).
 
 **Steps:**
 
@@ -2814,7 +2814,7 @@ import { handlers } from './handlers';
 export const worker = setupWorker(...handlers);
 ```
 
-- [ ] Modify `dashboard/src/main.tsx` — start MSW before render when the flag is set (statically false in production builds, so the branch and its chunk are eliminated):
+- [ ] Modify `dashboard/src/main.tsx` — start MSW before render only in dev builds with the flag set. Guard on `import.meta.env.DEV` (not on `VITE_ENABLE_MSW` alone): Vite always statically replaces `import.meta.env.DEV` with the literal `false` in production builds — unlike a custom env var such as `VITE_ENABLE_MSW`, which is not reliably define-replaced when unset — so with the `DEV &&` guard Rollup can prove the branch is dead in production and drops it along with its dynamic-import chunk:
 
 ```tsx
 import { StrictMode } from 'react';
@@ -2823,7 +2823,7 @@ import './index.css';
 import { App } from './App';
 
 async function bootstrap(): Promise<void> {
-  if (import.meta.env.VITE_ENABLE_MSW === 'true') {
+  if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_MSW === 'true') {
     const { worker } = await import('./test/msw/browser');
     await worker.start({ onUnhandledRequest: 'bypass' });
   }
@@ -2841,7 +2841,7 @@ async function bootstrap(): Promise<void> {
 void bootstrap();
 ```
 
-- [ ] Create `dashboard/playwright.config.ts` (boots the app against MSW — no backend needed):
+- [ ] Create `dashboard/playwright.config.ts` (boots the app against MSW via the **Vite dev server** — no backend needed. This must stay `vite dev`, not a `vite build` + `vite preview` of the production bundle: `import.meta.env.DEV` is only `true` under `vite dev`/`vite`, which is what lets the `bootstrap()` guard above start the MSW worker here while still being dead-code-eliminated from the production build asserted against in the build-verification step below):
 
 ```ts
 import { defineConfig } from '@playwright/test';

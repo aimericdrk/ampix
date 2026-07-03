@@ -3549,11 +3549,10 @@ void main() {
 - [ ] Run `flutter test test/offline_golden_test.dart` — expect **FAIL** only if any prior task's behavior is wrong (this test exercises Tasks 4–13 end-to-end); with Tasks 1–13 correctly implemented it should **PASS**. If it fails, fix the offending component — do not weaken the test.
 - [ ] Run `flutter analyze` — expect **No issues found**.
 - [ ] Run `flutter test --coverage` — expect all tests **PASS**.
-- [ ] Verify the coverage floor (≥ 85 % lines, excluding generated code):
+- [ ] Verify the coverage floor (≥ 85 % lines, excluding generated code) using a pure awk filter (no `lcov` dependency):
 
 ```bash
-lcov --remove coverage/lcov.info '*.g.dart' -o coverage/lcov.filtered.info 2>/dev/null \
-  || cp coverage/lcov.info coverage/lcov.filtered.info
+awk '/^SF:.*\.g\.dart$/{skip=1} !skip{print} /^end_of_record$/{skip=0}' coverage/lcov.info > coverage/lcov.filtered.info
 awk -F: '/^LF/{lf+=$2} /^LH/{lh+=$2} END{printf "line coverage: %.1f%%\n", 100*lh/lf}' \
   coverage/lcov.filtered.info
 ```
