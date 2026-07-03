@@ -43,7 +43,10 @@ class Uploader {
   }) : _client = client,
        _events = events,
        _profiles = profiles,
-       _serverUrl = serverUrl,
+       // A trailing slash would produce `//ingest/events` → 404 → the 4xx
+       // drop-list would silently delete every batch. Normalize here, the
+       // single place serverUrl is consumed.
+       _serverUrl = serverUrl.replaceFirst(RegExp(r'/+$'), ''),
        _token = token,
        _clock = clock,
        _batchSize = batchSize,
@@ -80,12 +83,19 @@ class Uploader {
 
   /// Drains both queues. Reentrancy-safe; each queue respects its own
   /// backoff deadline unless [force] (the public `MyAmpMix.flush()`).
+  ///
+  /// Never throws: the timer- and size-triggered `unawaited(flush())` calls
+  /// would otherwise leak storage exceptions (drift/sqlite errors, corrupt
+  /// row FormatException) into the host app's zone as unhandled async
+  /// errors. Containment only — corrupt-row eviction is a phase-2 ticket.
   Future<void> flush({bool force = false}) async {
     if (_flushing) return;
     _flushing = true;
     try {
       await _drainEvents(force: force);
       await _drainProfiles(force: force);
+    } on Object catch (error, stackTrace) {
+      _logger.log('flush failed', error, stackTrace);
     } finally {
       _flushing = false;
     }

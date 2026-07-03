@@ -14,6 +14,18 @@ import '../helpers/fake_clock.dart';
 import '../helpers/fixed_random.dart';
 import '../helpers/in_memory_stores.dart';
 
+/// Simulates a corrupt/failing storage layer that later recovers (e.g. a
+/// transient drift/sqlite error or a corrupt row FormatException).
+class FlakyEventStore extends InMemoryEventStore {
+  bool failing = true;
+
+  @override
+  Future<List<StoredEvent>> oldest(int limit) async {
+    if (failing) throw const FormatException('corrupt row');
+    return super.oldest(limit);
+  }
+}
+
 void main() {
   late InMemoryEventStore events;
   late InMemoryProfileOpStore profiles;
@@ -27,11 +39,15 @@ void main() {
     requests = [];
   });
 
-  Uploader build(http.Client client, {double jitter = 0.5}) => Uploader(
+  Uploader build(
+    http.Client client, {
+    double jitter = 0.5,
+    String serverUrl = 'http://localhost:8080',
+  }) => Uploader(
     client: client,
     events: events,
     profiles: profiles,
-    serverUrl: 'http://localhost:8080',
+    serverUrl: serverUrl,
     token: 'mam_0123456789abcdef0123456789abcdef',
     clock: clock,
     batchSize: 20,
@@ -313,6 +329,30 @@ void main() {
     uploader.maybeFlush(20);
     await pumpEventQueue();
     expect(requests, hasLength(1));
+  });
+
+  test('flush never throws when the store fails; delivery resumes once the '
+      'store recovers', () async {
+    final flaky = FlakyEventStore();
+    events = flaky;
+    await events.add(buildEvent(name: 'survivor'), maxQueueSize: 10);
+    final uploader = build(acceptAll());
+
+    // Storage exception (corrupt row) must be contained, not leak into the
+    // host app's zone as an unhandled async error.
+    await expectLater(uploader.flush(), completes);
+    expect(requests, isEmpty);
+
+    flaky.failing = false;
+    await uploader.flush();
+    expect(requests, hasLength(1));
+    expect(await events.count(), 0); // delivered normally after recovery
+  });
+
+  test('strips trailing slashes from serverUrl (no //ingest/events)', () async {
+    await events.add(buildEvent(), maxQueueSize: 10);
+    await build(acceptAll(), serverUrl: 'https://x.example/').flush();
+    expect(requests.single.url.toString(), 'https://x.example/ingest/events');
   });
 
   test('periodic timer flushes every flushInterval', () {
