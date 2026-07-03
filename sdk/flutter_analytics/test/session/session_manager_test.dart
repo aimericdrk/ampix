@@ -92,6 +92,47 @@ void main() {
     },
   );
 
+  test(
+    'background for exactly the timeout (30:00) rotates the session',
+    () async {
+      final session = build();
+      await session.start();
+      clock.advance(const Duration(minutes: 5)); // 5 min of foreground use
+      await session.handleLifecycleState(AppLifecycleState.paused);
+      emitted.clear();
+
+      clock.advance(const Duration(minutes: 30)); // exactly sessionTimeout
+      await session.handleLifecycleState(AppLifecycleState.resumed);
+
+      expect(emitted.map((e) => e.event).toList(), [
+        r'$session_end',
+        r'$session_start',
+        r'$app_open',
+      ]);
+      final end = emitted.first;
+      expect(end.properties[r'$duration_ms'], 5 * 60 * 1000);
+      expect(end.sessionId, 'session-1'); // emitted under the OLD session id
+      expect(session.sessionId, 'session-2');
+    },
+  );
+
+  test(
+    'background for 29:59 (one second under the timeout) keeps the session',
+    () async {
+      final session = build();
+      await session.start();
+      await session.handleLifecycleState(AppLifecycleState.paused);
+      emitted.clear();
+
+      clock.advance(const Duration(minutes: 29, seconds: 59));
+      await session.handleLifecycleState(AppLifecycleState.resumed);
+
+      expect(emitted.where((e) => e.event == r'$session_end'), isEmpty);
+      expect(emitted.map((e) => e.event).toList(), [r'$app_open']);
+      expect(session.sessionId, 'session-1');
+    },
+  );
+
   test('duplicate background states are ignored', () async {
     final session = build();
     await session.start();

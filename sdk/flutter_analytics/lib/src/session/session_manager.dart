@@ -70,10 +70,7 @@ class SessionManager {
         // Finalize the stale session under its OLD id before rotating.
         _sessionId = persistedId;
         _sessionStartMs = persistedStartMs;
-        await _emit(r'$session_end', {
-          r'$duration_ms':
-              (lastActivityMs ?? persistedStartMs) - persistedStartMs,
-        });
+        await _finalizeSession(lastActivityMs ?? persistedStartMs);
       }
       await _beginSession();
     }
@@ -100,9 +97,7 @@ class SessionManager {
             _clock.nowMs();
         if (_clock.nowMs() - lastActivityMs >= _timeout.inMilliseconds) {
           // Duration runs to the moment the app left the foreground.
-          await _emit(r'$session_end', {
-            r'$duration_ms': lastActivityMs - _sessionStartMs,
-          });
+          await _finalizeSession(lastActivityMs);
           await _beginSession();
         }
         await _emit(r'$app_open', const {});
@@ -112,6 +107,11 @@ class SessionManager {
     }
   }
 
+  /// Emits $session_end under the current (old) session id with
+  /// $duration_ms measured from session start to [endedAtMs].
+  Future<void> _finalizeSession(int endedAtMs) =>
+      _emit(r'$session_end', {r'$duration_ms': endedAtMs - _sessionStartMs});
+
   Future<void> _beginSession() async {
     _sessionId = _idFactory();
     _sessionStartMs = _clock.nowMs();
@@ -120,6 +120,11 @@ class SessionManager {
     await _emit(r'$session_start', const {});
   }
 
+  /// Persists "now" as the last-activity timestamp. Last-activity is only
+  /// touched on lifecycle transitions, so a hard kill while foregrounded
+  /// leaves the persisted duration measured to the last transition — the
+  /// backend's session finalizer (BullMQ job, master design) reconciles
+  /// such sessions from their last event timestamp.
   Future<void> _touch() =>
       _store.setString(lastActivityKey, '${_clock.nowMs()}');
 }
