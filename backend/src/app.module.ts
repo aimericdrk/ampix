@@ -3,11 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { LoggerModule } from 'nestjs-pino';
 import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
+import { ClickHouseModule } from './clickhouse/clickhouse.module';
 
 @Module({
   imports: [
     AppConfigModule,
     PrismaModule,
+    RedisModule,
+    ClickHouseModule,
     LoggerModule.forRoot({
       pinoHttp: {
         genReqId: (req, res) => {
