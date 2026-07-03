@@ -90,6 +90,11 @@ export class ClickHouseService implements EventSink, OnApplicationShutdown {
       query: sql,
       query_params: params,
       format: 'JSONEachRow',
+      // ClickHouse 24.8's JSON type infers integer leaves as Int64 and, by default,
+      // quotes 64-bit integers as JSON strings (precision-loss guard for JS numbers).
+      // That would break numeric round-tripping (e.g. ProfileWriter's increment op),
+      // so disable it for our own JSONEachRow reads.
+      clickhouse_settings: { output_format_json_quote_64bit_integers: 0 },
     });
     return result.json<T>();
   }

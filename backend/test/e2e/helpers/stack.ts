@@ -54,6 +54,10 @@ export async function startTestStack(
     username: 'default',
     password: 'myampmix_dev',
     database: 'analytics',
+    // Match ClickHouseService's query settings: ClickHouse 24.8's JSON type infers
+    // integer leaves as Int64, which this client would otherwise quote as JSON strings
+    // — breaking numeric-property assertions in e2e tests that read data back.
+    clickhouse_settings: { output_format_json_quote_64bit_integers: 0 },
   });
   await applyClickHouseSchema(ch);
 
