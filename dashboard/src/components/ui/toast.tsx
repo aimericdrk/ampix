@@ -1,11 +1,5 @@
 import * as ToastPrimitive from '@radix-ui/react-toast';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 
 export interface ToastOptions {

@@ -10,11 +10,7 @@ export interface ApiFetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
 }
 
 /** Auth endpoints are never themselves refresh-retried. */
-const AUTH_PATHS = new Set([
-  '/api/v1/auth/login',
-  '/api/v1/auth/signup',
-  '/api/v1/auth/refresh',
-]);
+const AUTH_PATHS = new Set(['/api/v1/auth/login', '/api/v1/auth/signup', '/api/v1/auth/refresh']);
 
 let refreshInFlight: Promise<boolean> | null = null;
 

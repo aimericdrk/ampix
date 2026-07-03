@@ -66,7 +66,9 @@ describe('apiFetch', () => {
 
   it('returns undefined for 204 responses', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
-    await expect(apiFetch<void>('/api/v1/auth/logout', { method: 'POST' })).resolves.toBeUndefined();
+    await expect(
+      apiFetch<void>('/api/v1/auth/logout', { method: 'POST' }),
+    ).resolves.toBeUndefined();
   });
 });
 
