@@ -1,8 +1,10 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../features/auth/store';
 import { authState, TEST_USER } from '../../test/msw/handlers';
+import { server } from '../../test/msw/server';
 import { renderApp } from '../../test/render-app';
 
 describe('AppLayout', () => {
@@ -32,6 +34,26 @@ describe('AppLayout', () => {
 
   it('logs out, clears the in-memory session, and returns to login', async () => {
     authState.refreshValid = true;
+    renderApp('/projects');
+    await screen.findByRole('heading', { name: 'Projects' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+
+    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpMix' })).toBeInTheDocument();
+    expect(authStore.getState().status).toBe('anonymous');
+    expect(authStore.getState().accessToken).toBeNull();
+  });
+
+  it('still clears the session and returns to login when the logout request fails', async () => {
+    authState.refreshValid = true;
+    server.use(
+      http.post('/api/v1/auth/logout', () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Internal server error', status: 500 },
+          { status: 500, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    );
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
 

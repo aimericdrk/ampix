@@ -1,6 +1,6 @@
 import { Link, Outlet, useRouter } from '@tanstack/react-router';
 import { logout } from '../../features/auth/api';
-import { useAuth } from '../../features/auth/store';
+import { authStore, useAuth } from '../../features/auth/store';
 import { Button } from '../ui/button';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { ThemeToggle } from './ThemeToggle';
@@ -20,8 +20,14 @@ export function AppLayout() {
   const router = useRouter();
 
   const handleLogout = async () => {
-    await logout(); // clears the session even on server failure
-    router.history.push('/login');
+    try {
+      await logout();
+    } catch {
+      // A failed server call must never block local logout.
+    } finally {
+      authStore.clearSession(); // idempotent — logout() already clears on any outcome
+      router.history.push('/login');
+    }
   };
 
   return (
