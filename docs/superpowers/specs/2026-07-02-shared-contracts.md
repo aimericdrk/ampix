@@ -144,6 +144,8 @@ Inserts use `async_insert=1, wait_for_async_insert=1` (client waits for durable 
 - Auth: `POST /api/v1/auth/signup|login|refresh|logout`; access JWT 15 min in memory, refresh JWT 30 d httpOnly cookie.
   - `signup` body `{email, password, name}`; `login` body `{email, password}`. Both (and `refresh`, which takes no body) respond `200 {"access_token": "<jwt>", "user": {"id", "email", "name"}}` and set/rotate the refresh cookie. `logout` → `204`, clears the cookie.
 - `GET /api/v1/projects` → `{"projects": [{"id", "org_id", "name", "timezone"}]}`.
+- `POST /api/v1/projects` (admin) body `{"org_id", "name", "timezone"?}` → `201` project object (same shape as list items).
+- Autocomplete metadata (phase 3): `GET /api/v1/projects/:projectId/meta/events` → `{"events": ["checkout_completed", ...]}`; `GET .../meta/properties?event=<name>` → `{"properties": [{"name", "type": "string|number|bool"}]}`. Sourced from ClickHouse `DISTINCT` over the last 30 days, cached 5 min in Redis.
 - `GET /api/v1/invitations/:token` (public, milestone 2) → `{"org_name", "role", "expires_at"}`; `410` if expired/used.
 - JSON error shape everywhere: RFC 7807 `{type, title, status, detail?, errors?}`.
 - Analytics queries: `POST /api/v1/projects/:projectId/query/insights` (phase 3+ adds `/funnels`, `/retention`, `/flows`) with body `{ "events": [{"name": "...", "aggregation": "total|unique_users"}], "date_range": {"from": "2026-06-01", "to": "2026-07-01"}, "interval": "hour|day|week|month", "filters": [{"property": "...", "op": "eq|neq|contains|set|not_set|gt|lt", "value": ...}], "breakdown": {"property": "..."} }` → `{ "series": [{"name": "...", "data": [{"t": "2026-06-01", "value": 123}]}] }`.
