@@ -7,15 +7,15 @@ NestJS ingestion/API → ClickHouse + Postgres + Redis → React dashboard.
 
 ## Repository layout
 
-| Path                     | What                                                          |
-| ------------------------ | ------------------------------------------------------------- |
-| `sdk/flutter_analytics/` | Flutter SDK (Flutter 3.32+, Dart 3.8+) — _not yet scaffolded_ |
-| `backend/`               | NestJS 11 ingestion + analytics API — _not yet scaffolded_    |
-| `dashboard/`             | React 18 + Vite SPA — _not yet scaffolded_                    |
-| `packages/contracts/`    | Shared TS types + Zod schemas — _not yet scaffolded_          |
-| `infra/`                 | docker-compose (local dev), ClickHouse init SQL, GCP (later)  |
-| `docs/superpowers/`      | Specs and implementation plans                                |
-| `.github/workflows/`     | CI (path-filtered per package)                                |
+| Path                     | What                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `sdk/flutter_analytics/` | Flutter SDK (Flutter 3.32+, Dart 3.8+) — offline-first queue + uploader (phase 1) |
+| `backend/`               | NestJS 11 ingestion + analytics API — `/ingest/*` + health (phase 1)              |
+| `dashboard/`             | React 18 + Vite SPA — auth + projects shell (phase 1)                             |
+| `packages/contracts/`    | Shared TS types + Zod schemas (ingest/auth contracts)                             |
+| `infra/`                 | docker-compose (local dev), ClickHouse init SQL, GCP (later)                      |
+| `docs/superpowers/`      | Specs and implementation plans                                                    |
+| `.github/workflows/`     | CI (path-filtered per package, coverage floors enforced)                          |
 
 ## Prerequisites
 
@@ -29,20 +29,20 @@ NestJS ingestion/API → ClickHouse + Postgres + Redis → React dashboard.
 corepack enable
 pnpm install
 pnpm infra:up        # ClickHouse + Postgres + Redis, waits for healthchecks
-cp .env.example .env # backend env (used once backend/ lands)
+cp .env.example backend/.env # backend env, loaded at boot in dev
 ```
 
 Verify: `curl http://localhost:8123/ping` → `Ok.`
 
 ## Local services (dev credentials — never used in production)
 
-| Service    | Port(s)    | Credentials                                           |
-| ---------- | ---------- | ----------------------------------------------------- |
-| ClickHouse | 8123, 9000 | `default` / `myampmix_dev`, db `analytics`            |
-| PostgreSQL | 5432       | `myampmix` / `myampmix_dev`, db `myampmix`            |
-| Redis      | 6379       | none                                                  |
-| Backend    | 8080       | `pnpm --filter ./backend start:dev` (once scaffolded) |
-| Dashboard  | 5173       | Vite dev server, proxies `/api` + `/ingest` → 8080    |
+| Service    | Port(s)    | Credentials                                        |
+| ---------- | ---------- | -------------------------------------------------- |
+| ClickHouse | 8123, 9000 | `default` / `myampmix_dev`, db `analytics`         |
+| PostgreSQL | 5432       | `myampmix` / `myampmix_dev`, db `myampmix`         |
+| Redis      | 6379       | none                                               |
+| Backend    | 8080       | `pnpm --filter ./backend start:dev`                |
+| Dashboard  | 5173       | Vite dev server, proxies `/api` + `/ingest` → 8080 |
 
 ## Root commands
 
