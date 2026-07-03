@@ -8,8 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "verify:build": "vite build && ./scripts/verify-build.sh",
+    "build": "tsc --noEmit && vite build && rm -f dist/mockServiceWorker.js",
+    "verify:build": "vite build && rm -f dist/mockServiceWorker.js && ./scripts/verify-build.sh",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

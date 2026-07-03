@@ -38,8 +38,19 @@ const indexRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
-    typeof search.redirect === 'string' ? { redirect: search.redirect } : {},
+  // Single enforcement point for the post-login redirect (open-redirect
+  // guard): only same-app absolute paths pass — must start with '/' but not
+  // '//' (protocol-relative URL). Anything else is dropped so LoginForm
+  // falls back to /projects. The explicit `undefined` matters: matches
+  // inherit the RAW parent search, so an omitted key would leak through.
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect:
+      typeof search.redirect === 'string' &&
+      search.redirect.startsWith('/') &&
+      !search.redirect.startsWith('//')
+        ? search.redirect
+        : undefined,
+  }),
   beforeLoad: async () => {
     await ensureAuthResolved();
     if (authStore.getState().status === 'authenticated') throw redirect({ to: '/projects' });

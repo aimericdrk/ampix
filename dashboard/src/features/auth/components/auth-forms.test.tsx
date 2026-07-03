@@ -67,6 +67,31 @@ describe('LoginForm', () => {
     expect(router.state.location.pathname).toBe('/projects/0197f6a0-0000-7000-8000-0000000000aa');
   });
 
+  /** The /login route's validated search — what useSearch hands the form. */
+  function loginSearch(router: ReturnType<typeof renderApp>['router']) {
+    return router.state.matches.find((m) => m.routeId === '/login')?.search;
+  }
+
+  it('ignores an absolute-URL ?redirect= and falls back to /projects (open redirect)', async () => {
+    const { router } = renderApp('/login?redirect=https%3A%2F%2Fevil.com');
+    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    // Dropped at the route boundary — the unsafe value never reaches the form.
+    expect(loginSearch(router)).toEqual({});
+
+    await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
+    await userEvent.type(screen.getByLabelText('Password'), TEST_PASSWORD);
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+
+    await screen.findByRole('heading', { name: 'Projects' });
+    expect(router.state.location.pathname).toBe('/projects');
+  });
+
+  it('ignores a protocol-relative ?redirect= (//evil.com)', async () => {
+    const { router } = renderApp('/login?redirect=%2F%2Fevil.com');
+    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    expect(loginSearch(router)).toEqual({});
+  });
+
   it('renders server-side field errors at the matching field instead of the banner', async () => {
     respondWithFieldErrors('/api/v1/auth/login', {
       email: ['Email domain is not allowed', 'second message ignored'],

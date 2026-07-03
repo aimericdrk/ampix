@@ -39,4 +39,10 @@ if grep -rq 'mockServiceWorker' dist/assets; then
 fi
 echo "verify-build: ok — no mockServiceWorker traces in dist/assets"
 
+# The dev-only MSW worker lives in public/ (dev server + e2e only); the build
+# scripts delete it from dist/ so the production artifact never ships it.
+[ ! -f dist/mockServiceWorker.js ] ||
+  fail "dist/mockServiceWorker.js must not ship in the production artifact"
+echo "verify-build: ok — mockServiceWorker.js absent from dist/ root"
+
 echo "verify-build: PASS — single-page dist, runtime config.js template, no MSW in bundle"
