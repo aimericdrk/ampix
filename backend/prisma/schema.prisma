@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  analyst
+  viewer
+}
+
+model Organization {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  name        String
+  createdAt   DateTime     @default(now()) @map("created_at")
+  memberships Membership[]
+  invitations Invitation[]
+  projects    Project[]
+
+  @@map("organizations")
+}
+
+model User {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  email         String         @unique
+  passwordHash  String         @map("password_hash")
+  name          String
+  createdAt     DateTime       @default(now()) @map("created_at")
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model Membership {
+  userId String @map("user_id") @db.Uuid
+  orgId  String @map("org_id") @db.Uuid
+  role   Role
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([userId, orgId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  role       Role
+  token      String   @unique
+  expiresAt  DateTime @map("expires_at")
+  acceptedBy String?  @map("accepted_by") @db.Uuid
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("invitations")
+}
+
+model Project {
+  id        String     @id @default(uuid(7)) @db.Uuid
+  orgId     String     @map("org_id") @db.Uuid
+  name      String
+  timezone  String     @default("UTC")
+  createdAt DateTime   @default(now()) @map("created_at")
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sdkTokens SdkToken[]
+
+  @@map("projects")
+}
+
+model SdkToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  projectId String    @map("project_id") @db.Uuid
+  token     String    @unique
+  label     String
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("sdk_tokens")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
