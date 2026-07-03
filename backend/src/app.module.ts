@@ -6,14 +6,11 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { ClickHouseModule } from './clickhouse/clickhouse.module';
 import { IngestModule } from './ingestion/ingest.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
     AppConfigModule,
-    PrismaModule,
-    RedisModule,
-    ClickHouseModule,
-    IngestModule,
     LoggerModule.forRoot({
       pinoHttp: {
         genReqId: (req, res) => {
@@ -27,6 +24,11 @@ import { IngestModule } from './ingestion/ingest.module';
         transport: process.env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
       },
     }),
+    PrismaModule,
+    RedisModule,
+    ClickHouseModule,
+    IngestModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
