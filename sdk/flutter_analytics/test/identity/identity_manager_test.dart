@@ -54,4 +54,9 @@ void main() {
     expect(identity.distinctId, 'anon-2');
     expect(store.values[IdentityManager.distinctIdKey], isNull);
   });
+
+  test('identify before load() throws StateError', () async {
+    final identity = IdentityManager(store: InMemoryKeyValueStore());
+    await expectLater(identity.identify('u_42'), throwsStateError);
+  });
 }
