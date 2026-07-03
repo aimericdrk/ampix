@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Button } from './button';
@@ -97,6 +97,21 @@ describe('Toast', () => {
     await userEvent.click(screen.getByRole('button', { name: 'notify' }));
     expect(await screen.findByText('Saved')).toBeInTheDocument();
     expect(screen.getByText('Report saved.')).toBeInTheDocument();
+  });
+
+  it('removes a toast from the DOM when dismissed via the Radix escape-key close mechanism', async () => {
+    render(
+      <ToastProvider>
+        <ToastProbe />
+      </ToastProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'notify' }));
+    const title = await screen.findByText('Saved');
+    const toastRoot = title.closest('li');
+    if (!toastRoot) throw new Error('expected toast root <li> to be rendered');
+    fireEvent.keyDown(toastRoot, { key: 'Escape' });
+    await waitFor(() => expect(toastRoot).not.toBeInTheDocument());
+    expect(screen.queryByText('Report saved.')).not.toBeInTheDocument();
   });
 
   it('throws when useToast is used outside the provider', () => {
