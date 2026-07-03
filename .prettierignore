@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+coverage/
+pnpm-lock.yaml
+*.yml
+*.yaml
+# Dart is formatted by `dart format`
+sdk/
+# Hand-authored specs/plans are not reformatted
+docs/
