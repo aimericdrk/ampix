@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { SDK_TOKEN_REGEX } from '@myampmix/contracts';
 import { REDIS } from '../redis/redis.module';
@@ -24,6 +24,8 @@ interface CachedLookup {
  */
 @Injectable()
 export class SdkTokenGuard implements CanActivate {
+  private readonly logger = new Logger(SdkTokenGuard.name);
+
   constructor(
     @Inject(REDIS) private readonly redis: Redis,
     private readonly prisma: PrismaService,
@@ -40,25 +42,41 @@ export class SdkTokenGuard implements CanActivate {
       throw this.unauthorized();
     }
 
-    const cached = await this.redis.get(sdkTokenCacheKey(token));
+    const cached = await this.readCache(sdkTokenCacheKey(token));
     if (cached !== null) {
-      const lookup = JSON.parse(cached) as CachedLookup;
-      if (!lookup.projectId) throw this.unauthorized();
-      req.ingestAuth = { projectId: lookup.projectId, token };
+      if (!cached.projectId) throw this.unauthorized();
+      req.ingestAuth = { projectId: cached.projectId, token };
       return true;
     }
 
     const row = await this.prisma.sdkToken.findUnique({ where: { token } });
     const projectId = row !== null && row.revokedAt === null ? row.projectId : null;
-    await this.redis.set(
-      sdkTokenCacheKey(token),
-      JSON.stringify({ projectId }),
-      'EX',
-      SDK_TOKEN_CACHE_TTL_SECONDS,
-    );
+    await this.writeCache(sdkTokenCacheKey(token), { projectId });
     if (!projectId) throw this.unauthorized();
     req.ingestAuth = { projectId, token };
     return true;
+  }
+
+  /** Redis unavailability or a corrupt entry must not break ingestion: treat as a cache miss. */
+  private async readCache(key: string): Promise<CachedLookup | null> {
+    try {
+      const cached = await this.redis.get(key);
+      return cached === null ? null : (JSON.parse(cached) as CachedLookup);
+    } catch (err) {
+      // cache unavailable — degrade to direct lookup
+      this.logger.warn(`sdk token cache read failed; degrading to direct lookup: ${String(err)}`);
+      return null;
+    }
+  }
+
+  /** Auth outcome is already decided by Postgres at this point: swallow cache-write failures. */
+  private async writeCache(key: string, lookup: CachedLookup): Promise<void> {
+    try {
+      await this.redis.set(key, JSON.stringify(lookup), 'EX', SDK_TOKEN_CACHE_TTL_SECONDS);
+    } catch (err) {
+      // cache unavailable — continue without caching
+      this.logger.warn(`sdk token cache write failed; continuing without cache: ${String(err)}`);
+    }
   }
 
   private unauthorized(): ProblemException {
