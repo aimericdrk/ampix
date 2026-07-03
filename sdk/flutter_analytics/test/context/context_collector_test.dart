@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myampmix_analytics/src/context/context_collector.dart';
+import 'package:myampmix_analytics/src/version.dart';
 
 import '../helpers/fake_context_data_source.dart';
 
@@ -33,6 +34,16 @@ void main() {
     final second = await collector.collect();
 
     expect(source.appInfoCalls, 1); // static info fetched once
+    expect(source.deviceInfoCalls, 1); // static info fetched once
     expect(second.network, 'offline'); // network is fresh
+  });
+
+  test('collect() never throws even when every source call fails', () async {
+    final collector = ContextCollector(ThrowingContextDataSource());
+
+    final context = await collector.collect();
+
+    expect(context.sdkVersion, mamSdkVersion);
+    expect(context.toJson(), {'sdk_version': mamSdkVersion});
   });
 }

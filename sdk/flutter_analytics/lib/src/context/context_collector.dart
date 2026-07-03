@@ -51,22 +51,29 @@ class ContextCollector {
   DeviceInfo? _deviceInfo;
 
   Future<EventContext> collect() async {
-    final appInfo = _appInfo ??= await _source.appInfo();
-    final deviceInfo = _deviceInfo ??= await _source.deviceInfo();
-    final screen = _source.screenSize();
-    return EventContext(
-      appVersion: appInfo.version,
-      appBuild: appInfo.build,
-      os: deviceInfo.os,
-      osVersion: deviceInfo.osVersion,
-      deviceModel: deviceInfo.model,
-      deviceManufacturer: deviceInfo.manufacturer,
-      locale: _source.locale(),
-      timezone: _source.timezone(),
-      screenWidth: screen.width,
-      screenHeight: screen.height,
-      network: await _source.network(),
-      sdkVersion: mamSdkVersion,
-    );
+    try {
+      final appInfo = _appInfo ??= await _source.appInfo();
+      final deviceInfo = _deviceInfo ??= await _source.deviceInfo();
+      final screen = _source.screenSize();
+      return EventContext(
+        appVersion: appInfo.version,
+        appBuild: appInfo.build,
+        os: deviceInfo.os,
+        osVersion: deviceInfo.osVersion,
+        deviceModel: deviceInfo.model,
+        deviceManufacturer: deviceInfo.manufacturer,
+        locale: _source.locale(),
+        timezone: _source.timezone(),
+        screenWidth: screen.width,
+        screenHeight: screen.height,
+        network: await _source.network(),
+        sdkVersion: mamSdkVersion,
+      );
+    } catch (_) {
+      // Deliberately swallowed: the SDK never throws into the host app.
+      // Degrade to a context that still identifies the SDK version so the
+      // event can always be built.
+      return const EventContext(sdkVersion: mamSdkVersion);
+    }
   }
 }
