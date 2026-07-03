@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect changed packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci.yml'
+            dashboard:
+              - 'dashboard/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci.yml'
+            sdk:
+              - 'sdk/flutter_analytics/**'
+              - '.github/workflows/ci.yml'
+
+  root:
+    name: Root lint & format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version read from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Format check
+        run: pnpm format:check
+
+  backend:
+    name: Backend — lint, typecheck, test
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # backend/ does not exist until the backend sub-project lands.
+      # Every subsequent step is guarded so this job passes as a no-op until then.
+      - name: Check backend package exists
+        id: pkg
+        run: |
+          if [ -f backend/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::backend/package.json not found — backend not scaffolded yet, skipping"
+          fi
+      - uses: pnpm/action-setup@v4
+        if: steps.pkg.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.pkg.outputs.present == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./backend run --if-present lint
+      - name: Typecheck
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./backend run --if-present typecheck
+      - name: Unit tests
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./backend run --if-present test
+
+  dashboard:
+    name: Dashboard — lint, typecheck, test
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check dashboard package exists
+        id: pkg
+        run: |
+          if [ -f dashboard/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::dashboard/package.json not found — dashboard not scaffolded yet, skipping"
+          fi
+      - uses: pnpm/action-setup@v4
+        if: steps.pkg.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.pkg.outputs.present == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./dashboard run --if-present lint
+      - name: Typecheck
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./dashboard run --if-present typecheck
+      - name: Unit tests
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./dashboard run --if-present test
+
+  sdk:
+    name: Flutter SDK — analyze, test
+    needs: changes
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check SDK package exists
+        id: pkg
+        run: |
+          if [ -f sdk/flutter_analytics/pubspec.yaml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::sdk/flutter_analytics/pubspec.yaml not found — SDK not scaffolded yet, skipping"
+          fi
+      - uses: subosito/flutter-action@v2
+        if: steps.pkg.outputs.present == 'true'
+        with:
+          channel: stable
+          flutter-version: 3.32.x
+          cache: true
+      - name: Pub get
+        if: steps.pkg.outputs.present == 'true'
+        run: flutter pub get
+        working-directory: sdk/flutter_analytics
+      - name: Format check
+        if: steps.pkg.outputs.present == 'true'
+        run: dart format --output=none --set-exit-if-changed .
+        working-directory: sdk/flutter_analytics
+      - name: Analyze
+        if: steps.pkg.outputs.present == 'true'
+        run: flutter analyze
+        working-directory: sdk/flutter_analytics
+      - name: Tests
+        if: steps.pkg.outputs.present == 'true'
+        run: flutter test
+        working-directory: sdk/flutter_analytics
