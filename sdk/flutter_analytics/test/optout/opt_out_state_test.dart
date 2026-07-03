@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:myampmix_analytics/src/model/profile_operation.dart';
 import 'package:myampmix_analytics/src/optout/opt_out_state.dart';
 
 import '../helpers/builders.dart';
@@ -11,10 +12,21 @@ void main() {
     final events = InMemoryEventStore();
     final profiles = InMemoryProfileOpStore();
     await events.add(buildEvent(), maxQueueSize: 10);
+    await profiles.add(
+      const ProfileOperation(
+        distinctId: 'u_1',
+        op: 'set',
+        properties: {'a': 1},
+        timestamp: 1751462400123,
+      ),
+      maxQueueSize: 10,
+    );
 
     final state = OptOutState(store: kv, events: events, profiles: profiles);
     await state.load();
     expect(state.isOptedOut, isFalse);
+    expect(await events.count(), 1);
+    expect(await profiles.count(), 1);
 
     await state.optOut();
     expect(state.isOptedOut, isTrue);
