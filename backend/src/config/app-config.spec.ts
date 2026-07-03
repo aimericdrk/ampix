@@ -56,6 +56,8 @@ describe('loadConfig', () => {
   });
 
   it('rejects JWT secrets shorter than 32 chars', () => {
-    expect(() => loadConfig({ ...validEnv, JWT_ACCESS_SECRET: 'short' })).toThrow(/JWT_ACCESS_SECRET/);
+    expect(() => loadConfig({ ...validEnv, JWT_ACCESS_SECRET: 'short' })).toThrow(
+      /JWT_ACCESS_SECRET/,
+    );
   });
 });

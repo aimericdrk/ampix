@@ -84,7 +84,14 @@ export const ingestEventsRequestSchema = z.object({
   events: z.array(z.unknown()).min(1),
 });
 
-export const profileOpSchema = z.enum(['set', 'set_once', 'increment', 'append', 'unset', 'delete']);
+export const profileOpSchema = z.enum([
+  'set',
+  'set_once',
+  'increment',
+  'append',
+  'unset',
+  'delete',
+]);
 
 /** One profile operation for POST /ingest/profiles (shared contracts §4). */
 export const profileOperationSchema = z.object({

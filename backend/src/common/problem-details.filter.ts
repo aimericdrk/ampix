@@ -19,7 +19,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       res.setHeader('Retry-After', String(exception.retryAfterSeconds));
     }
     if (problem.status >= 500) {
-      this.logger.error(exception instanceof Error ? (exception.stack ?? exception.message) : String(exception));
+      this.logger.error(
+        exception instanceof Error ? (exception.stack ?? exception.message) : String(exception),
+      );
     }
 
     res.status(problem.status).type('application/problem+json').send(problem);

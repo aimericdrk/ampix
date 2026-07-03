@@ -61,11 +61,15 @@ describe('ingestEventSchema', () => {
   });
 
   it('rejects a non-UUID insert_id', () => {
-    expect(ingestEventSchema.safeParse({ ...validEvent, insert_id: 'not-a-uuid' }).success).toBe(false);
+    expect(ingestEventSchema.safeParse({ ...validEvent, insert_id: 'not-a-uuid' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects an event name longer than 255 chars', () => {
-    expect(ingestEventSchema.safeParse({ ...validEvent, event: 'x'.repeat(256) }).success).toBe(false);
+    expect(ingestEventSchema.safeParse({ ...validEvent, event: 'x'.repeat(256) }).success).toBe(
+      false,
+    );
   });
 
   it('rejects an empty event name', () => {
@@ -178,7 +182,13 @@ describe('SDK_TOKEN_REGEX', () => {
 describe('reserved names', () => {
   it('exports the shared-contracts §4 reserved event list', () => {
     expect(RESERVED_EVENTS).toEqual(
-      expect.arrayContaining(['$first_open', '$session_start', '$session_end', '$screen_view', '$tap']),
+      expect.arrayContaining([
+        '$first_open',
+        '$session_start',
+        '$session_end',
+        '$screen_view',
+        '$tap',
+      ]),
     );
   });
 });

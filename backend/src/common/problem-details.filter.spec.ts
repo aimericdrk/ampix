@@ -47,7 +47,10 @@ describe('ProblemDetailsFilter', () => {
 
   it('serializes a ProblemException as application/problem+json', () => {
     const { host, res } = mockHost();
-    filter.catch(new ProblemException({ status: 401, title: 'Unauthorized', detail: 'bad token' }), host);
+    filter.catch(
+      new ProblemException({ status: 401, title: 'Unauthorized', detail: 'bad token' }),
+      host,
+    );
     expect(res.statusCode).toBe(401);
     expect(res.contentType).toBe('application/problem+json');
     expect(res.body).toEqual({

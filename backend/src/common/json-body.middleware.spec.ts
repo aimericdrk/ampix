@@ -20,13 +20,18 @@ describe('problemFromBodyParserError', () => {
   });
 
   it('maps encoding.unsupported to a 415 problem', () => {
-    expect(problemFromBodyParserError({ type: 'encoding.unsupported', status: 415 })).toMatchObject({
-      status: 415,
-      title: 'Unsupported Media Type',
-    });
+    expect(problemFromBodyParserError({ type: 'encoding.unsupported', status: 415 })).toMatchObject(
+      {
+        status: 415,
+        title: 'Unsupported Media Type',
+      },
+    );
   });
 
   it('falls back to a 400 problem for unknown parser errors', () => {
-    expect(problemFromBodyParserError(new Error('weird'))).toMatchObject({ status: 400, title: 'Bad Request' });
+    expect(problemFromBodyParserError(new Error('weird'))).toMatchObject({
+      status: 400,
+      title: 'Bad Request',
+    });
   });
 });
