@@ -132,6 +132,40 @@ describe('SlidingWindowRateLimiter (redis failure policy)', () => {
     });
   });
 
+  describe('credential redaction in warn logs', () => {
+    const rawToken = 'mam_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const key = `ingest:${rawToken}`;
+
+    function loggedText(): string {
+      return warnSpy.mock.calls.map((call) => String(call[0])).join('\n');
+    }
+
+    it('never logs the raw SDK token on the fail-open path', async () => {
+      const { redis } = makeRedis({ execRejects: new Error('ECONNREFUSED') });
+      const limiter = new SlidingWindowRateLimiter(redis);
+
+      await limiter.consume(key, 1000);
+
+      expect(warnSpy).toHaveBeenCalled();
+      expect(loggedText()).not.toContain(rawToken);
+      expect(loggedText()).toContain('ingest:mam_a…');
+    });
+
+    it('never logs the raw SDK token on the post-decision cleanup path', async () => {
+      const { redis } = makeRedis({
+        execResolves: execResultWithCount(1001),
+        zremRejects: new Error('ECONNRESET'),
+      });
+      const limiter = new SlidingWindowRateLimiter(redis);
+
+      await limiter.consume(key, 1000);
+
+      expect(warnSpy).toHaveBeenCalled();
+      expect(loggedText()).not.toContain(rawToken);
+      expect(loggedText()).toContain('ingest:mam_a…');
+    });
+  });
+
   describe('deny decision already made (deny stands)', () => {
     it('still denies with a full-window retry hint when zrem fails after an over-limit count', async () => {
       const { redis, zrem } = makeRedis({

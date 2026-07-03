@@ -12,6 +12,14 @@ export interface RateLimitResult {
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
+ * Rate-limit keys embed the raw SDK token (`ingest:mam_<32hex>`) — a credential.
+ * Log at most the first 12 chars so warn messages never leak it into Cloud Logging.
+ */
+function redactKey(key: string): string {
+  return key.length <= 12 ? key : `${key.slice(0, 12)}…`;
+}
+
+/**
  * Distributed sliding-window rate limiter (contracts §4: 1000 req/min per token).
  * State lives in a Redis ZSET (`rl:<key>`, score = ms timestamp), so any number of
  * stateless Cloud Run instances share one window. One MULTI keeps it near-atomic;
@@ -65,7 +73,7 @@ export class SlidingWindowRateLimiter {
       // consistent with SdkTokenGuard's degrade behavior). Do not throttle traffic just
       // because the rate-limit store is down.
       this.logger.warn(
-        `rate limiter store unavailable; failing open for key ${key}: ${String(err)}`,
+        `rate limiter store unavailable; failing open for key ${redactKey(key)}: ${String(err)}`,
       );
       return { allowed: true, remaining: limit, retryAfterSeconds: 0 };
     }
@@ -80,7 +88,7 @@ export class SlidingWindowRateLimiter {
         retryAfterSeconds = Math.max(1, Math.ceil((oldestScore + windowMs - now) / 1000));
       } catch (err) {
         this.logger.warn(
-          `rate limiter post-decision cleanup failed for key ${key}; denying with full-window retry hint: ${String(err)}`,
+          `rate limiter post-decision cleanup failed for key ${redactKey(key)}; denying with full-window retry hint: ${String(err)}`,
         );
       }
       return { allowed: false, remaining: 0, retryAfterSeconds };
