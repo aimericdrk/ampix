@@ -26,3 +26,13 @@ pnpm-debug.log*
 .dart_tool/
 sdk/**/pubspec.lock
 .flutter-plugins*
+
+# Local tooling (machine-local, never committed)
+CLAUDE.md
+images/
+.claude/
+.claude-flow/
+.agents/
+.swarm/
+.firebase/
+.superpowers/
