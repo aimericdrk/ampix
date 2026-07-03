@@ -1,0 +1,104 @@
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  redirect,
+} from '@tanstack/react-router';
+import { AppLayout } from './components/layout/AppLayout';
+import { NotFoundPage } from './components/NotFoundPage';
+import { RouteErrorPage } from './components/RouteErrorPage';
+import { InvitePage } from './features/auth/components/InvitePage';
+import { LoginPage } from './features/auth/components/LoginPage';
+import { SignupPage } from './features/auth/components/SignupPage';
+import { authStore } from './features/auth/store';
+import { ProjectPlaceholderPage } from './features/projects/components/ProjectPlaceholderPage';
+import { ProjectsPage } from './features/projects/components/ProjectsPage';
+import { restoreSession } from './lib/api/client';
+
+/** Resolve the session exactly once per page load before any guarded navigation. */
+async function ensureAuthResolved(): Promise<void> {
+  if (authStore.getState().status === 'unknown') await restoreSession();
+}
+
+const rootRoute = createRootRoute({
+  component: () => <Outlet />,
+  notFoundComponent: NotFoundPage,
+  errorComponent: RouteErrorPage,
+});
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  beforeLoad: () => {
+    throw redirect({ to: '/projects' });
+  },
+});
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login',
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
+    typeof search.redirect === 'string' ? { redirect: search.redirect } : {},
+  beforeLoad: async () => {
+    await ensureAuthResolved();
+    if (authStore.getState().status === 'authenticated') throw redirect({ to: '/projects' });
+  },
+  component: LoginPage,
+});
+
+const signupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/signup',
+  beforeLoad: async () => {
+    await ensureAuthResolved();
+    if (authStore.getState().status === 'authenticated') throw redirect({ to: '/projects' });
+  },
+  component: SignupPage,
+});
+
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/invite/$token',
+  component: InvitePage,
+});
+
+const privateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'private',
+  beforeLoad: async ({ location }) => {
+    await ensureAuthResolved();
+    if (authStore.getState().status !== 'authenticated') {
+      throw redirect({ to: '/login', search: { redirect: location.href } });
+    }
+  },
+  component: AppLayout,
+});
+
+const projectsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects',
+  component: ProjectsPage,
+});
+
+const projectDetailRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId',
+  component: ProjectPlaceholderPage,
+});
+
+export const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  signupRoute,
+  inviteRoute,
+  privateRoute.addChildren([projectsRoute, projectDetailRoute]),
+]);
+
+export const router = createRouter({ routeTree });
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router;
+  }
+}
