@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show AppLifecycleState;
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -17,6 +19,7 @@ import 'helpers/fake_clock.dart';
 import 'helpers/fake_context_data_source.dart';
 import 'helpers/fixed_random.dart';
 import 'helpers/in_memory_key_value_store.dart';
+import 'helpers/in_memory_stores.dart';
 
 class ThrowingKeyValueStore implements KeyValueStore {
   @override
@@ -36,8 +39,14 @@ class ThrowingKeyValueStore implements KeyValueStore {
 /// raised deep in the write path when the host app calls `track()` after a
 /// successful init (controller-adjudicated requirement 1).
 class ThrowingEventStore implements EventStore {
+  /// Every event name [add] was invoked with, recorded BEFORE throwing, so
+  /// tests can assert the guarded call actually reached the store (and did
+  /// not pass vacuously through the pre-init no-op branch of `_guard`).
+  final List<String> attemptedEvents = [];
+
   @override
   Future<void> add(AnalyticsEvent event, {required int maxQueueSize}) async {
+    attemptedEvents.add(event.event);
     if (!event.event.startsWith(r'$')) {
       throw StateError('event store boom');
     }
@@ -58,6 +67,10 @@ class ThrowingEventStore implements EventStore {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  // The double-init test legitimately constructs a second in-memory
+  // database while the first is still open; each has its own executor, so
+  // drift's shared-executor race warning does not apply.
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
   late List<http.Request> requests;
   late FakeClock clock;
@@ -76,18 +89,20 @@ void main() {
     return http.Response('{"accepted": 100, "rejected": []}', 202);
   });
 
-  Future<void> initSdk({http.Client? client}) => MyAmpMix.init(
-    'mam_0123456789abcdef0123456789abcdef',
-    config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
-    overrides: SdkOverrides(
-      clock: clock,
-      httpClient: client ?? acceptAll(),
-      database: AnalyticsDatabase(NativeDatabase.memory()),
-      keyValueStore: keyValueStore,
-      contextDataSource: FakeContextDataSource(),
-      random: FixedRandom(0.5),
-    ),
-  );
+  Future<void> initSdk({http.Client? client, EventStore? eventStore}) =>
+      MyAmpMix.init(
+        'mam_0123456789abcdef0123456789abcdef',
+        config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+        overrides: SdkOverrides(
+          clock: clock,
+          httpClient: client ?? acceptAll(),
+          database: AnalyticsDatabase(NativeDatabase.memory()),
+          keyValueStore: keyValueStore,
+          contextDataSource: FakeContextDataSource(),
+          random: FixedRandom(0.5),
+          eventStore: eventStore,
+        ),
+      );
 
   Future<void> waitFor(bool Function() condition) async {
     for (var i = 0; i < 200 && !condition(); i++) {
@@ -311,27 +326,21 @@ void main() {
 
   test('track() never throws even when the event store fails internally '
       'after a successful init', () async {
-    await MyAmpMix.init(
-      'mam_0123456789abcdef0123456789abcdef',
-      config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
-      overrides: SdkOverrides(
-        clock: clock,
-        httpClient: acceptAll(),
-        database: AnalyticsDatabase(NativeDatabase.memory()),
-        keyValueStore: keyValueStore,
-        contextDataSource: FakeContextDataSource(),
-        random: FixedRandom(0.5),
-        eventStore: ThrowingEventStore(),
-      ),
-    );
+    final store = ThrowingEventStore();
+    await initSdk(eventStore: store);
 
     // Init itself must have completed successfully (only $-prefixed
     // lifecycle events flow through the throwing store during init).
+    expect(store.attemptedEvents, contains(r'$app_open'));
+
     expect(
       () => MyAmpMix.instance.track('checkout_completed'),
       returnsNormally,
     );
     await pumpEventQueue();
+    // The guarded call really reached the store and threw there — it did
+    // not pass vacuously through the pre-init no-op branch of _guard.
+    expect(store.attemptedEvents, contains('checkout_completed'));
   });
 
   // --- Controller-adjudicated requirement 2: init ordering / corrupt data -
@@ -351,5 +360,76 @@ void main() {
       (e) => e['event'] == 'after_corrupt_props',
     );
     expect((event['properties'] as Map).keys, isEmpty);
+  });
+
+  // --- Review fix 1: flush() is decoupled from the guard chain -----------
+
+  test('a slow network flush does not block track() from reaching the '
+      'local queue', () async {
+    final gate = Completer<void>();
+    final store = InMemoryEventStore();
+    final slowClient = MockClient((request) async {
+      requests.add(request);
+      await gate.future;
+      return http.Response('{"accepted": 100, "rejected": []}', 202);
+    });
+    await initSdk(client: slowClient, eventStore: store);
+
+    MyAmpMix.instance.flush();
+    // The drain is now in flight, blocked on the unanswered request.
+    await waitFor(() => requests.any((r) => r.url.path == '/ingest/events'));
+
+    MyAmpMix.instance.track('queued_during_flush');
+    await waitFor(
+      () => store.rows.any((r) => r.event.event == 'queued_during_flush'),
+    );
+    // The event reached the LOCAL queue while the network response was
+    // still pending — the guard chain was not blocked behind the upload.
+    expect(gate.isCompleted, isFalse);
+
+    gate.complete();
+    // Letting the flush finish surfaces no errors and delivers the event
+    // queued mid-flight on the drain loop's next batch.
+    await waitFor(
+      () => sentEvents().any((e) => e['event'] == 'queued_during_flush'),
+    );
+  });
+
+  // --- Review fix 3a: init() is idempotent --------------------------------
+
+  test('a second init() call keeps the existing instance and starts no '
+      'second session', () async {
+    await initSdk();
+    final first = MyAmpMix.instance;
+
+    // A realistic double-init with a full fresh dependency set: were init
+    // not idempotent, this would genuinely construct and start a second
+    // uploader/session stack — caught by the event counts below.
+    final secondDb = AnalyticsDatabase(NativeDatabase.memory());
+    await MyAmpMix.init(
+      'mam_0123456789abcdef0123456789abcdef',
+      config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+      overrides: SdkOverrides(
+        clock: clock,
+        httpClient: acceptAll(),
+        database: secondDb,
+        keyValueStore: keyValueStore,
+        contextDataSource: FakeContextDataSource(),
+        random: FixedRandom(0.5),
+      ),
+    );
+    expect(identical(MyAmpMix.instance, first), isTrue);
+
+    MyAmpMix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == r'$app_open'));
+    // A non-idempotent init would have run SessionManager.start() again and
+    // emitted a second $app_open (and $session_start) from a second
+    // pipeline/uploader stack.
+    final names = sentEvents().map((e) => e['event']);
+    expect(names.where((n) => n == r'$app_open').length, 1);
+    expect(names.where((n) => n == r'$session_start').length, 1);
+    expect(names.where((n) => n == r'$first_open').length, 1);
+
+    await secondDb.close();
   });
 }

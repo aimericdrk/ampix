@@ -81,12 +81,20 @@ class MyAmpMix {
   People people = People.noop();
 
   /// Initializes the SDK. Never throws: on failure the SDK stays disabled
-  /// and every call becomes a logged no-op.
+  /// and every call becomes a logged no-op. Idempotent: calling it while
+  /// the SDK is already initialized is a logged no-op that keeps the
+  /// existing instance (no new timers, observers or database connections).
   static Future<void> init(
     String token, {
     required MyAmpMixConfig config,
     @visibleForTesting SdkOverrides? overrides,
   }) async {
+    if (_instance._initialized) {
+      MamLogger(
+        enabled: config.debug,
+      ).log('MyAmpMix.init ignored: SDK is already initialized.');
+      return;
+    }
     final sdk = MyAmpMix._();
     try {
       await sdk._start(token, config, overrides);
@@ -184,9 +192,11 @@ class MyAmpMix {
     );
 
     _initialized = true;
+    await _session.start();
+    // Registered only after start() succeeded: a failed init must not leak
+    // an observer pointing at a discarded SessionManager.
     _observer = _SdkLifecycleObserver(_session, _logger);
     WidgetsBinding.instance.addObserver(_observer!);
-    await _session.start();
     _uploader.start();
   }
 
@@ -223,7 +233,27 @@ class MyAmpMix {
 
   void optInTracking() => _guard('optInTracking', () => _optOut.optIn());
 
-  void flush() => _guard('flush', () => _uploader.flush(force: true));
+  /// Deliberately NOT routed through the [_guard] chain: a slow or failing
+  /// network drain must never block later track/identify calls from
+  /// reaching the LOCAL queue. It awaits a snapshot of the current chain so
+  /// every previously issued call is queued before the drain reads the
+  /// store, then runs the upload OUTSIDE the chain in its own try/catch —
+  /// guarded calls issued after flush() chain independently of the network.
+  void flush() {
+    if (!_initialized) {
+      _logger.log('flush ignored: MyAmpMix.init has not completed.');
+      return;
+    }
+    final priorOps = _tail;
+    unawaited(() async {
+      try {
+        await priorOps;
+        await _uploader.flush(force: true);
+      } on Object catch (error, stackTrace) {
+        _logger.log('flush failed', error, stackTrace);
+      }
+    }());
+  }
 
   /// Serializes every guarded call onto a single chain so that fire-and-
   /// forget calls observe the same ordering a synchronous API would imply
