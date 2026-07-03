@@ -14,6 +14,15 @@ import 'helpers/fake_context_data_source.dart';
 import 'helpers/fixed_random.dart';
 import 'helpers/in_memory_key_value_store.dart';
 
+/// Multiset view of [values]: value → occurrence count.
+Map<String, int> countBy(Iterable<String> values) {
+  final counts = <String, int>{};
+  for (final value in values) {
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
+  return counts;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -30,6 +39,18 @@ void main() {
         requests.add(request);
         return http.Response('{"accepted": 100, "rejected": []}', 202);
       });
+
+      // Every event delivered so far across ALL /ingest/events requests, in
+      // wire order — a LIST, not a set, so duplicate deliveries are visible.
+      List<Map<String, dynamic>> delivered() => [
+        for (final request in requests.where(
+          (r) => r.url.path == '/ingest/events',
+        ))
+          ...((jsonDecode(utf8.decode(gzip.decode(request.bodyBytes)))
+                      as Map<String, dynamic>)['events']
+                  as List)
+              .cast<Map<String, dynamic>>(),
+      ];
 
       Future<void> boot() => MyAmpMix.init(
         'mam_0123456789abcdef0123456789abcdef',
@@ -52,15 +73,23 @@ void main() {
       await pumpEventQueue(times: 50);
       expect(requests, isEmpty);
 
-      // Snapshot the insert_ids stamped at queue time.
+      // Snapshot the FULL wire payloads stamped at queue time (insert_id →
+      // all 8 contract fields), so delivery can be checked for deep payload
+      // equality, not just id membership.
       final queued = await DriftEventStore(database).oldest(100);
-      final queuedIds = {for (final stored in queued) stored.event.insertId};
-      expect(
-        {
-          for (final stored in queued) stored.event.event,
-        }.containsAll({'offline_1', 'offline_2'}),
-        isTrue,
-      );
+      expect(queued, hasLength(5)); // 3 run-1 lifecycle + 2 tracked
+      final queuedJsonById = {
+        for (final stored in queued)
+          stored.event.insertId: stored.event.toJson(),
+      };
+      final trackedQueued = queuedJsonById.entries
+          .where(
+            (entry) =>
+                entry.value['event'] == 'offline_1' ||
+                entry.value['event'] == 'offline_2',
+          )
+          .toList();
+      expect(trackedQueued, hasLength(2));
 
       // ── "Kill": tear down without closing the shared in-memory DB. ──
       await MyAmpMix.shutdownForTesting(closeDatabase: false);
@@ -70,28 +99,66 @@ void main() {
       online = true;
       await boot();
       MyAmpMix.instance.flush();
-      for (var i = 0; i < 200 && requests.isEmpty; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      // Everything that may EVER legitimately reach the wire, as a multiset
+      // of event names: run 1's offline-queued events plus run 2's relaunch
+      // lifecycle (the 2 h-stale session is finalized, then a new session
+      // begins — no $first_open on a second launch).
+      const expectedNames = [
+        r'$session_start', r'$first_open', r'$app_open', // run 1 lifecycle
+        'offline_1', 'offline_2', // run 1 tracked while offline
+        r'$session_end', r'$session_start', r'$app_open', // run 2 relaunch
+      ];
+
+      // Bounded poll — 10 ms steps, 3 s hard cap — until the FULL expected
+      // batch is on the wire (not merely the first request), then settle.
+      for (
+        var i = 0;
+        i < 300 && delivered().length < expectedNames.length;
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
       }
       await pumpEventQueue(times: 50);
+      final sent = delivered();
 
-      final delivered = [
-        for (final request in requests.where(
-          (r) => r.url.path == '/ingest/events',
-        ))
-          ...((jsonDecode(utf8.decode(gzip.decode(request.bodyBytes)))
-                      as Map<String, dynamic>)['events']
-                  as List)
-              .cast<Map<String, dynamic>>(),
-      ];
-      final deliveredNames = delivered.map((e) => e['event']).toSet();
-      final deliveredIds = delivered.map((e) => e['insert_id']).toSet();
+      // No extras and nothing missing: the delivered event names are exactly
+      // the expected multiset (each name exactly as often as expected).
+      expect(sent, hasLength(expectedNames.length));
+      expect(
+        countBy(sent.map((e) => e['event'] as String)),
+        countBy(expectedNames),
+      );
 
-      // All offline events arrive, with the ORIGINAL insert_ids (idempotency),
-      // and the stale session was finalized on relaunch.
-      expect(deliveredNames.containsAll({'offline_1', 'offline_2'}), isTrue);
-      expect(deliveredIds.containsAll(queuedIds), isTrue);
-      expect(deliveredNames, contains(r'$session_end'));
+      // Exactly-once: every insert_id queued BEFORE the kill arrives EXACTLY
+      // once (the ORIGINAL idempotency keys survive the kill, no duplicates),
+      // and no insert_id at all is ever delivered twice.
+      final idCounts = countBy(sent.map((e) => e['insert_id'] as String));
+      for (final id in queuedJsonById.keys) {
+        expect(
+          idCounts[id],
+          1,
+          reason: 'queued insert_id $id must be delivered exactly once',
+        );
+      }
+      expect(
+        idCounts.values.every((count) => count == 1),
+        isTrue,
+        reason: 'no insert_id may be delivered more than once',
+      );
+
+      // Full payload equality for the explicitly tracked events: all 8 wire
+      // fields (insert_id, event, distinct_id, anon_id, session_id,
+      // timestamp, properties, context) must deep-equal the pre-kill queue
+      // snapshot — the kill/relaunch cycle must not rewrite any field.
+      for (final entry in trackedQueued) {
+        final match = sent.singleWhere((e) => e['insert_id'] == entry.key);
+        expect(
+          match,
+          equals(entry.value),
+          reason: '${entry.value['event']} payload must survive unchanged',
+        );
+      }
 
       await MyAmpMix.shutdownForTesting();
     },
