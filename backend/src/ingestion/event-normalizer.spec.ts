@@ -35,6 +35,26 @@ describe('clampTimestamp', () => {
   it('clamps timestamps more than 5 minutes ahead to now+5min', () => {
     expect(clampTimestamp(NOW + 3_600_000, NOW)).toBe(NOW + TIMESTAMP_FUTURE_LIMIT_MS);
   });
+
+  it('accepts exactly now-7d unchanged (inclusive lower edge)', () => {
+    const edge = NOW - TIMESTAMP_PAST_LIMIT_MS;
+    expect(clampTimestamp(edge, NOW)).toBe(edge);
+  });
+
+  it('clamps one ms older than now-7d to now-7d', () => {
+    const edge = NOW - TIMESTAMP_PAST_LIMIT_MS;
+    expect(clampTimestamp(edge - 1, NOW)).toBe(edge);
+  });
+
+  it('accepts exactly now+5min unchanged (inclusive upper edge)', () => {
+    const edge = NOW + TIMESTAMP_FUTURE_LIMIT_MS;
+    expect(clampTimestamp(edge, NOW)).toBe(edge);
+  });
+
+  it('clamps one ms beyond now+5min to now+5min', () => {
+    const edge = NOW + TIMESTAMP_FUTURE_LIMIT_MS;
+    expect(clampTimestamp(edge + 1, NOW)).toBe(edge);
+  });
 });
 
 describe('EventNormalizer.normalizeBatch', () => {
