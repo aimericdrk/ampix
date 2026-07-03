@@ -60,6 +60,16 @@ describe('problemFromResponse', () => {
     expect(problem.status).toBe(500);
     expect(problem.title).toBe('Internal Server Error');
   });
+
+  it('falls back for an empty body with a JSON content-type (e.g. a stripped 401)', async () => {
+    const res = new Response('', {
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const problem = await problemFromResponse(res);
+    expect(problem).toEqual({ type: 'about:blank', title: 'Unauthorized', status: 401 });
+  });
 });
 
 describe('ApiError', () => {

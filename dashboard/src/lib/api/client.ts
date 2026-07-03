@@ -1,0 +1,88 @@
+import { authStore } from '../../features/auth/store';
+import { getRuntimeConfig } from '../config';
+import { ApiError, problemFromResponse } from './problem';
+import type { AuthResponse } from './types';
+
+export interface ApiFetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
+  /** JSON-serializable request body. */
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
+/** Auth endpoints are never themselves refresh-retried. */
+const AUTH_PATHS = new Set([
+  '/api/v1/auth/login',
+  '/api/v1/auth/signup',
+  '/api/v1/auth/refresh',
+]);
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function doRefresh(): Promise<boolean> {
+  try {
+    const res = await fetch(`${getRuntimeConfig().apiBaseUrl}/api/v1/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as AuthResponse;
+    authStore.setSession(body.access_token, body.user);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Single-flight silent refresh: concurrent callers share one /auth/refresh round-trip. */
+export function refreshSession(): Promise<boolean> {
+  refreshInFlight ??= doRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+/** Page-load session restore from the httpOnly refresh cookie. */
+export async function restoreSession(): Promise<boolean> {
+  const refreshed = await refreshSession();
+  if (!refreshed) authStore.clearSession();
+  return refreshed;
+}
+
+function send(path: string, options: ApiFetchOptions): Promise<Response> {
+  const { body, headers, ...init } = options;
+  const token = authStore.getState().accessToken;
+  return fetch(`${getRuntimeConfig().apiBaseUrl}${path}`, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+async function parse<T>(res: Response): Promise<T> {
+  if (!res.ok) throw new ApiError(await problemFromResponse(res));
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+/**
+ * Typed transport for every API call:
+ * runtime base URL + credentials + bearer injection + RFC 7807 errors +
+ * 401 silent-refresh-and-replay (exactly one replay; auth endpoints excluded).
+ */
+export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const res = await send(path, options);
+  if (res.status === 401 && !AUTH_PATHS.has(path)) {
+    const refreshed = await refreshSession();
+    if (!refreshed) {
+      authStore.clearSession();
+      throw new ApiError(await problemFromResponse(res));
+    }
+    return parse<T>(await send(path, options));
+  }
+  return parse<T>(res);
+}
