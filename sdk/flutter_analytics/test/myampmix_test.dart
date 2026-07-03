@@ -119,6 +119,16 @@ void main() {
           .cast<Map<String, dynamic>>(),
   ];
 
+  List<Map<String, dynamic>> profileOps() => [
+    for (final request in requests.where(
+      (r) => r.url.path == '/ingest/profiles',
+    ))
+      ...((jsonDecode(utf8.decode(gzip.decode(request.bodyBytes)))
+                  as Map<String, dynamic>)['operations']
+              as List)
+          .cast<Map<String, dynamic>>(),
+  ];
+
   test('init + track + flush delivers a contract-shaped event', () async {
     await initSdk();
     MyAmpMix.instance.track('checkout_completed', properties: {'value': 9.99});
@@ -229,6 +239,37 @@ void main() {
     expect((ops.single as Map)['op'], 'set');
     expect((ops.single as Map)['properties'], {'plan': 'pro'});
     expect((ops.single as Map)['distinct_id'], isNotEmpty);
+  });
+
+  // --- Final-review fix: people ops share the facade's ordering domain ----
+
+  test('people.set immediately after identify() attributes the profile op '
+      'to the new distinct id', () async {
+    await initSdk();
+    MyAmpMix.instance.identify('u_42');
+    MyAmpMix.instance.people.set({'plan': 'pro'});
+    MyAmpMix.instance.flush();
+    await waitFor(() => profileOps().isNotEmpty);
+
+    expect(profileOps().single['distinct_id'], 'u_42');
+  });
+
+  test('people.set immediately after reset() carries the NEW anonymous id, '
+      'not the previous user\'s', () async {
+    await initSdk();
+    MyAmpMix.instance.identify('u_42');
+    await pumpEventQueue();
+    MyAmpMix.instance.reset();
+    MyAmpMix.instance.people.set({'plan': 'free'});
+    MyAmpMix.instance.track('after_reset');
+    MyAmpMix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == 'after_reset'));
+    await waitFor(() => profileOps().isNotEmpty);
+
+    final event = sentEvents().firstWhere((e) => e['event'] == 'after_reset');
+    final op = profileOps().single;
+    expect(op['distinct_id'], isNot('u_42'));
+    expect(op['distinct_id'], event['anon_id']); // the fresh anonymous id
   });
 
   test('opt-out drops events until opt-in', () async {

@@ -189,6 +189,11 @@ class MyAmpMix {
       maxQueueSize: config.maxQueueSize,
       onQueued: (queuedCount) => _uploader.maybeFlush(queuedCount),
       logger: _logger,
+      // People ops must share the facade's ordering domain: identify() and
+      // reset() run deferred on the _guard chain, so profile ops are
+      // scheduled there too and observe post-identify/reset identity state
+      // (People reads distinctId inside the scheduled body).
+      schedule: (body) => _guard('people', body),
     );
 
     _initialized = true;

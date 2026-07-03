@@ -16,13 +16,15 @@ class People {
     required int maxQueueSize,
     void Function(int queuedCount)? onQueued,
     MamLogger logger = const MamLogger(enabled: false),
+    void Function(Future<void> Function() body)? schedule,
   }) : _store = store,
        _distinctId = distinctId,
        _clock = clock,
        _isOptedOut = isOptedOut,
        _maxQueueSize = maxQueueSize,
        _onQueued = onQueued,
-       _logger = logger;
+       _logger = logger,
+       _schedule = schedule;
 
   /// Inert instance used before `MyAmpMix.init` completes (design §13).
   factory People.noop() => People(
@@ -40,6 +42,14 @@ class People {
   final int _maxQueueSize;
   final void Function(int queuedCount)? _onQueued;
   final MamLogger _logger;
+
+  /// Ordering seam: when set (the facade injects its `_guard` chain), every
+  /// profile op runs in the SAME ordering domain as the deferred
+  /// `identify()`/`reset()` bodies, so `identify('u'); people.set(...)`
+  /// attributes the op to `'u'` and a post-`reset()` op carries the fresh
+  /// anonymous id — never the previous user's profile. When null (direct
+  /// construction in tests, `People.noop()`), ops chain on [_tail].
+  final void Function(Future<void> Function() body)? _schedule;
 
   /// Serializes the fire-and-forget store writes so that `onQueued` fires
   /// in call order. Without this, two synchronous calls (e.g. `set`
@@ -70,22 +80,30 @@ class People {
     // too (shared-contracts §4): drop any nested Map/List value before it
     // ever reaches the queue or the wire.
     final sanitizedProperties = sanitizeProperties(properties, _logger);
-    // distinctId/timestamp are read synchronously at call time so caller
-    // ordering holds, matching EventPipeline.track's convention.
-    final operation = ProfileOperation(
-      distinctId: _distinctId(),
-      op: op,
-      properties: sanitizedProperties,
-      timestamp: _clock.nowMs(),
-    );
-    _tail = _tail.then((_) async {
+    Future<void> body() async {
       try {
+        // distinctId/timestamp are read INSIDE the scheduled body so a
+        // deferred identify()/reset() queued earlier on the same chain has
+        // already applied — the op reads post-identify identity state.
+        final operation = ProfileOperation(
+          distinctId: _distinctId(),
+          op: op,
+          properties: sanitizedProperties,
+          timestamp: _clock.nowMs(),
+        );
         await _store.add(operation, maxQueueSize: _maxQueueSize);
         _onQueued?.call(await _store.count());
       } on Object catch (error, stackTrace) {
         _logger.log('people.$op failed', error, stackTrace);
       }
-    });
+    }
+
+    final schedule = _schedule;
+    if (schedule != null) {
+      schedule(body);
+    } else {
+      _tail = _tail.then((_) => body());
+    }
   }
 }
 
