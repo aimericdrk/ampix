@@ -14,8 +14,9 @@ class SuperPropertiesStore {
   Future<void> load() async {
     final raw = await _store.getString(storageKey);
     if (raw != null) {
-      _properties =
-          Map<String, Object?>.from(jsonDecode(raw) as Map<String, dynamic>);
+      _properties = Map<String, Object?>.from(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
     }
   }
 

@@ -27,7 +27,8 @@ void main() {
       timestamp: 7,
     );
     final decoded = ProfileOperation.fromJson(
-        jsonDecode(jsonEncode(op.toJson())) as Map<String, dynamic>);
+      jsonDecode(jsonEncode(op.toJson())) as Map<String, dynamic>,
+    );
     expect(decoded.toJson(), op.toJson());
   });
 }

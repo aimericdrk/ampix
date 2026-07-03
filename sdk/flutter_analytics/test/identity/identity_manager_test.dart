@@ -25,27 +25,35 @@ void main() {
     expect(second.anonId, 'anon-1');
   });
 
-  test('identify switches distinct id, keeps anon id, persists across relaunch', () async {
-    final store = InMemoryKeyValueStore();
-    final identity = IdentityManager(store: store, idFactory: () => 'anon-1');
-    await identity.load();
+  test(
+    'identify switches distinct id, keeps anon id, persists across relaunch',
+    () async {
+      final store = InMemoryKeyValueStore();
+      final identity = IdentityManager(store: store, idFactory: () => 'anon-1');
+      await identity.load();
 
-    expect(await identity.identify('u_42'), isTrue);
-    expect(await identity.identify('u_42'), isFalse); // repeat is a no-op
-    expect(identity.distinctId, 'u_42');
-    expect(identity.anonId, 'anon-1');
+      expect(await identity.identify('u_42'), isTrue);
+      expect(await identity.identify('u_42'), isFalse); // repeat is a no-op
+      expect(identity.distinctId, 'u_42');
+      expect(identity.anonId, 'anon-1');
 
-    final relaunched = IdentityManager(store: store, idFactory: () => 'anon-2');
-    await relaunched.load();
-    expect(relaunched.distinctId, 'u_42');
-    expect(relaunched.anonId, 'anon-1');
-  });
+      final relaunched = IdentityManager(
+        store: store,
+        idFactory: () => 'anon-2',
+      );
+      await relaunched.load();
+      expect(relaunched.distinctId, 'u_42');
+      expect(relaunched.anonId, 'anon-1');
+    },
+  );
 
   test('reset generates a fresh anonymous identity', () async {
     final store = InMemoryKeyValueStore();
     var calls = 0;
-    final identity =
-        IdentityManager(store: store, idFactory: () => 'anon-${++calls}');
+    final identity = IdentityManager(
+      store: store,
+      idFactory: () => 'anon-${++calls}',
+    );
     await identity.load();
     await identity.identify('u_42');
 

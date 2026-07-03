@@ -29,8 +29,13 @@ class DriftProfileOpStore implements ProfileOpStore {
   @override
   Future<void> add(ProfileOperation op, {required int maxQueueSize}) =>
       _db.transaction(() async {
-        await _db.into(_db.pendingProfileOps).insert(
-            PendingProfileOpsCompanion.insert(payload: jsonEncode(op.toJson())));
+        await _db
+            .into(_db.pendingProfileOps)
+            .insert(
+              PendingProfileOpsCompanion.insert(
+                payload: jsonEncode(op.toJson()),
+              ),
+            );
         final excess = await count() - maxQueueSize;
         if (excess > 0) {
           await _db.customStatement(
@@ -43,16 +48,18 @@ class DriftProfileOpStore implements ProfileOpStore {
 
   @override
   Future<List<StoredProfileOp>> oldest(int limit) async {
-    final rows = await (_db.select(_db.pendingProfileOps)
-          ..orderBy([(t) => OrderingTerm.asc(t.id)])
-          ..limit(limit))
-        .get();
+    final rows =
+        await (_db.select(_db.pendingProfileOps)
+              ..orderBy([(t) => OrderingTerm.asc(t.id)])
+              ..limit(limit))
+            .get();
     return [
       for (final row in rows)
         StoredProfileOp(
           id: row.id,
           op: ProfileOperation.fromJson(
-              jsonDecode(row.payload) as Map<String, dynamic>),
+            jsonDecode(row.payload) as Map<String, dynamic>,
+          ),
         ),
     ];
   }

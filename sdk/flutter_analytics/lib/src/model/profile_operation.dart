@@ -24,9 +24,9 @@ class ProfileOperation {
   final int timestamp;
 
   Map<String, Object?> toJson() => {
-        'distinct_id': distinctId,
-        'op': op,
-        'properties': properties,
-        'timestamp': timestamp,
-      };
+    'distinct_id': distinctId,
+    'op': op,
+    'properties': properties,
+    'timestamp': timestamp,
+  };
 }

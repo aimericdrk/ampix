@@ -38,8 +38,13 @@ class DriftEventStore implements EventStore {
   @override
   Future<void> add(AnalyticsEvent event, {required int maxQueueSize}) =>
       _db.transaction(() async {
-        await _db.into(_db.pendingEvents).insert(
-            PendingEventsCompanion.insert(payload: jsonEncode(event.toJson())));
+        await _db
+            .into(_db.pendingEvents)
+            .insert(
+              PendingEventsCompanion.insert(
+                payload: jsonEncode(event.toJson()),
+              ),
+            );
         final excess = await count() - maxQueueSize;
         if (excess > 0) {
           await _db.customStatement(
@@ -52,16 +57,18 @@ class DriftEventStore implements EventStore {
 
   @override
   Future<List<StoredEvent>> oldest(int limit) async {
-    final rows = await (_db.select(_db.pendingEvents)
-          ..orderBy([(t) => OrderingTerm.asc(t.id)])
-          ..limit(limit))
-        .get();
+    final rows =
+        await (_db.select(_db.pendingEvents)
+              ..orderBy([(t) => OrderingTerm.asc(t.id)])
+              ..limit(limit))
+            .get();
     return [
       for (final row in rows)
         StoredEvent(
           id: row.id,
           event: AnalyticsEvent.fromJson(
-              jsonDecode(row.payload) as Map<String, dynamic>),
+            jsonDecode(row.payload) as Map<String, dynamic>,
+          ),
         ),
     ];
   }

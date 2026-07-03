@@ -12,8 +12,8 @@ import '../storage/key_value_store.dart';
 /// loud in tests instead of surfacing as a LateInitializationError.
 class IdentityManager {
   IdentityManager({required KeyValueStore store, String Function()? idFactory})
-      : _store = store,
-        _idFactory = idFactory ?? (() => const Uuid().v7());
+    : _store = store,
+      _idFactory = idFactory ?? (() => const Uuid().v7());
 
   static const anonIdKey = 'mam_anon_id';
   static const distinctIdKey = 'mam_distinct_id';
@@ -46,7 +46,8 @@ class IdentityManager {
   Future<bool> identify(String userId) async {
     if (!_loaded) {
       throw StateError(
-          'IdentityManager.load() must complete before identify()/reset()');
+        'IdentityManager.load() must complete before identify()/reset()',
+      );
     }
     if (userId == _distinctId) return false;
     _distinctId = userId;
@@ -58,7 +59,8 @@ class IdentityManager {
   Future<void> reset() async {
     if (!_loaded) {
       throw StateError(
-          'IdentityManager.load() must complete before identify()/reset()');
+        'IdentityManager.load() must complete before identify()/reset()',
+      );
     }
     _anonId = _idFactory();
     _distinctId = _anonId;

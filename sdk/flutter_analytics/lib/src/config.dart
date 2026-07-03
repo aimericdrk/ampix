@@ -8,9 +8,11 @@ class MyAmpMixConfig {
     this.sessionTimeout = const Duration(minutes: 30),
     this.maxRetryDelay = const Duration(minutes: 5),
     this.debug = false,
-  })  : assert(flushAt > 0 && flushAt <= 100,
-            'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)'),
-        assert(maxQueueSize > 0, 'maxQueueSize must be positive');
+  }) : assert(
+         flushAt > 0 && flushAt <= 100,
+         'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
+       ),
+       assert(maxQueueSize > 0, 'maxQueueSize must be positive');
 
   /// Base URL of the MyAmpMix backend, e.g. `https://analytics.example.com`.
   final String serverUrl;

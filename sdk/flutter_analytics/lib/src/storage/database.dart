@@ -24,11 +24,14 @@ class AnalyticsDatabase extends _$AnalyticsDatabase {
   AnalyticsDatabase(super.e);
 
   /// Opens the on-device database under the application support directory.
-  static AnalyticsDatabase open() => AnalyticsDatabase(LazyDatabase(() async {
-        final directory = await getApplicationSupportDirectory();
-        return NativeDatabase.createInBackground(
-            File(p.join(directory.path, 'myampmix_analytics.sqlite')));
-      }));
+  static AnalyticsDatabase open() => AnalyticsDatabase(
+    LazyDatabase(() async {
+      final directory = await getApplicationSupportDirectory();
+      return NativeDatabase.createInBackground(
+        File(p.join(directory.path, 'myampmix_analytics.sqlite')),
+      );
+    }),
+  );
 
   @override
   int get schemaVersion => 1;

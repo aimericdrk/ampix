@@ -20,7 +20,8 @@ class SharedPrefsKeyValueStore implements KeyValueStore {
   Future<String?> getString(String key) async => _prefs.getString(key);
 
   @override
-  Future<void> setString(String key, String value) => _prefs.setString(key, value);
+  Future<void> setString(String key, String value) =>
+      _prefs.setString(key, value);
 
   @override
   Future<void> remove(String key) => _prefs.remove(key);

@@ -6,7 +6,11 @@ import 'package:myampmix_analytics/src/storage/profile_op_store.dart';
 
 void main() {
   ProfileOperation buildOp(String op) => ProfileOperation(
-      distinctId: 'u_1', op: op, properties: const {'plan': 'pro'}, timestamp: 1);
+    distinctId: 'u_1',
+    op: op,
+    properties: const {'plan': 'pro'},
+    timestamp: 1,
+  );
 
   late AnalyticsDatabase db;
   late DriftProfileOpStore store;
