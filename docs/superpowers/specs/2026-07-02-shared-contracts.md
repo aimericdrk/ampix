@@ -63,7 +63,7 @@ Auth: `Authorization: Bearer <sdk_token>` where `sdk_token` is the project's ing
       "anon_id": "device anon UUID",                          // REQUIRED (stable per install)
       "session_id": "018f6b2e-....",                          // REQUIRED (UUID)
       "timestamp": 1751462400123,                             // ms epoch, client clock, REQUIRED
-      "properties": { "plan": "pro", "value": 9.99 },         // flat JSON, optional
+      "properties": { "plan": "pro", "value": 9.99 },         // optional; values: scalar, null, or array of scalars — nested objects rejected at the schema layer. Envelope size (≤INGEST_MAX_BATCH) is enforced at the API layer, not in the static schema.
       "context": {                                            // all optional strings/ints
         "app_version": "1.4.2", "app_build": "142",
         "os": "ios|android", "os_version": "18.5",
