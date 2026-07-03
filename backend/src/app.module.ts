@@ -5,6 +5,7 @@ import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { ClickHouseModule } from './clickhouse/clickhouse.module';
+import { IngestModule } from './ingestion/ingest.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { ClickHouseModule } from './clickhouse/clickhouse.module';
     PrismaModule,
     RedisModule,
     ClickHouseModule,
+    IngestModule,
     LoggerModule.forRoot({
       pinoHttp: {
         genReqId: (req, res) => {
