@@ -1,3 +1,4 @@
+import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../features/auth/store';
 import {
@@ -6,6 +7,7 @@ import {
   TEST_USER,
   VALID_ACCESS_TOKEN,
 } from '../../test/msw/handlers';
+import { server } from '../../test/msw/server';
 import { apiFetch, restoreSession } from './client';
 import { ApiError } from './problem';
 import type { ListProjectsResponse } from './types';
@@ -53,6 +55,31 @@ describe('apiFetch', () => {
     expect(a.projects).toHaveLength(1);
     expect(b.projects).toHaveLength(1);
     expect(authState.refreshCalls).toBe(1);
+  });
+
+  it('clears the session when the replayed request is rejected again', async () => {
+    authStore.setSession('expired-access-token', TEST_USER);
+    authState.refreshValid = true;
+    // The API rejects every token — e.g. the user was disabled between refresh and replay.
+    server.use(
+      http.get('/api/v1/projects', () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Access token invalid or expired', status: 401 },
+          { status: 401, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    );
+
+    await expect(apiFetch('/api/v1/projects')).rejects.toMatchObject({
+      name: 'ApiError',
+      problem: { status: 401 },
+    });
+    expect(authState.refreshCalls).toBe(1);
+    expect(authStore.getState()).toEqual({
+      accessToken: null,
+      user: null,
+      status: 'anonymous',
+    });
   });
 
   it('clears the session and throws when the refresh itself fails', async () => {

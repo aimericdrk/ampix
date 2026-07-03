@@ -10,6 +10,8 @@ export interface ApiFetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
 }
 
 /** Auth endpoints are never themselves refresh-retried. */
+// /auth/logout is deliberately absent: a stale-token logout should still refresh-and-replay
+// so the revocation call reaches the server and the httpOnly refresh cookie gets cleared.
 const AUTH_PATHS = new Set(['/api/v1/auth/login', '/api/v1/auth/signup', '/api/v1/auth/refresh']);
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -78,7 +80,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       authStore.clearSession();
       throw new ApiError(await problemFromResponse(res));
     }
-    return parse<T>(await send(path, options));
+    const replay = await send(path, options);
+    // A 401 on the freshly-refreshed token means the session is truly dead
+    // (e.g. user disabled); log out locally instead of looping refresh-replay.
+    if (replay.status === 401) authStore.clearSession();
+    return parse<T>(replay);
   }
   return parse<T>(res);
 }
