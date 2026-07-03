@@ -1,3 +1,12 @@
+// Local dev (README quick start): load backend/.env before anything reads process.env.
+// Real environment variables take precedence — loadEnvFile never overrides vars that are
+// already set — and production/CI (no .env file) falls through to the real environment.
+try {
+  process.loadEnvFile();
+} catch {
+  // No .env file — the environment is already configured.
+}
+
 import { NestFactory } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
