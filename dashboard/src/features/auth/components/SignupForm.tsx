@@ -6,7 +6,7 @@ import { Input } from '../../../components/ui/input';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { signup } from '../api';
-import { validateSignup, type FieldErrors } from '../validation';
+import { firstFieldErrors, validateSignup, type FieldErrors } from '../validation';
 
 export function SignupForm() {
   const router = useRouter();
@@ -30,10 +30,15 @@ export function SignupForm() {
     },
   });
 
-  const inlineError =
+  const problem =
     mutation.error instanceof ApiError && mutation.error.problem.status < 500
-      ? mutation.error.problem.title
+      ? mutation.error.problem
       : null;
+  // Server-side per-field messages (problem.errors) render at the fields, like
+  // client validation; a problem with no field mapping keeps the title banner.
+  const serverFieldErrors = firstFieldErrors(problem?.errors);
+  const visibleErrors: FieldErrors = { ...fieldErrors, ...serverFieldErrors };
+  const inlineError = problem && Object.keys(serverFieldErrors).length === 0 ? problem.title : null;
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -53,12 +58,12 @@ export function SignupForm() {
           id="signup-name"
           autoComplete="name"
           value={values.name}
-          aria-invalid={Boolean(fieldErrors.name)}
+          aria-invalid={Boolean(visibleErrors.name)}
           onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
         />
-        {fieldErrors.name && (
+        {visibleErrors.name && (
           <p role="alert" className="mt-1 text-sm text-danger">
-            {fieldErrors.name}
+            {visibleErrors.name}
           </p>
         )}
       </div>
@@ -71,12 +76,12 @@ export function SignupForm() {
           type="email"
           autoComplete="email"
           value={values.email}
-          aria-invalid={Boolean(fieldErrors.email)}
+          aria-invalid={Boolean(visibleErrors.email)}
           onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))}
         />
-        {fieldErrors.email && (
+        {visibleErrors.email && (
           <p role="alert" className="mt-1 text-sm text-danger">
-            {fieldErrors.email}
+            {visibleErrors.email}
           </p>
         )}
       </div>
@@ -89,12 +94,12 @@ export function SignupForm() {
           type="password"
           autoComplete="new-password"
           value={values.password}
-          aria-invalid={Boolean(fieldErrors.password)}
+          aria-invalid={Boolean(visibleErrors.password)}
           onChange={(e) => setValues((v) => ({ ...v, password: e.target.value }))}
         />
-        {fieldErrors.password && (
+        {visibleErrors.password && (
           <p role="alert" className="mt-1 text-sm text-danger">
-            {fieldErrors.password}
+            {visibleErrors.password}
           </p>
         )}
       </div>

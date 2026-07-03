@@ -1,5 +1,16 @@
 export type FieldErrors = Record<string, string>;
 
+/** First message per field from an RFC 7807 problem `errors` map (contracts §7). */
+export function firstFieldErrors(errors: Record<string, string[]> | undefined): FieldErrors {
+  const result: FieldErrors = {};
+  if (!errors) return result;
+  for (const [field, messages] of Object.entries(errors)) {
+    const first = messages?.[0];
+    if (first) result[field] = first;
+  }
+  return result;
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateLogin(values: { email: string; password: string }): FieldErrors {

@@ -6,7 +6,7 @@ import { Input } from '../../../components/ui/input';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { login } from '../api';
-import { validateLogin, type FieldErrors } from '../validation';
+import { firstFieldErrors, validateLogin, type FieldErrors } from '../validation';
 
 export function LoginForm() {
   const router = useRouter();
@@ -32,10 +32,15 @@ export function LoginForm() {
     },
   });
 
-  const inlineError =
+  const problem =
     mutation.error instanceof ApiError && mutation.error.problem.status < 500
-      ? mutation.error.problem.title
+      ? mutation.error.problem
       : null;
+  // Server-side per-field messages (problem.errors) render at the fields, like
+  // client validation; a problem with no field mapping keeps the title banner.
+  const serverFieldErrors = firstFieldErrors(problem?.errors);
+  const visibleErrors: FieldErrors = { ...fieldErrors, ...serverFieldErrors };
+  const inlineError = problem && Object.keys(serverFieldErrors).length === 0 ? problem.title : null;
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -56,12 +61,12 @@ export function LoginForm() {
           type="email"
           autoComplete="email"
           value={values.email}
-          aria-invalid={Boolean(fieldErrors.email)}
+          aria-invalid={Boolean(visibleErrors.email)}
           onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))}
         />
-        {fieldErrors.email && (
+        {visibleErrors.email && (
           <p role="alert" className="mt-1 text-sm text-danger">
-            {fieldErrors.email}
+            {visibleErrors.email}
           </p>
         )}
       </div>
@@ -74,12 +79,12 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           value={values.password}
-          aria-invalid={Boolean(fieldErrors.password)}
+          aria-invalid={Boolean(visibleErrors.password)}
           onChange={(e) => setValues((v) => ({ ...v, password: e.target.value }))}
         />
-        {fieldErrors.password && (
+        {visibleErrors.password && (
           <p role="alert" className="mt-1 text-sm text-danger">
-            {fieldErrors.password}
+            {visibleErrors.password}
           </p>
         )}
       </div>
