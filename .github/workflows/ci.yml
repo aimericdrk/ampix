@@ -96,9 +96,11 @@ jobs:
       - name: Typecheck
         if: steps.pkg.outputs.present == 'true'
         run: pnpm --filter ./backend run --if-present typecheck
-      - name: Unit tests
+      # Coverage-gated (README floor: backend 85% lines). test:cov runs the unit +
+      # integration projects; Testcontainers spin up Postgres/Redis via the runner's Docker.
+      - name: Tests (coverage-gated)
         if: steps.pkg.outputs.present == 'true'
-        run: pnpm --filter ./backend run --if-present test
+        run: pnpm --filter ./backend run test:cov
 
   dashboard:
     name: Dashboard — lint, typecheck, test
@@ -132,9 +134,10 @@ jobs:
       - name: Typecheck
         if: steps.pkg.outputs.present == 'true'
         run: pnpm --filter ./dashboard run --if-present typecheck
-      - name: Unit tests
+      # Coverage-gated (README floor: dashboard 75%) via vitest's coverage thresholds.
+      - name: Tests (coverage-gated)
         if: steps.pkg.outputs.present == 'true'
-        run: pnpm --filter ./dashboard run --if-present test
+        run: pnpm --filter ./dashboard run test:coverage
 
   sdk:
     name: Flutter SDK — analyze, test
@@ -170,7 +173,17 @@ jobs:
         if: steps.pkg.outputs.present == 'true'
         run: flutter analyze
         working-directory: sdk/flutter_analytics
-      - name: Tests
+      - name: Tests (coverage)
         if: steps.pkg.outputs.present == 'true'
-        run: flutter test
+        run: flutter test --coverage
         working-directory: sdk/flutter_analytics
+      # README floor: SDK 85% lines, excluding generated code (*.g.dart).
+      # Pure-awk gate (no lcov dependency), same filter as the sdk plan (task 14).
+      - name: Coverage floor (>= 85% lines, excluding *.g.dart)
+        if: steps.pkg.outputs.present == 'true'
+        working-directory: sdk/flutter_analytics
+        run: |
+          awk '/^SF:.*\.g\.dart$/{skip=1} !skip{print} /^end_of_record$/{skip=0}' coverage/lcov.info > coverage/lcov.filtered.info
+          awk -F: '/^LF/{lf+=$2} /^LH/{lh+=$2} END{printf "line coverage: %.1f%%\n", 100*lh/lf}' coverage/lcov.filtered.info
+          awk -F: '/^LF/{lf+=$2} /^LH/{lh+=$2} END{exit !(100*lh/lf >= 85.0)}' coverage/lcov.filtered.info ||
+            { echo "::error::SDK line coverage is below the 85% floor"; exit 1; }
