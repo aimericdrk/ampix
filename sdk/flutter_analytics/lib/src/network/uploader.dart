@@ -12,6 +12,18 @@ import '../util/logger.dart';
 
 enum _SendOutcome { delivered, invalid, retryLater }
 
+/// Retry state for one queue. Each queue (events, profiles) backs off
+/// independently so a healthy queue never clears a failing queue's deadline.
+class _Backoff {
+  int consecutiveFailures = 0;
+  DateTime? nextAttemptAt;
+
+  void reset() {
+    consecutiveFailures = 0;
+    nextAttemptAt = null;
+  }
+}
+
 /// Drains the persistent queues to `/ingest/events` and `/ingest/profiles`
 /// in gzip batches with exponential backoff + jitter (design §6).
 class Uploader {
@@ -54,8 +66,8 @@ class Uploader {
 
   Timer? _timer;
   bool _flushing = false;
-  int _consecutiveFailures = 0;
-  DateTime? _nextAttemptAt;
+  final _eventsBackoff = _Backoff();
+  final _profilesBackoff = _Backoff();
 
   /// Starts the periodic flush timer (idempotent).
   void start() =>
@@ -66,16 +78,14 @@ class Uploader {
     if (queuedCount >= _batchSize) unawaited(flush());
   }
 
-  /// Drains both queues. Reentrancy-safe; respects the backoff deadline
-  /// unless [force] (the public `MyAmpMix.flush()`).
+  /// Drains both queues. Reentrancy-safe; each queue respects its own
+  /// backoff deadline unless [force] (the public `MyAmpMix.flush()`).
   Future<void> flush({bool force = false}) async {
     if (_flushing) return;
-    final deadline = _nextAttemptAt;
-    if (!force && deadline != null && _clock.now().isBefore(deadline)) return;
     _flushing = true;
     try {
-      await _drainEvents();
-      await _drainProfiles();
+      await _drainEvents(force: force);
+      await _drainProfiles(force: force);
     } finally {
       _flushing = false;
     }
@@ -86,14 +96,20 @@ class Uploader {
     _timer = null;
   }
 
-  Future<void> _drainEvents() async {
+  bool _inBackoff(_Backoff backoff) {
+    final deadline = backoff.nextAttemptAt;
+    return deadline != null && _clock.now().isBefore(deadline);
+  }
+
+  Future<void> _drainEvents({required bool force}) async {
+    if (!force && _inBackoff(_eventsBackoff)) return;
     while (true) {
       final batch = await _events.oldest(_batchSize);
       if (batch.isEmpty) return;
       final body = jsonEncode({
         'events': [for (final stored in batch) stored.event.toJson()],
       });
-      switch (await _post('/ingest/events', body)) {
+      switch (await _post('/ingest/events', body, _eventsBackoff)) {
         case _SendOutcome.delivered:
         case _SendOutcome.invalid:
           // Delivered: server has the batch (202). Invalid: it never will.
@@ -104,14 +120,15 @@ class Uploader {
     }
   }
 
-  Future<void> _drainProfiles() async {
+  Future<void> _drainProfiles({required bool force}) async {
+    if (!force && _inBackoff(_profilesBackoff)) return;
     while (true) {
       final batch = await _profiles.oldest(_batchSize);
       if (batch.isEmpty) return;
       final body = jsonEncode({
         'operations': [for (final stored in batch) stored.op.toJson()],
       });
-      switch (await _post('/ingest/profiles', body)) {
+      switch (await _post('/ingest/profiles', body, _profilesBackoff)) {
         case _SendOutcome.delivered:
         case _SendOutcome.invalid:
           await _profiles.delete([for (final stored in batch) stored.id]);
@@ -121,7 +138,7 @@ class Uploader {
     }
   }
 
-  Future<_SendOutcome> _post(String path, String body) async {
+  Future<_SendOutcome> _post(String path, String body, _Backoff backoff) async {
     try {
       final response = await _client.post(
         Uri.parse('$_serverUrl$path'),
@@ -133,21 +150,24 @@ class Uploader {
         body: gzip.encode(utf8.encode(body)),
       );
       if (response.statusCode == 202) {
-        _resetBackoff();
+        backoff.reset();
         _logRejections(response.body);
         return _SendOutcome.delivered;
       }
-      if (response.statusCode == 400 || response.statusCode == 413) {
-        // The batch can never succeed: drop it rather than retry forever.
+      if (response.statusCode >= 400 &&
+          response.statusCode < 500 &&
+          response.statusCode != 429) {
+        // 4xx (except 429): the batch can never succeed as-is; drop it
+        // rather than retry forever (contract §4: rejection is permanent).
         _logger.log('Batch dropped (${response.statusCode}): ${response.body}');
-        _resetBackoff();
+        backoff.reset();
         return _SendOutcome.invalid;
       }
-      // 401 (token misconfiguration), 429 and 5xx: keep events, back off.
-      _recordFailure('HTTP ${response.statusCode}');
+      // 429 and 5xx: keep events, back off.
+      _recordFailure(backoff, 'HTTP ${response.statusCode}');
       return _SendOutcome.retryLater;
     } on Object catch (error) {
-      _recordFailure('$error');
+      _recordFailure(backoff, '$error');
       return _SendOutcome.retryLater;
     }
   }
@@ -165,23 +185,23 @@ class Uploader {
     }
   }
 
-  void _recordFailure(String reason) {
-    _consecutiveFailures += 1;
-    final exponent = math.min(_consecutiveFailures - 1, 16);
+  void _recordFailure(_Backoff backoff, String reason) {
+    backoff.consecutiveFailures += 1;
+    final exponent = math.min(backoff.consecutiveFailures - 1, 16);
     final rawMs =
         baseRetryDelay.inMilliseconds * math.pow(2, exponent).toDouble();
-    final cappedMs = math.min(rawMs, maxRetryDelay.inMilliseconds.toDouble());
     final jitterFactor = 0.5 + _random.nextDouble(); // uniform in [0.5, 1.5)
-    _nextAttemptAt = _clock.now().add(
-      Duration(milliseconds: (cappedMs * jitterFactor).round()),
+    // Jitter applies before the cap so maxRetryDelay is a true upper bound.
+    final delayMs = math.min(
+      rawMs * jitterFactor,
+      maxRetryDelay.inMilliseconds.toDouble(),
+    );
+    backoff.nextAttemptAt = _clock.now().add(
+      Duration(milliseconds: delayMs.round()),
     );
     _logger.log(
-      'Flush failed ($reason); retry #$_consecutiveFailures after $_nextAttemptAt',
+      'Flush failed ($reason); retry #${backoff.consecutiveFailures} '
+      'after ${backoff.nextAttemptAt}',
     );
-  }
-
-  void _resetBackoff() {
-    _consecutiveFailures = 0;
-    _nextAttemptAt = null;
   }
 }

@@ -123,6 +123,73 @@ void main() {
     expect(calls, 3);
   });
 
+  test(
+    'per-queue backoff: profiles 202 does not clear events backoff',
+    () async {
+      await events.add(buildEvent(), maxQueueSize: 10);
+      await profiles.add(
+        const ProfileOperation(
+          distinctId: 'u_1',
+          op: 'set',
+          properties: {},
+          timestamp: 1,
+        ),
+        maxQueueSize: 10,
+      );
+      var eventCalls = 0;
+      var profileCalls = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/ingest/events') {
+          eventCalls++;
+          return http.Response('oops', 500);
+        }
+        profileCalls++;
+        return http.Response('{"accepted": 1, "rejected": []}', 202);
+      });
+      final uploader = build(client); // jitter factor exactly 1.0
+
+      await uploader.flush();
+      expect(eventCalls, 1);
+      expect(profileCalls, 1); // profiles still drained despite events failing
+      expect(await events.count(), 1);
+      expect(await profiles.count(), 0);
+
+      clock.advance(const Duration(seconds: 1)); // inside events' 2 s backoff
+      await uploader.flush();
+      expect(eventCalls, 1); // deadline survived the profiles 202
+
+      clock.advance(const Duration(seconds: 1)); // 2 s elapsed
+      await uploader.flush();
+      expect(eventCalls, 2);
+    },
+  );
+
+  test('maxRetryDelay is a hard cap even with maximum jitter', () async {
+    await events.add(buildEvent(), maxQueueSize: 10);
+    var calls = 0;
+    final client = MockClient((request) async {
+      calls++;
+      return http.Response('oops', 500);
+    });
+    final uploader = build(client, jitter: 1.0); // jitter factor 1.5
+
+    // Drive 8 consecutive failures; the raw delay after the 8th is
+    // 2 s × 2^7 × 1.5 = 384 s, which must be capped at maxRetryDelay (300 s).
+    await uploader.flush();
+    for (var i = 0; i < 7; i++) {
+      await uploader.flush(force: true);
+    }
+    expect(calls, 8);
+
+    clock.advance(const Duration(seconds: 299)); // 1 s inside the 300 s cap
+    await uploader.flush();
+    expect(calls, 8); // no attempt
+
+    clock.advance(const Duration(seconds: 1)); // cap elapsed
+    await uploader.flush();
+    expect(calls, 9);
+  });
+
   test('flush(force: true) ignores the backoff window', () async {
     await events.add(buildEvent(), maxQueueSize: 10);
     var calls = 0;
@@ -142,6 +209,46 @@ void main() {
     final client = MockClient((request) async => http.Response('bad', 400));
     await build(client).flush();
     expect(await events.count(), 0);
+  });
+
+  test('drops the batch on 413 without retrying', () async {
+    await events.add(buildEvent(), maxQueueSize: 10);
+    final client = MockClient(
+      (request) async => http.Response('too large', 413),
+    );
+    await build(client).flush();
+    expect(await events.count(), 0);
+  });
+
+  test('drops the batch on 422 without retrying (4xx non-429)', () async {
+    await events.add(buildEvent(), maxQueueSize: 10);
+    final client = MockClient(
+      (request) async => http.Response('unprocessable', 422),
+    );
+    await build(client).flush();
+    expect(await events.count(), 0);
+  });
+
+  test('429 keeps the batch and backs off like a 5xx', () async {
+    await events.add(buildEvent(), maxQueueSize: 10);
+    var calls = 0;
+    final client = MockClient((request) async {
+      calls++;
+      return http.Response('slow down', 429);
+    });
+    final uploader = build(client); // jitter factor exactly 1.0
+
+    await uploader.flush();
+    expect(calls, 1);
+    expect(await events.count(), 1); // retained
+
+    clock.advance(const Duration(seconds: 1)); // inside 2 s backoff window
+    await uploader.flush();
+    expect(calls, 1); // no attempt
+
+    clock.advance(const Duration(seconds: 1)); // 2 s elapsed
+    await uploader.flush();
+    expect(calls, 2);
   });
 
   test(
