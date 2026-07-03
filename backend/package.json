@@ -4,6 +4,7 @@
   "private": true,
   "description": "MyAmpMix NestJS backend — ingestion, analytics queries, auth",
   "scripts": {
+    "prepare": "prisma generate",
     "build": "nest build",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",

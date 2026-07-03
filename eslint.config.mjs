@@ -14,6 +14,8 @@ export default tseslint.config(
       '**/coverage/**',
       // Dart package — linted by flutter_lints, not ESLint
       'sdk/**',
+      // Browser app — lints itself via dashboard/eslint.config.js (browser globals)
+      'dashboard/**',
       // Machine-local tooling dirs (gitignored, never in CI)
       '.claude/**',
       '.claude-flow/**',
