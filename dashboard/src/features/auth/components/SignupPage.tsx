@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { SignupForm } from './SignupForm';
 
 export function SignupPage() {
   return (
@@ -9,7 +10,7 @@ export function SignupPage() {
           <CardTitle>Create your MyAmpMix account</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-text-muted">Signup form coming in the next task.</p>
+          <SignupForm />
           <p className="mt-4 text-sm text-text-muted">
             Already have an account?{' '}
             <Link to="/login" className="text-accent underline">
