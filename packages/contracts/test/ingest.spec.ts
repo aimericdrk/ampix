@@ -4,6 +4,7 @@ import {
   ingestEventsRequestSchema,
   ingestProfilesRequestSchema,
   profileOperationSchema,
+  propertyValueSchema,
   RESERVED_EVENTS,
   SDK_TOKEN_REGEX,
 } from '../src';
@@ -77,6 +78,52 @@ describe('ingestEventSchema', () => {
 
   it('accepts null UTM fields in context', () => {
     expect(eventContextSchema.safeParse({ utm_content: null, utm_term: null }).success).toBe(true);
+  });
+
+  it('rejects a negative screen_width in context', () => {
+    expect(eventContextSchema.safeParse({ screen_width: -1 }).success).toBe(false);
+  });
+
+  it('rejects a screen_width above 65535 in context', () => {
+    expect(eventContextSchema.safeParse({ screen_width: 70000 }).success).toBe(false);
+  });
+});
+
+describe('propertyValueSchema (flat properties)', () => {
+  it.each(['pro', 9.99, true, null])('accepts scalar %p', (value) => {
+    expect(propertyValueSchema.safeParse(value).success).toBe(true);
+  });
+
+  it('accepts an array of scalars', () => {
+    expect(propertyValueSchema.safeParse(['a', 1, true, null]).success).toBe(true);
+  });
+
+  it('rejects a nested object value', () => {
+    expect(propertyValueSchema.safeParse({ tier: 'pro' }).success).toBe(false);
+  });
+
+  it('rejects an array containing an object', () => {
+    expect(propertyValueSchema.safeParse(['a', { tier: 'pro' }]).success).toBe(false);
+  });
+
+  it('rejects an array containing a nested array', () => {
+    expect(propertyValueSchema.safeParse([['a']]).success).toBe(false);
+  });
+
+  it('rejects an event with a nested object property value', () => {
+    expect(
+      ingestEventSchema.safeParse({ ...validEvent, properties: { plan: { tier: 'pro' } } }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a profile operation with a nested object property value', () => {
+    const op = {
+      distinct_id: 'u_42',
+      op: 'set',
+      properties: { plan: { tier: 'pro' } },
+      timestamp: 1751462400123,
+    };
+    expect(profileOperationSchema.safeParse(op).success).toBe(false);
   });
 });
 

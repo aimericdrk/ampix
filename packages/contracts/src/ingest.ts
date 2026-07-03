@@ -20,6 +20,23 @@ export const RESERVED_EVENTS = [
 /** Reserved property prefix (shared contracts §4). */
 export const RESERVED_PROPERTY_PREFIX = '$';
 
+/** Identifiers and event names: non-empty string, at most 255 chars (shared contracts §4). */
+const idSchema = z.string().min(1).max(255);
+
+/** Client-supplied epoch timestamp in milliseconds. */
+const epochMsSchema = z.number().int().positive();
+
+const propertyScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+/**
+ * One flat property value: a scalar, null, or an array of scalars.
+ * Nested objects and nested arrays are rejected (shared contracts §4).
+ */
+export const propertyValueSchema = z.union([propertyScalarSchema, z.array(propertyScalarSchema)]);
+
+/** Flat property bag shared by events and profile operations (shared contracts §4). */
+export const propertiesSchema = z.record(z.string(), propertyValueSchema);
+
 /** Optional device/app context attached to every event (shared contracts §4). */
 export const eventContextSchema = z
   .object({
@@ -49,18 +66,19 @@ export const eventContextSchema = z
 /** One event as sent by the SDK to POST /ingest/events (shared contracts §4). */
 export const ingestEventSchema = z.object({
   insert_id: z.string().uuid(),
-  event: z.string().min(1).max(255),
-  distinct_id: z.string().min(1).max(255),
-  anon_id: z.string().min(1).max(255),
+  event: idSchema,
+  distinct_id: idSchema,
+  anon_id: idSchema,
   session_id: z.string().uuid(),
-  timestamp: z.number().int().positive(),
-  properties: z.record(z.string(), z.unknown()).optional(),
+  timestamp: epochMsSchema,
+  properties: propertiesSchema.optional(),
   context: eventContextSchema.optional(),
 });
 
 /**
  * Request envelope for POST /ingest/events. Items are `unknown` on purpose:
  * validation is per-item (accept/reject), never all-or-nothing.
+ * Envelope size (≤INGEST_MAX_BATCH, default 100) is enforced at the API layer — see contracts §4.
  */
 export const ingestEventsRequestSchema = z.object({
   events: z.array(z.unknown()).min(1),
@@ -70,13 +88,16 @@ export const profileOpSchema = z.enum(['set', 'set_once', 'increment', 'append',
 
 /** One profile operation for POST /ingest/profiles (shared contracts §4). */
 export const profileOperationSchema = z.object({
-  distinct_id: z.string().min(1).max(255),
+  distinct_id: idSchema,
   op: profileOpSchema,
-  properties: z.record(z.string(), z.unknown()).optional(),
-  timestamp: z.number().int().positive(),
+  properties: propertiesSchema.optional(),
+  timestamp: epochMsSchema,
 });
 
-/** Request envelope for POST /ingest/profiles. Per-item validation, like events. */
+/**
+ * Request envelope for POST /ingest/profiles. Per-item validation, like events.
+ * Envelope size (≤INGEST_MAX_BATCH, default 100) is enforced at the API layer — see contracts §4.
+ */
 export const ingestProfilesRequestSchema = z.object({
   operations: z.array(z.unknown()).min(1),
 });
