@@ -2,10 +2,12 @@ import { Module } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { LoggerModule } from 'nestjs-pino';
 import { AppConfigModule } from './config/config.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
     AppConfigModule,
+    PrismaModule,
     LoggerModule.forRoot({
       pinoHttp: {
         genReqId: (req, res) => {

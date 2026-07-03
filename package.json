@@ -8,6 +8,13 @@
     "node": ">=22 <23",
     "pnpm": ">=10"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ]
+  },
   "scripts": {
     "lint": "eslint .",
     "format": "prettier --write .",
