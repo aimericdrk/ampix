@@ -63,6 +63,19 @@ describe('POST /ingest/profiles (e2e)', () => {
     expect(await fetchProfile('u_101')).toEqual({});
   });
 
+  it('increments a stored numeric property across separate requests (regression: JSON int read-back typing)', async () => {
+    await post([
+      { distinct_id: 'u_103', op: 'set', properties: { count: 41 }, timestamp: 1 },
+    ]).expect(202);
+    await post([
+      { distinct_id: 'u_103', op: 'increment', properties: { count: 1 }, timestamp: 2 },
+    ]).expect(202);
+    // Must be the number 42: if ClickHouse's 64-bit-integer quoting leaked back into
+    // ProfileWriter.fetchCurrent, the stored base would read back as the string "41"
+    // and increment would reset to 1 (or concatenate to '411') instead of accumulating.
+    expect(await fetchProfile('u_103')).toEqual({ count: 42 });
+  });
+
   it('rejects invalid operations per-item and still applies the valid ones', async () => {
     const res = await post([
       { distinct_id: 'u_102', op: 'merge', properties: {}, timestamp: 1 },

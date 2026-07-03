@@ -51,6 +51,12 @@ export function applyOperation(
  * Applies profile operations: read current state (SELECT ... FINAL), fold ops in
  * timestamp order, write one new user_profiles row per user. ReplacingMergeTree(updated_at)
  * keeps the latest row; profile ops are rare relative to events, so the read is acceptable.
+ *
+ * Concurrency: this is a read-fold-write without locking. Concurrent requests mutating
+ * the same distinct_id each read the same base state and write competing full rows;
+ * ReplacingMergeTree keeps the one with the latest updated_at (last write wins), so a
+ * concurrent request's ops can be discarded entirely — not merged. Acceptable under the
+ * design's eventual-consistency model for profile data.
  */
 @Injectable()
 export class ProfileWriter {
@@ -94,6 +100,11 @@ export class ProfileWriter {
     const rows = await this.clickhouse.query<{ properties: Record<string, unknown> }>(
       'SELECT properties FROM user_profiles FINAL WHERE project_id = {projectId:UUID} AND distinct_id = {distinctId:String} LIMIT 1',
       { projectId, distinctId },
+      // ClickHouse 24.8's JSON type infers integer leaves as Int64 and, by default,
+      // quotes 64-bit integers as JSON strings (precision-loss guard for JS numbers).
+      // A stringified base would make applyOperation's increment silently reset to the
+      // delta, so opt out of the quoting for this read specifically.
+      { output_format_json_quote_64bit_integers: 0 },
     );
     return rows[0]?.properties ?? null;
   }

@@ -1,5 +1,6 @@
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { ClickHouseClient, createClient } from '@clickhouse/client';
+import type { ClickHouseSettings } from '@clickhouse/client';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 
 /** One row of analytics.events — columns exactly per shared contracts §5. */
@@ -84,17 +85,23 @@ export class ClickHouseService implements EventSink, OnApplicationShutdown {
     await this.client.insert({ table: 'user_profiles', values: rows, format: 'JSONEachRow' });
   }
 
-  /** Parameterized query — user input must always bind via {name:Type} params, never interpolation. */
-  async query<T>(sql: string, params: Record<string, unknown> = {}): Promise<T[]> {
+  /**
+   * Parameterized query — user input must always bind via {name:Type} params, never
+   * interpolation. Callers may pass per-call `settings` (e.g. ProfileWriter disables
+   * `output_format_json_quote_64bit_integers` to round-trip numbers through the JSON
+   * column type); by default ClickHouse's settings, including its 64-bit-integer
+   * precision guard, are left untouched.
+   */
+  async query<T>(
+    sql: string,
+    params: Record<string, unknown> = {},
+    settings?: ClickHouseSettings,
+  ): Promise<T[]> {
     const result = await this.client.query({
       query: sql,
       query_params: params,
       format: 'JSONEachRow',
-      // ClickHouse 24.8's JSON type infers integer leaves as Int64 and, by default,
-      // quotes 64-bit integers as JSON strings (precision-loss guard for JS numbers).
-      // That would break numeric round-tripping (e.g. ProfileWriter's increment op),
-      // so disable it for our own JSONEachRow reads.
-      clickhouse_settings: { output_format_json_quote_64bit_integers: 0 },
+      clickhouse_settings: settings,
     });
     return result.json<T>();
   }
