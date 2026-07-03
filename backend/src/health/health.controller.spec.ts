@@ -2,7 +2,7 @@ import type { Response } from 'express';
 import type Redis from 'ioredis';
 import type { ClickHouseService } from '../clickhouse/clickhouse.service';
 import type { PrismaService } from '../prisma/prisma.service';
-import { HealthController } from './health.controller';
+import { HealthController, READINESS_PROBE_TIMEOUT_MS } from './health.controller';
 
 function makeController(
   overrides: { pgFails?: boolean; chDown?: boolean; redisFails?: boolean } = {},
@@ -69,5 +69,32 @@ describe('HealthController', () => {
     const body = await makeController({ redisFails: true }).ready(res);
     expect(body.checks.redis).toBe(false);
     expect(statusCalls).toEqual([503]);
+  });
+
+  it('ready returns 503 within the probe timeout when a dependency hangs instead of failing', async () => {
+    jest.useFakeTimers();
+    try {
+      const prisma = {
+        // Half-open connection: the query never settles — neither resolves nor rejects.
+        $queryRaw: jest.fn().mockReturnValue(new Promise(() => {})),
+      } as unknown as PrismaService;
+      const clickhouse = {
+        ping: jest.fn().mockResolvedValue(true),
+      } as unknown as ClickHouseService;
+      const redis = { ping: jest.fn().mockResolvedValue('PONG') } as unknown as Redis;
+      const { res, statusCalls } = mockRes();
+
+      const pending = new HealthController(prisma, clickhouse, redis).ready(res);
+      await jest.advanceTimersByTimeAsync(READINESS_PROBE_TIMEOUT_MS);
+      const body = await pending;
+
+      expect(body).toEqual({
+        status: 'unavailable',
+        checks: { postgres: false, clickhouse: true, redis: true },
+      });
+      expect(statusCalls).toEqual([503]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
