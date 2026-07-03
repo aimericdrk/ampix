@@ -1,0 +1,40 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: oklch(98.5% 0.002 260);
+  --surface: oklch(100% 0 0);
+  --border: oklch(90% 0.004 260);
+  --text: oklch(22% 0.01 260);
+  --text-muted: oklch(50% 0.01 260);
+  --accent: oklch(55% 0.18 265);
+  --accent-fg: oklch(99% 0 0);
+  --danger: oklch(55% 0.2 25);
+}
+
+.dark {
+  --bg: oklch(18% 0.01 260);
+  --surface: oklch(22% 0.01 260);
+  --border: oklch(32% 0.01 260);
+  --text: oklch(95% 0.005 260);
+  --text-muted: oklch(70% 0.01 260);
+  --accent: oklch(70% 0.15 265);
+  --accent-fg: oklch(18% 0.01 260);
+  --danger: oklch(65% 0.18 25);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+}
+
+body {
+  @apply bg-bg text-text antialiased;
+}
