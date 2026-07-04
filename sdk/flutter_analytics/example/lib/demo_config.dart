@@ -13,14 +13,12 @@ library;
 /// the host loopback interface) when running on the Android emulator.
 const String demoServerUrl = 'http://localhost:8080';
 
-/// Placeholder ingest token: `mam_` followed by 32 hex zeros.
+/// Demo ingest token: `mam_` followed by 32 hex zeros.
 ///
-/// This is NOT a real token, it only lets the SDK initialize without
-/// crashing. Replace it with the token printed by `pnpm dev`'s demo seed
-/// (run from the repo root) to see events actually accepted by your local
-/// MyAmpMix backend — otherwise every batch the SDK uploads will be
-/// rejected with 401 Unauthorized. The app still runs normally either way,
-/// and the on-screen Event Log still shows every call made to the SDK,
-/// because the SDK is designed to never throw into the host app regardless
-/// of network or auth failures.
+/// Running `pnpm dev` from the repo root seeds this EXACT token into the local
+/// backend, so events from this example are accepted (202) out of the box — no
+/// edit needed. If the backend is not running (or you point at a different
+/// server), uploads get 401, but the app still runs normally and the on-screen
+/// Event Log still shows every SDK call, because the SDK never throws into the
+/// host app regardless of network or auth failures.
 const String demoToken = 'mam_00000000000000000000000000000000';

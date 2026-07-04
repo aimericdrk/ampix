@@ -13,7 +13,11 @@
     "test:cov": "jest --config jest.config.coverage.js --coverage --runInBand",
     "test:int": "jest --config test/jest-integration.config.js --runInBand",
     "test:e2e": "jest --config test/jest-e2e.config.js --runInBand",
-    "prisma": "prisma"
+    "prisma": "prisma",
+    "seed": "prisma db seed"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
   },
   "dependencies": {
     "@clickhouse/client": "^1.11.0",

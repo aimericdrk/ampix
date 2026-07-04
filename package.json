@@ -21,6 +21,8 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
+    "dev": "bash scripts/dev.sh",
+    "seed": "pnpm --filter @myampmix/backend exec prisma db seed",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:reset": "docker compose -f infra/docker-compose.yml down -v"
