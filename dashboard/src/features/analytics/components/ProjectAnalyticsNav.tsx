@@ -3,6 +3,9 @@ import { Link } from '@tanstack/react-router';
 const TABS = [
   { to: '/projects/$projectId', label: 'Overview', exact: true },
   { to: '/projects/$projectId/insights', label: 'Insights', exact: false },
+  { to: '/projects/$projectId/funnels', label: 'Funnels', exact: false },
+  { to: '/projects/$projectId/retention', label: 'Retention', exact: false },
+  { to: '/projects/$projectId/flows', label: 'Flows', exact: false },
   { to: '/projects/$projectId/live', label: 'Live', exact: false },
   { to: '/projects/$projectId/users', label: 'Users', exact: false },
   { to: '/projects/$projectId/sessions', label: 'Sessions', exact: false },

@@ -1,12 +1,18 @@
 import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api/client';
 import type {
+  FlowsQueryDefinition,
+  FlowsResponse,
+  FunnelQueryDefinition,
+  FunnelResponse,
   InsightsQueryDefinition,
   InsightsResponse,
   ListUsersResponse,
   LiveEventsResponse,
   MetaEventsResponse,
   MetaPropertiesResponse,
+  RetentionQueryDefinition,
+  RetentionResponse,
   SessionsSummaryResponse,
   UserProfileResponse,
 } from '../../lib/api/types';
@@ -35,6 +41,38 @@ export function useRunInsights(projectId: string) {
   return useMutation({
     mutationFn: (query: InsightsQueryDefinition) =>
       apiFetch<InsightsResponse>(`${base(projectId)}/query/insights`, {
+        method: 'POST',
+        body: query,
+      }),
+  });
+}
+
+// --- Advanced analysis query engine (contracts §15) ---
+
+export function useRunFunnels(projectId: string) {
+  return useMutation({
+    mutationFn: (query: FunnelQueryDefinition) =>
+      apiFetch<FunnelResponse>(`${base(projectId)}/query/funnels`, {
+        method: 'POST',
+        body: query,
+      }),
+  });
+}
+
+export function useRunRetention(projectId: string) {
+  return useMutation({
+    mutationFn: (query: RetentionQueryDefinition) =>
+      apiFetch<RetentionResponse>(`${base(projectId)}/query/retention`, {
+        method: 'POST',
+        body: query,
+      }),
+  });
+}
+
+export function useRunFlows(projectId: string) {
+  return useMutation({
+    mutationFn: (query: FlowsQueryDefinition) =>
+      apiFetch<FlowsResponse>(`${base(projectId)}/query/flows`, {
         method: 'POST',
         body: query,
       }),

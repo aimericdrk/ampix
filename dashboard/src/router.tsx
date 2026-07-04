@@ -15,6 +15,9 @@ import { SecuritySettingsPage } from './features/auth/components/SecuritySetting
 import { SignupPage } from './features/auth/components/SignupPage';
 import { authStore } from './features/auth/store';
 import { InsightsPage } from './features/analytics/components/InsightsPage';
+import { FunnelsPage } from './features/analytics/components/FunnelsPage';
+import { RetentionPage } from './features/analytics/components/RetentionPage';
+import { FlowsPage } from './features/analytics/components/FlowsPage';
 import { LiveFeedPage } from './features/analytics/components/LiveFeedPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { UserProfilePage } from './features/analytics/components/UserProfilePage';
@@ -118,6 +121,26 @@ const insightsRoute = createRoute({
   component: InsightsPage,
 });
 
+// --- Advanced analysis, Phase 4 (contracts §15) ---
+
+const funnelsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/funnels',
+  component: FunnelsPage,
+});
+
+const retentionRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/retention',
+  component: RetentionPage,
+});
+
+const flowsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/flows',
+  component: FlowsPage,
+});
+
 const liveEventsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/live',
@@ -169,6 +192,9 @@ export const routeTree = rootRoute.addChildren([
     projectsRoute,
     projectDetailRoute,
     insightsRoute,
+    funnelsRoute,
+    retentionRoute,
+    flowsRoute,
     liveEventsRoute,
     usersRoute,
     userProfileRoute,

@@ -24,6 +24,27 @@
   --series-7: #e87ba4;
   --series-8: #eb6834;
   --series-other: oklch(62% 0.01 260);
+
+  /* Sequential single-hue (blue) ramp for the retention heatmap. Level 0 = lowest retention,
+     level 6 = highest; light→dark = low→high. The near-zero end is allowed to recede toward the
+     surface (sequential-heatmap convention, dataviz references/palette.md) — identity is never
+     color-alone since every cell shows its numeric rate and the grid is an accessible table.
+     Steps are the palette.md blue ramp; each level pairs a background with a legible foreground.
+     Validated with dataviz scripts/validate_palette.js (monotone L, ΔL, single-hue all PASS). */
+  --retention-0-bg: #cde2fb;
+  --retention-0-fg: #0b0b0b;
+  --retention-1-bg: #9ec5f4;
+  --retention-1-fg: #0b0b0b;
+  --retention-2-bg: #6da7ec;
+  --retention-2-fg: #0b0b0b;
+  --retention-3-bg: #3987e5;
+  --retention-3-fg: #0b0b0b;
+  --retention-4-bg: #256abf;
+  --retention-4-fg: #ffffff;
+  --retention-5-bg: #184f95;
+  --retention-5-fg: #ffffff;
+  --retention-6-bg: #0d366b;
+  --retention-6-fg: #ffffff;
 }
 
 .dark {
@@ -48,6 +69,24 @@
   --series-7: #d55181;
   --series-8: #d95926;
   --series-other: oklch(58% 0.01 260);
+
+  /* Dark mode is a SELECTED ramp (same 7 hues), with the rate→step direction flipped: low retention
+     recedes into the dark surface (dark navy), high retention stands out bright. Level index still
+     maps to the same magnitude bucket (0 = low, 6 = high). Foregrounds re-chosen per step luminance. */
+  --retention-0-bg: #0d366b;
+  --retention-0-fg: #ffffff;
+  --retention-1-bg: #184f95;
+  --retention-1-fg: #ffffff;
+  --retention-2-bg: #256abf;
+  --retention-2-fg: #ffffff;
+  --retention-3-bg: #3987e5;
+  --retention-3-fg: #0b0b0b;
+  --retention-4-bg: #6da7ec;
+  --retention-4-fg: #0b0b0b;
+  --retention-5-bg: #9ec5f4;
+  --retention-5-fg: #0b0b0b;
+  --retention-6-bg: #cde2fb;
+  --retention-6-fg: #0b0b0b;
 }
 
 @theme inline {

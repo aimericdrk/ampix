@@ -9,11 +9,17 @@ import type {
   CreateInvitationResponse,
   CreateOrgResponse,
   EventSummaryResponse,
+  FlowsQueryDefinition,
+  FlowsResponse,
+  FunnelQueryDefinition,
+  FunnelResponse,
   Invitation,
   InvitationPreview,
   InsightsQueryDefinition,
   InsightsSeries,
   ListInvitationsResponse,
+  RetentionQueryDefinition,
+  RetentionResponse,
   ListMembersResponse,
   ListOrgsResponse,
   ListProjectsResponse,
@@ -154,6 +160,61 @@ export const SESSIONS_SUMMARY_FIXTURE: SessionsSummaryResponse = {
     { t: '2026-06-29', sessions: 40, avg_duration_ms: 230000 },
     { t: '2026-06-30', sessions: 44, avg_duration_ms: 250000 },
     { t: '2026-07-01', sessions: 44, avg_duration_ms: 255000 },
+  ],
+};
+
+// --- Advanced analysis fixtures (contracts §15) ---
+
+/** Deterministic funnel used by the default handler when a test does not override it. */
+export const FUNNEL_FIXTURE: FunnelResponse = {
+  steps: [
+    { event: 'app_open', count: 1000, conversion_from_prev: 1, conversion_from_top: 1 },
+    { event: 'signup_started', count: 620, conversion_from_prev: 0.62, conversion_from_top: 0.62 },
+    { event: 'checkout_completed', count: 145, conversion_from_prev: 0.234, conversion_from_top: 0.145 },
+  ],
+  overall_conversion: 0.145,
+};
+
+/** Two cohorts + a size-weighted averages row (period 1 avg = (320*0.65 + 180*0.5)/500 = 0.596). */
+export const RETENTION_FIXTURE: RetentionResponse = {
+  cohorts: [
+    {
+      cohort: '2026-06-01',
+      size: 320,
+      periods: [
+        { period: 0, count: 320, rate: 1 },
+        { period: 1, count: 208, rate: 0.65 },
+        { period: 2, count: 112, rate: 0.35 },
+      ],
+    },
+    {
+      cohort: '2026-06-02',
+      size: 180,
+      periods: [
+        { period: 0, count: 180, rate: 1 },
+        { period: 1, count: 90, rate: 0.5 },
+      ],
+    },
+  ],
+  averages: [
+    { period: 0, rate: 1 },
+    { period: 1, rate: 0.596 },
+    { period: 2, rate: 0.35 },
+  ],
+};
+
+/** A two-step forward flow with an $end drop-off and an $other fold. */
+export const FLOWS_FIXTURE: FlowsResponse = {
+  nodes: [
+    { id: '0:app_open', step: 0, event: 'app_open', value: 1000 },
+    { id: '1:browse', step: 1, event: 'browse', value: 540 },
+    { id: '1:$other', step: 1, event: '$other', value: 160 },
+    { id: '1:$end', step: 1, event: '$end', value: 300 },
+  ],
+  links: [
+    { source: '0:app_open', target: '1:browse', value: 540 },
+    { source: '0:app_open', target: '1:$other', value: 160 },
+    { source: '0:app_open', target: '1:$end', value: 300 },
   ],
 };
 
@@ -977,6 +1038,58 @@ export const handlers = [
       });
     });
     return HttpResponse.json({ series });
+  }),
+
+  // --- Advanced analysis (contracts §15) ---
+
+  http.post('/api/v1/projects/:projectId/query/funnels', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as FunnelQueryDefinition;
+    if (!body.steps || body.steps.length < 2 || body.steps.length > 8) {
+      return problem(400, 'Invalid funnel: 2-8 steps required');
+    }
+    // Deterministic monotonic decay (halving per step) keyed off the requested step events so the
+    // rendered funnel matches the builder; exact-value tests override this handler.
+    const top = 1000;
+    const steps = body.steps.map((step, i) => {
+      const count = Math.round(top * 0.5 ** i);
+      const prev = i === 0 ? top : Math.round(top * 0.5 ** (i - 1));
+      return {
+        event: step.event,
+        count,
+        conversion_from_prev: i === 0 ? 1 : count / prev,
+        conversion_from_top: count / top,
+      };
+    });
+    const response: FunnelResponse = {
+      steps,
+      overall_conversion: (steps.at(-1)?.count ?? 0) / top,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/query/retention', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as RetentionQueryDefinition;
+    if (!body.born_event?.name) return problem(400, 'Invalid retention: born_event required');
+    if (body.periods < 1 || body.periods > 30) {
+      return problem(400, 'Invalid retention: periods out of range');
+    }
+    return HttpResponse.json(RETENTION_FIXTURE);
+  }),
+
+  http.post('/api/v1/projects/:projectId/query/flows', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as FlowsQueryDefinition;
+    if (!body.anchor?.event) return problem(400, 'Invalid flow: anchor event required');
+    if (body.steps < 1 || body.steps > 5) return problem(400, 'Invalid flow: steps out of range');
+    return HttpResponse.json(FLOWS_FIXTURE);
   }),
 
   http.get('/api/v1/projects/:projectId/events/live', ({ request }) => {

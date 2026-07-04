@@ -394,3 +394,140 @@ export interface MetaProperty {
 export interface MetaPropertiesResponse {
   properties: MetaProperty[];
 }
+
+// --- Advanced analysis (contracts §15) ---
+// Request/response shapes mirror shared-contracts §15 byte-for-byte (the concurrent backend builds
+// against the same section). Filters/date-range/breakdown reuse the §14 primitives above.
+
+/** One funnel step: an event plus optional §14 filters (AND-joined). */
+export interface FunnelStep {
+  event: string;
+  filters: InsightsFilter[];
+}
+
+/** `any` = steps may be interleaved; `strict_order` = steps strictly consecutive in time. */
+export type FunnelOrder = 'any' | 'strict_order';
+
+export const FUNNEL_ORDERS: FunnelOrder[] = ['any', 'strict_order'];
+
+/** `POST /query/funnels` body — 2..8 ordered steps, a 1..365-day conversion window. */
+export interface FunnelQueryDefinition {
+  steps: FunnelStep[];
+  date_range: InsightsDateRange;
+  window_days: number;
+  order: FunnelOrder;
+  breakdown?: InsightsBreakdown;
+}
+
+/**
+ * `conversion_from_prev` = count / previous step count (1.0 for step 0);
+ * `conversion_from_top` = count / step-0 count. Both `0` when the denominator is `0`.
+ */
+export interface FunnelResultStep {
+  event: string;
+  count: number;
+  conversion_from_prev: number;
+  conversion_from_top: number;
+}
+
+/** One funnel per breakdown value (top 10, rest folded into `$other`); present only when breakdown set. */
+export interface FunnelBreakdownResult {
+  value: string;
+  steps: FunnelResultStep[];
+  overall_conversion: number;
+}
+
+export interface FunnelResponse {
+  steps: FunnelResultStep[];
+  overall_conversion: number;
+  breakdowns?: FunnelBreakdownResult[];
+}
+
+/** Retention period granularity — a constant-map keyword, not free text. */
+export type RetentionInterval = 'day' | 'week';
+
+export const RETENTION_INTERVALS: RetentionInterval[] = ['day', 'week'];
+
+/** A cohort-defining or returning event: a name plus optional §14 filters. */
+export interface RetentionEvent {
+  name: string;
+  filters: InsightsFilter[];
+}
+
+/** `POST /query/retention` body — `return_event` defaults to `born_event` when omitted; `periods` is 1..30. */
+export interface RetentionQueryDefinition {
+  born_event: RetentionEvent;
+  return_event?: RetentionEvent;
+  date_range: InsightsDateRange;
+  interval: RetentionInterval;
+  periods: number;
+}
+
+export interface RetentionPeriodCell {
+  period: number;
+  count: number;
+  rate: number;
+}
+
+/** Cohort row: born bucket + its size; period 0 is the cohort itself (`count == size`, `rate == 1.0`). */
+export interface RetentionCohort {
+  cohort: string;
+  size: number;
+  periods: RetentionPeriodCell[];
+}
+
+/** Size-weighted mean retention rate per period, across all cohorts. */
+export interface RetentionAveragePoint {
+  period: number;
+  rate: number;
+}
+
+export interface RetentionResponse {
+  cohorts: RetentionCohort[];
+  averages: RetentionAveragePoint[];
+}
+
+/** `forward` = events after the anchor; `backward` = events before it. */
+export type FlowsDirection = 'forward' | 'backward';
+
+export const FLOWS_DIRECTIONS: FlowsDirection[] = ['forward', 'backward'];
+
+/** `session` = split by session id; `user` = the whole user timeline. */
+export type FlowsUnit = 'session' | 'user';
+
+export const FLOWS_UNITS: FlowsUnit[] = ['session', 'user'];
+
+export interface FlowsAnchor {
+  event: string;
+  filters: InsightsFilter[];
+}
+
+/** `POST /query/flows` body — `steps` is 1..5 hops, `max_nodes_per_step` is 1..20. */
+export interface FlowsQueryDefinition {
+  anchor: FlowsAnchor;
+  direction: FlowsDirection;
+  date_range: InsightsDateRange;
+  steps: number;
+  max_nodes_per_step: number;
+  unit: FlowsUnit;
+}
+
+/** Sankey node — `id` is `"{step}:{event}"`, unique across steps even when an event recurs. */
+export interface FlowNode {
+  id: string;
+  step: number;
+  event: string;
+  value: number;
+}
+
+/** Sankey link — `source`/`target` reference `FlowNode.id`. */
+export interface FlowLink {
+  source: string;
+  target: string;
+  value: number;
+}
+
+export interface FlowsResponse {
+  nodes: FlowNode[];
+  links: FlowLink[];
+}
