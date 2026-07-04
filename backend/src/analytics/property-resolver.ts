@@ -69,9 +69,14 @@ export function resolveProperty(
   paramName: string,
   params: Record<string, unknown>,
 ): ResolvedProperty {
-  const column = EVENT_COLUMNS[property];
-  if (column !== undefined) {
-    return { expr: column, isColumn: true };
+  // hasOwnProperty (not a bare `EVENT_COLUMNS[property]` lookup) so that
+  // Object.prototype-inherited names — `constructor`, `__proto__`, `toString`,
+  // `hasOwnProperty`, `valueOf`, … — do NOT resolve as whitelisted columns.
+  // A bare lookup would return the inherited builtin (a Function/Object) and
+  // splice its stringified form into the SQL text, bypassing the bound-param
+  // invariant. Inherited names correctly fall through to the custom-key branch.
+  if (Object.prototype.hasOwnProperty.call(EVENT_COLUMNS, property)) {
+    return { expr: EVENT_COLUMNS[property]!, isColumn: true };
   }
   params[paramName] = property;
   return {

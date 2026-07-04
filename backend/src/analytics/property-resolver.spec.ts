@@ -83,4 +83,19 @@ describe('resolveProperty', () => {
     expect(resolved.isColumn).toBe(false);
     expect(params.p).toBe('os ');
   });
+
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf'])(
+    'INJECTION: Object.prototype-inherited name %p resolves as a bound custom key, never a column',
+    (proto) => {
+      const params: Record<string, unknown> = {};
+      const resolved = resolveProperty(proto, 'p', params);
+
+      expect(resolved.isColumn).toBe(false);
+      expect(params.p).toBe(proto);
+      expect(resolved.expr).toBe('JSONExtractString(toJSONString(properties), {p:String})');
+      // The stringified builtin must never leak into the SQL expression.
+      expect(resolved.expr).not.toContain('native code');
+      expect(resolved.expr).not.toContain('[object');
+    },
+  );
 });
