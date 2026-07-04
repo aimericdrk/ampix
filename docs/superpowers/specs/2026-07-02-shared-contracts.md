@@ -390,3 +390,91 @@ Engine: per unit, order events by `timestamp`; for each occurrence of the anchor
 }
 ```
 Node `id` is `"{step}:{event}"` (unique across steps even when the same event recurs). `400` on unknown direction/unit, `steps` out of `1..5`, or `max_nodes_per_step` out of `1..20`.
+
+## 16. Cohorts, saved reports & custom dashboards — Phase 5 (added 2026-07-04)
+
+Persistence layer + management API that make Phase 3–4 analytics reusable: a **cohort** is a saved
+audience definition, a **saved report** is a saved query of any analysis type, a **dashboard** is a
+grid of tiles each backed by a saved report. All rows are **project-scoped** and gated by project
+membership; **reads require viewer+, writes require analyst+** (reuse `RolesGuard` + `@Roles('analyst')`
+from `../authz/roles.guard`, resolving the org from the project like the tenancy controllers). Ownership
+is recorded (`created_by`) but does not restrict access within the project. Definitions are stored as
+validated JSON and **re-validated with the SAME zod schemas** (§14/§15) on write and before every run —
+a stored definition is never trusted blindly, so the injection-safe query engine remains the only path
+to ClickHouse.
+
+### Postgres schema (Prisma — new migration `phase5_cohorts_dashboards`)
+- `Cohort(id uuid pk, project_id fk→Project, name, definition Json, created_by fk→User, created_at, updated_at)`
+- `SavedReport(id uuid pk, project_id fk, name, kind enum insights|funnel|retention|flows, definition Json, created_by fk, created_at, updated_at)`
+- `Dashboard(id uuid pk, project_id fk, name, created_by fk, created_at, updated_at)`
+- `DashboardTile(id uuid pk, dashboard_id fk→Dashboard on delete cascade, title, saved_report_id fk→SavedReport nullable, inline_definition Json nullable, kind enum, x int, y int, w int, h int, position int)` — a tile references a saved report OR carries an inline definition (exactly one; enforce in the service). Grid is a fixed **12-column** layout; `w`∈1..12, `h`≥1, `x`∈0..11, `x+w`≤12.
+- Indexes on every `project_id`; `DashboardTile(dashboard_id, position)`. Cascade tile delete with dashboard.
+
+### Cohort definition (JSON) & engine
+```jsonc
+{
+  "match": "all",                                        // all | any (AND / OR across conditions)
+  "conditions": [
+    { "type": "behavior", "event": "checkout_completed", "op": "gte", "count": 1, "within_days": 30,
+      "filters": [ { "property": "os", "op": "eq", "value": "ios" } ] },   // did/didn't do event N times in last D days
+    { "type": "did_not", "event": "app_open", "within_days": 7 },          // performed the event 0 times in the window
+    { "type": "property", "property": "plan", "op": "eq", "value": "pro" } // latest-known profile / event property
+  ]                                                                         // 1..10 conditions
+}
+```
+Engine: each condition compiles to a **parameterized** `distinct_id`-producing ClickHouse fragment
+(behavior → `GROUP BY distinct_id HAVING count(...) {op} {n}` over the window; `did_not` → users absent
+from that set; property → matches via `resolveProperty`). `all` intersects the id-sets, `any` unions
+them. The resolved cohort is a `distinct_id IN (<subquery>)` predicate — never a materialized id list
+spliced into SQL. **Cohort as a filter:** §14 insights, §15 funnels, and §15 retention bodies accept an
+optional top-level `"cohort_id": "<uuid>"`; the engine loads that cohort's definition, compiles it, and
+AND-joins the `distinct_id IN (…)` predicate into the query (still fully parameterized).
+
+### Cohorts API (`/api/v1/projects/:projectId/cohorts`)
+- `GET /cohorts` → `{ "cohorts": [ { "id","name","created_by","created_at","updated_at" } ] }` (viewer+).
+- `POST /cohorts` (analyst+) body `{ "name", "definition" }` → `201` cohort object. `400` if the
+  definition fails the cohort zod schema.
+- `GET /cohorts/:id` → cohort incl. `definition`. `PATCH /cohorts/:id` (analyst+) name/definition.
+  `DELETE /cohorts/:id` (analyst+) → `204`.
+- `GET /cohorts/:id/preview` → `{ "count": N, "sample": ["distinct_id", …up to 20] }` — runs the cohort
+  and returns its size + a sample (viewer+). `uniqExact` for the count.
+
+### Saved reports API (`/api/v1/projects/:projectId/reports`)
+- `GET /reports?kind=<kind?>` → `{ "reports": [ { "id","name","kind","created_by","updated_at" } ] }`.
+- `POST /reports` (analyst+) `{ "name","kind","definition" }` → `201`. The `definition` is validated with
+  the zod schema for its `kind` (§14 insights / §15 funnel|retention|flows) — `400` on mismatch.
+- `GET /reports/:id` (incl. definition) · `PATCH /reports/:id` · `DELETE /reports/:id` (analyst+, `204`).
+- `POST /reports/:id/run` (viewer+) → executes the stored definition through the existing engine and
+  returns that analysis's normal response shape (re-validated first). Accepts an optional body
+  `{ "date_range"?, "cohort_id"? }` override merged over the stored definition.
+
+### Dashboards API (`/api/v1/projects/:projectId/dashboards`)
+- `GET /dashboards` → `{ "dashboards": [ { "id","name","tile_count","updated_at" } ] }`.
+- `POST /dashboards` (analyst+) `{ "name" }` → `201`. `GET /dashboards/:id` →
+  `{ "id","name","tiles": [ { "id","title","kind","saved_report_id","inline_definition","x","y","w","h","position" } ] }`.
+  `PATCH /dashboards/:id` (name) · `DELETE /dashboards/:id` (analyst+, `204`, cascades tiles).
+- Tiles: `POST /dashboards/:id/tiles` (analyst+) `{ "title","saved_report_id"? | "inline_definition"?,"kind","x","y","w","h" }`
+  → `201` tile; `PATCH /dashboards/:id/tiles/:tileId` (move/resize/retitle); `DELETE …/tiles/:tileId` (`204`).
+  `PATCH /dashboards/:id/layout` (analyst+) `{ "tiles": [ { "id","x","y","w","h","position" } ] }` batch-saves
+  the grid after a drag. Validate the 12-col bounds server-side.
+- `GET /dashboards/:id/data` (viewer+) → runs every tile's definition and returns
+  `{ "tiles": [ { "id", "result": <analysis response> | { "error": "<detail>" } } ] }` — one tile failing
+  never fails the dashboard.
+
+### Dashboard frontend (React)
+New routes `/projects/$projectId/{cohorts,reports,dashboards,dashboards/$dashboardId}` + nav tabs.
+- **Cohorts**: list + a builder (condition rows: behavior/did_not/property) with a live `preview` count.
+- **Reports**: list; "Save current view as report" wired from the Insights/Funnels/Retention/Flows
+  builders (their existing query-definition state IS the saved `definition`); a report page renders via
+  `/run` using the Phase 3–4 chart components keyed by `kind`.
+- **Dashboards**: list; a dashboard view renders a **CSS-Grid 12-column** board of tiles, each tile
+  rendering the matching chart from `/dashboards/:id/data`. Drag-to-reorder and **discrete resize**
+  (per-tile column-span / height steppers — NOT free-form drag-resize) persisted via
+  `/layout` — implemented with native pointer events + CSS Grid, **no new drag-drop dependency** (honors
+  the "minimize packages" constraint; discrete resize is also far less bug-prone). "Add tile from report"
+  picker. Cohort filter selectable on Insights/Funnels/Retention builders (sets `cohort_id`).
+
+Verification: unit tests (cohort/report/dashboard zod schemas incl. the exactly-one-of tile rule and
+12-col bounds; cohort compiler SQL shape + injection regression like §14/§15), a real-stack e2e proving
+a known cohort resolves to the exact expected users AND that a cohort-filtered insight returns the
+narrowed counts, dashboard tile CRUD + `/data` batch-run, and a dashboard-frontend functional test.
