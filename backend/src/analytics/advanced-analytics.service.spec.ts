@@ -1,5 +1,6 @@
 import { AdvancedAnalyticsService } from './advanced-analytics.service';
 import type { ClickHouseService } from '../clickhouse/clickhouse.service';
+import type { CohortsService } from '../cohorts/cohorts.service';
 import type { ProjectsService } from '../projects/projects.service';
 
 const USER = 'user-1';
@@ -10,7 +11,14 @@ function makeService(queryImpl: (sql: string) => unknown[]) {
   const clickhouse = { query } as unknown as ClickHouseService;
   const assertMembership = jest.fn().mockResolvedValue(undefined);
   const projects = { assertMembership } as unknown as ProjectsService;
-  return { service: new AdvancedAnalyticsService(clickhouse, projects), query, assertMembership };
+  const resolveCohortPredicate = jest.fn();
+  const cohorts = { resolveCohortPredicate } as unknown as CohortsService;
+  return {
+    service: new AdvancedAnalyticsService(clickhouse, projects, cohorts),
+    query,
+    assertMembership,
+    resolveCohortPredicate,
+  };
 }
 
 describe('AdvancedAnalyticsService', () => {

@@ -1,4 +1,9 @@
-import { compileDateRange, compileFilterClauses } from './filter-compiler';
+import {
+  CohortPredicate,
+  applyCohortPredicate,
+  compileDateRange,
+  compileFilterClauses,
+} from './filter-compiler';
 import type { RetentionInterval, RetentionQuery } from './retention.schema';
 
 /**
@@ -37,6 +42,7 @@ function bornSubquery(
   bucketFn: string,
   params: Record<string, unknown>,
   filterOffset: number,
+  cohort?: CohortPredicate,
 ): string {
   const clauses = [
     'project_id = {projectId:UUID}',
@@ -45,6 +51,8 @@ function bornSubquery(
     'timestamp < {toExclusive:DateTime64}',
     ...compileFilterClauses(query.born_event.filters, params, filterOffset),
   ];
+  // §16 cohort_id filter: the cohort narrows WHO is "born" (cohort membership defines the cohort rows).
+  applyCohortPredicate(clauses, params, cohort);
   return [
     '  SELECT distinct_id,',
     `    min(${bucketFn}(timestamp)) AS cohort`,
@@ -64,6 +72,7 @@ function bornSubquery(
 export function compileRetentionQuery(
   query: RetentionQuery,
   projectId: string,
+  cohort?: CohortPredicate,
 ): CompiledRetentionQuery {
   const bucketFn = RETENTION_BUCKET_FN[query.interval];
   const unit = RETENTION_DATEDIFF_UNIT[query.interval];
@@ -83,7 +92,7 @@ export function compileRetentionQuery(
     '  toString(toDate(b.cohort)) AS cohort,',
     '  uniqExact(b.distinct_id) AS size',
     'FROM (',
-    bornSubquery(query, bucketFn, sizesParams, 0),
+    bornSubquery(query, bucketFn, sizesParams, 0, cohort),
     ') AS b',
     'GROUP BY b.cohort',
     'ORDER BY b.cohort',
@@ -109,7 +118,7 @@ export function compileRetentionQuery(
     `  dateDiff('${unit}', b.cohort, r.rbucket) AS period,`,
     '  uniqExact(r.distinct_id) AS cnt',
     'FROM (',
-    bornSubquery(query, bucketFn, gridParams, 0),
+    bornSubquery(query, bucketFn, gridParams, 0, cohort),
     ') AS b',
     'INNER JOIN (',
     '  SELECT distinct_id,',

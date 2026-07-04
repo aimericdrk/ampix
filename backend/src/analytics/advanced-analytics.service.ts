@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { parseOrThrow } from '../auth/auth.schemas';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
+import { CohortsService } from '../cohorts/cohorts.service';
 import { ProjectsService } from '../projects/projects.service';
 import type {
   FunnelBreakdownResult,
@@ -58,6 +59,7 @@ export class AdvancedAnalyticsService {
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly projects: ProjectsService,
+    private readonly cohorts: CohortsService,
   ) {}
 
   /**
@@ -69,7 +71,10 @@ export class AdvancedAnalyticsService {
   async runFunnelQuery(userId: string, projectId: string, body: unknown): Promise<FunnelResponse> {
     await this.projects.assertMembership(userId, projectId);
     const query = parseOrThrow(funnelsQuerySchema, body);
-    const compiled = compileFunnelQuery(query, projectId);
+    const cohort = query.cohort_id
+      ? await this.cohorts.resolveCohortPredicate(projectId, query.cohort_id)
+      : undefined;
+    const compiled = compileFunnelQuery(query, projectId, cohort);
     const rows = await this.clickhouse.query<FunnelCountRow>(compiled.sql, compiled.params);
 
     const readCounts = (row: FunnelCountRow | undefined): number[] =>
@@ -145,7 +150,10 @@ export class AdvancedAnalyticsService {
   ): Promise<RetentionResponse> {
     await this.projects.assertMembership(userId, projectId);
     const query = parseOrThrow(retentionQuerySchema, body);
-    const compiled = compileRetentionQuery(query, projectId);
+    const cohort = query.cohort_id
+      ? await this.cohorts.resolveCohortPredicate(projectId, query.cohort_id)
+      : undefined;
+    const compiled = compileRetentionQuery(query, projectId, cohort);
 
     const [sizeRows, gridRows] = await Promise.all([
       this.clickhouse.query<RetentionSizeRow>(compiled.sizesQuery.sql, compiled.sizesQuery.params),

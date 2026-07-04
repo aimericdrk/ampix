@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { dateRangeSchema, insightsBreakdownSchema, insightsFilterSchema } from './insights-query.schema';
+import {
+  cohortIdSchema,
+  dateRangeSchema,
+  insightsBreakdownSchema,
+  insightsFilterSchema,
+} from './insights-query.schema';
 
 /**
  * POST /query/funnels request schema (contracts §15). Ordered conversion funnel over
@@ -36,5 +41,6 @@ export const funnelsQuerySchema = z.object({
     .max(MAX_WINDOW_DAYS, 'window_days must be <= 365'),
   order: z.enum(FUNNEL_ORDERS).default('any'),
   breakdown: insightsBreakdownSchema.optional(),
+  cohort_id: cohortIdSchema.optional(),
 });
 export type FunnelsQuery = z.infer<typeof funnelsQuerySchema>;

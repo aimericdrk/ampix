@@ -12,6 +12,9 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { OrgsModule } from './orgs/orgs.module';
 import { ProjectsModule } from './projects/projects.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CohortsModule } from './cohorts/cohorts.module';
+import { ReportsModule } from './reports/reports.module';
+import { DashboardsModule } from './dashboards/dashboards.module';
 
 @Module({
   imports: [
@@ -38,7 +41,10 @@ import { AnalyticsModule } from './analytics/analytics.module';
     ProjectsModule,
     OrgsModule,
     InvitationsModule,
+    CohortsModule,
     AnalyticsModule,
+    ReportsModule,
+    DashboardsModule,
   ],
 })
 export class AppModule {}

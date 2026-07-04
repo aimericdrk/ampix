@@ -13,6 +13,14 @@ enum Role {
   viewer
 }
 
+/** §16 — the four analysis kinds a saved report / dashboard tile can hold. */
+enum ReportKind {
+  insights
+  funnel
+  retention
+  flows
+}
+
 model Organization {
   id          String       @id @default(uuid(7)) @db.Uuid
   name        String
@@ -35,6 +43,9 @@ model User {
   memberships      Membership[]
   refreshTokens    RefreshToken[]
   recoveryCodes    TwoFactorRecoveryCode[]
+  cohorts          Cohort[]
+  savedReports     SavedReport[]
+  dashboards       Dashboard[]
 
   @@map("users")
 }
@@ -72,6 +83,9 @@ model Project {
   createdAt DateTime     @default(now()) @map("created_at")
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   sdkTokens SdkToken[]
+  cohorts   Cohort[]
+  savedReports SavedReport[]
+  dashboards Dashboard[]
 
   @@map("projects")
 }
@@ -111,4 +125,87 @@ model TwoFactorRecoveryCode {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("two_factor_recovery_codes")
+}
+
+/**
+ * §16 — a saved audience definition. `definition` is validated JSON (the cohort zod schema),
+ * re-validated on write AND before every run so the injection-safe engine is the only path to CH.
+ */
+model Cohort {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  projectId  String   @map("project_id") @db.Uuid
+  name       String
+  definition Json
+  createdBy  String   @map("created_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator User    @relation(fields: [createdBy], references: [id])
+
+  @@index([projectId])
+  @@map("cohorts")
+}
+
+/**
+ * §16 — a saved query of any analysis type. `kind` selects which §14/§15 zod schema validates
+ * `definition` (insights / funnel / retention / flows), both on write and before every `/run`.
+ */
+model SavedReport {
+  id         String     @id @default(uuid(7)) @db.Uuid
+  projectId  String     @map("project_id") @db.Uuid
+  name       String
+  kind       ReportKind
+  definition Json
+  createdBy  String     @map("created_by") @db.Uuid
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator User            @relation(fields: [createdBy], references: [id])
+  tiles   DashboardTile[]
+
+  @@index([projectId])
+  @@map("saved_reports")
+}
+
+/** §16 — a named grid of tiles (12-column layout), each tile backed by a saved report or inline def. */
+model Dashboard {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  name      String
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator User            @relation(fields: [createdBy], references: [id])
+  tiles   DashboardTile[]
+
+  @@index([projectId])
+  @@map("dashboards")
+}
+
+/**
+ * §16 — one tile on a dashboard. References EXACTLY ONE of `savedReportId` / `inlineDefinition`
+ * (enforced in the service). Grid is a fixed 12-column layout: w 1..12, h >= 1, x 0..11, x+w <= 12.
+ */
+model DashboardTile {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  dashboardId      String     @map("dashboard_id") @db.Uuid
+  title            String
+  savedReportId    String?    @map("saved_report_id") @db.Uuid
+  inlineDefinition Json?      @map("inline_definition")
+  kind             ReportKind
+  x                Int
+  y                Int
+  w                Int
+  h                Int
+  position         Int
+
+  dashboard   Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  savedReport SavedReport? @relation(fields: [savedReportId], references: [id], onDelete: SetNull)
+
+  @@index([dashboardId, position])
+  @@map("dashboard_tiles")
 }

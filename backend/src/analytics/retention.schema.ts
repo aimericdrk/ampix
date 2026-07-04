@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dateRangeSchema, insightsFilterSchema } from './insights-query.schema';
+import { cohortIdSchema, dateRangeSchema, insightsFilterSchema } from './insights-query.schema';
 
 /**
  * POST /query/retention request schema (contracts §15). Cohort retention grid: users "born" (first
@@ -33,5 +33,6 @@ export const retentionQuerySchema = z.object({
     .int('periods must be an integer')
     .min(MIN_PERIODS, 'periods must be >= 1')
     .max(MAX_PERIODS, 'periods must be <= 30'),
+  cohort_id: cohortIdSchema.optional(),
 });
 export type RetentionQuery = z.infer<typeof retentionQuerySchema>;

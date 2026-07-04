@@ -49,7 +49,7 @@ export const insightsEventSchema = z.object({
 });
 export type InsightsEvent = z.infer<typeof insightsEventSchema>;
 
-const filterValueSchema = z.union([
+export const filterValueSchema = z.union([
   z.string().max(MAX_VALUE_LENGTH),
   z.number().finite(),
   z.boolean(),
@@ -76,6 +76,10 @@ export const insightsBreakdownSchema = z.object({
 });
 export type InsightsBreakdown = z.infer<typeof insightsBreakdownSchema>;
 
+/** §16: an optional top-level cohort reference; when set, the engine AND-joins the cohort's
+ *  `distinct_id IN (…)` predicate (fully parameterized) into the §14/§15 query. */
+export const cohortIdSchema = z.string().uuid();
+
 export const insightsQuerySchema = z.object({
   events: z
     .array(insightsEventSchema)
@@ -85,5 +89,6 @@ export const insightsQuerySchema = z.object({
   interval: z.enum(INTERVALS),
   filters: z.array(insightsFilterSchema).max(MAX_FILTERS).default([]),
   breakdown: insightsBreakdownSchema.optional(),
+  cohort_id: cohortIdSchema.optional(),
 });
 export type InsightsQuery = z.infer<typeof insightsQuerySchema>;

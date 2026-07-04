@@ -1,4 +1,9 @@
-import { compileDateRange, compileFilterClauses } from './filter-compiler';
+import {
+  CohortPredicate,
+  applyCohortPredicate,
+  compileDateRange,
+  compileFilterClauses,
+} from './filter-compiler';
 import type { FunnelOrder, FunnelsQuery } from './funnels.schema';
 import { resolveProperty } from './property-resolver';
 
@@ -36,7 +41,11 @@ export interface CompiledFunnelQuery {
  * SQL fragments are our own frozen structural constants (the mode arg) and JS-generated integers
  * (the `>= k+1` step thresholds, derived from the validated, bounded `steps.length`).
  */
-export function compileFunnelQuery(query: FunnelsQuery, projectId: string): CompiledFunnelQuery {
+export function compileFunnelQuery(
+  query: FunnelsQuery,
+  projectId: string,
+  cohort?: CohortPredicate,
+): CompiledFunnelQuery {
   const params: Record<string, unknown> = {
     projectId,
     windowSeconds: query.window_days * SECONDS_PER_DAY,
@@ -78,6 +87,11 @@ export function compileFunnelQuery(query: FunnelsQuery, projectId: string): Comp
     .map((_, k) => `countIf(level >= ${k + 1}) AS step_${k}`)
     .join(',\n  ');
 
+  // §16 cohort_id filter: AND-join `distinct_id IN (<cohort subquery>)` into the inner scan.
+  const cohortClauses: string[] = [];
+  applyCohortPredicate(cohortClauses, params, cohort);
+  const cohortClause = cohortClauses.length > 0 ? `\n    AND ${cohortClauses[0]}` : '';
+
   const sql = [
     'SELECT',
     `  ${outerBreakdown}${stepCounts}`,
@@ -92,7 +106,7 @@ export function compileFunnelQuery(query: FunnelsQuery, projectId: string): Comp
     '  FROM events',
     '  WHERE project_id = {projectId:UUID}',
     '    AND timestamp >= {from:DateTime64}',
-    '    AND timestamp < {toExclusive:DateTime64}',
+    `    AND timestamp < {toExclusive:DateTime64}${cohortClause}`,
     '    AND event IN {stepEvents:Array(String)}',
     `  GROUP BY ${innerGroupBy}`,
     `)${outerGroupOrder}`,

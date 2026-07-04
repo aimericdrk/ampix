@@ -57,8 +57,11 @@ export function compileFilter(
   filter: InsightsFilter,
   index: number,
   params: Record<string, unknown>,
+  namePrefix = 'filter',
 ): string {
-  const { expr } = resolveProperty(filter.property, `filterKey${index}`, params);
+  const keyParam = `${namePrefix}Key${index}`;
+  const valueParam = `${namePrefix}Val${index}`;
+  const { expr } = resolveProperty(filter.property, keyParam, params);
 
   switch (filter.op) {
     case 'is_set':
@@ -66,7 +69,6 @@ export function compileFilter(
     case 'is_not_set':
       return `${expr} = ''`;
     case 'contains': {
-      const valueParam = `filterVal${index}`;
       params[valueParam] = String(filter.value);
       return `position(${expr}, {${valueParam}:String}) > 0`;
     }
@@ -77,7 +79,6 @@ export function compileFilter(
       // The §14 refine on insightsFilterSchema guarantees `value` is defined for these ops.
       const value = filter.value as FilterValue;
       const type = paramTypeFor(value);
-      const valueParam = `filterVal${index}`;
       params[valueParam] = paramValueFor(value);
       return `${castTo(expr, type)} ${COMPARISON_OP[filter.op]} {${valueParam}:${type}}`;
     }
@@ -93,8 +94,36 @@ export function compileFilterClauses(
   filters: InsightsFilter[],
   params: Record<string, unknown>,
   indexOffset = 0,
+  namePrefix = 'filter',
 ): string[] {
-  return filters.map((filter, index) => compileFilter(filter, indexOffset + index, params));
+  return filters.map((filter, index) =>
+    compileFilter(filter, indexOffset + index, params, namePrefix),
+  );
+}
+
+/**
+ * A compiled cohort filter (contracts §16): a `distinct_id`-producing subquery plus its (uniquely
+ * prefixed) bound params. Structurally matches `CohortsService.resolveCohortPredicate`'s output.
+ */
+export interface CohortPredicate {
+  sql: string;
+  params: Record<string, unknown>;
+}
+
+/**
+ * AND-joins a compiled cohort's `distinct_id IN (<subquery>)` predicate into a WHERE-clause list,
+ * merging its bound params (contracts §16 `cohort_id` filter). Fully parameterized — the cohort
+ * subquery and every value inside it are bound params (cohort param names are prefixed so they can
+ * never collide with the host query's). A no-op when no cohort is set.
+ */
+export function applyCohortPredicate(
+  whereClauses: string[],
+  params: Record<string, unknown>,
+  cohort: CohortPredicate | undefined,
+): void {
+  if (!cohort) return;
+  Object.assign(params, cohort.params);
+  whereClauses.push(`distinct_id IN (\n${cohort.sql}\n)`);
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { ClickHouseService } from '../clickhouse/clickhouse.service';
+import type { CohortsService } from '../cohorts/cohorts.service';
 import type { ProjectsService } from '../projects/projects.service';
 import { AnalyticsService } from './analytics.service';
 
@@ -15,8 +16,12 @@ function makeProjects(assertMembershipImpl?: () => Promise<void>) {
   return { assertMembership: jest.fn(assertMembershipImpl ?? (() => Promise.resolve())) };
 }
 
-function makeService(clickhouse: unknown, projects: unknown) {
-  return new AnalyticsService(clickhouse as ClickHouseService, projects as ProjectsService);
+function makeService(clickhouse: unknown, projects: unknown, cohorts?: unknown) {
+  return new AnalyticsService(
+    clickhouse as ClickHouseService,
+    projects as ProjectsService,
+    (cohorts ?? { resolveCohortPredicate: jest.fn() }) as CohortsService,
+  );
 }
 
 function validInsightsBody(overrides: Record<string, unknown> = {}) {

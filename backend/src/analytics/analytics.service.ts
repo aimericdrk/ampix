@@ -5,6 +5,7 @@ import {
   fromChDateTime64,
   toChDateTime64,
 } from '../clickhouse/clickhouse.service';
+import { CohortsService } from '../cohorts/cohorts.service';
 import { ProjectsService } from '../projects/projects.service';
 import type {
   EventsMetaResponse,
@@ -123,13 +124,15 @@ export class AnalyticsService {
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly projects: ProjectsService,
+    private readonly cohorts: CohortsService,
   ) {}
 
   /**
    * Compiles + executes an insights query. Breakdown queries are 2-phase: first discover the top
    * `MAX_BREAKDOWN_VALUES` (insights.compiler.ts) values across all selected events, then run each
    * event's own bucketed series query restricted to those values. Raw events are queried directly
-   * (not the rollup MVs) so results are exact — contracts §14's correctness note.
+   * (not the rollup MVs) so results are exact — contracts §14's correctness note. An optional §16
+   * `cohort_id` narrows every series to `distinct_id IN (<cohort subquery>)`, fully parameterized.
    */
   async runInsightsQuery(
     userId: string,
@@ -138,7 +141,10 @@ export class AnalyticsService {
   ): Promise<InsightsResponse> {
     await this.projects.assertMembership(userId, projectId);
     const query = parseOrThrow(insightsQuerySchema, body);
-    const compiled = compileInsightsQuery(query, projectId);
+    const cohort = query.cohort_id
+      ? await this.cohorts.resolveCohortPredicate(projectId, query.cohort_id)
+      : undefined;
+    const compiled = compileInsightsQuery(query, projectId, cohort);
 
     let breakdownValues: string[] | undefined;
     if (compiled.topBreakdownValuesQuery) {

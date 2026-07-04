@@ -1,5 +1,10 @@
 import { BUCKET_EXPR, Bucket, buildBucketGrid } from './bucket-grid';
-import { compileDateRange, compileFilterClauses } from './filter-compiler';
+import {
+  CohortPredicate,
+  applyCohortPredicate,
+  compileDateRange,
+  compileFilterClauses,
+} from './filter-compiler';
 import type { Aggregation, InsightsEvent, InsightsQuery } from './insights-query.schema';
 import { resolveProperty } from './property-resolver';
 
@@ -42,7 +47,11 @@ function dateRangeParams(query: InsightsQuery): { from: string; toExclusive: str
   return compileDateRange(query.date_range.from, query.date_range.to);
 }
 
-function compileTopBreakdownValuesQuery(query: InsightsQuery, projectId: string): CompiledQuery {
+function compileTopBreakdownValuesQuery(
+  query: InsightsQuery,
+  projectId: string,
+  cohort?: CohortPredicate,
+): CompiledQuery {
   const params: Record<string, unknown> = {
     projectId,
     eventNames: query.events.map((event) => event.name),
@@ -61,6 +70,7 @@ function compileTopBreakdownValuesQuery(query: InsightsQuery, projectId: string)
     'timestamp < {toExclusive:DateTime64}',
     ...compileFilterClauses(query.filters, params),
   ];
+  applyCohortPredicate(whereClauses, params, cohort);
 
   const sql = [
     'SELECT',
@@ -81,6 +91,7 @@ function compileEventSeriesQuery(
   projectId: string,
   event: InsightsEvent,
   bucketExpr: string,
+  cohort?: CohortPredicate,
 ): CompiledEventSeriesQuery {
   const params: Record<string, unknown> = {
     projectId,
@@ -94,6 +105,7 @@ function compileEventSeriesQuery(
     'timestamp < {toExclusive:DateTime64}',
     ...compileFilterClauses(query.filters, params),
   ];
+  applyCohortPredicate(whereClauses, params, cohort);
 
   let breakdownSelect = '';
   let groupByExtra = '';
@@ -131,14 +143,15 @@ function compileEventSeriesQuery(
 export function compileInsightsQuery(
   query: InsightsQuery,
   projectId: string,
+  cohort?: CohortPredicate,
 ): CompiledInsightsQuery {
   const bucketExpr = BUCKET_EXPR[query.interval];
   const buckets = buildBucketGrid(query.date_range.from, query.date_range.to, query.interval);
   const seriesQueries = query.events.map((event) =>
-    compileEventSeriesQuery(query, projectId, event, bucketExpr),
+    compileEventSeriesQuery(query, projectId, event, bucketExpr, cohort),
   );
   const topBreakdownValuesQuery = query.breakdown
-    ? compileTopBreakdownValuesQuery(query, projectId)
+    ? compileTopBreakdownValuesQuery(query, projectId, cohort)
     : undefined;
 
   return {
