@@ -8,6 +8,8 @@ class MyAmpMixConfig {
     this.sessionTimeout = const Duration(minutes: 30),
     this.maxRetryDelay = const Duration(minutes: 5),
     this.debug = false,
+    this.autocaptureScreens = true,
+    this.autocaptureTaps = true,
   }) : assert(
          flushAt > 0 && flushAt <= 100,
          'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
@@ -34,4 +36,12 @@ class MyAmpMixConfig {
 
   /// Enables internal logging in debug builds.
   final bool debug;
+
+  /// Enables `MyAmpMixObserver` to emit `$screen_view` (design §11, M2).
+  /// Independently toggleable from [autocaptureTaps].
+  final bool autocaptureScreens;
+
+  /// Enables `MyAmpMixTracker` to emit `$tap`/`$rage_tap` (design §11, M2).
+  /// Independently toggleable from [autocaptureScreens].
+  final bool autocaptureTaps;
 }

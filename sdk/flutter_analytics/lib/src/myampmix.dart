@@ -66,6 +66,8 @@ class MyAmpMix {
 
   bool _initialized = false;
   MamLogger _logger = const MamLogger(enabled: false);
+  bool _autocaptureScreens = true;
+  bool _autocaptureTaps = true;
 
   late final AnalyticsDatabase _database;
   late final IdentityManager _identity;
@@ -113,6 +115,8 @@ class MyAmpMix {
   ) async {
     WidgetsFlutterBinding.ensureInitialized();
     _logger = MamLogger(enabled: config.debug);
+    _autocaptureScreens = config.autocaptureScreens;
+    _autocaptureTaps = config.autocaptureTaps;
     final clock = overrides?.clock ?? const SystemClock();
     final idFactory = overrides?.idFactory ?? (() => const Uuid().v7());
     final keyValueStore =
@@ -207,6 +211,16 @@ class MyAmpMix {
 
   void track(String event, {Map<String, Object?>? properties}) =>
       _guard('track', () => _pipeline.track(event, properties));
+
+  /// Whether `$screen_view` autocapture is enabled (`config.autocaptureScreens`).
+  /// Read by `MyAmpMixObserver`'s default wiring; not part of the frozen §8
+  /// method surface, but a public property of the facade class.
+  bool get autocaptureScreensEnabled => _initialized && _autocaptureScreens;
+
+  /// Whether `$tap`/`$rage_tap` autocapture is enabled (`config.autocaptureTaps`).
+  /// Read by `MyAmpMixTracker`'s default wiring; not part of the frozen §8
+  /// method surface, but a public property of the facade class.
+  bool get autocaptureTapsEnabled => _initialized && _autocaptureTaps;
 
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);

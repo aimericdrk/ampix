@@ -13,6 +13,8 @@ void main() {
     expect(config.sessionTimeout, const Duration(minutes: 30));
     expect(config.maxRetryDelay, const Duration(minutes: 5));
     expect(config.debug, isFalse);
+    expect(config.autocaptureScreens, isTrue);
+    expect(config.autocaptureTaps, isTrue);
   });
 
   test('fake clock advances deterministically', () {
