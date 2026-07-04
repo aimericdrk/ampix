@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw';
+import { phase5Handlers } from './phase5-handlers';
 import type {
   Activate2faResponse,
   AcceptInvitationResponse,
@@ -1151,4 +1152,7 @@ export const handlers = [
       return problem(401, 'Access token invalid or expired');
     return HttpResponse.json(SESSIONS_SUMMARY_FIXTURE);
   }),
+
+  // --- Cohorts, saved reports & custom dashboards (contracts §16) ---
+  ...phase5Handlers,
 ];

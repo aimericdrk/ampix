@@ -14,6 +14,7 @@ import { FUNNEL_ORDERS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFunnels } from '../api';
 import { FunnelChart } from './FunnelChart';
 import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { CohortSelect, SaveAsReportButton } from './report-actions';
 import {
   cleanFilters,
   DateRangeFields,
@@ -47,6 +48,7 @@ export function FunnelsPage() {
   const [windowDays, setWindowDays] = useState(7);
   const [order, setOrder] = useState<FunnelOrder>('any');
   const [breakdownProperty, setBreakdownProperty] = useState('');
+  const [cohortId, setCohortId] = useState('');
   const [result, setResult] = useState<FunnelResponse | null>(null);
 
   const eventOptions = metaEvents.data?.events ?? [];
@@ -94,8 +96,9 @@ export function FunnelsPage() {
       order,
     };
     if (breakdownProperty) def.breakdown = { property: breakdownProperty };
+    if (cohortId) def.cohort_id = cohortId;
     return def;
-  }, [steps, dateFrom, dateTo, windowDays, order, breakdownProperty]);
+  }, [steps, dateFrom, dateTo, windowDays, order, breakdownProperty, cohortId]);
 
   const canRun =
     steps.length >= 2 && Boolean(dateFrom) && Boolean(dateTo) && !runFunnels.isPending;
@@ -250,10 +253,18 @@ export function FunnelsPage() {
             </div>
           </div>
 
-          <div>
+          <CohortSelect projectId={projectId} value={cohortId} onChange={setCohortId} />
+
+          <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleRun} disabled={!canRun}>
               {runFunnels.isPending ? 'Running…' : 'Run'}
             </Button>
+            <SaveAsReportButton
+              projectId={projectId}
+              kind="funnel"
+              definition={queryDefinition}
+              disabled={steps.length < 2}
+            />
           </div>
         </CardContent>
       </Card>

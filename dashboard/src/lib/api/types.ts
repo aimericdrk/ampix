@@ -304,6 +304,8 @@ export interface InsightsQueryDefinition {
   interval: InsightsInterval;
   filters: InsightsFilter[];
   breakdown?: InsightsBreakdown;
+  /** Phase-5 (§16): optional cohort filter — AND-joins the cohort's `distinct_id IN (…)` predicate. */
+  cohort_id?: string;
 }
 
 export interface InsightsSeriesPoint {
@@ -417,6 +419,8 @@ export interface FunnelQueryDefinition {
   window_days: number;
   order: FunnelOrder;
   breakdown?: InsightsBreakdown;
+  /** Phase-5 (§16): optional cohort filter (`cohort_id`). */
+  cohort_id?: string;
 }
 
 /**
@@ -461,6 +465,8 @@ export interface RetentionQueryDefinition {
   date_range: InsightsDateRange;
   interval: RetentionInterval;
   periods: number;
+  /** Phase-5 (§16): optional cohort filter (`cohort_id`). */
+  cohort_id?: string;
 }
 
 export interface RetentionPeriodCell {
@@ -530,4 +536,254 @@ export interface FlowLink {
 export interface FlowsResponse {
   nodes: FlowNode[];
   links: FlowLink[];
+}
+
+// --- Cohorts/reports/dashboards (contracts §16) ---
+// Request/response shapes mirror shared-contracts §16 exactly (the concurrent Phase-5 backend builds
+// against the same section, re-validating every stored definition with the §14/§15 zod schemas).
+// Cohort/report/dashboard-tile definitions reuse the §14/§15 query-definition types verbatim.
+
+/** `all` = AND across conditions, `any` = OR (contracts §16 cohort definition). */
+export type CohortMatch = 'all' | 'any';
+
+export const COHORT_MATCHES: CohortMatch[] = ['all', 'any'];
+
+/** Count comparison for a `behavior` condition — `did event {op} {count} times in the window`. */
+export type CohortCountOp = 'gte' | 'gt' | 'lte' | 'lt' | 'eq';
+
+export const COHORT_COUNT_OPS: CohortCountOp[] = ['gte', 'gt', 'lte', 'lt', 'eq'];
+
+export type CohortConditionType = 'behavior' | 'did_not' | 'property';
+
+export const COHORT_CONDITION_TYPES: CohortConditionType[] = ['behavior', 'did_not', 'property'];
+
+/** Did/didn't do an event N times in the last D days, with optional §14 filters (AND-joined). */
+export interface CohortBehaviorCondition {
+  type: 'behavior';
+  event: string;
+  op: CohortCountOp;
+  count: number;
+  within_days: number;
+  filters: InsightsFilter[];
+}
+
+/** Performed the event 0 times in the window. */
+export interface CohortDidNotCondition {
+  type: 'did_not';
+  event: string;
+  within_days: number;
+}
+
+/** Latest-known profile / event property match (reuses the §14 filter ops). */
+export interface CohortPropertyCondition {
+  type: 'property';
+  property: string;
+  op: InsightsFilterOp;
+  value?: string;
+}
+
+export type CohortCondition =
+  | CohortBehaviorCondition
+  | CohortDidNotCondition
+  | CohortPropertyCondition;
+
+/** The cohort builder state IS this shape (contracts §16) — 1..10 conditions. */
+export interface CohortDefinition {
+  match: CohortMatch;
+  conditions: CohortCondition[];
+}
+
+/** A cohort as listed by `GET /cohorts` — no `definition`. */
+export interface CohortSummary {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListCohortsResponse {
+  cohorts: CohortSummary[];
+}
+
+/** `GET /cohorts/:id` — the summary plus its stored `definition`. */
+export interface Cohort extends CohortSummary {
+  definition: CohortDefinition;
+}
+
+export interface CreateCohortRequest {
+  name: string;
+  definition: CohortDefinition;
+}
+
+export interface UpdateCohortRequest {
+  name?: string;
+  definition?: CohortDefinition;
+}
+
+/** `GET /cohorts/:id/preview` — resolved size (`uniqExact`) + up to 20 sample distinct_ids. */
+export interface CohortPreviewResponse {
+  count: number;
+  sample: string[];
+}
+
+/** The four saved-report kinds; a report's `definition` is the matching §14/§15 query definition. */
+export type ReportKind = 'insights' | 'funnel' | 'retention' | 'flows';
+
+export const REPORT_KINDS: ReportKind[] = ['insights', 'funnel', 'retention', 'flows'];
+
+/** A report as listed by `GET /reports` — no `definition`. */
+export interface SavedReportSummary {
+  id: string;
+  name: string;
+  kind: ReportKind;
+  created_by: string;
+  updated_at: string;
+}
+
+export interface ListReportsResponse {
+  reports: SavedReportSummary[];
+}
+
+interface SavedReportBase {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * `GET /reports/:id` — a discriminated union on `kind` so `definition` narrows to the exact §14/§15
+ * query-definition type (the union the contract calls the report `definition`).
+ */
+export type SavedReport =
+  | (SavedReportBase & { kind: 'insights'; definition: InsightsQueryDefinition })
+  | (SavedReportBase & { kind: 'funnel'; definition: FunnelQueryDefinition })
+  | (SavedReportBase & { kind: 'retention'; definition: RetentionQueryDefinition })
+  | (SavedReportBase & { kind: 'flows'; definition: FlowsQueryDefinition });
+
+/** Any of the four §14/§15 query definitions — a report/tile `definition` or `inline_definition`. */
+export type AnalysisDefinition =
+  | InsightsQueryDefinition
+  | FunnelQueryDefinition
+  | RetentionQueryDefinition
+  | FlowsQueryDefinition;
+
+/** `POST /reports` — a discriminated union so `definition` matches `kind`. */
+export type CreateReportRequest =
+  | { name: string; kind: 'insights'; definition: InsightsQueryDefinition }
+  | { name: string; kind: 'funnel'; definition: FunnelQueryDefinition }
+  | { name: string; kind: 'retention'; definition: RetentionQueryDefinition }
+  | { name: string; kind: 'flows'; definition: FlowsQueryDefinition };
+
+export interface UpdateReportRequest {
+  name?: string;
+  definition?: AnalysisDefinition;
+}
+
+/** `POST /reports/:id/run` body — optional overrides merged over the stored definition. */
+export interface RunReportRequest {
+  date_range?: InsightsDateRange;
+  cohort_id?: string;
+}
+
+/** The normal response shape of whichever analysis the report's `kind` names. */
+export type AnalysisResult = InsightsResponse | FunnelResponse | RetentionResponse | FlowsResponse;
+
+/** A dashboard as listed by `GET /dashboards`. */
+export interface DashboardSummary {
+  id: string;
+  name: string;
+  tile_count: number;
+  updated_at: string;
+}
+
+export interface ListDashboardsResponse {
+  dashboards: DashboardSummary[];
+}
+
+export interface CreateDashboardRequest {
+  name: string;
+}
+
+export interface UpdateDashboardRequest {
+  name: string;
+}
+
+/**
+ * One tile of the 12-column grid. `w`∈1..12, `h`≥1, `x`∈0..11, `x+w`≤12. Exactly one of
+ * `saved_report_id` / `inline_definition` is set (enforced server-side); `kind` names the chart.
+ */
+export interface DashboardTile {
+  id: string;
+  title: string;
+  kind: ReportKind;
+  saved_report_id: string | null;
+  inline_definition: AnalysisDefinition | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  position: number;
+}
+
+/** `GET /dashboards/:id` — the board plus its ordered tiles. */
+export interface Dashboard {
+  id: string;
+  name: string;
+  tiles: DashboardTile[];
+}
+
+/** `POST /dashboards/:id/tiles` — references a saved report OR carries an inline definition. */
+export interface CreateTileRequest {
+  title: string;
+  kind: ReportKind;
+  saved_report_id?: string;
+  inline_definition?: AnalysisDefinition;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** `PATCH /dashboards/:id/tiles/:tileId` — move / resize / retitle. */
+export interface UpdateTileRequest {
+  title?: string;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
+/** One entry of the `PATCH /dashboards/:id/layout` batch grid save. */
+export interface LayoutTile {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  position: number;
+}
+
+export interface UpdateLayoutRequest {
+  tiles: LayoutTile[];
+}
+
+/** One tile's run result — the analysis response, or an `{ error }` (one tile failing is isolated). */
+export interface DashboardTileResult {
+  id: string;
+  result: AnalysisResult | { error: string };
+}
+
+/** `GET /dashboards/:id/data` — every tile's definition run through the engine. */
+export interface DashboardDataResponse {
+  tiles: DashboardTileResult[];
+}
+
+/** Narrows a tile result to the failure branch. */
+export function isTileError(
+  result: AnalysisResult | { error: string },
+): result is { error: string } {
+  return 'error' in result;
 }

@@ -1,19 +1,40 @@
-import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api/client';
 import type {
+  Cohort,
+  CohortPreviewResponse,
+  CreateCohortRequest,
+  CreateDashboardRequest,
+  CreateReportRequest,
+  CreateTileRequest,
+  Dashboard,
+  DashboardDataResponse,
+  DashboardTile,
   FlowsQueryDefinition,
   FlowsResponse,
   FunnelQueryDefinition,
   FunnelResponse,
   InsightsQueryDefinition,
   InsightsResponse,
+  ListCohortsResponse,
+  ListDashboardsResponse,
+  ListReportsResponse,
   ListUsersResponse,
   LiveEventsResponse,
   MetaEventsResponse,
   MetaPropertiesResponse,
+  AnalysisResult,
   RetentionQueryDefinition,
   RetentionResponse,
+  RunReportRequest,
+  SavedReport,
   SessionsSummaryResponse,
+  UpdateCohortRequest,
+  UpdateDashboardRequest,
+  UpdateLayoutRequest,
+  UpdateReportRequest,
+  UpdateTileRequest,
+  DashboardSummary,
   UserProfileResponse,
 } from '../../lib/api/types';
 
@@ -135,5 +156,254 @@ export function useSessionsSummary(projectId: string, from: string, to: string) 
       apiFetch<SessionsSummaryResponse>(
         `${base(projectId)}/sessions/summary?from=${from}&to=${to}`,
       ),
+  });
+}
+
+// --- Cohorts (contracts §16) ---
+
+const cohortsKey = (projectId: string) => ['analytics', projectId, 'cohorts'] as const;
+
+export function useCohorts(projectId: string) {
+  return useQuery({
+    queryKey: cohortsKey(projectId),
+    queryFn: () => apiFetch<ListCohortsResponse>(`${base(projectId)}/cohorts`),
+  });
+}
+
+export function useCohort(projectId: string, cohortId: string) {
+  return useQuery({
+    queryKey: [...cohortsKey(projectId), cohortId],
+    queryFn: () => apiFetch<Cohort>(`${base(projectId)}/cohorts/${cohortId}`),
+  });
+}
+
+/** Runs a saved cohort (`GET /cohorts/:id/preview`); only fires once a cohort id exists. */
+export function useCohortPreview(projectId: string, cohortId: string | null) {
+  return useQuery({
+    queryKey: [...cohortsKey(projectId), cohortId, 'preview'],
+    queryFn: () =>
+      apiFetch<CohortPreviewResponse>(`${base(projectId)}/cohorts/${cohortId}/preview`),
+    enabled: cohortId !== null,
+  });
+}
+
+export function useCreateCohort(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateCohortRequest) =>
+      apiFetch<Cohort>(`${base(projectId)}/cohorts`, { method: 'POST', body: input }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: cohortsKey(projectId) });
+    },
+  });
+}
+
+export function useUpdateCohort(projectId: string, cohortId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateCohortRequest) =>
+      apiFetch<Cohort>(`${base(projectId)}/cohorts/${cohortId}`, { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: cohortsKey(projectId) });
+    },
+  });
+}
+
+export function useDeleteCohort(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (cohortId: string) =>
+      apiFetch<void>(`${base(projectId)}/cohorts/${cohortId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: cohortsKey(projectId) });
+    },
+  });
+}
+
+// --- Saved reports (contracts §16) ---
+
+const reportsKey = (projectId: string) => ['analytics', projectId, 'reports'] as const;
+
+export function useReports(projectId: string, kind?: string) {
+  return useQuery({
+    queryKey: [...reportsKey(projectId), kind ?? 'all'],
+    queryFn: () => {
+      const query = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+      return apiFetch<ListReportsResponse>(`${base(projectId)}/reports${query}`);
+    },
+  });
+}
+
+export function useReport(projectId: string, reportId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(projectId), reportId],
+    queryFn: () => apiFetch<SavedReport>(`${base(projectId)}/reports/${reportId}`),
+  });
+}
+
+export function useCreateReport(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateReportRequest) =>
+      apiFetch<SavedReport>(`${base(projectId)}/reports`, { method: 'POST', body: input }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: reportsKey(projectId) });
+    },
+  });
+}
+
+export function useUpdateReport(projectId: string, reportId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateReportRequest) =>
+      apiFetch<SavedReport>(`${base(projectId)}/reports/${reportId}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: reportsKey(projectId) });
+    },
+  });
+}
+
+export function useDeleteReport(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reportId: string) =>
+      apiFetch<void>(`${base(projectId)}/reports/${reportId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: reportsKey(projectId) });
+    },
+  });
+}
+
+/** Executes a stored report's definition (`POST /reports/:id/run`) with optional overrides. */
+export function useRunReport(projectId: string, reportId: string) {
+  return useMutation({
+    mutationFn: (input: RunReportRequest) =>
+      apiFetch<AnalysisResult>(`${base(projectId)}/reports/${reportId}/run`, {
+        method: 'POST',
+        body: input,
+      }),
+  });
+}
+
+// --- Custom dashboards (contracts §16) ---
+
+const dashboardsKey = (projectId: string) => ['analytics', projectId, 'dashboards'] as const;
+
+export function useDashboards(projectId: string) {
+  return useQuery({
+    queryKey: dashboardsKey(projectId),
+    queryFn: () => apiFetch<ListDashboardsResponse>(`${base(projectId)}/dashboards`),
+  });
+}
+
+export function useDashboard(projectId: string, dashboardId: string) {
+  return useQuery({
+    queryKey: [...dashboardsKey(projectId), dashboardId],
+    queryFn: () => apiFetch<Dashboard>(`${base(projectId)}/dashboards/${dashboardId}`),
+  });
+}
+
+/** Runs every tile's definition; one tile failing surfaces as `{ error }`, never a whole-board failure. */
+export function useDashboardData(projectId: string, dashboardId: string) {
+  return useQuery({
+    queryKey: [...dashboardsKey(projectId), dashboardId, 'data'],
+    queryFn: () =>
+      apiFetch<DashboardDataResponse>(`${base(projectId)}/dashboards/${dashboardId}/data`),
+  });
+}
+
+export function useCreateDashboard(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateDashboardRequest) =>
+      apiFetch<DashboardSummary>(`${base(projectId)}/dashboards`, { method: 'POST', body: input }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardsKey(projectId) });
+    },
+  });
+}
+
+export function useUpdateDashboard(projectId: string, dashboardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateDashboardRequest) =>
+      apiFetch<DashboardSummary>(`${base(projectId)}/dashboards/${dashboardId}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardsKey(projectId) });
+    },
+  });
+}
+
+export function useDeleteDashboard(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dashboardId: string) =>
+      apiFetch<void>(`${base(projectId)}/dashboards/${dashboardId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardsKey(projectId) });
+    },
+  });
+}
+
+/** Invalidate both the structural dashboard and its run data after a tile mutation. */
+function invalidateDashboard(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId: string,
+  dashboardId: string,
+) {
+  void queryClient.invalidateQueries({ queryKey: [...dashboardsKey(projectId), dashboardId] });
+}
+
+export function useCreateTile(projectId: string, dashboardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTileRequest) =>
+      apiFetch<DashboardTile>(`${base(projectId)}/dashboards/${dashboardId}/tiles`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => invalidateDashboard(queryClient, projectId, dashboardId),
+  });
+}
+
+export function useUpdateTile(projectId: string, dashboardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tileId, patch }: { tileId: string; patch: UpdateTileRequest }) =>
+      apiFetch<DashboardTile>(`${base(projectId)}/dashboards/${dashboardId}/tiles/${tileId}`, {
+        method: 'PATCH',
+        body: patch,
+      }),
+    onSuccess: () => invalidateDashboard(queryClient, projectId, dashboardId),
+  });
+}
+
+export function useDeleteTile(projectId: string, dashboardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (tileId: string) =>
+      apiFetch<void>(`${base(projectId)}/dashboards/${dashboardId}/tiles/${tileId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => invalidateDashboard(queryClient, projectId, dashboardId),
+  });
+}
+
+/** Batch-saves the 12-col grid after a drag / discrete resize (`PATCH /dashboards/:id/layout`). */
+export function useSaveLayout(projectId: string, dashboardId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateLayoutRequest) =>
+      apiFetch<Dashboard>(`${base(projectId)}/dashboards/${dashboardId}/layout`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () => invalidateDashboard(queryClient, projectId, dashboardId),
   });
 }

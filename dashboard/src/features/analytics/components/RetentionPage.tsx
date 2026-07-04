@@ -13,6 +13,7 @@ import { RETENTION_INTERVALS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunRetention } from '../api';
 import { RetentionChart } from './RetentionChart';
 import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { CohortSelect, SaveAsReportButton } from './report-actions';
 import {
   cleanFilters,
   DateRangeFields,
@@ -40,6 +41,7 @@ export function RetentionPage() {
   const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [interval, setInterval] = useState<RetentionInterval>('day');
   const [periods, setPeriods] = useState(14);
+  const [cohortId, setCohortId] = useState('');
   const [result, setResult] = useState<RetentionResponse | null>(null);
 
   const eventOptions = metaEvents.data?.events ?? [];
@@ -56,8 +58,19 @@ export function RetentionPage() {
     if (returnEvent.trim()) {
       def.return_event = { name: returnEvent.trim(), filters: cleanFilters(returnFilters) };
     }
+    if (cohortId) def.cohort_id = cohortId;
     return def;
-  }, [bornEvent, bornFilters, returnEvent, returnFilters, dateFrom, dateTo, interval, periods]);
+  }, [
+    bornEvent,
+    bornFilters,
+    returnEvent,
+    returnFilters,
+    dateFrom,
+    dateTo,
+    interval,
+    periods,
+    cohortId,
+  ]);
 
   const canRun =
     Boolean(bornEvent.trim()) && Boolean(dateFrom) && Boolean(dateTo) && !runRetention.isPending;
@@ -155,10 +168,18 @@ export function RetentionPage() {
             </div>
           </div>
 
-          <div>
+          <CohortSelect projectId={projectId} value={cohortId} onChange={setCohortId} />
+
+          <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleRun} disabled={!canRun}>
               {runRetention.isPending ? 'Running…' : 'Run'}
             </Button>
+            <SaveAsReportButton
+              projectId={projectId}
+              kind="retention"
+              definition={queryDefinition}
+              disabled={!bornEvent.trim()}
+            />
           </div>
         </CardContent>
       </Card>

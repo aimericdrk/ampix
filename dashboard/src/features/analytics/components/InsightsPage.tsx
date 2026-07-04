@@ -17,6 +17,7 @@ import { INSIGHTS_FILTER_OPS, INSIGHTS_INTERVALS } from '../../../lib/api/types'
 import { useMetaEvents, useMetaProperties, useRunInsights } from '../api';
 import { InsightsChart } from './InsightsChart';
 import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { CohortSelect, SaveAsReportButton } from './report-actions';
 
 const MAX_EVENTS = 5;
 
@@ -51,6 +52,7 @@ export function InsightsPage() {
   const [interval, setInterval] = useState<InsightsInterval>('day');
   const [filters, setFilters] = useState<InsightsFilter[]>([]);
   const [breakdownProperty, setBreakdownProperty] = useState('');
+  const [cohortId, setCohortId] = useState('');
   const [result, setResult] = useState<InsightsResponse | null>(null);
 
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
@@ -99,8 +101,9 @@ export function InsightsPage() {
       ),
     };
     if (breakdownProperty) def.breakdown = { property: breakdownProperty };
+    if (cohortId) def.cohort_id = cohortId;
     return def;
-  }, [events, dateFrom, dateTo, interval, filters, breakdownProperty]);
+  }, [events, dateFrom, dateTo, interval, filters, breakdownProperty, cohortId]);
 
   const canRun =
     events.length > 0 && Boolean(dateFrom) && Boolean(dateTo) && !runInsights.isPending;
@@ -323,10 +326,18 @@ export function InsightsPage() {
             </select>
           </div>
 
-          <div>
+          <CohortSelect projectId={projectId} value={cohortId} onChange={setCohortId} />
+
+          <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleRun} disabled={!canRun}>
               {runInsights.isPending ? 'Running…' : 'Run'}
             </Button>
+            <SaveAsReportButton
+              projectId={projectId}
+              kind="insights"
+              definition={queryDefinition}
+              disabled={events.length === 0}
+            />
           </div>
         </CardContent>
       </Card>

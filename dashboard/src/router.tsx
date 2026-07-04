@@ -18,6 +18,11 @@ import { InsightsPage } from './features/analytics/components/InsightsPage';
 import { FunnelsPage } from './features/analytics/components/FunnelsPage';
 import { RetentionPage } from './features/analytics/components/RetentionPage';
 import { FlowsPage } from './features/analytics/components/FlowsPage';
+import { CohortsPage } from './features/analytics/components/CohortsPage';
+import { ReportsPage } from './features/analytics/components/ReportsPage';
+import { ReportDetailPage } from './features/analytics/components/ReportDetailPage';
+import { DashboardsPage } from './features/analytics/components/DashboardsPage';
+import { DashboardViewPage } from './features/analytics/components/DashboardViewPage';
 import { LiveFeedPage } from './features/analytics/components/LiveFeedPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { UserProfilePage } from './features/analytics/components/UserProfilePage';
@@ -141,6 +146,38 @@ const flowsRoute = createRoute({
   component: FlowsPage,
 });
 
+// --- Cohorts, saved reports & custom dashboards, Phase 5 (contracts §16) ---
+
+const cohortsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/cohorts',
+  component: CohortsPage,
+});
+
+const reportsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/reports',
+  component: ReportsPage,
+});
+
+const reportDetailRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/reports/$reportId',
+  component: ReportDetailPage,
+});
+
+const dashboardsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/dashboards',
+  component: DashboardsPage,
+});
+
+const dashboardViewRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/dashboards/$dashboardId',
+  component: DashboardViewPage,
+});
+
 const liveEventsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/live',
@@ -195,6 +232,11 @@ export const routeTree = rootRoute.addChildren([
     funnelsRoute,
     retentionRoute,
     flowsRoute,
+    cohortsRoute,
+    reportsRoute,
+    reportDetailRoute,
+    dashboardsRoute,
+    dashboardViewRoute,
     liveEventsRoute,
     usersRoute,
     userProfileRoute,

@@ -14,6 +14,7 @@ import { FLOWS_DIRECTIONS, FLOWS_UNITS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFlows } from '../api';
 import { FlowsChart } from './FlowsChart';
 import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { SaveAsReportButton } from './report-actions';
 import {
   cleanFilters,
   DateRangeFields,
@@ -172,10 +173,16 @@ export function FlowsPage() {
             </div>
           </div>
 
-          <div>
+          <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleRun} disabled={!canRun}>
               {runFlows.isPending ? 'Running…' : 'Run'}
             </Button>
+            <SaveAsReportButton
+              projectId={projectId}
+              kind="flows"
+              definition={queryDefinition}
+              disabled={!anchorEvent.trim()}
+            />
           </div>
         </CardContent>
       </Card>
