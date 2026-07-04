@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { OrgsModule } from './orgs/orgs.module';
 import { ProjectsModule } from './projects/projects.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { ProjectsModule } from './projects/projects.module';
     ProjectsModule,
     OrgsModule,
     InvitationsModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

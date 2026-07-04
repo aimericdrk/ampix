@@ -10,5 +10,8 @@ import { ProjectsService } from './projects.service';
   imports: [AuthModule, AuthzModule],
   controllers: [ProjectsController, ProjectManagementController],
   providers: [ProjectsService, ProjectManagementService],
+  // Exported so AnalyticsModule (contracts §14) can reuse `assertMembership` instead of
+  // duplicating the 404-then-403 tenancy check.
+  exports: [ProjectsService],
 })
 export class ProjectsModule {}

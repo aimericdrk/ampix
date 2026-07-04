@@ -44,3 +44,80 @@ CREATE TABLE IF NOT EXISTS analytics.identity_mappings (
   created_at DateTime64(3, 'UTC')
 ) ENGINE = ReplacingMergeTree(created_at)
 ORDER BY (project_id, anon_id);
+
+-- Phase 3 rollup materialized views (contracts §14). Fed continuously from `analytics.events` as
+-- new rows land. Correctness note (contracts §14): the Phase 3 insights/meta endpoints
+-- intentionally query RAW events for exact, `DISTINCT insert_id`-deduplicated results — these
+-- rollups exist purely as a future dashboard-speed optimization and are not read by any endpoint
+-- yet.
+
+-- Daily active users: AggregatingMergeTree storing a mergeable uniq() state per (project_id, day).
+CREATE TABLE IF NOT EXISTS analytics.daily_active_users
+(
+  project_id  UUID,
+  day         Date,
+  users_state AggregateFunction(uniq, String)
+)
+ENGINE = AggregatingMergeTree
+ORDER BY (project_id, day);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.daily_active_users_mv
+TO analytics.daily_active_users
+AS
+SELECT
+  project_id,
+  toDate(timestamp) AS day,
+  uniqState(distinct_id) AS users_state
+FROM analytics.events
+GROUP BY project_id, day;
+
+-- Daily event counts: SummingMergeTree keyed by (project_id, day, event) — `count` sums across merges.
+-- NOTE: no comment or statement below may contain a literal semicolon character anywhere (not even
+-- inside backticks) — both the production container's init and the test suite's
+-- applyClickHouseSchema() naively split this whole file on that character.
+CREATE TABLE IF NOT EXISTS analytics.daily_event_counts
+(
+  project_id UUID,
+  day        Date,
+  event      LowCardinality(String),
+  count      UInt64
+)
+ENGINE = SummingMergeTree(count)
+ORDER BY (project_id, day, event);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.daily_event_counts_mv
+TO analytics.daily_event_counts
+AS
+SELECT
+  project_id,
+  toDate(timestamp) AS day,
+  event,
+  count() AS count
+FROM analytics.events
+GROUP BY project_id, day, event;
+
+-- Daily sessions: SummingMergeTree keyed by (project_id, day) — derived from `$session_end` events,
+-- whose `$duration_ms` property carries the exact session duration. `toJSONString(properties)` is
+-- required because `properties` is the native `JSON` type, not a `String` column holding JSON
+-- text — `JSONExtractUInt` needs a `String` argument (verified against clickhouse-server:24.8).
+CREATE TABLE IF NOT EXISTS analytics.daily_sessions
+(
+  project_id        UUID,
+  day               Date,
+  sessions          UInt64,
+  total_duration_ms UInt64
+)
+ENGINE = SummingMergeTree((sessions, total_duration_ms))
+ORDER BY (project_id, day);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.daily_sessions_mv
+TO analytics.daily_sessions
+AS
+SELECT
+  project_id,
+  toDate(timestamp) AS day,
+  count() AS sessions,
+  sum(JSONExtractUInt(toJSONString(properties), '$duration_ms')) AS total_duration_ms
+FROM analytics.events
+WHERE event = '$session_end'
+GROUP BY project_id, day;

@@ -84,8 +84,13 @@ export class ProjectsService {
    * of its org. SECURITY-CRITICAL: this is the only gate standing between a member of org A and
    * org B's data, so it always re-derives the project's actual `orgId` from Postgres and checks
    * membership against THAT org — never trusts a client-supplied org id.
+   *
+   * Public (not private) so other read-only, viewer+-gated modules can reuse it verbatim instead
+   * of duplicating the check — e.g. AnalyticsService (contracts §14: "reuse
+   * ProjectsService.assertMembership ... for viewer+"). Any Membership row already implies
+   * viewer-or-higher access; there is no lower tier to distinguish.
    */
-  private async assertMembership(userId: string, projectId: string): Promise<void> {
+  async assertMembership(userId: string, projectId: string): Promise<void> {
     if (!UUID_SHAPE.test(projectId)) {
       throw this.notFound();
     }

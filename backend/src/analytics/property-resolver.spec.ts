@@ -1,0 +1,86 @@
+import { EVENT_COLUMN_WHITELIST, resolveProperty } from './property-resolver';
+
+const WHITELIST_COLUMNS = [
+  'event',
+  'distinct_id',
+  'anon_id',
+  'session_id',
+  'os',
+  'os_version',
+  'app_version',
+  'app_build',
+  'device_model',
+  'device_manufacturer',
+  'locale',
+  'timezone',
+  'network',
+  'sdk_version',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+  'first_utm_source',
+  'first_utm_campaign',
+];
+
+describe('resolveProperty', () => {
+  it('exposes exactly the contracts §14 whitelist', () => {
+    expect([...EVENT_COLUMN_WHITELIST].sort()).toEqual([...WHITELIST_COLUMNS].sort());
+  });
+
+  it.each(WHITELIST_COLUMNS)(
+    'resolves whitelisted column "%s" to the bare column identifier',
+    (column) => {
+      const params: Record<string, unknown> = {};
+      const resolved = resolveProperty(column, 'someParam', params);
+
+      expect(resolved).toEqual({ expr: column, isColumn: true });
+      // A whitelist hit never needs (or creates) a bound key parameter.
+      expect(params).toEqual({});
+    },
+  );
+
+  it('resolves a non-whitelisted property to a JSONExtractString(toJSONString(...)) call with the key bound as a param', () => {
+    const params: Record<string, unknown> = {};
+    const resolved = resolveProperty('plan', 'breakdownKey', params);
+
+    expect(resolved.isColumn).toBe(false);
+    expect(resolved.expr).toBe(
+      'JSONExtractString(toJSONString(properties), {breakdownKey:String})',
+    );
+    expect(params).toEqual({ breakdownKey: 'plan' });
+    // The raw property name must never appear inline in the expression string.
+    expect(resolved.expr).not.toContain('plan');
+  });
+
+  it('INJECTION: a malicious property name is bound as a param value, never interpolated into the SQL expression', () => {
+    const attack = "os'; DROP TABLE events; --";
+    const params: Record<string, unknown> = {};
+    const resolved = resolveProperty(attack, 'filterKey0', params);
+
+    expect(resolved.isColumn).toBe(false);
+    expect(params.filterKey0).toBe(attack);
+    expect(resolved.expr).toBe('JSONExtractString(toJSONString(properties), {filterKey0:String})');
+    expect(resolved.expr).not.toContain(attack);
+    expect(resolved.expr).not.toContain('DROP TABLE');
+  });
+
+  it('INJECTION: a property name containing braces/backticks is still only ever bound as a param', () => {
+    const attack = '`properties`}; SELECT {evil';
+    const params: Record<string, unknown> = {};
+    const resolved = resolveProperty(attack, 'breakdownKey', params);
+
+    expect(params.breakdownKey).toBe(attack);
+    expect(resolved.expr).not.toContain(attack);
+    expect(resolved.expr).not.toContain('`');
+  });
+
+  it('an exact-looking-but-not-whitelisted property (e.g. trailing space) falls through to the custom-property path', () => {
+    const params: Record<string, unknown> = {};
+    const resolved = resolveProperty('os ', 'p', params);
+
+    expect(resolved.isColumn).toBe(false);
+    expect(params.p).toBe('os ');
+  });
+});
