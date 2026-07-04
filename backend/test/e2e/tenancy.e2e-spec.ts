@@ -240,6 +240,52 @@ describe('Tenancy management (e2e, contracts §13)', () => {
         .expect(410);
     });
 
+    it(
+      'single-use race regression: two brand-new users accepting the SAME never-accepted ' +
+        'token at the same instant — exactly one becomes a member, the other 410s',
+      async () => {
+        const http = stack.app.getHttpServer();
+        const invite = await request(http)
+          .post(`/api/v1/orgs/${orgId}/invitations`)
+          .set('Authorization', auth(admin.accessToken))
+          .send({ role: 'analyst' })
+          .expect(201);
+
+        const [challenger1, challenger2] = await Promise.all([
+          signup(stack, uniqueEmail()),
+          signup(stack, uniqueEmail()),
+        ]);
+
+        // Fire both accepts concurrently against the SAME real Postgres — before the fix, both
+        // could pass "findUnique -> not yet accepted" and each create their own membership.
+        const [res1, res2] = await Promise.all([
+          request(http)
+            .post(`/api/v1/invitations/${invite.body.token}/accept`)
+            .set('Authorization', auth(challenger1.accessToken)),
+          request(http)
+            .post(`/api/v1/invitations/${invite.body.token}/accept`)
+            .set('Authorization', auth(challenger2.accessToken)),
+        ]);
+
+        expect([res1.status, res2.status].sort()).toEqual([200, 410]);
+        const winner = res1.status === 200 ? challenger1 : challenger2;
+        expect((res1.status === 200 ? res1 : res2).body).toEqual({
+          org_id: orgId,
+          role: 'analyst',
+        });
+
+        const members = await request(http)
+          .get(`/api/v1/orgs/${orgId}/members`)
+          .set('Authorization', auth(admin.accessToken))
+          .expect(200);
+        const winnerMemberships = members.body.members.filter(
+          (m: { user: { id: string } }) => m.user.id === winner.userId,
+        );
+        expect(winnerMemberships).toHaveLength(1); // exactly one membership row, never two
+      },
+      30_000,
+    );
+
     describe('last-admin protection (SECURITY-CRITICAL)', () => {
       it('cannot demote the sole admin -> 409', async () => {
         await request(stack.app.getHttpServer())
@@ -277,6 +323,67 @@ describe('Tenancy management (e2e, contracts §13)', () => {
           .send({ role: 'admin' })
           .expect(200);
       });
+
+      it(
+        'TOCTOU regression: two admins racing to demote EACH OTHER at the same instant never ' +
+          'leave the org with zero admins — exactly one demotion wins, the other 409s',
+        async () => {
+          const http = stack.app.getHttpServer();
+
+          // Fresh org, isolated from the shared `orgId`/`admin`/`viewer` state above, with
+          // exactly two admins so the race has a real invariant to violate if unguarded.
+          const adminA = await signup(stack, uniqueEmail());
+          const raceOrg = await request(http)
+            .post('/api/v1/orgs')
+            .set('Authorization', auth(adminA.accessToken))
+            .send({ name: 'Race Org' })
+            .expect(201);
+          const raceOrgId = raceOrg.body.id as string;
+
+          const invite = await request(http)
+            .post(`/api/v1/orgs/${raceOrgId}/invitations`)
+            .set('Authorization', auth(adminA.accessToken))
+            .send({ role: 'viewer' })
+            .expect(201);
+          const adminB = await signup(stack, uniqueEmail());
+          await request(http)
+            .post(`/api/v1/invitations/${invite.body.token}/accept`)
+            .set('Authorization', auth(adminB.accessToken))
+            .expect(200);
+          await request(http)
+            .patch(`/api/v1/orgs/${raceOrgId}/members/${adminB.userId}`)
+            .set('Authorization', auth(adminA.accessToken))
+            .send({ role: 'admin' })
+            .expect(200);
+          // Exactly two admins now: adminA, adminB.
+
+          // Fire both demotions concurrently against the SAME real Postgres — before the fix,
+          // both requests could independently observe "2 admins" and both succeed, stranding
+          // the org with zero.
+          const [resA, resB] = await Promise.all([
+            request(http)
+              .patch(`/api/v1/orgs/${raceOrgId}/members/${adminA.userId}`)
+              .set('Authorization', auth(adminA.accessToken))
+              .send({ role: 'viewer' }),
+            request(http)
+              .patch(`/api/v1/orgs/${raceOrgId}/members/${adminB.userId}`)
+              .set('Authorization', auth(adminB.accessToken))
+              .send({ role: 'viewer' }),
+          ]);
+
+          expect([resA.status, resB.status].sort()).toEqual([200, 409]);
+
+          const members = await request(http)
+            .get(`/api/v1/orgs/${raceOrgId}/members`)
+            .set('Authorization', auth(adminA.accessToken))
+            .expect(200);
+          const adminCount = members.body.members.filter(
+            (m: { role: string }) => m.role === 'admin',
+          ).length;
+          expect(adminCount).toBe(1); // never 0, never 2
+        },
+        30_000,
+      );
     });
 
     describe('token revocation takes effect on the ingest path', () => {
@@ -361,6 +468,40 @@ describe('Tenancy management (e2e, contracts §13)', () => {
     it('unauthenticated requests get 401 on protected routes', async () => {
       await request(stack.app.getHttpServer()).get('/api/v1/orgs').expect(401);
       await request(stack.app.getHttpServer()).post('/api/v1/orgs').send({ name: 'x' }).expect(401);
+    });
+
+    it('malformed (non-UUID-shaped) :userId/:invitationId/:tokenId -> 404, never a 500', async () => {
+      const http = stack.app.getHttpServer();
+      const owner = await signup(stack, uniqueEmail());
+      const orgRes = await request(http)
+        .post('/api/v1/orgs')
+        .set('Authorization', auth(owner.accessToken))
+        .send({ name: 'Malformed Ids Org' })
+        .expect(201);
+      const malformedIdsOrgId = orgRes.body.id as string;
+      const projectRes = await request(http)
+        .post(`/api/v1/orgs/${malformedIdsOrgId}/projects`)
+        .set('Authorization', auth(owner.accessToken))
+        .send({ name: 'App' })
+        .expect(201);
+
+      await request(http)
+        .patch(`/api/v1/orgs/${malformedIdsOrgId}/members/not-a-uuid`)
+        .set('Authorization', auth(owner.accessToken))
+        .send({ role: 'viewer' })
+        .expect(404);
+      await request(http)
+        .delete(`/api/v1/orgs/${malformedIdsOrgId}/members/not-a-uuid`)
+        .set('Authorization', auth(owner.accessToken))
+        .expect(404);
+      await request(http)
+        .delete(`/api/v1/orgs/${malformedIdsOrgId}/invitations/not-a-uuid`)
+        .set('Authorization', auth(owner.accessToken))
+        .expect(404);
+      await request(http)
+        .delete(`/api/v1/projects/${projectRes.body.id}/tokens/not-a-uuid`)
+        .set('Authorization', auth(owner.accessToken))
+        .expect(404);
     });
   });
 

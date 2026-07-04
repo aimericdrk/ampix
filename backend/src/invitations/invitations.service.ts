@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import type { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
+import { isUuidShaped } from '../common/uuid';
 import type {
   AcceptedInvitation,
   CreatedInvitation,
@@ -51,8 +52,13 @@ export class InvitationsService {
     }));
   }
 
-  /** Scoped to `orgId` so an admin of org A can never delete org B's invitation by id. */
+  /**
+   * Scoped to `orgId` so an admin of org A can never delete org B's invitation by id. A
+   * non-UUID-shaped `invitationId` short-circuits to 404 instead of letting Postgres throw on an
+   * invalid `uuid` column comparison (it can never match a real invitation either way).
+   */
   async remove(orgId: string, invitationId: string): Promise<void> {
+    if (!isUuidShaped(invitationId)) throw this.notFound();
     const result = await this.prisma.invitation.deleteMany({
       where: { id: invitationId, orgId },
     });
@@ -78,34 +84,65 @@ export class InvitationsService {
    * SECOND user calling accept on an already-accepted token gets 410. The SAME user calling
    * accept again (any reason, e.g. a retried request) is idempotent — 200, keeping whatever role
    * they ended up with, never re-applying the invitation's role over an already-different one.
+   *
+   * SECURITY-CRITICAL atomicity: claiming the invitation is a compare-and-swap —
+   * `updateMany({ where: { token, acceptedBy: null, expiresAt: { gt: now } }, data: {
+   * acceptedBy: userId } })` — a single conditional UPDATE, so exactly one concurrent caller can
+   * ever flip `acceptedBy` from null for a given token (Postgres serializes concurrent UPDATEs
+   * that target the SAME row: the loser blocks until the winner commits, then re-evaluates its
+   * WHERE clause against the now-committed row and finds `acceptedBy` no longer null, so it
+   * affects 0 rows). Only the caller that wins the CAS (`count === 1`) goes on to create the
+   * Membership, and it does so — plus the existing-membership re-check — inside the SAME
+   * transaction as the CAS, so a crash between "claim" and "create membership" can never leave
+   * an invitation marked accepted with no corresponding membership.
    */
   async accept(token: string, userId: string): Promise<AcceptedInvitation> {
-    return this.prisma.$transaction(async (tx) => {
+    const now = new Date();
+
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const cas = await tx.invitation.updateMany({
+        where: { token, acceptedBy: null, expiresAt: { gt: now } },
+        data: { acceptedBy: userId },
+      });
+      if (cas.count === 0) return null; // lost the race (or nothing to win) — resolve outside
+
       const invitation = await tx.invitation.findUnique({ where: { token } });
-      if (!invitation) throw this.notFound();
-      if (invitation.expiresAt < new Date()) throw this.gone();
-      if (invitation.acceptedBy && invitation.acceptedBy !== userId) throw this.gone();
+      if (!invitation) {
+        // Can't happen: the CAS above just updated this exact row inside this transaction.
+        throw new Error('InvitationsService.accept: invitation vanished after winning the CAS');
+      }
 
       const existingMembership = await tx.membership.findUnique({
         where: { userId_orgId: { userId, orgId: invitation.orgId } },
       });
-
       if (existingMembership) {
-        if (!invitation.acceptedBy) {
-          await tx.invitation.update({
-            where: { id: invitation.id },
-            data: { acceptedBy: userId },
-          });
-        }
+        // Already a member some other way — keep their EXISTING role, never let this
+        // invitation's role clobber it, even though we just (re-)marked it accepted.
         return { org_id: invitation.orgId, role: existingMembership.role };
       }
 
       await tx.membership.create({
         data: { userId, orgId: invitation.orgId, role: invitation.role },
       });
-      await tx.invitation.update({ where: { id: invitation.id }, data: { acceptedBy: userId } });
       return { org_id: invitation.orgId, role: invitation.role };
     });
+
+    if (claimed) return claimed;
+
+    // Lost the CAS (or there was nothing to win): resolve WHY without ever writing anything.
+    // The only successful outcome from here on is the idempotent already-a-member case — a
+    // second, different caller never gets to "win" by any other path.
+    const invitation = await this.prisma.invitation.findUnique({ where: { token } });
+    if (!invitation) throw this.notFound();
+
+    const existingMembership = await this.prisma.membership.findUnique({
+      where: { userId_orgId: { userId, orgId: invitation.orgId } },
+    });
+    if (existingMembership) {
+      return { org_id: invitation.orgId, role: existingMembership.role };
+    }
+
+    throw this.gone(); // expired, or already accepted (single-use) by this or another caller
   }
 
   private isExpiredOrAccepted(expiresAt: Date, acceptedBy: string | null): boolean {

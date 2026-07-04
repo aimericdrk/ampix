@@ -3,6 +3,7 @@ import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
 import { generateSdkToken } from '../common/sdk-token';
+import { isUuidShaped } from '../common/uuid';
 import { REDIS } from '../redis/redis.module';
 import { sdkTokenCacheKey } from '../ingestion/sdk-token.guard';
 import type {
@@ -91,10 +92,12 @@ export class ProjectManagementService {
   /**
    * Sets `revokedAt` AND proactively deletes the SdkTokenGuard's Redis cache entry for this
    * token, so revocation takes effect immediately rather than waiting out the guard's 60s cache
-   * TTL (see sdk-token.guard.ts's SDK_TOKEN_CACHE_TTL_SECONDS comment). 404 if `tokenId` doesn't
-   * belong to `projectId`, or is already revoked (it's no longer a live token to revoke).
+   * TTL (see sdk-token.guard.ts's SDK_TOKEN_CACHE_TTL_SECONDS comment). 404 if `tokenId` isn't
+   * UUID-shaped, doesn't belong to `projectId`, or is already revoked (it's no longer a live
+   * token to revoke).
    */
   async revokeToken(projectId: string, tokenId: string): Promise<void> {
+    if (!isUuidShaped(tokenId)) throw this.tokenNotFound();
     const token = await this.prisma.sdkToken.findUnique({ where: { id: tokenId } });
     if (!token || token.projectId !== projectId || token.revokedAt !== null) {
       throw this.tokenNotFound();

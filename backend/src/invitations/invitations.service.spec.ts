@@ -60,6 +60,22 @@ class FakePrisma {
       );
       return { count: before - this.invitations.length };
     },
+    updateMany: async ({
+      where,
+      data,
+    }: {
+      where: { token: string; acceptedBy: null; expiresAt: { gt: Date } };
+      data: { acceptedBy: string };
+    }) => {
+      const matches = this.invitations.filter(
+        (i) =>
+          i.token === where.token &&
+          i.acceptedBy === where.acceptedBy &&
+          i.expiresAt > where.expiresAt.gt,
+      );
+      matches.forEach((i) => Object.assign(i, data));
+      return { count: matches.length };
+    },
   };
 
   membership = {
@@ -156,11 +172,14 @@ describe('InvitationsService', () => {
   });
 
   describe('remove', () => {
+    const INVITATION_ID = '018f6b2e-0000-7000-8000-0000000000a1';
+    const UNKNOWN_INVITATION_ID = '018f6b2e-0000-7000-8000-0000000000ff';
+
     it('deletes when the invitation belongs to the given org', async () => {
       const prisma = new FakePrisma();
       prisma.invitations = [
         {
-          id: 'inv-1',
+          id: INVITATION_ID,
           orgId: 'org-1',
           role: 'viewer',
           token: 't1',
@@ -170,7 +189,7 @@ describe('InvitationsService', () => {
       ];
       const service = makeService(prisma);
 
-      await service.remove('org-1', 'inv-1');
+      await service.remove('org-1', INVITATION_ID);
       expect(prisma.invitations).toHaveLength(0);
     });
 
@@ -178,7 +197,7 @@ describe('InvitationsService', () => {
       const prisma = new FakePrisma();
       prisma.invitations = [
         {
-          id: 'inv-1',
+          id: INVITATION_ID,
           orgId: 'org-2',
           role: 'viewer',
           token: 't1',
@@ -188,17 +207,37 @@ describe('InvitationsService', () => {
       ];
       const service = makeService(prisma);
 
-      await expect(service.remove('org-1', 'inv-1')).rejects.toMatchObject({
+      await expect(service.remove('org-1', INVITATION_ID)).rejects.toMatchObject({
         problem: { status: 404 },
       });
       expect(prisma.invitations).toHaveLength(1);
     });
 
-    it('404s for an unknown invitation id', async () => {
+    it('404s for an unknown (but UUID-shaped) invitation id', async () => {
       const service = makeService(new FakePrisma());
-      await expect(service.remove('org-1', 'missing')).rejects.toMatchObject({
+      await expect(service.remove('org-1', UNKNOWN_INVITATION_ID)).rejects.toMatchObject({
         problem: { status: 404 },
       });
+    });
+
+    it('404s for a malformed (non-UUID-shaped) invitation id without querying Postgres', async () => {
+      const prisma = new FakePrisma();
+      prisma.invitations = [
+        {
+          id: INVITATION_ID,
+          orgId: 'org-1',
+          role: 'viewer',
+          token: 't1',
+          expiresAt: new Date(),
+          acceptedBy: null,
+        },
+      ];
+      const service = makeService(prisma);
+
+      await expect(service.remove('org-1', 'not-a-uuid')).rejects.toMatchObject({
+        problem: { status: 404 },
+      });
+      expect(prisma.invitations).toHaveLength(1); // untouched — never reached deleteMany
     });
   });
 
@@ -351,6 +390,35 @@ describe('InvitationsService', () => {
       });
       expect(prisma.memberships).toHaveLength(1); // no duplicate membership row
     });
+
+    it(
+      'the claim is atomic (compare-and-swap) — SECURITY-CRITICAL: a SECOND accept by a ' +
+        'DIFFERENT user, immediately after the FIRST accept just won the CAS, still 410s and ' +
+        'creates no second membership',
+      async () => {
+        const prisma = new FakePrisma();
+        prisma.invitations = [
+          {
+            id: 'inv-1',
+            orgId: 'org-1',
+            role: 'viewer',
+            token: 't1',
+            expiresAt: new Date(Date.now() + 10_000),
+            acceptedBy: null,
+          },
+        ];
+        const service = makeService(prisma);
+
+        const first = await service.accept('t1', 'user-1');
+        expect(first).toEqual({ org_id: 'org-1', role: 'viewer' });
+        expect(prisma.invitations[0].acceptedBy).toBe('user-1');
+
+        await expect(service.accept('t1', 'user-2')).rejects.toMatchObject({
+          problem: { status: 410 },
+        });
+        expect(prisma.memberships).toEqual([{ userId: 'user-1', orgId: 'org-1', role: 'viewer' }]);
+      },
+    );
 
     it('is idempotent — keeps the EXISTING role — when the caller is already a member some other way', async () => {
       const prisma = new FakePrisma();

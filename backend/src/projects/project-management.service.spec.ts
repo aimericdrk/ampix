@@ -174,10 +174,13 @@ describe('ProjectManagementService', () => {
   });
 
   describe('revokeToken', () => {
+    const TOKEN_ID = '018f6b2e-0000-7000-8000-0000000000a1';
+    const UNKNOWN_TOKEN_ID = '018f6b2e-0000-7000-8000-0000000000ff';
+
     it('sets revokedAt and deletes the guard cache entry — proves revocation takes effect immediately', async () => {
       const prisma = new FakePrisma();
       prisma.sdkTokens.push({
-        id: 't1',
+        id: TOKEN_ID,
         projectId: 'p1',
         token: 'mam_abc',
         label: 'default',
@@ -186,24 +189,44 @@ describe('ProjectManagementService', () => {
       });
       const { service, redis } = makeService(prisma);
 
-      await service.revokeToken('p1', 't1');
+      await service.revokeToken('p1', TOKEN_ID);
 
       expect(prisma.sdkTokens[0].revokedAt).not.toBeNull();
       expect(redis.del).toHaveBeenCalledWith(sdkTokenCacheKey('mam_abc'));
     });
 
-    it('404s for an unknown token id', async () => {
+    it('404s for an unknown (but UUID-shaped) token id', async () => {
       const prisma = new FakePrisma();
       const { service } = makeService(prisma);
-      await expect(service.revokeToken('p1', 'missing')).rejects.toMatchObject({
+      await expect(service.revokeToken('p1', UNKNOWN_TOKEN_ID)).rejects.toMatchObject({
         problem: { status: 404 },
       });
+    });
+
+    it('404s for a malformed (non-UUID-shaped) token id without querying Postgres', async () => {
+      const prisma = new FakePrisma();
+      prisma.sdkTokens.push({
+        id: TOKEN_ID,
+        projectId: 'p1',
+        token: 'mam_abc',
+        label: 'default',
+        revokedAt: null,
+        createdAt: new Date(),
+      });
+      const findUniqueSpy = jest.spyOn(prisma.sdkToken, 'findUnique');
+      const { service } = makeService(prisma);
+
+      await expect(service.revokeToken('p1', 'not-a-uuid')).rejects.toMatchObject({
+        problem: { status: 404 },
+      });
+      expect(findUniqueSpy).not.toHaveBeenCalled();
+      expect(prisma.sdkTokens[0].revokedAt).toBeNull(); // untouched
     });
 
     it('404s when the token belongs to a DIFFERENT project — SECURITY-CRITICAL', async () => {
       const prisma = new FakePrisma();
       prisma.sdkTokens.push({
-        id: 't1',
+        id: TOKEN_ID,
         projectId: 'other-project',
         token: 'mam_abc',
         label: 'default',
@@ -211,7 +234,7 @@ describe('ProjectManagementService', () => {
         createdAt: new Date(),
       });
       const { service } = makeService(prisma);
-      await expect(service.revokeToken('p1', 't1')).rejects.toMatchObject({
+      await expect(service.revokeToken('p1', TOKEN_ID)).rejects.toMatchObject({
         problem: { status: 404 },
       });
       expect(prisma.sdkTokens[0].revokedAt).toBeNull(); // untouched
@@ -220,7 +243,7 @@ describe('ProjectManagementService', () => {
     it('404s for an already-revoked token', async () => {
       const prisma = new FakePrisma();
       prisma.sdkTokens.push({
-        id: 't1',
+        id: TOKEN_ID,
         projectId: 'p1',
         token: 'mam_abc',
         label: 'default',
@@ -228,7 +251,7 @@ describe('ProjectManagementService', () => {
         createdAt: new Date(),
       });
       const { service } = makeService(prisma);
-      await expect(service.revokeToken('p1', 't1')).rejects.toMatchObject({
+      await expect(service.revokeToken('p1', TOKEN_ID)).rejects.toMatchObject({
         problem: { status: 404 },
       });
     });
@@ -236,7 +259,7 @@ describe('ProjectManagementService', () => {
     it('still revokes even if the Redis cache delete fails (degrades gracefully)', async () => {
       const prisma = new FakePrisma();
       prisma.sdkTokens.push({
-        id: 't1',
+        id: TOKEN_ID,
         projectId: 'p1',
         token: 'mam_abc',
         label: 'default',
@@ -247,7 +270,7 @@ describe('ProjectManagementService', () => {
         del: jest.fn().mockRejectedValue(new Error('redis down')) as unknown as Redis['del'],
       });
 
-      await expect(service.revokeToken('p1', 't1')).resolves.toBeUndefined();
+      await expect(service.revokeToken('p1', TOKEN_ID)).resolves.toBeUndefined();
       expect(prisma.sdkTokens[0].revokedAt).not.toBeNull();
     });
   });
