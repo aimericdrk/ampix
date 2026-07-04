@@ -376,6 +376,52 @@ describe('AuthService', () => {
     });
   });
 
+  describe('updateName (contracts §13 PATCH /auth/me)', () => {
+    it('renames the account and returns the public user shape', async () => {
+      const { service, prisma } = makeService();
+      const user = makeUser({ name: 'Old Name' });
+      prisma.users.push(user);
+
+      const updated = await service.updateName(user.id, 'New Name');
+
+      expect(updated).toEqual({ id: user.id, email: user.email, name: 'New Name' });
+      expect(prisma.users[0].name).toBe('New Name');
+    });
+  });
+
+  describe('changePassword (contracts §13 POST /auth/password)', () => {
+    it('verifies the current password, re-hashes, and persists the new one', async () => {
+      const { service, prisma, passwords } = makeService();
+      const originalHash = await passwords.hash('old-password1');
+      const user = makeUser({ passwordHash: originalHash });
+      prisma.users.push(user);
+
+      await service.changePassword(user.id, 'old-password1', 'new-password1');
+
+      expect(prisma.users[0].passwordHash).not.toBe(originalHash);
+      expect(await passwords.verify(prisma.users[0].passwordHash, 'new-password1')).toBe(true);
+    });
+
+    it('rejects with 401 when the current password is wrong, and does not change anything', async () => {
+      const { service, prisma, passwords } = makeService();
+      const originalHash = await passwords.hash('old-password1');
+      const user = makeUser({ passwordHash: originalHash });
+      prisma.users.push(user);
+
+      await expect(
+        service.changePassword(user.id, 'wrong-password', 'new-password1'),
+      ).rejects.toMatchObject({ problem: { status: 401 } });
+      expect(prisma.users[0].passwordHash).toBe(originalHash);
+    });
+
+    it('rejects with 401 for an unknown user id', async () => {
+      const { service } = makeService();
+      await expect(
+        service.changePassword('nonexistent', 'whatever', 'new-password1'),
+      ).rejects.toMatchObject({ problem: { status: 401 } });
+    });
+  });
+
   it('re-throws unexpected prisma errors from signup (not P2002)', async () => {
     const { service, prisma } = makeService();
     jest.spyOn(prisma.user, 'create').mockRejectedValueOnce(new Error('connection refused'));

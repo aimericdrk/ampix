@@ -1,14 +1,27 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Patch,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { ProblemException } from '../common/problem-details';
 import { requireAuthConfig } from './auth-config.util';
 import { AuthService } from './auth.service';
 import {
+  changePasswordSchema,
   codeSchema,
   loginSchema,
   parseOrThrow,
   signupSchema,
+  updateMeSchema,
   verify2faSchema,
 } from './auth.schemas';
 import type { AuthRequest } from './auth.types';
@@ -124,6 +137,21 @@ export class AuthController {
       user: { id: user.id, email: user.email, name: user.name },
       two_factor_enabled: user.twoFactorEnabled,
     };
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  async updateMe(@Req() req: AuthRequest, @Body() body: unknown) {
+    const dto = parseOrThrow(updateMeSchema, body);
+    return this.authService.updateName(req.user!.id, dto.name);
+  }
+
+  @Post('password')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  async changePassword(@Req() req: AuthRequest, @Body() body: unknown) {
+    const dto = parseOrThrow(changePasswordSchema, body);
+    await this.authService.changePassword(req.user!.id, dto.current_password, dto.new_password);
   }
 
   @Post('2fa/setup')

@@ -114,6 +114,34 @@ export class AuthService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
+  /** PATCH /api/v1/auth/me (contracts §13): renames the account, returns the public user shape. */
+  async updateName(userId: string, name: string): Promise<PublicUser> {
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { name } });
+    return toPublicUser(user);
+  }
+
+  /**
+   * POST /api/v1/auth/password (contracts §13): verifies `currentPassword` against the stored
+   * argon2id hash before re-hashing and persisting `newPassword`. Wrong current password -> 401,
+   * distinguishing it from a plain validation error since it's an authentication check.
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.getUserById(userId);
+    if (!user) {
+      throw this.wrongCurrentPassword();
+    }
+    const valid = await this.passwords.verify(user.passwordHash, currentPassword);
+    if (!valid) {
+      throw this.wrongCurrentPassword();
+    }
+    const passwordHash = await this.passwords.hash(newPassword);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  }
+
   async isTwoFactorEnabled(userId: string): Promise<boolean> {
     const user = await this.getUserById(userId);
     return user?.twoFactorEnabled ?? false;
@@ -171,6 +199,14 @@ export class AuthService {
       status: 401,
       title: 'Unauthorized',
       detail: 'Invalid email or password',
+    });
+  }
+
+  private wrongCurrentPassword(): ProblemException {
+    return new ProblemException({
+      status: 401,
+      title: 'Unauthorized',
+      detail: 'Current password is incorrect',
     });
   }
 

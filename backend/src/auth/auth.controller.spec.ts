@@ -30,6 +30,8 @@ describe('AuthController', () => {
       persistTotpSecret: jest.fn(),
       disableTwoFactor: jest.fn(),
       verifyActiveCode: jest.fn(),
+      updateName: jest.fn(),
+      changePassword: jest.fn(),
     };
     const tokens = {
       signAccessToken: jest.fn().mockReturnValue('new-access-token'),
@@ -335,6 +337,70 @@ describe('AuthController', () => {
       expect(totp.clearPending).toHaveBeenCalledWith(USER.id);
       expect(recoveryCodes.generateAndStore).toHaveBeenCalledWith(USER.id);
       expect(body).toEqual({ recovery_codes: ['code-1', 'code-2'] });
+    });
+  });
+
+  describe('updateMe (contracts §13)', () => {
+    it('parses the body and returns the updated user', async () => {
+      const { controller, authService } = makeController();
+      authService.updateName.mockResolvedValue({ ...USER, name: 'New Name' });
+
+      const body = await controller.updateMe(fakeRequest({ user: USER }), { name: 'New Name' });
+
+      expect(authService.updateName).toHaveBeenCalledWith(USER.id, 'New Name');
+      expect(body).toEqual({ ...USER, name: 'New Name' });
+    });
+
+    it('rejects an invalid body before touching the service', async () => {
+      const { controller, authService } = makeController();
+
+      await expect(
+        controller.updateMe(fakeRequest({ user: USER }), { name: '' }),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
+      expect(authService.updateName).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword (contracts §13)', () => {
+    it('delegates to the service with the caller id and both passwords', async () => {
+      const { controller, authService } = makeController();
+
+      await controller.changePassword(fakeRequest({ user: USER }), {
+        current_password: 'old-password1',
+        new_password: 'new-password1',
+      });
+
+      expect(authService.changePassword).toHaveBeenCalledWith(
+        USER.id,
+        'old-password1',
+        'new-password1',
+      );
+    });
+
+    it('propagates a 401 thrown by the service for a wrong current password', async () => {
+      const { controller, authService } = makeController();
+      authService.changePassword.mockRejectedValue(
+        Object.assign(new Error('wrong password'), { problem: { status: 401 } }),
+      );
+
+      await expect(
+        controller.changePassword(fakeRequest({ user: USER }), {
+          current_password: 'wrong',
+          new_password: 'new-password1',
+        }),
+      ).rejects.toMatchObject({ problem: { status: 401 } });
+    });
+
+    it('rejects a too-short new_password before touching the service', async () => {
+      const { controller, authService } = makeController();
+
+      await expect(
+        controller.changePassword(fakeRequest({ user: USER }), {
+          current_password: 'old-password1',
+          new_password: 'short',
+        }),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
+      expect(authService.changePassword).not.toHaveBeenCalled();
     });
   });
 

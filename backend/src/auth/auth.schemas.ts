@@ -35,6 +35,21 @@ export const codeSchema = z.object({
 });
 export type CodeDto = z.infer<typeof codeSchema>;
 
+// §13 — account (self) management.
+export const updateMeSchema = z.object({
+  name: z.string().trim().min(1).max(MAX_NAME_LENGTH),
+});
+export type UpdateMeDto = z.infer<typeof updateMeSchema>;
+
+export const changePasswordSchema = z.object({
+  current_password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
+  new_password: z
+    .string()
+    .min(8, 'new_password must be at least 8 characters')
+    .max(MAX_PASSWORD_LENGTH),
+});
+export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
+
 /** Parses `body` against `schema` or throws a 400 RFC 7807 problem naming the first bad field. */
 export function parseOrThrow<T extends ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
   const parsed = schema.safeParse(body);

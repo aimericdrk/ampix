@@ -8,6 +8,8 @@ import { ClickHouseModule } from './clickhouse/clickhouse.module';
 import { IngestModule } from './ingestion/ingest.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { OrgsModule } from './orgs/orgs.module';
 import { ProjectsModule } from './projects/projects.module';
 
 @Module({
@@ -33,6 +35,8 @@ import { ProjectsModule } from './projects/projects.module';
     HealthModule,
     AuthModule,
     ProjectsModule,
+    OrgsModule,
+    InvitationsModule,
   ],
 })
 export class AppModule {}

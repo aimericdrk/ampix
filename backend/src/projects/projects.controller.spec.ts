@@ -1,4 +1,5 @@
 import type { AuthRequest } from '../auth/auth.types';
+import { ProjectManagementService } from './project-management.service';
 import { ProjectsController } from './projects.controller';
 import type { ProjectsService } from './projects.service';
 
@@ -14,8 +15,19 @@ describe('ProjectsController', () => {
       listForUser: jest.fn(),
       getEventsSummary: jest.fn(),
     };
-    const controller = new ProjectsController(projects as unknown as ProjectsService);
-    return { controller, projects };
+    const projectManagement = {
+      createForOrg: jest.fn(),
+      update: jest.fn(),
+      remove: jest.fn(),
+      listTokens: jest.fn(),
+      createToken: jest.fn(),
+      revokeToken: jest.fn(),
+    };
+    const controller = new ProjectsController(
+      projects as unknown as ProjectsService,
+      projectManagement as unknown as ProjectManagementService,
+    );
+    return { controller, projects, projectManagement };
   }
 
   describe('list', () => {
@@ -65,6 +77,85 @@ describe('ProjectsController', () => {
       await expect(controller.eventsSummary(fakeRequest(), 'p1')).rejects.toMatchObject({
         problem: { status: 403 },
       });
+    });
+  });
+
+  describe('update', () => {
+    it('parses the body and delegates to ProjectManagementService', async () => {
+      const { controller, projectManagement } = makeController();
+      projectManagement.update.mockResolvedValue({ id: 'p1', name: 'New', timezone: 'UTC' });
+
+      const body = await controller.update('p1', { name: 'New' });
+
+      expect(projectManagement.update).toHaveBeenCalledWith('p1', { name: 'New' });
+      expect(body).toEqual({ id: 'p1', name: 'New', timezone: 'UTC' });
+    });
+
+    it('rejects an invalid body before touching the service', async () => {
+      const { controller, projectManagement } = makeController();
+
+      await expect(controller.update('p1', {})).rejects.toMatchObject({
+        problem: { status: 400 },
+      });
+      expect(projectManagement.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('remove', () => {
+    it('delegates to ProjectManagementService', async () => {
+      const { controller, projectManagement } = makeController();
+
+      await controller.remove('p1');
+
+      expect(projectManagement.remove).toHaveBeenCalledWith('p1');
+    });
+  });
+
+  describe('listTokens', () => {
+    it('wraps the service result in a { tokens } envelope', async () => {
+      const { controller, projectManagement } = makeController();
+      const tokens = [{ id: 't1', token: 'mam_x', label: 'default', created_at: 'now' }];
+      projectManagement.listTokens.mockResolvedValue(tokens);
+
+      const body = await controller.listTokens('p1');
+
+      expect(projectManagement.listTokens).toHaveBeenCalledWith('p1');
+      expect(body).toEqual({ tokens });
+    });
+  });
+
+  describe('createToken', () => {
+    it('parses the optional label and delegates to ProjectManagementService', async () => {
+      const { controller, projectManagement } = makeController();
+      projectManagement.createToken.mockResolvedValue({ id: 't1', token: 'mam_x', label: 'ci' });
+
+      const body = await controller.createToken('p1', { label: 'ci' });
+
+      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', 'ci');
+      expect(body).toEqual({ id: 't1', token: 'mam_x', label: 'ci' });
+    });
+
+    it('works with no body at all (label optional)', async () => {
+      const { controller, projectManagement } = makeController();
+      projectManagement.createToken.mockResolvedValue({
+        id: 't1',
+        token: 'mam_x',
+        label: 'default',
+      });
+
+      await controller.createToken('p1', {});
+
+      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', undefined);
+    });
+  });
+
+  describe('revokeToken', () => {
+    it('delegates to ProjectManagementService', async () => {
+      const { controller, projectManagement } = makeController();
+
+      await controller.revokeToken('p1', 't1');
+
+      expect(projectManagement.revokeToken).toHaveBeenCalledWith('p1', 't1');
     });
   });
 });
