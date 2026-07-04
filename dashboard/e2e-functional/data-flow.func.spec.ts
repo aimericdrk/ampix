@@ -123,10 +123,16 @@ test('real user journey: signup, login, ingest fake mobile data, dashboard shows
 
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
   await expect(page.getByRole('heading', { name: 'Default', level: 1 })).toBeVisible();
-  await expect(page.getByText("Ada Lovelace's Workspace")).toBeVisible();
+  // Scoped to #main-content: the tenancy UI's sidebar <OrgSwitcher> also renders an
+  // <option> with this same org name, so an unscoped getByText matches both.
+  await expect(
+    page.locator('#main-content').getByText("Ada Lovelace's Workspace", { exact: true }),
+  ).toBeVisible();
 
   // ---- Step 4: read the real ingest token from the detail page's <code> block. ----
-  const tokenCode = page.locator('code');
+  // .first(): the tenancy UI's admin-only Settings/Tokens table below also renders the
+  // same token in its own <code> cell, but the "Ingest token" card is first in DOM order.
+  const tokenCode = page.locator('code').first();
   await expect(tokenCode).toBeVisible();
   const ingestToken = (await tokenCode.innerText()).trim();
   expect(ingestToken).toMatch(/^mam_[0-9a-f]{32}$/);
@@ -157,7 +163,8 @@ test('real user journey: signup, login, ingest fake mobile data, dashboard shows
   await expect(page.getByRole('heading', { name: 'Total events' })).toBeVisible();
   await expect(page.locator('p.text-3xl')).toHaveText('10');
 
-  const table = page.getByRole('table');
+  // Named: the tenancy UI's admin-only Settings/Tokens table below is also a <table>.
+  const table = page.getByRole('table', { name: 'Events by name' });
   await expect(table).toBeVisible();
 
   // Exact per-event counts, each row selected by its event name.
