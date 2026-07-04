@@ -11,6 +11,19 @@
   --accent: oklch(55% 0.18 265);
   --accent-fg: oklch(99% 0 0);
   --danger: oklch(55% 0.2 25);
+
+  /* Chart categorical palette (dataviz spec) — fixed hue order, assigned by series identity,
+     never cycled or reassigned by rank. A 9th+ series folds into --series-other. */
+  --chart-surface: #fcfcfb;
+  --series-1: #2a78d6;
+  --series-2: #1baf7a;
+  --series-3: #eda100;
+  --series-4: #008300;
+  --series-5: #4a3aa7;
+  --series-6: #e34948;
+  --series-7: #e87ba4;
+  --series-8: #eb6834;
+  --series-other: oklch(62% 0.01 260);
 }
 
 .dark {
@@ -22,6 +35,19 @@
   --accent: oklch(70% 0.15 265);
   --accent-fg: oklch(18% 0.01 260);
   --danger: oklch(65% 0.18 25);
+
+  /* Dark steps are selected to hold contrast/CVD separation against --chart-surface, not an
+     auto-invert of the light values. */
+  --chart-surface: #1a1a19;
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --series-3: #c98500;
+  --series-4: #008300;
+  --series-5: #9085e9;
+  --series-6: #e66767;
+  --series-7: #d55181;
+  --series-8: #d95926;
+  --series-other: oklch(58% 0.01 260);
 }
 
 @theme inline {
@@ -33,6 +59,16 @@
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-danger: var(--danger);
+  --color-chart-surface: var(--chart-surface);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
+  --color-series-7: var(--series-7);
+  --color-series-8: var(--series-8);
+  --color-series-other: var(--series-other);
 }
 
 body {

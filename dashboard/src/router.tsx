@@ -14,6 +14,11 @@ import { LoginPage } from './features/auth/components/LoginPage';
 import { SecuritySettingsPage } from './features/auth/components/SecuritySettingsPage';
 import { SignupPage } from './features/auth/components/SignupPage';
 import { authStore } from './features/auth/store';
+import { InsightsPage } from './features/analytics/components/InsightsPage';
+import { LiveFeedPage } from './features/analytics/components/LiveFeedPage';
+import { SessionsPage } from './features/analytics/components/SessionsPage';
+import { UserProfilePage } from './features/analytics/components/UserProfilePage';
+import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
@@ -105,6 +110,38 @@ const projectDetailRoute = createRoute({
   component: ProjectDetailPage,
 });
 
+// --- Core analytics, Phase 3 (contracts §14) — all scoped to the selected project ---
+
+const insightsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/insights',
+  component: InsightsPage,
+});
+
+const liveEventsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/live',
+  component: LiveFeedPage,
+});
+
+const usersRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/users',
+  component: UsersPage,
+});
+
+const userProfileRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/users/$distinctId',
+  component: UserProfilePage,
+});
+
+const sessionsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/sessions',
+  component: SessionsPage,
+});
+
 const securitySettingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/settings/security',
@@ -131,6 +168,11 @@ export const routeTree = rootRoute.addChildren([
   privateRoute.addChildren([
     projectsRoute,
     projectDetailRoute,
+    insightsRoute,
+    liveEventsRoute,
+    usersRoute,
+    userProfileRoute,
+    sessionsRoute,
     securitySettingsRoute,
     accountRoute,
     orgSettingsRoute,

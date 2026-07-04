@@ -7,15 +7,10 @@ import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { ThemeToggle } from './ThemeToggle';
 
-const UPCOMING_SECTIONS = [
-  'Insights',
-  'Funnels',
-  'Retention',
-  'Flows',
-  'Users',
-  'Cohorts',
-  'Dashboards',
-] as const;
+// Insights/Live/Users/Sessions shipped in Phase 3 as project-scoped pages (see
+// features/analytics/components/ProjectAnalyticsNav.tsx, linked from the project detail page) —
+// this sidebar has no "current project" concept yet, so they're not listed here.
+const UPCOMING_SECTIONS = ['Funnels', 'Retention', 'Flows', 'Cohorts', 'Dashboards'] as const;
 
 export function AppLayout() {
   const { user } = useAuth();

@@ -250,3 +250,147 @@ export interface ChangePasswordRequest {
   current_password: string;
   new_password: string;
 }
+
+// --- Core analytics (contracts §14) ---
+
+/** `total` = count(DISTINCT insert_id); `unique_users` = uniqExact(distinct_id). */
+export type InsightsAggregation = 'total' | 'unique_users';
+
+export interface InsightsEventQuery {
+  name: string;
+  aggregation: InsightsAggregation;
+}
+
+/** Inclusive UTC dates, `YYYY-MM-DD`. */
+export interface InsightsDateRange {
+  from: string;
+  to: string;
+}
+
+export type InsightsInterval = 'hour' | 'day' | 'week' | 'month';
+
+export const INSIGHTS_INTERVALS: InsightsInterval[] = ['hour', 'day', 'week', 'month'];
+
+export type InsightsFilterOp = 'eq' | 'neq' | 'contains' | 'gt' | 'lt' | 'is_set' | 'is_not_set';
+
+export const INSIGHTS_FILTER_OPS: InsightsFilterOp[] = [
+  'eq',
+  'neq',
+  'contains',
+  'gt',
+  'lt',
+  'is_set',
+  'is_not_set',
+];
+
+/** `value` is omitted/ignored for the value-less ops `is_set` / `is_not_set`. */
+export interface InsightsFilter {
+  property: string;
+  op: InsightsFilterOp;
+  value?: string;
+}
+
+export interface InsightsBreakdown {
+  property: string;
+}
+
+/**
+ * The builder state IS this shape (contracts §14) — also the saved-report shape in Phase 5.
+ * 1..5 events, AND-joined filters, an optional single breakdown (top 20 values).
+ */
+export interface InsightsQueryDefinition {
+  events: InsightsEventQuery[];
+  date_range: InsightsDateRange;
+  interval: InsightsInterval;
+  filters: InsightsFilter[];
+  breakdown?: InsightsBreakdown;
+}
+
+export interface InsightsSeriesPoint {
+  t: string;
+  value: number;
+}
+
+/** One series per (event × breakdown value); buckets zero-filled across the range. */
+export interface InsightsSeries {
+  name: string;
+  breakdown_value: string | null;
+  data: InsightsSeriesPoint[];
+}
+
+export interface InsightsResponse {
+  series: InsightsSeries[];
+}
+
+export interface LiveEvent {
+  insert_id: string;
+  event: string;
+  distinct_id: string;
+  timestamp: string;
+  os: string;
+  app_version: string;
+}
+
+/** `GET /events/live` — newest-first; `next_before` feeds the next page's `before` param. */
+export interface LiveEventsResponse {
+  events: LiveEvent[];
+  next_before: string | null;
+}
+
+export interface UserListItem {
+  distinct_id: string;
+  last_seen: string;
+  event_count: number;
+}
+
+/** `GET /users` — search matches `distinct_id` prefix; `next_cursor` is the last `distinct_id`. */
+export interface ListUsersResponse {
+  users: UserListItem[];
+  next_cursor: string | null;
+}
+
+export interface UserRecentEvent {
+  insert_id: string;
+  event: string;
+  timestamp: string;
+}
+
+/** `GET /users/:distinctId` — `profile` is the raw `user_profiles` row (arbitrary keys). */
+export interface UserProfileResponse {
+  distinct_id: string;
+  profile: Record<string, string | number | boolean | null>;
+  first_seen: string;
+  last_seen: string;
+  event_count: number;
+  recent_events: UserRecentEvent[];
+}
+
+export interface SessionsByDay {
+  t: string;
+  sessions: number;
+  avg_duration_ms: number;
+}
+
+/** `GET /sessions/summary` — derived from `$session_end` events' `$duration_ms` property. */
+export interface SessionsSummaryResponse {
+  sessions: number;
+  avg_duration_ms: number;
+  by_day: SessionsByDay[];
+}
+
+/** `GET /meta/events` — distinct event names seen in the last 30 days, for the builder's autocomplete. */
+export interface MetaEventsResponse {
+  events: string[];
+}
+
+export type MetaPropertyType = 'string' | 'number' | 'column';
+
+export interface MetaProperty {
+  name: string;
+  type: MetaPropertyType;
+}
+
+/** `GET /meta/properties` — known event columns + distinct top-level `properties` keys seen. */
+export interface MetaPropertiesResponse {
+  properties: MetaProperty[];
+}

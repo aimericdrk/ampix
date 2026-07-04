@@ -16,6 +16,30 @@ globalThis.ResizeObserver ??= class ResizeObserver {
   disconnect(): void {}
 };
 
+// recharts' <ResponsiveContainer> measures its parent via getBoundingClientRect/offset*; jsdom
+// reports 0 for every element, which makes it render nothing. Give every element a stable,
+// plausible size so chart tests exercise the real rendered SVG instead of an empty container.
+Object.defineProperty(window.HTMLElement.prototype, 'offsetWidth', {
+  configurable: true,
+  value: 800,
+});
+Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', {
+  configurable: true,
+  value: 400,
+});
+window.HTMLElement.prototype.getBoundingClientRect = () =>
+  ({
+    width: 800,
+    height: 400,
+    top: 0,
+    left: 0,
+    right: 800,
+    bottom: 400,
+    x: 0,
+    y: 0,
+    toJSON() {},
+  }) as DOMRect;
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 afterEach(() => {

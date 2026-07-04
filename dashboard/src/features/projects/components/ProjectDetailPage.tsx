@@ -1,5 +1,6 @@
 import { Link, useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
+import { ProjectAnalyticsNav } from '../../analytics/components/ProjectAnalyticsNav';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import {
@@ -40,6 +41,8 @@ export function ProjectDetailPage() {
         <h1 className="mt-2 text-2xl font-semibold">{project?.name ?? 'Project'}</h1>
         {project && <p className="text-sm text-text-muted">{project.org_name}</p>}
       </div>
+
+      <ProjectAnalyticsNav projectId={projectId} />
 
       {project && (
         <Card className="max-w-lg">

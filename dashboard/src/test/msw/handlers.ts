@@ -11,18 +11,28 @@ import type {
   EventSummaryResponse,
   Invitation,
   InvitationPreview,
+  InsightsQueryDefinition,
+  InsightsSeries,
   ListInvitationsResponse,
   ListMembersResponse,
   ListOrgsResponse,
   ListProjectsResponse,
   ListTokensResponse,
+  ListUsersResponse,
+  LiveEvent,
+  LiveEventsResponse,
   MeResponse,
+  MetaEventsResponse,
+  MetaPropertiesResponse,
   Org,
   OrgRole,
   Project,
   RenameOrgResponse,
+  SessionsSummaryResponse,
   Setup2faResponse,
   UpdateProjectResponse,
+  UserListItem,
+  UserProfileResponse,
 } from '../../lib/api/types';
 
 export const TEST_USER: AuthUser = {
@@ -68,6 +78,82 @@ export const EVENT_SUMMARY_FIXTURE: Omit<EventSummaryResponse, 'project_id'> = {
   by_event: [
     { event: 'checkout_completed', count: 32 },
     { event: 'product_viewed', count: 20 },
+  ],
+};
+
+// --- Core analytics fixtures (contracts §14) ---
+
+export const META_EVENTS_FIXTURE: MetaEventsResponse = {
+  events: ['checkout_completed', 'product_viewed', 'app_opened', 'signup_completed'],
+};
+
+export const META_PROPERTIES_FIXTURE: MetaPropertiesResponse = {
+  properties: [
+    { name: 'os', type: 'column' },
+    { name: 'app_version', type: 'column' },
+    { name: 'utm_source', type: 'column' },
+    { name: 'plan', type: 'string' },
+  ],
+};
+
+/**
+ * Deterministic newest-first fixture for GET /events/live — evt-30 is the newest. 30 (> the UI's
+ * 25-per-page request) so tests exercise real "load older" pagination via `next_before`.
+ */
+export const LIVE_EVENTS_FIXTURE: LiveEvent[] = Array.from({ length: 30 }, (_, i) => {
+  const n = 30 - i;
+  return {
+    insert_id: `evt-${n}`,
+    event: n % 2 === 0 ? 'checkout_completed' : 'product_viewed',
+    distinct_id: `user-00${((n - 1) % 5) + 1}`,
+    timestamp: `2026-07-02T12:${String(n).padStart(2, '0')}:00.000Z`,
+    os: n % 2 === 0 ? 'Android' : 'iOS',
+    app_version: n >= 15 ? '2.0.0' : '1.4.0',
+  };
+});
+
+/**
+ * Deterministic fixture for GET /users, GET /users/:distinctId — ordered by distinct_id. 22 users
+ * (> the UI's 20-per-page request) so tests exercise real "load more" pagination via
+ * `next_cursor`. `user-001` carries the detailed values GET /users/:distinctId (below) responds
+ * with.
+ */
+export const USERS_FIXTURE: UserListItem[] = [
+  { distinct_id: 'user-001', last_seen: '2026-07-01T10:00:00.000Z', event_count: 42 },
+  { distinct_id: 'user-002', last_seen: '2026-06-30T09:30:00.000Z', event_count: 17 },
+  { distinct_id: 'user-003', last_seen: '2026-06-29T08:15:00.000Z', event_count: 5 },
+  { distinct_id: 'user-004', last_seen: '2026-06-28T07:00:00.000Z', event_count: 63 },
+  { distinct_id: 'user-005', last_seen: '2026-06-27T06:45:00.000Z', event_count: 9 },
+  ...Array.from({ length: 17 }, (_, i) => {
+    const n = i + 6;
+    return {
+      distinct_id: `user-${String(n).padStart(3, '0')}`,
+      last_seen: `2026-06-${String(26 - i).padStart(2, '0')}T06:00:00.000Z`,
+      event_count: n,
+    };
+  }),
+];
+
+export const USER_PROFILE_FIXTURE: Omit<
+  UserProfileResponse,
+  'distinct_id' | 'last_seen' | 'event_count'
+> = {
+  profile: { plan: 'pro', email: 'user001@example.com', country: 'FR' },
+  first_seen: '2026-05-01T08:00:00.000Z',
+  recent_events: [
+    { insert_id: 'evt-101', event: 'checkout_completed', timestamp: '2026-07-01T10:00:00.000Z' },
+    { insert_id: 'evt-100', event: 'product_viewed', timestamp: '2026-07-01T09:55:00.000Z' },
+    { insert_id: 'evt-99', event: 'app_opened', timestamp: '2026-07-01T09:50:00.000Z' },
+  ],
+};
+
+export const SESSIONS_SUMMARY_FIXTURE: SessionsSummaryResponse = {
+  sessions: 128,
+  avg_duration_ms: 245000,
+  by_day: [
+    { t: '2026-06-29', sessions: 40, avg_duration_ms: 230000 },
+    { t: '2026-06-30', sessions: 44, avg_duration_ms: 250000 },
+    { t: '2026-07-01', sessions: 44, avg_duration_ms: 255000 },
   ],
 };
 
@@ -841,5 +927,115 @@ export const handlers = [
     if (!token) return problem(404, 'Token not found');
     token.revoked = true;
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // --- Core analytics (contracts §14) ---
+
+  http.get('/api/v1/projects/:projectId/meta/events', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(META_EVENTS_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/meta/properties', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(META_PROPERTIES_FIXTURE);
+  }),
+
+  http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as InsightsQueryDefinition;
+    if (!body.events || body.events.length === 0 || body.events.length > 5) {
+      return problem(400, 'Invalid query definition: 1-5 events required');
+    }
+    const validIntervals = new Set(['hour', 'day', 'week', 'month']);
+    if (!validIntervals.has(body.interval)) {
+      return problem(400, 'Invalid query definition: unknown interval');
+    }
+
+    // Deterministic 3-bucket series so tests can assert on exact values. When a breakdown is
+    // requested, each event fans out into two breakdown-value series (never a rainbow of
+    // unbounded values in this fixture).
+    const buckets = ['2026-06-29', '2026-06-30', '2026-07-01'];
+    const breakdownValues: (string | null)[] = body.breakdown ? ['ios', 'android'] : [null];
+    const series: InsightsSeries[] = [];
+    body.events.forEach((eventQuery, eventIndex) => {
+      breakdownValues.forEach((breakdownValue, breakdownIndex) => {
+        series.push({
+          name: eventQuery.name,
+          breakdown_value: breakdownValue,
+          data: buckets.map((t, bucketIndex) => ({
+            t,
+            value: (eventIndex + 1) * 10 + breakdownIndex * 5 + bucketIndex,
+          })),
+        });
+      });
+    });
+    return HttpResponse.json({ series });
+  }),
+
+  http.get('/api/v1/projects/:projectId/events/live', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const url = new URL(request.url);
+    const limitParam = Number(url.searchParams.get('limit') ?? '50');
+    const limit = Math.min(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 100);
+    const before = url.searchParams.get('before');
+    const pool = before
+      ? LIVE_EVENTS_FIXTURE.filter((e) => e.timestamp < before)
+      : LIVE_EVENTS_FIXTURE;
+    const page = pool.slice(0, limit);
+    const next_before = pool.length > limit ? (page.at(-1)?.timestamp ?? null) : null;
+    const response: LiveEventsResponse = { events: page, next_before };
+    return HttpResponse.json(response);
+  }),
+
+  http.get('/api/v1/projects/:projectId/users', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const url = new URL(request.url);
+    const search = url.searchParams.get('search') ?? '';
+    const limitParam = Number(url.searchParams.get('limit') ?? '50');
+    const limit = Math.min(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 100);
+    const cursor = url.searchParams.get('cursor');
+    let pool = USERS_FIXTURE.filter((u) => u.distinct_id.startsWith(search));
+    if (cursor) {
+      const cursorIndex = pool.findIndex((u) => u.distinct_id === cursor);
+      pool = cursorIndex >= 0 ? pool.slice(cursorIndex + 1) : pool;
+    }
+    const page = pool.slice(0, limit);
+    const next_cursor = pool.length > limit ? (page.at(-1)?.distinct_id ?? null) : null;
+    const response: ListUsersResponse = { users: page, next_cursor };
+    return HttpResponse.json(response);
+  }),
+
+  http.get('/api/v1/projects/:projectId/users/:distinctId', ({ request, params }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const distinctId = params.distinctId as string;
+    const user = USERS_FIXTURE.find((u) => u.distinct_id === distinctId);
+    if (!user) return problem(404, 'User not found');
+    const response: UserProfileResponse = {
+      distinct_id: distinctId,
+      last_seen: user.last_seen,
+      event_count: user.event_count,
+      ...USER_PROFILE_FIXTURE,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.get('/api/v1/projects/:projectId/sessions/summary', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SESSIONS_SUMMARY_FIXTURE);
   }),
 ];
