@@ -206,6 +206,12 @@ void main() {
       config: MyAmpMixConfig(
         serverUrl: 'http://localhost:8080',
         autocaptureScreens: autocaptureScreens,
+        // This suite exercises SCREEN autocapture only. Disable native purchase
+        // autocapture so init() never subscribes to the real
+        // `myampmix_analytics/purchases` EventChannel — that subscription hangs
+        // under testWidgets' fake-async. Native purchase autocapture has its own
+        // dedicated suite (purchase_autocapture_test.dart) that injects a stream.
+        autocapturePurchases: false,
       ),
       overrides: SdkOverrides(
         clock: clock,

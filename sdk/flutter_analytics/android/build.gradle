@@ -1,0 +1,55 @@
+group 'com.myampmix.analytics'
+version '1.0-SNAPSHOT'
+
+buildscript {
+    ext.kotlin_version = '2.2.20'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.11.1'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.myampmix.analytics'
+    compileSdk 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    sourceSets {
+        main.kotlin.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        minSdk 24
+    }
+}
+
+dependencies {
+    // Google Play Billing — used purely as a passive OBSERVER of the app's
+    // own in-app-purchase transactions (see MyampmixAnalyticsPlugin's doc
+    // comment). This plugin never launches a purchase flow, never
+    // acknowledges, and never consumes a purchase itself.
+    implementation 'com.android.billingclient:billing:7.1.1'
+}

@@ -10,6 +10,7 @@ class MyAmpMixConfig {
     this.debug = false,
     this.autocaptureScreens = true,
     this.autocaptureTaps = true,
+    this.autocapturePurchases = true,
   }) : assert(
          flushAt > 0 && flushAt <= 100,
          'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
@@ -44,4 +45,15 @@ class MyAmpMixConfig {
   /// Enables `MyAmpMixTracker` to emit `$tap`/`$rage_tap` (design §11, M2).
   /// Independently toggleable from [autocaptureScreens].
   final bool autocaptureTaps;
+
+  /// Enables native store-purchase autocapture: `$in_app_purchase` emitted
+  /// automatically when the platform plugin (iOS StoreKit
+  /// `SKPaymentTransactionObserver` / Android Play Billing
+  /// `PurchasesUpdatedListener`) reports one of the app's own purchase
+  /// transactions (shared-contracts §4). Always distinguishable from a
+  /// manually-tracked purchase: this reserved, `$`-prefixed event always
+  /// carries `$purchase_source: "native"`, while a developer's own
+  /// `track('purchase', ...)` call is never `$`-prefixed. Independently
+  /// toggleable from [autocaptureScreens]/[autocaptureTaps].
+  final bool autocapturePurchases;
 }

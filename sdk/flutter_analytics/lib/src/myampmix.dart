@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
+import 'autocapture/purchase_autocapture.dart';
 import 'config.dart';
 import 'context/context_collector.dart';
 import 'context/platform_context_data_source.dart';
@@ -36,6 +37,7 @@ class SdkOverrides {
     this.idFactory,
     this.random,
     this.eventStore,
+    this.purchaseStream,
   });
 
   final Clock? clock;
@@ -51,6 +53,12 @@ class SdkOverrides {
   /// instead of letting them propagate into the host app. Not part of the
   /// frozen §8 surface.
   final EventStore? eventStore;
+
+  /// Test-only seam replacing the real `myampmix_analytics/purchases`
+  /// `EventChannel` stream so native store-purchase autocapture can be
+  /// driven with a fake payload instead of a real platform channel. Not
+  /// part of the frozen §8 surface.
+  final Stream<dynamic>? purchaseStream;
 }
 
 /// Public facade — the exact shared-contracts §8 surface. Every method is
@@ -68,6 +76,7 @@ class MyAmpMix {
   MamLogger _logger = const MamLogger(enabled: false);
   bool _autocaptureScreens = true;
   bool _autocaptureTaps = true;
+  bool _autocapturePurchases = true;
 
   late final AnalyticsDatabase _database;
   late final IdentityManager _identity;
@@ -78,6 +87,7 @@ class MyAmpMix {
   late final SessionManager _session;
   late final Uploader _uploader;
   _SdkLifecycleObserver? _observer;
+  PurchaseAutocapture? _purchaseAutocapture;
 
   /// Profile operations (`people.set/setOnce/increment/append/unset/deleteUser`).
   People people = People.noop();
@@ -117,6 +127,7 @@ class MyAmpMix {
     _logger = MamLogger(enabled: config.debug);
     _autocaptureScreens = config.autocaptureScreens;
     _autocaptureTaps = config.autocaptureTaps;
+    _autocapturePurchases = config.autocapturePurchases;
     final clock = overrides?.clock ?? const SystemClock();
     final idFactory = overrides?.idFactory ?? (() => const Uuid().v7());
     final keyValueStore =
@@ -207,6 +218,23 @@ class MyAmpMix {
     _observer = _SdkLifecycleObserver(_session, _logger);
     WidgetsBinding.instance.addObserver(_observer!);
     _uploader.start();
+
+    // Native store-purchase autocapture (shared-contracts §4). Gated on
+    // `config.autocapturePurchases` (default true): when enabled we subscribe
+    // to the platform plugin's transaction stream (the real
+    // `myampmix_analytics/purchases` EventChannel, or an injected test stream).
+    // Unlike the screen/tap capturers — which are pure-Dart observers — this is
+    // the one autocapture that opens a real platform channel, so gating at
+    // subscribe-time gives host apps a clean escape hatch (`autocapturePurchases:
+    // false`) that keeps `MyAmpMix.init()` from ever touching a platform channel
+    // in their widget tests. Emission is ALSO guarded by
+    // `autocapturePurchasesEnabled` (defense in depth).
+    if (config.autocapturePurchases) {
+      _purchaseAutocapture = PurchaseAutocapture(
+        purchaseStream: overrides?.purchaseStream,
+      );
+      _purchaseAutocapture!.start();
+    }
   }
 
   void track(String event, {Map<String, Object?>? properties}) =>
@@ -221,6 +249,13 @@ class MyAmpMix {
   /// Read by `MyAmpMixTracker`'s default wiring; not part of the frozen §8
   /// method surface, but a public property of the facade class.
   bool get autocaptureTapsEnabled => _initialized && _autocaptureTaps;
+
+  /// Whether native `$in_app_purchase` autocapture is enabled
+  /// (`config.autocapturePurchases`). Read by `PurchaseAutocapture`'s
+  /// default wiring; not part of the frozen §8 method surface, but a
+  /// public property of the facade class.
+  bool get autocapturePurchasesEnabled =>
+      _initialized && _autocapturePurchases;
 
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);
@@ -303,6 +338,7 @@ class MyAmpMix {
     final sdk = _instance;
     if (sdk._initialized) {
       sdk._uploader.dispose();
+      await sdk._purchaseAutocapture?.stop();
       final observer = sdk._observer;
       if (observer != null) WidgetsBinding.instance.removeObserver(observer);
       if (closeDatabase) await sdk._database.close();

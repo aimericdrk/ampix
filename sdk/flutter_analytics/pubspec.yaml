@@ -28,3 +28,17 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
+
+# This package is a Flutter plugin: it ships native platform code (iOS
+# StoreKit / Android Play Billing) that autocaptures the app's own
+# in-app-purchase transactions and forwards them to the Dart side over the
+# `myampmix_analytics/purchases` channel (see lib/src/autocapture/
+# purchase_autocapture.dart). The existing pure-Dart public API is unchanged.
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.myampmix.analytics
+        pluginClass: MyampmixAnalyticsPlugin
+      ios:
+        pluginClass: MyampmixAnalyticsPlugin
