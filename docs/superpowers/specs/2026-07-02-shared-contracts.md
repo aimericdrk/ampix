@@ -307,3 +307,86 @@ From `$session_end` events (`$duration_ms` property): `{ "sessions": N, "avg_dur
 
 ### Rollup materialized views (ClickHouse)
 Add to `infra/clickhouse/init.sql` (idempotent) three Aggregating/SummingMergeTree rollups fed by MVs on `events`: **daily active users** (`project_id, day, uniqState(distinct_id)`), **daily event counts** (`project_id, day, event, count`), **daily sessions** (`project_id, day, sessions, sum($duration_ms)`). Correctness note: the insights/summary endpoints query **raw events** for exact results (dedup via `DISTINCT insert_id`); the rollups exist for future dashboard-speed optimization and the DAU/session cards may read them. Keep raw-event queries authoritative in Phase 3.
+
+## 15. Advanced analysis API — Phase 4 (added 2026-07-04)
+
+Three read-only endpoints under `/api/v1/projects/:projectId/...`, JWT + project membership (viewer+), reusing the exact §14 machinery: `resolveProperty` for every property reference, the shared filter compiler, date-range handling, and **fully parameterized ClickHouse** (`{name:Type}` query_params — never string interpolation). Event names, property values, and numeric bounds are all bound as params. Structural keywords that cannot be parameters (interval unit `day`/`week`, funnel `strict_order` flag) are selected from **frozen constant maps** keyed by a validated enum — identical to the §14 interval pattern — never interpolated from raw input. Reject unknown ops/intervals/directions with `400`. All three take exact-count semantics: users are `uniqExact(distinct_id)`; event de-dup within a user uses raw events (an `insert_id` re-delivery does not create a phantom step).
+
+### POST /query/funnels
+Ordered conversion funnel via ClickHouse `windowFunnel`. Body:
+```jsonc
+{
+  "steps": [
+    { "event": "app_open", "filters": [] },          // each step: an event + optional §14 filters (AND-joined)
+    { "event": "signup_started" },
+    { "event": "checkout_completed" }
+  ],                                                   // 2..8 ordered steps
+  "date_range": { "from": "2026-06-01", "to": "2026-07-01" },
+  "window_days": 7,                                    // conversion window (1..365); → windowFunnel(window_seconds)
+  "order": "any",                                      // any | strict_order (strict = steps must be strictly consecutive in time)
+  "breakdown": { "property": "utm_source" }            // optional; one funnel per breakdown value (top 10, rest folded to "$other")
+}
+```
+Engine: per `distinct_id`, `windowFunnel(window_seconds[, 'strict_order'])(timestamp, cond0, cond1, …)` where `cond_k` = `event = {stepK:String}` AND that step's compiled filters; the combinator returns the max consecutive step reached (0..N). Then step *k*'s count = users whose level ≥ *k*+1.
+→
+```jsonc
+{
+  "steps": [
+    { "event": "app_open",           "count": 1000, "conversion_from_prev": 1.0,   "conversion_from_top": 1.0 },
+    { "event": "signup_started",     "count": 620,  "conversion_from_prev": 0.62,  "conversion_from_top": 0.62 },
+    { "event": "checkout_completed", "count": 145,  "conversion_from_prev": 0.234, "conversion_from_top": 0.145 }
+  ],
+  "overall_conversion": 0.145,
+  "breakdowns": [ { "value": "tiktok", "steps": [ … ], "overall_conversion": 0.21 } ]   // present only when breakdown set
+}
+```
+`conversion_from_prev` of step 0 is always `1.0`; rates are `count / prev_count` (and `count / step0_count` for `from_top`), `0` when the denominator is `0`. `400` on <2 or >8 steps, bad window, unknown op.
+
+### POST /query/retention
+Cohort retention grid: users "born" (first did `born_event` in the window), returning if they did `return_event` a given number of intervals later. Body:
+```jsonc
+{
+  "born_event":   { "name": "signup_completed", "filters": [] },   // cohort-defining event
+  "return_event": { "name": "app_open", "filters": [] },           // returning event (defaults to born_event if omitted)
+  "date_range": { "from": "2026-06-01", "to": "2026-07-01" },       // cohort BIRTH window (UTC dates, inclusive)
+  "interval": "day",                                                // day | week — period granularity (constant-map keyword)
+  "periods": 14                                                     // return periods computed: columns are period 0..periods (1..30)
+}
+```
+Engine: `born_bucket(user) = min(toStartOf{Interval}(timestamp))` over born_event rows in-window; for return_event rows, `period = dateDiff('{interval}', born_bucket, toStartOf{Interval}(ts))`, kept when `0 ≤ period ≤ periods`. Cohort row = born_bucket; cell = `uniqExact(distinct_id)`.
+→
+```jsonc
+{
+  "cohorts": [
+    { "cohort": "2026-06-01", "size": 320,
+      "periods": [ { "period": 0, "count": 320, "rate": 1.0 }, { "period": 1, "count": 210, "rate": 0.656 }, … ] },
+    { "cohort": "2026-06-02", "size": 290, "periods": [ … ] }
+  ],
+  "averages": [ { "period": 0, "rate": 1.0 }, { "period": 1, "rate": 0.61 }, … ]        // size-weighted mean per period
+}
+```
+Period 0 is by definition the cohort itself (`count == size`, `rate == 1.0`). Cohorts are ordered by birth bucket ascending; a cohort exposes only the periods for which a full interval has elapsed within the query's "to" bound (later periods omitted, not zero-filled, so partial windows don't read as churn). `400` on unknown interval or `periods` out of `1..30`.
+
+### POST /query/flows
+Event-sequence flow (Sankey) anchored at one event. Body:
+```jsonc
+{
+  "anchor": { "event": "app_open", "filters": [] },   // the fixed node
+  "direction": "forward",                              // forward = events AFTER anchor | backward = events BEFORE anchor
+  "date_range": { "from": "2026-06-01", "to": "2026-07-01" },
+  "steps": 3,                                          // hops to expand away from the anchor (1..5)
+  "max_nodes_per_step": 8,                             // top-N distinct events per step; the rest fold into "$other"
+  "unit": "session"                                    // session (split by session_id) | user (whole user timeline)
+}
+```
+Engine: per unit, order events by `timestamp`; for each occurrence of the anchor take the next (`forward`) / previous (`backward`) `steps` events as an ordered path; aggregate transitions `(step_index, from_event, to_event)` → `uniqExact(distinct_id)`; within each step keep the top `max_nodes_per_step` target events by volume and fold the remainder into a synthetic `"$other"` node; users who have no further event at a step flow into a synthetic `"$end"` node (drop-off).
+→
+```jsonc
+{
+  "nodes": [ { "id": "0:app_open", "step": 0, "event": "app_open", "value": 1000 },
+             { "id": "1:browse",   "step": 1, "event": "browse",   "value": 540  }, … ],
+  "links": [ { "source": "0:app_open", "target": "1:browse", "value": 540 },
+             { "source": "0:app_open", "target": "1:$end",   "value": 300 }, … ]     // Sankey-ready; node ids are "step:event"
+}
+```
+Node `id` is `"{step}:{event}"` (unique across steps even when the same event recurs). `400` on unknown direction/unit, `steps` out of `1..5`, or `max_nodes_per_step` out of `1..20`.
