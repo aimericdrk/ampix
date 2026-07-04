@@ -1,0 +1,165 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { Prisma, User } from '@prisma/client';
+import { APP_CONFIG, AppConfig } from '../config/app-config';
+import { PrismaService } from '../prisma/prisma.service';
+import { ProblemException } from '../common/problem-details';
+import { requireTotpEncKey } from './auth-config.util';
+import { decodeEncryptionKey, decryptSecret, encryptSecret } from './crypto/aes-gcm';
+import { PasswordService } from './password.service';
+import { RecoveryCodeService } from './recovery-code.service';
+import { RefreshTokenService } from './refresh-token.service';
+import { TokenService } from './token.service';
+import { TotpService } from './totp.service';
+import { LoginDto, SignupDto } from './auth.schemas';
+import { PublicUser, toPublicUser } from './auth.types';
+
+export interface Session {
+  accessToken: string;
+  refreshToken: string;
+  user: PublicUser;
+}
+
+export interface MfaChallenge {
+  mfaToken: string;
+}
+
+// A fixed, lazily-computed dummy hash — verified against on a "user not found" login so the
+// response takes roughly the same time as a real password mismatch, denying an attacker a
+// timing oracle for enumerating registered emails.
+const DUMMY_PASSWORD_FOR_TIMING = 'dummy-password-for-timing-parity';
+
+@Injectable()
+export class AuthService {
+  private dummyHashPromise: Promise<string> | null = null;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly passwords: PasswordService,
+    private readonly tokens: TokenService,
+    private readonly refreshTokens: RefreshTokenService,
+    private readonly totp: TotpService,
+    private readonly recoveryCodes: RecoveryCodeService,
+  ) {}
+
+  async signup(dto: SignupDto): Promise<Session> {
+    const email = dto.email.toLowerCase();
+    const passwordHash = await this.passwords.hash(dto.password);
+    let user: User;
+    try {
+      user = await this.prisma.user.create({ data: { email, passwordHash, name: dto.name } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw this.emailTaken();
+      }
+      throw err;
+    }
+    return this.issueSession(user);
+  }
+
+  async login(dto: LoginDto): Promise<Session | MfaChallenge> {
+    const email = dto.email.toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      // Burn roughly the same time as a real mismatch would — see DUMMY_PASSWORD_FOR_TIMING.
+      await this.passwords.verify(await this.dummyHash(), dto.password);
+      throw this.invalidCredentials();
+    }
+    const valid = await this.passwords.verify(user.passwordHash, dto.password);
+    if (!valid) {
+      throw this.invalidCredentials();
+    }
+    if (user.twoFactorEnabled) {
+      return { mfaToken: this.tokens.signMfaToken(user.id) };
+    }
+    return this.issueSession(user);
+  }
+
+  /** `/2fa/verify`: exchanges a validated mfa_token's userId + a TOTP/recovery code for a session. */
+  async completeMfaLogin(userId: string, code: string): Promise<Session | null> {
+    const user = await this.getUserById(userId);
+    if (!user) return null;
+    const valid = await this.verifyTotpOrRecovery(user, code);
+    if (!valid) return null;
+    return this.issueSession(user);
+  }
+
+  /** `/2fa/disable`: same code semantics (TOTP or recovery), but the user already has a session. */
+  async verifyActiveCode(userId: string, code: string): Promise<boolean> {
+    const user = await this.getUserById(userId);
+    if (!user) return false;
+    return this.verifyTotpOrRecovery(user, code);
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  async isTwoFactorEnabled(userId: string): Promise<boolean> {
+    const user = await this.getUserById(userId);
+    return user?.twoFactorEnabled ?? false;
+  }
+
+  /** `/2fa/activate`: persists the pending secret (encrypted) and flips the account to 2FA-on. */
+  async persistTotpSecret(userId: string, plainSecret: string): Promise<void> {
+    const key = decodeEncryptionKey(requireTotpEncKey(this.config));
+    const encrypted = encryptSecret(plainSecret, key);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { totpSecret: encrypted, twoFactorEnabled: true },
+    });
+  }
+
+  /** `/2fa/disable`: clears the secret, flips 2FA off, and deletes all recovery codes. */
+  async disableTwoFactor(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { totpSecret: null, twoFactorEnabled: false },
+    });
+    await this.recoveryCodes.clearAll(userId);
+  }
+
+  private async verifyTotpOrRecovery(user: User, code: string): Promise<boolean> {
+    if (!user.twoFactorEnabled || !user.totpSecret) return false;
+    let totpOk = false;
+    try {
+      const key = decodeEncryptionKey(requireTotpEncKey(this.config));
+      const secret = decryptSecret(user.totpSecret, key);
+      totpOk = await this.totp.verify(code, secret);
+    } catch {
+      totpOk = false;
+    }
+    if (totpOk) return true;
+    return this.recoveryCodes.consume(user.id, code);
+  }
+
+  private async issueSession(user: User): Promise<Session> {
+    const publicUser = toPublicUser(user);
+    const accessToken = this.tokens.signAccessToken(publicUser);
+    const refreshToken = await this.refreshTokens.issue(user.id);
+    return { accessToken, refreshToken, user: publicUser };
+  }
+
+  private async dummyHash(): Promise<string> {
+    if (!this.dummyHashPromise) {
+      this.dummyHashPromise = this.passwords.hash(DUMMY_PASSWORD_FOR_TIMING);
+    }
+    return this.dummyHashPromise;
+  }
+
+  private invalidCredentials(): ProblemException {
+    return new ProblemException({
+      status: 401,
+      title: 'Unauthorized',
+      detail: 'Invalid email or password',
+    });
+  }
+
+  private emailTaken(): ProblemException {
+    return new ProblemException({
+      status: 409,
+      title: 'Conflict',
+      detail: 'Email is already registered',
+    });
+  }
+}

@@ -25,13 +25,16 @@ model Organization {
 }
 
 model User {
-  id            String         @id @default(uuid(7)) @db.Uuid
-  email         String         @unique
-  passwordHash  String         @map("password_hash")
-  name          String
-  createdAt     DateTime       @default(now()) @map("created_at")
-  memberships   Membership[]
-  refreshTokens RefreshToken[]
+  id               String                  @id @default(uuid(7)) @db.Uuid
+  email            String                  @unique
+  passwordHash     String                  @map("password_hash")
+  name             String
+  totpSecret       String?                 @map("totp_secret")
+  twoFactorEnabled Boolean                 @default(false) @map("two_factor_enabled")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  memberships      Membership[]
+  refreshTokens    RefreshToken[]
+  recoveryCodes    TwoFactorRecoveryCode[]
 
   @@map("users")
 }
@@ -62,11 +65,11 @@ model Invitation {
 }
 
 model Project {
-  id        String     @id @default(uuid(7)) @db.Uuid
-  orgId     String     @map("org_id") @db.Uuid
+  id        String       @id @default(uuid(7)) @db.Uuid
+  orgId     String       @map("org_id") @db.Uuid
   name      String
-  timezone  String     @default("UTC")
-  createdAt DateTime   @default(now()) @map("created_at")
+  timezone  String       @default("UTC")
+  createdAt DateTime     @default(now()) @map("created_at")
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   sdkTokens SdkToken[]
 
@@ -94,4 +97,18 @@ model RefreshToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+/**
+ * §11 — single-use 2FA recovery codes; only argon2id hashes are ever persisted.
+ */
+model TwoFactorRecoveryCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("two_factor_recovery_codes")
 }

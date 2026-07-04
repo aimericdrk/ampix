@@ -7,6 +7,7 @@ import { RedisModule } from './redis/redis.module';
 import { ClickHouseModule } from './clickhouse/clickhouse.module';
 import { IngestModule } from './ingestion/ingest.module';
 import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { HealthModule } from './health/health.module';
     ClickHouseModule,
     IngestModule,
     HealthModule,
+    AuthModule,
   ],
 })
 export class AppModule {}

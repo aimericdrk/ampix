@@ -8,23 +8,30 @@ const HEX_64 = /^[0-9a-fA-F]{64}$/;
 const BASE64_CHARS = /^[A-Za-z0-9+/]+={0,2}$/;
 
 /**
- * Decodes a 32-byte key encoded as either 64 hex chars or base64, returning the decoded byte
- * length, or `null` if `raw` isn't validly encoded in either format. Base64 is round-tripped
- * (decode then re-encode) because Node's `Buffer.from(str, 'base64')` silently ignores invalid
- * characters instead of throwing, which would otherwise let garbage strings "decode".
+ * Decodes a key encoded as either hex or base64 into raw bytes, or `null` if `raw` isn't validly
+ * encoded in either format. Base64 is round-tripped (decode then re-encode) because Node's
+ * `Buffer.from(str, 'base64')` silently ignores invalid characters instead of throwing, which
+ * would otherwise let garbage strings "decode". Exported so callers who need the actual key bytes
+ * (e.g. auth's AES-256-GCM helper for TOTP_ENC_KEY) share this exact decoding logic instead of
+ * re-implementing it and risking drift.
  */
-function decodeKeyBytes(raw: string): number | null {
+export function decodeAuthKeyBytes(raw: string): Buffer | null {
   if (HEX_64.test(raw)) {
-    return Buffer.from(raw, 'hex').length;
+    return Buffer.from(raw, 'hex');
   }
   if (BASE64_CHARS.test(raw) && raw.length % 4 === 0) {
     const decoded = Buffer.from(raw, 'base64');
     const roundTripped = decoded.toString('base64').replace(/=+$/, '');
     if (roundTripped === raw.replace(/=+$/, '')) {
-      return decoded.length;
+      return decoded;
     }
   }
   return null;
+}
+
+/** Byte length of a hex/base64-encoded key, or `null` if `raw` isn't validly encoded. */
+function decodeKeyBytes(raw: string): number | null {
+  return decodeAuthKeyBytes(raw)?.length ?? null;
 }
 
 /** True if `value` parses as a URL whose protocol is one of `schemes` (each without trailing ':'). */

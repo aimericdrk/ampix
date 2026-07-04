@@ -9,6 +9,7 @@ try {
 
 import { NestFactory } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { APP_CONFIG, AppConfig, describeConfig } from './config/app-config';
@@ -21,6 +22,9 @@ export async function createApp(): Promise<INestApplication> {
   const config = app.get<AppConfig>(APP_CONFIG);
   app.useLogger(app.get(Logger));
   app.use(jsonBodyParser(config.ingestMaxBodyKb));
+  // Parses the incoming Cookie header into req.cookies — needed to read the httpOnly
+  // `mam_refresh` cookie on /api/v1/auth/refresh and /logout (contracts §11).
+  app.use(cookieParser());
   app.useGlobalFilters(new ProblemDetailsFilter());
   app.enableShutdownHooks();
   return app;
