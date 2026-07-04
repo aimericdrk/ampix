@@ -88,7 +88,9 @@ Auth: `Authorization: Bearer <sdk_token>` where `sdk_token` is the project's ing
 Body: `{"operations": [{"distinct_id": "u_42", "op": "set|set_once|increment|append|unset|delete", "properties": {...}, "timestamp": 1751462400123}]}` → `202` same shape as events.
 
 ### Reserved event names (SDK autocapture)
-`$first_open`, `$app_open`, `$app_background`, `$session_start`, `$session_end` (property `$duration_ms`), `$screen_view` (`$screen_name`, `$previous_screen`, `$time_on_previous_ms`), `$tap` (`$widget_type`, `$widget_label`, `$screen_name`, `$pos_x`, `$pos_y`), `$rage_tap`, `$identify`, `$campaign_touch`. Reserved property prefix: `$`.
+`$first_open`, `$app_open`, `$app_background`, `$session_start`, `$session_end` (property `$duration_ms`), `$screen_view` (`$screen_name`, `$previous_screen`, `$time_on_previous_ms`), `$tap` (`$widget_type`, `$widget_label`, `$screen_name`, `$pos_x`, `$pos_y`), `$rage_tap`, `$identify`, `$campaign_touch`, `$in_app_purchase` (native store-transaction autocapture — properties `$product_id`, `$price` (number), `$currency`, `$quantity`, `$transaction_id`, `$store` (`app_store`|`play_store`), `$purchase_source` = `"native"`). Reserved property prefix: `$`.
+
+**Manual vs automatic events (distinction):** every SDK-autocaptured/native event is `$`-prefixed and reserved (e.g. `$screen_view`, `$tap`, `$in_app_purchase`); developer-tracked manual events are never `$`-prefixed. So a manually-tracked purchase (whatever the developer names it, e.g. `purchase`/`checkout_completed`) and the automatically-detected native store transaction (`$in_app_purchase`, `$purchase_source:"native"`) are always distinguishable by name prefix — analytics/queries can filter one from the other.
 
 Alias transport: there is no `$alias` event — `alias(newId)` sends a `$identify` event with property `{"$alias": "<newId>"}`. Profile op encodings: `unset` sends `properties: {"<name>": null, ...}`; `delete` sends `properties: {}`.
 
