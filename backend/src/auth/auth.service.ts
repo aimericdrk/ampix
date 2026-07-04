@@ -3,6 +3,7 @@ import { Prisma, User } from '@prisma/client';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
+import { generateSdkToken } from '../common/sdk-token';
 import { requireTotpEncKey } from './auth-config.util';
 import { decodeEncryptionKey, decryptSecret, encryptSecret } from './crypto/aes-gcm';
 import { PasswordService } from './password.service';
@@ -42,12 +43,30 @@ export class AuthService {
     private readonly recoveryCodes: RecoveryCodeService,
   ) {}
 
+  /**
+   * Creates the user and, in the SAME transaction (contracts §12), provisions their default
+   * workspace: an Organization ("<name>'s Workspace"), an admin Membership linking the user to
+   * it, a "Default" Project (UTC), and an ingest SdkToken for that project. A brand-new account
+   * therefore always has exactly one org/project/token to instrument against. The signup
+   * RESPONSE shape (access_token + user) is unchanged by this.
+   */
   async signup(dto: SignupDto): Promise<Session> {
     const email = dto.email.toLowerCase();
     const passwordHash = await this.passwords.hash(dto.password);
     let user: User;
     try {
-      user = await this.prisma.user.create({ data: { email, passwordHash, name: dto.name } });
+      user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({ data: { email, passwordHash, name: dto.name } });
+        const org = await tx.organization.create({ data: { name: `${dto.name}'s Workspace` } });
+        await tx.membership.create({ data: { userId: created.id, orgId: org.id, role: 'admin' } });
+        const project = await tx.project.create({
+          data: { orgId: org.id, name: 'Default', timezone: 'UTC' },
+        });
+        await tx.sdkToken.create({
+          data: { projectId: project.id, token: generateSdkToken(), label: 'default' },
+        });
+        return created;
+      });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw this.emailTaken();

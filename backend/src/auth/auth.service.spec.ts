@@ -28,6 +28,11 @@ function makeUser(overrides: Partial<User> = {}): User {
 
 class FakePrisma {
   users: User[] = [];
+  organizations: { id: string; name: string }[] = [];
+  memberships: { userId: string; orgId: string; role: string }[] = [];
+  projects: { id: string; orgId: string; name: string; timezone: string }[] = [];
+  sdkTokens: { id: string; projectId: string; token: string; label: string; revokedAt: null }[] =
+    [];
   refreshTokens: {
     id: string;
     userId: string;
@@ -36,6 +41,9 @@ class FakePrisma {
     revokedAt: Date | null;
   }[] = [];
   private nextRefreshId = 0;
+  private nextOrgId = 0;
+  private nextProjectId = 0;
+  private nextSdkTokenId = 0;
 
   user = {
     findUnique: async ({ where }: { where: { email?: string; id?: string } }) => {
@@ -62,6 +70,37 @@ class FakePrisma {
     },
   };
 
+  organization = {
+    create: async ({ data }: { data: { name: string } }) => {
+      const org = { id: `org-${this.nextOrgId++}`, ...data };
+      this.organizations.push(org);
+      return org;
+    },
+  };
+
+  membership = {
+    create: async ({ data }: { data: { userId: string; orgId: string; role: string } }) => {
+      this.memberships.push({ ...data });
+      return data;
+    },
+  };
+
+  project = {
+    create: async ({ data }: { data: { orgId: string; name: string; timezone: string } }) => {
+      const project = { id: `project-${this.nextProjectId++}`, ...data };
+      this.projects.push(project);
+      return project;
+    },
+  };
+
+  sdkToken = {
+    create: async ({ data }: { data: { projectId: string; token: string; label: string } }) => {
+      const token = { id: `sdk-${this.nextSdkTokenId++}`, revokedAt: null, ...data };
+      this.sdkTokens.push(token);
+      return token;
+    },
+  };
+
   refreshToken = {
     create: async ({ data }: { data: { userId: string; tokenHash: string; expiresAt: Date } }) => {
       const row = { id: `rt-${this.nextRefreshId++}`, revokedAt: null, ...data };
@@ -69,6 +108,10 @@ class FakePrisma {
       return row;
     },
   };
+
+  /** Mimics Prisma's interactive transaction: runs the callback against this same fake client
+   *  (no real atomicity, but sufficient for unit-testing the sequence of calls signup makes). */
+  $transaction = async <T>(fn: (tx: this) => Promise<T>): Promise<T> => fn(this);
 }
 
 describe('AuthService', () => {
@@ -111,6 +154,40 @@ describe('AuthService', () => {
       expect(session.refreshToken).toEqual(expect.any(String));
       expect(prisma.users).toHaveLength(1);
       expect(prisma.users[0].passwordHash).not.toBe('password1');
+    });
+
+    it('provisions a default workspace (org, admin membership, Default project, sdk token) — contracts §12', async () => {
+      const { service, prisma } = makeService();
+      const session = await service.signup({
+        email: 'workspace@example.com',
+        password: 'password1',
+        name: 'Ada',
+      });
+
+      expect(prisma.organizations).toHaveLength(1);
+      expect(prisma.organizations[0].name).toBe("Ada's Workspace");
+
+      expect(prisma.memberships).toEqual([
+        { userId: session.user.id, orgId: prisma.organizations[0].id, role: 'admin' },
+      ]);
+
+      expect(prisma.projects).toHaveLength(1);
+      expect(prisma.projects[0]).toMatchObject({
+        orgId: prisma.organizations[0].id,
+        name: 'Default',
+        timezone: 'UTC',
+      });
+
+      expect(prisma.sdkTokens).toHaveLength(1);
+      expect(prisma.sdkTokens[0]).toMatchObject({
+        projectId: prisma.projects[0].id,
+        label: 'default',
+        revokedAt: null,
+      });
+      expect(prisma.sdkTokens[0].token).toMatch(/^mam_[0-9a-f]{32}$/);
+
+      // The signup RESPONSE shape is unchanged by workspace provisioning.
+      expect(Object.keys(session).sort()).toEqual(['accessToken', 'refreshToken', 'user']);
     });
 
     it('throws 409 on a duplicate email', async () => {

@@ -8,6 +8,7 @@ import { ClickHouseModule } from './clickhouse/clickhouse.module';
 import { IngestModule } from './ingestion/ingest.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AuthModule } from './auth/auth.module';
     IngestModule,
     HealthModule,
     AuthModule,
+    ProjectsModule,
   ],
 })
 export class AppModule {}
