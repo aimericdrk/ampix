@@ -172,3 +172,36 @@ MyAmpMix.instance.optOutTracking(); MyAmpMix.instance.optInTracking();
 - Commit style: Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`, `ci:`).
 - Coverage floors (CI-enforced): backend 85% lines, SDK 85%, dashboard 75%.
 - No paid services anywhere (design spec §10).
+
+---
+
+## 11. Auth & TOTP 2FA API (added 2026-07-04)
+
+Real account auth (previously mocked). All under `/api/v1/auth`. JSON in/out; errors are RFC 7807. Access token = JWT 15 min returned in body (held in memory client-side); refresh = opaque/JWT in an httpOnly `mam_refresh` cookie (30 d, rotated on use). Passwords hashed with **argon2id**. TOTP per RFC 6238 (30 s step, 6 digits, SHA-1 — Google Authenticator compatible).
+
+### Endpoints
+- `POST /signup` `{email, password (min 8), name}` → `200 {access_token, user:{id,email,name}}` + refresh cookie. Creates the user (409 if email taken).
+- `POST /login` `{email, password}`:
+  - 2FA **off** → `200 {access_token, user}` + refresh cookie.
+  - 2FA **on** → `200 {mfa_required: true, mfa_token}` (NO access token, NO refresh cookie). `mfa_token` is a short-lived (5 min) JWT with `purpose:"mfa"` — never accepted as an access token.
+  - bad creds → `401`.
+- `POST /2fa/verify` `{mfa_token, code}` (`code` = 6-digit TOTP **or** a recovery code) → `200 {access_token, user}` + refresh cookie; `401` on bad/expired.
+- `POST /refresh` (refresh cookie) → `200 {access_token, user}` + rotated cookie; `401` if missing/invalid.
+- `POST /logout` → `204`, clears cookie + revokes the refresh token.
+- `GET /me` (access token) → `200 {user, two_factor_enabled}`.
+- `POST /2fa/setup` (access token) → `200 {otpauth_url, secret, qr_data_url}` — generates a **pending** (not-yet-active) TOTP secret; `qr_data_url` is a PNG data URI of the otpauth URL.
+- `POST /2fa/activate` `{code}` (access token) → verifies code vs pending secret → enables 2FA, persists secret (AES-256-GCM encrypted at rest) → `200 {recovery_codes: string[10]}` (shown once).
+- `POST /2fa/disable` `{code}` (access token) → `204`; clears secret + recovery codes.
+
+Recovery codes: 10, single-use, stored hashed. 2FA verify/activate attempts are rate-limited per user (reuse Redis). `mfa_token`/access/refresh use distinct signing purposes so none is interchangeable.
+
+### New env vars (extends §3)
+```
+ACCESS_TOKEN_TTL=900            # seconds (15m)
+REFRESH_TOKEN_TTL=2592000       # seconds (30d)
+MFA_TOKEN_TTL=300               # seconds (5m)
+TOTP_ISSUER=MyAmpMix            # label shown in the authenticator app
+TOTP_ENC_KEY                    # 32-byte key (base64 or 64-hex) for AES-256-GCM of TOTP secrets; required outside NODE_ENV=test
+COOKIE_SECURE=false             # true in production (HTTPS)
+COOKIE_DOMAIN                   # optional
+```
