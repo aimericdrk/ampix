@@ -205,3 +205,28 @@ TOTP_ENC_KEY                    # 32-byte key (base64 or 64-hex) for AES-256-GCM
 COOKIE_SECURE=false             # true in production (HTTPS)
 COOKIE_DOMAIN                   # optional
 ```
+
+---
+
+## 12. Projects & minimal analytics read (added 2026-07-04)
+
+Makes the dashboard's project navigation and a first real data view work end-to-end against the backend (previously mocked). All under `/api/v1`, JWT access-token auth (the §11 access token). A user may only see orgs/projects/data for organizations they are a member of (membership join enforced; 403 for a project in a non-member org, 404 for an unknown project id).
+
+### Signup now provisions a default workspace
+`POST /api/v1/auth/signup` additionally creates, in one transaction with the user: an `Organization` named `"<name>'s Workspace"`, a `Membership(role=admin)` linking the user to it, a `Project` named `"Default"` (timezone `UTC`), and an `SdkToken` (`mam_` + 32 random hex). So a brand-new account immediately has one org, one project, and one ingest token. (Existing signup response shape is unchanged.)
+
+### GET /api/v1/projects
+Returns the authenticated user's projects across their memberships:
+```json
+{ "projects": [ { "id": "uuid", "org_id": "uuid", "org_name": "Ada's Workspace",
+                  "name": "Default", "timezone": "UTC", "ingest_token": "mam_…" } ] }
+```
+`ingest_token` is included because the requester owns the project (used to instrument their app / ingest). `org_name` is added to the existing Project shape; the dashboard `Project` type gains `org_name` and `ingest_token`.
+
+### GET /api/v1/projects/:projectId/events/summary
+Real ClickHouse read over `analytics.events` for that `project_id`:
+```json
+{ "project_id": "uuid", "total": 128,
+  "by_event": [ { "event": "checkout_completed", "count": 12 }, { "event": "product_viewed", "count": 40 } ] }
+```
+`total` and per-event `count` use `count(DISTINCT insert_id)` (exact under retries). `by_event` ordered by count desc. All-time (no date filter in this MVP). Empty project → `{ total: 0, by_event: [] }`. Auth + membership enforced as above.
