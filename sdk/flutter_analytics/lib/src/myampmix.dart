@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
+import 'attribution/attribution_autocapture.dart';
+import 'attribution/attribution_store.dart';
 import 'autocapture/purchase_autocapture.dart';
 import 'config.dart';
 import 'context/context_collector.dart';
@@ -38,6 +40,7 @@ class SdkOverrides {
     this.random,
     this.eventStore,
     this.purchaseStream,
+    this.attributionStream,
   });
 
   final Clock? clock;
@@ -59,6 +62,12 @@ class SdkOverrides {
   /// driven with a fake payload instead of a real platform channel. Not
   /// part of the frozen §8 surface.
   final Stream<dynamic>? purchaseStream;
+
+  /// Test-only seam replacing the real `myampmix_analytics/attribution`
+  /// `EventChannel` stream so native install-referrer autocapture can be
+  /// driven with a fake referrer payload instead of a real platform channel.
+  /// Not part of the frozen §8 surface.
+  final Stream<dynamic>? attributionStream;
 }
 
 /// Public facade — the exact shared-contracts §8 surface. Every method is
@@ -77,8 +86,10 @@ class MyAmpMix {
   bool _autocaptureScreens = true;
   bool _autocaptureTaps = true;
   bool _autocapturePurchases = true;
+  bool _autocaptureAttribution = true;
 
   late final AnalyticsDatabase _database;
+  late final AttributionStore _attribution;
   late final IdentityManager _identity;
   late final SuperPropertiesStore _superProperties;
   late final TimedEventTracker _timedEvents;
@@ -88,6 +99,7 @@ class MyAmpMix {
   late final Uploader _uploader;
   _SdkLifecycleObserver? _observer;
   PurchaseAutocapture? _purchaseAutocapture;
+  AttributionAutocapture? _attributionAutocapture;
 
   /// Profile operations (`people.set/setOnce/increment/append/unset/deleteUser`).
   People people = People.noop();
@@ -128,6 +140,7 @@ class MyAmpMix {
     _autocaptureScreens = config.autocaptureScreens;
     _autocaptureTaps = config.autocaptureTaps;
     _autocapturePurchases = config.autocapturePurchases;
+    _autocaptureAttribution = config.autocaptureAttribution;
     final clock = overrides?.clock ?? const SystemClock();
     final idFactory = overrides?.idFactory ?? (() => const Uuid().v7());
     final keyValueStore =
@@ -138,6 +151,18 @@ class MyAmpMix {
 
     _identity = IdentityManager(store: keyValueStore, idFactory: idFactory);
     await _identity.load();
+    _attribution = AttributionStore(keyValueStore);
+    try {
+      await _attribution.load();
+    } on Object catch (error, stackTrace) {
+      // Corrupt persisted attribution must degrade to "no touch", never fail
+      // init (mirrors the corrupt super-properties handling above).
+      _logger.log(
+        'Corrupt persisted attribution; starting with no touch.',
+        error,
+        stackTrace,
+      );
+    }
     _superProperties = SuperPropertiesStore(keyValueStore);
     try {
       await _superProperties.load();
@@ -181,6 +206,7 @@ class MyAmpMix {
       timedEvents: _timedEvents,
       contextCollector: ContextCollector(
         overrides?.contextDataSource ?? PlatformContextDataSource(),
+        attribution: _attribution,
       ),
       maxQueueSize: config.maxQueueSize,
       isOptedOut: () => _optOut.isOptedOut,
@@ -235,10 +261,69 @@ class MyAmpMix {
       );
       _purchaseAutocapture!.start();
     }
+
+    // Native install-referrer autocapture (shared-contracts §4/§5). Gated on
+    // `config.autocaptureAttribution` (default true) for EXACTLY the same
+    // reason as the purchase block above: this opens the real
+    // `myampmix_analytics/attribution` EventChannel, and an unconditional
+    // subscription DEADLOCKS host-app + our own `testWidgets` fake-async.
+    // Gating at subscribe-time gives host apps a clean escape hatch
+    // (`autocaptureAttribution: false`) that keeps `MyAmpMix.init()` from
+    // touching a platform channel in their widget tests. `trackDeepLink` is
+    // deliberately NOT gated — it is an explicit host call with no channel.
+    if (config.autocaptureAttribution) {
+      _attributionAutocapture = AttributionAutocapture(
+        attributionStream: overrides?.attributionStream,
+        onReferrer: (referrer) => _guard(
+          'installReferrer',
+          () => _recordCampaignTouch(
+            utmFromReferrer(referrer),
+            source: 'install_referrer',
+          ),
+        ),
+      );
+      _attributionAutocapture!.start();
+    }
   }
 
   void track(String event, {Map<String, Object?>? properties}) =>
       _guard('track', () => _pipeline.track(event, properties));
+
+  /// Records a marketing-attribution touch from a deep link / app link the
+  /// host app received (shared-contracts §4/§5). The host owns its own
+  /// deep-link plumbing (this adds no dependency) and forwards the incoming
+  /// [uri] here from its `onGenerateRoute`/`uni_links`/`app_links` handler.
+  ///
+  /// Parses the whitelisted `utm_source, utm_medium, utm_campaign,
+  /// utm_content, utm_term` query params. On a link carrying at least one of
+  /// them this records the touch (last touch always; first touch write-once,
+  /// see [AttributionStore]) and emits the reserved `$campaign_touch` event
+  /// with `$attribution_source: "deep_link"`. A link with no `utm_*` — or a
+  /// malformed/odd URI — records nothing and emits nothing. Always available
+  /// regardless of `config.autocaptureAttribution` (it is an explicit host
+  /// call, not a platform-channel subscription). Never throws.
+  void trackDeepLink(Uri uri) => _guard(
+    'trackDeepLink',
+    () => _recordCampaignTouch(utmFromUri(uri), source: 'deep_link'),
+  );
+
+  /// Records a parsed [utm] touch and emits the reserved `$campaign_touch`
+  /// event. A no-`utm_*` touch is a no-op (no touch, no event). Recording
+  /// happens BEFORE the emit so the `$campaign_touch` event's own context
+  /// already carries the new touch, matching every subsequent event.
+  Future<void> _recordCampaignTouch(
+    Map<String, String> utm, {
+    required String source,
+  }) async {
+    final recorded = await _attribution.record(utm);
+    if (!recorded) return;
+    final properties = <String, Object?>{
+      for (final key in kUtmKeys)
+        if (utm[key] != null) '\$$key': utm[key],
+      r'$attribution_source': source,
+    };
+    await _pipeline.track(r'$campaign_touch', properties);
+  }
 
   /// Whether `$screen_view` autocapture is enabled (`config.autocaptureScreens`).
   /// Read by `MyAmpMixObserver`'s default wiring; not part of the frozen §8
@@ -254,8 +339,14 @@ class MyAmpMix {
   /// (`config.autocapturePurchases`). Read by `PurchaseAutocapture`'s
   /// default wiring; not part of the frozen §8 method surface, but a
   /// public property of the facade class.
-  bool get autocapturePurchasesEnabled =>
-      _initialized && _autocapturePurchases;
+  bool get autocapturePurchasesEnabled => _initialized && _autocapturePurchases;
+
+  /// Whether native install-referrer autocapture is enabled
+  /// (`config.autocaptureAttribution`). Not part of the frozen §8 method
+  /// surface, but a public property of the facade class. Note `trackDeepLink`
+  /// is always available regardless of this flag.
+  bool get autocaptureAttributionEnabled =>
+      _initialized && _autocaptureAttribution;
 
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);
@@ -339,6 +430,7 @@ class MyAmpMix {
     if (sdk._initialized) {
       sdk._uploader.dispose();
       await sdk._purchaseAutocapture?.stop();
+      await sdk._attributionAutocapture?.stop();
       final observer = sdk._observer;
       if (observer != null) WidgetsBinding.instance.removeObserver(observer);
       if (closeDatabase) await sdk._database.close();

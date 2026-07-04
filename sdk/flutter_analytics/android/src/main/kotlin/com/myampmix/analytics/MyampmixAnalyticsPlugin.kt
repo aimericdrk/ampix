@@ -8,6 +8,8 @@ import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
+import com.android.installreferrer.api.InstallReferrerClient
+import com.android.installreferrer.api.InstallReferrerStateListener
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 
@@ -50,11 +52,19 @@ class MyampmixAnalyticsPlugin :
     private var eventSink: EventChannel.EventSink? = null
     private var billingClient: BillingClient? = null
 
+    /** Attribution (install-referrer) channel + its Dart listener sink. */
+    private var attributionChannel: EventChannel? = null
+    private var attributionSink: EventChannel.EventSink? = null
+    private var referrerClient: InstallReferrerClient? = null
+
     /** De-dupes a purchase seen both via the live listener and the replay query. */
     private val seenTransactionIds = mutableSetOf<String>()
 
     /** Buffers payloads observed before Dart attaches a stream listener. */
     private val pendingPayloads = mutableListOf<Map<String, Any?>>()
+
+    /** Buffers an install referrer fetched before Dart attaches its listener. */
+    private var pendingReferrer: String? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         val channel = EventChannel(binding.binaryMessenger, CHANNEL_NAME)
@@ -74,19 +84,48 @@ class MyampmixAnalyticsPlugin :
             },
         )
         eventChannel = channel
+
+        val attribution = EventChannel(binding.binaryMessenger, ATTRIBUTION_CHANNEL_NAME)
+        attribution.setStreamHandler(
+            object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    attributionSink = events
+                    pendingReferrer?.let {
+                        events.success(it)
+                        pendingReferrer = null
+                    }
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    attributionSink = null
+                }
+            },
+        )
+        attributionChannel = attribution
+
         startBillingClient(binding.applicationContext)
+        maybeFetchInstallReferrer(binding.applicationContext)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         eventChannel?.setStreamHandler(null)
         eventChannel = null
         eventSink = null
+        attributionChannel?.setStreamHandler(null)
+        attributionChannel = null
+        attributionSink = null
         try {
             billingClient?.endConnection()
         } catch (_: Throwable) {
             // Never crash the host on teardown.
         }
         billingClient = null
+        try {
+            referrerClient?.endConnection()
+        } catch (_: Throwable) {
+            // Never crash the host on teardown.
+        }
+        referrerClient = null
     }
 
     private fun startBillingClient(context: Context) {
@@ -221,7 +260,73 @@ class MyampmixAnalyticsPlugin :
         }
     }
 
+    /**
+     * Fetches the Google Play install referrer ONCE (first launch) and
+     * forwards its raw `utm_*`-carrying query string over the attribution
+     * channel. A persisted flag guarantees the referrer is only ever
+     * forwarded once, so the Dart side emits a single first-touch
+     * `$campaign_touch` (`$attribution_source: "install_referrer"`) — not one
+     * per launch. iOS has no install-referrer equivalent; its plugin half
+     * registers this channel as a documented no-op.
+     *
+     * Defensive throughout: a missing Play Store, service disconnect, or
+     * malformed referrer degrades to "no touch", never a crash.
+     */
+    private fun maybeFetchInstallReferrer(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (prefs.getBoolean(PREF_REFERRER_FORWARDED, false)) return
+            val client = InstallReferrerClient.newBuilder(context).build()
+            referrerClient = client
+            client.startConnection(
+                object : InstallReferrerStateListener {
+                    override fun onInstallReferrerSetupFinished(responseCode: Int) {
+                        try {
+                            if (responseCode == InstallReferrerClient.InstallReferrerResponse.OK) {
+                                val referrer = client.installReferrer.installReferrer
+                                if (!referrer.isNullOrEmpty()) {
+                                    emitReferrer(referrer)
+                                    prefs.edit()
+                                        .putBoolean(PREF_REFERRER_FORWARDED, true)
+                                        .apply()
+                                }
+                            }
+                        } catch (_: Throwable) {
+                            // Best-effort only: never crash on a referrer read.
+                        } finally {
+                            try {
+                                client.endConnection()
+                            } catch (_: Throwable) {
+                                // Never crash on teardown.
+                            }
+                        }
+                    }
+
+                    override fun onInstallReferrerServiceDisconnected() {
+                        // Never crash; the persisted flag stays unset so a
+                        // future launch can retry the one-time fetch.
+                    }
+                },
+            )
+        } catch (_: Throwable) {
+            // Install Referrer may be unavailable (no Play Store, ...). Never
+            // crash the host.
+        }
+    }
+
+    private fun emitReferrer(referrer: String) {
+        val sink = attributionSink
+        if (sink != null) {
+            sink.success(referrer)
+        } else {
+            pendingReferrer = referrer
+        }
+    }
+
     private companion object {
         const val CHANNEL_NAME = "myampmix_analytics/purchases"
+        const val ATTRIBUTION_CHANNEL_NAME = "myampmix_analytics/attribution"
+        const val PREFS_NAME = "myampmix_analytics"
+        const val PREF_REFERRER_FORWARDED = "install_referrer_forwarded"
     }
 }

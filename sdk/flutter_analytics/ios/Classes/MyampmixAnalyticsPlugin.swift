@@ -26,6 +26,7 @@ import UIKit
 /// failure or unexpected transaction shape never crashes the host app.
 public class MyampmixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransactionObserver, SKProductsRequestDelegate, FlutterStreamHandler {
   private static let channelName = "myampmix_analytics/purchases"
+  private static let attributionChannelName = "myampmix_analytics/attribution"
 
   private var eventSink: FlutterEventSink?
 
@@ -54,6 +55,21 @@ public class MyampmixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransact
     // Keeps the plugin instance alive for the lifetime of the engine so the
     // SKPaymentQueue observer registration above is never deallocated.
     registrar.publish(instance)
+
+    // Marketing-attribution channel — iOS HAS NO INSTALL-REFERRER EQUIVALENT.
+    // Unlike Android's Google Play `InstallReferrerClient` (see
+    // MyampmixAnalyticsPlugin.kt), Apple exposes no API for a generic
+    // install-attribution string (SKAdNetwork is a privacy-preserving,
+    // postback-only mechanism, not a utm_* referrer). So this half registers
+    // the `myampmix_analytics/attribution` channel purely to keep the Dart
+    // `EventChannel` well-formed, and NEVER emits: iOS attribution is
+    // deep-link-only via `MyAmpMix.trackDeepLink`. This mirrors the honest
+    // Play-Billing caveat documented on the purchase channel above.
+    let attributionChannel = FlutterEventChannel(
+      name: attributionChannelName,
+      binaryMessenger: registrar.messenger()
+    )
+    attributionChannel.setStreamHandler(MyampmixAttributionNoopStreamHandler())
   }
 
   deinit {
@@ -145,5 +161,21 @@ public class MyampmixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransact
     guard let productsRequest = request as? SKProductsRequest else { return }
     let requestedIds = productIdsByRequest.removeValue(forKey: ObjectIdentifier(productsRequest)) ?? []
     requestedIds.forEach { pendingProductRequests.remove($0) }
+  }
+}
+
+/// No-op stream handler for the `myampmix_analytics/attribution` channel on
+/// iOS. iOS has no install-referrer equivalent, so this handler accepts the
+/// Dart listener and never emits — iOS marketing attribution is deep-link
+/// only via `MyAmpMix.trackDeepLink`. See the caveat in
+/// `MyampmixAnalyticsPlugin.register`.
+private class MyampmixAttributionNoopStreamHandler: NSObject, FlutterStreamHandler {
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    // Intentionally emits nothing.
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    return nil
   }
 }

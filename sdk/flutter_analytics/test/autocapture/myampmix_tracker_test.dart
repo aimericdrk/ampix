@@ -336,11 +336,13 @@ void main() {
         serverUrl: 'http://localhost:8080',
         autocaptureTaps: autocaptureTaps,
         // This suite exercises TAP autocapture only. Disable native purchase
-        // autocapture so init() never subscribes to the real
-        // `myampmix_analytics/purchases` EventChannel — that subscription hangs
-        // under testWidgets' fake-async. Native purchase autocapture has its own
-        // dedicated suite (purchase_autocapture_test.dart) that injects a stream.
+        // AND attribution autocapture so init() never subscribes to the real
+        // `myampmix_analytics/purchases` or `.../attribution` EventChannels —
+        // those subscriptions hang under testWidgets' fake-async. Each has its
+        // own dedicated suite (purchase_autocapture_test.dart /
+        // attribution/*_test.dart) that injects a stream instead.
         autocapturePurchases: false,
+        autocaptureAttribution: false,
       ),
       overrides: SdkOverrides(
         clock: clock,

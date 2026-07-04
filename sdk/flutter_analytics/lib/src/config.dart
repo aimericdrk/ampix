@@ -11,6 +11,7 @@ class MyAmpMixConfig {
     this.autocaptureScreens = true,
     this.autocaptureTaps = true,
     this.autocapturePurchases = true,
+    this.autocaptureAttribution = true,
   }) : assert(
          flushAt > 0 && flushAt <= 100,
          'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
@@ -56,4 +57,19 @@ class MyAmpMixConfig {
   /// `track('purchase', ...)` call is never `$`-prefixed. Independently
   /// toggleable from [autocaptureScreens]/[autocaptureTaps].
   final bool autocapturePurchases;
+
+  /// Enables native marketing-attribution autocapture: the Android install
+  /// referrer (Google Play `InstallReferrerClient`) is fetched on first
+  /// launch, its `utm_*` params parsed and re-emitted as the reserved
+  /// `$campaign_touch` event (`$attribution_source: "install_referrer"`,
+  /// shared-contracts §4/§5). iOS has no install-referrer equivalent, so on
+  /// iOS this flag only governs whether the (no-op) attribution channel is
+  /// subscribed; iOS attribution is deep-link-only via
+  /// [MyAmpMix.trackDeepLink], which is always available regardless of this
+  /// flag. Like [autocapturePurchases], this is the one attribution path that
+  /// opens a real platform channel, so gating it at subscribe-time gives host
+  /// apps a clean escape hatch (`autocaptureAttribution: false`) that keeps
+  /// `MyAmpMix.init()` from touching a platform channel in their widget
+  /// tests. Independently toggleable from the other autocapture flags.
+  final bool autocaptureAttribution;
 }

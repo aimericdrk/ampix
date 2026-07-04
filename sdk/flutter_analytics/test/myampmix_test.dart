@@ -333,6 +333,7 @@ void main() {
     final sdk = MyAmpMix.instance;
     expect(() {
       sdk.track('e');
+      sdk.trackDeepLink(Uri.parse('https://app.example.com/?utm_source=x'));
       sdk.identify('u');
       sdk.alias('a');
       sdk.reset();

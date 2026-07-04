@@ -1,3 +1,4 @@
+import '../attribution/attribution_store.dart';
 import '../model/event.dart';
 import '../version.dart';
 
@@ -42,11 +43,17 @@ abstract interface class ContextDataSource {
 }
 
 /// Builds the contract-§4 `context` block for every event. App and device
-/// info are fetched once and cached; network state is fresh per event.
+/// info are fetched once and cached; network state is fresh per event. When
+/// an [AttributionStore] is supplied, the current marketing touch
+/// (`utm_*` last touch + `first_utm_*` first touch) is attached to every
+/// event's context so ingest can populate the `events` table's attribution
+/// columns (shared-contracts §5/§14).
 class ContextCollector {
-  ContextCollector(this._source);
+  ContextCollector(this._source, {AttributionStore? attribution})
+    : _attribution = attribution;
 
   final ContextDataSource _source;
+  final AttributionStore? _attribution;
   AppInfo? _appInfo;
   DeviceInfo? _deviceInfo;
 
@@ -55,6 +62,7 @@ class ContextCollector {
       final appInfo = _appInfo ??= await _source.appInfo();
       final deviceInfo = _deviceInfo ??= await _source.deviceInfo();
       final screen = _source.screenSize();
+      final attribution = _attribution;
       return EventContext(
         appVersion: appInfo.version,
         appBuild: appInfo.build,
@@ -68,6 +76,13 @@ class ContextCollector {
         screenHeight: screen.height,
         network: await _source.network(),
         sdkVersion: mamSdkVersion,
+        utmSource: attribution?.utmSource,
+        utmMedium: attribution?.utmMedium,
+        utmCampaign: attribution?.utmCampaign,
+        utmContent: attribution?.utmContent,
+        utmTerm: attribution?.utmTerm,
+        firstUtmSource: attribution?.firstUtmSource,
+        firstUtmCampaign: attribution?.firstUtmCampaign,
       );
     } catch (_) {
       // Deliberately swallowed: the SDK never throws into the host app.

@@ -52,4 +52,9 @@ dependencies {
     // comment). This plugin never launches a purchase flow, never
     // acknowledges, and never consumes a purchase itself.
     implementation 'com.android.billingclient:billing:7.1.1'
+    // Google Play Install Referrer — the standard, free library for reading
+    // the marketing attribution (utm_*) that led to the install. Fetched
+    // once on first launch and forwarded over the
+    // `myampmix_analytics/attribution` channel (see MyampmixAnalyticsPlugin).
+    implementation 'com.android.installreferrer:installreferrer:2.2'
 }
