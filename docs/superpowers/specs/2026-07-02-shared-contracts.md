@@ -269,3 +269,39 @@ A non-member gets **403** for a scoped route; unknown ids **404**; unauthenticat
 - `GET /api/v1/projects/:projectId/tokens` (admin) → `{ tokens:[{ id, token, label, created_at }] }` (non-revoked).
 - `POST /api/v1/projects/:projectId/tokens { label? }` (admin) → `201 { id, token, label }` (new `mam_`+32hex).
 - `DELETE /api/v1/projects/:projectId/tokens/:tokenId` (admin) → `204` (sets `revoked_at`; the ingest guard already rejects revoked tokens).
+
+---
+
+## 14. Core analytics API — Phase 3 (added 2026-07-04)
+
+Read-only analytics over `analytics.events`, all under `/api/v1/projects/:projectId/...`, JWT auth + project membership (viewer+, reuse the projects membership check). **Every ClickHouse query MUST be parameterized** (`query_params` / `{name:Type}`), never string-interpolated — user-supplied property names/values are injection vectors. Property references resolve as: a **known event column** (whitelist: `event, distinct_id, anon_id, session_id, os, os_version, app_version, app_build, device_model, device_manufacturer, locale, timezone, network, sdk_version, utm_source, utm_medium, utm_campaign, utm_content, utm_term, first_utm_source, first_utm_campaign`) → that column; otherwise a **custom property** → `JSONExtractString(properties, {key:String})` with the key bound as a param. Reject unknown ops.
+
+### POST /query/insights  (the query engine)
+Body (typed query definition; also the saved-report shape in Phase 5):
+```jsonc
+{
+  "events": [ { "name": "checkout_completed", "aggregation": "total" } ],  // total=count(DISTINCT insert_id); unique_users=uniqExact(distinct_id); 1..5 events
+  "date_range": { "from": "2026-06-01", "to": "2026-07-01" },              // inclusive dates (UTC)
+  "interval": "day",                                                        // hour|day|week|month → toStartOf*(timestamp)
+  "filters": [ { "property": "os", "op": "eq", "value": "ios" } ],          // AND-joined; op: eq|neq|contains|gt|lt|is_set|is_not_set
+  "breakdown": { "property": "utm_source" }                                 // optional single breakdown; top 20 values
+}
+```
+→ `{ "series": [ { "name": "checkout_completed", "breakdown_value": "tiktok"|null, "data": [ { "t": "2026-06-01", "value": 12 } ] } ] }`. One series per (event × breakdown value); buckets zero-filled across the range. `400` on invalid definition (unknown op/interval, >5 events, bad date).
+
+### GET /events/live?limit=50&before=<iso>
+Recent events newest-first: `{ "events": [ { "insert_id", "event", "distinct_id", "timestamp", "os", "app_version" } ], "next_before": "<iso>|null" }`. `limit` ≤ 100.
+
+### Users explorer
+- `GET /users?search=<q>&limit=50&cursor=<distinct_id>` → `{ "users": [ { "distinct_id", "last_seen", "event_count" } ], "next_cursor": "<id>|null" }` (search matches distinct_id prefix; derived from events).
+- `GET /users/:distinctId` → `{ "distinct_id", "profile": {…}, "first_seen", "last_seen", "event_count", "recent_events": [ { "insert_id","event","timestamp" } ] }` (profile from `user_profiles` FINAL, recent_events last 50).
+
+### GET /sessions/summary?from=<date>&to=<date>
+From `$session_end` events (`$duration_ms` property): `{ "sessions": N, "avg_duration_ms": M, "by_day": [ { "t","sessions","avg_duration_ms" } ] }`.
+
+### Metadata (autocomplete for the builder)
+- `GET /meta/events` → `{ "events": ["checkout_completed", …] }` (distinct event names, last 30 days).
+- `GET /meta/properties?event=<name?>` → `{ "properties": [ { "name", "type": "string|number|column" } ] }` (known columns + distinct top-level `properties` keys seen, last 30 days).
+
+### Rollup materialized views (ClickHouse)
+Add to `infra/clickhouse/init.sql` (idempotent) three Aggregating/SummingMergeTree rollups fed by MVs on `events`: **daily active users** (`project_id, day, uniqState(distinct_id)`), **daily event counts** (`project_id, day, event, count`), **daily sessions** (`project_id, day, sessions, sum($duration_ms)`). Correctness note: the insights/summary endpoints query **raw events** for exact results (dedup via `DISTINCT insert_id`); the rollups exist for future dashboard-speed optimization and the DAU/session cards may read them. Keep raw-event queries authoritative in Phase 3.
