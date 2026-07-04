@@ -29,10 +29,19 @@ function isRealCalendarDate(value: string): boolean {
   );
 }
 
-const dateOnlySchema = z
+export const dateOnlySchema = z
   .string()
   .regex(DATE_ONLY_RE, 'must be an ISO date (YYYY-MM-DD)')
   .refine(isRealCalendarDate, 'must be a real calendar date');
+
+/**
+ * Inclusive `{ from, to }` UTC date range with `from <= to` (contracts §14/§15). Shared verbatim by
+ * the insights query and the Phase-4 funnels/retention/flows schemas so every endpoint validates
+ * dates identically.
+ */
+export const dateRangeSchema = z
+  .object({ from: dateOnlySchema, to: dateOnlySchema })
+  .refine((range) => range.from <= range.to, { message: 'from must be <= to', path: ['to'] });
 
 export const insightsEventSchema = z.object({
   name: z.string().trim().min(1).max(255),
@@ -72,9 +81,7 @@ export const insightsQuerySchema = z.object({
     .array(insightsEventSchema)
     .min(1, '1..5 events required')
     .max(MAX_EVENTS, 'at most 5 events'),
-  date_range: z
-    .object({ from: dateOnlySchema, to: dateOnlySchema })
-    .refine((range) => range.from <= range.to, { message: 'from must be <= to', path: ['to'] }),
+  date_range: dateRangeSchema,
   interval: z.enum(INTERVALS),
   filters: z.array(insightsFilterSchema).max(MAX_FILTERS).default([]),
   breakdown: insightsBreakdownSchema.optional(),

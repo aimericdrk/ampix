@@ -1,15 +1,7 @@
-import { toChDateTime64 } from '../clickhouse/clickhouse.service';
-import { BUCKET_EXPR, Bucket, buildBucketGrid, parseDateOnlyUTC } from './bucket-grid';
-import type {
-  Aggregation,
-  FilterValue,
-  InsightsEvent,
-  InsightsFilter,
-  InsightsQuery,
-} from './insights-query.schema';
+import { BUCKET_EXPR, Bucket, buildBucketGrid } from './bucket-grid';
+import { compileDateRange, compileFilterClauses } from './filter-compiler';
+import type { Aggregation, InsightsEvent, InsightsQuery } from './insights-query.schema';
 import { resolveProperty } from './property-resolver';
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** contracts §14: breakdown series are capped at the top 20 values. */
 export const MAX_BREAKDOWN_VALUES = 20;
@@ -41,88 +33,13 @@ export interface CompiledInsightsQuery {
   seriesQueries: CompiledEventSeriesQuery[];
 }
 
-type ParamType = 'String' | 'Float64' | 'UInt8';
-
-function paramTypeFor(value: FilterValue): ParamType {
-  if (typeof value === 'number') return 'Float64';
-  if (typeof value === 'boolean') return 'UInt8';
-  return 'String';
-}
-
-function paramValueFor(value: FilterValue): string | number {
-  return typeof value === 'boolean' ? (value ? 1 : 0) : value;
-}
-
-/**
- * Casts a String-typed SQL expression (every whitelisted column and every JSONExtractString(...)
- * call is String-typed) so it can be compared against a non-String bound param without
- * ClickHouse raising "Illegal types of arguments". A no-op for String params.
- */
-function castTo(expr: string, type: ParamType): string {
-  if (type === 'Float64') return `toFloat64OrZero(${expr})`;
-  if (type === 'UInt8') return `toUInt8OrZero(${expr})`;
-  return expr;
-}
-
-const COMPARISON_OP: Record<'eq' | 'neq' | 'gt' | 'lt', string> = {
-  eq: '=',
-  neq: '!=',
-  gt: '>',
-  lt: '<',
-};
-
-/**
- * Compiles one `filters[]` entry into a SQL boolean expression, mutating `params`. Every property
- * key (when it's a custom, non-whitelisted property) and every value is bound as a query
- * parameter — never string-interpolated (contracts §14, SECURITY-CRITICAL).
- */
-function compileFilter(
-  filter: InsightsFilter,
-  index: number,
-  params: Record<string, unknown>,
-): string {
-  const { expr } = resolveProperty(filter.property, `filterKey${index}`, params);
-
-  switch (filter.op) {
-    case 'is_set':
-      return `${expr} != ''`;
-    case 'is_not_set':
-      return `${expr} = ''`;
-    case 'contains': {
-      const valueParam = `filterVal${index}`;
-      params[valueParam] = String(filter.value);
-      return `position(${expr}, {${valueParam}:String}) > 0`;
-    }
-    case 'eq':
-    case 'neq':
-    case 'gt':
-    case 'lt': {
-      // The §14 refine on insightsFilterSchema guarantees `value` is defined for these ops.
-      const value = filter.value as FilterValue;
-      const type = paramTypeFor(value);
-      const valueParam = `filterVal${index}`;
-      params[valueParam] = paramValueFor(value);
-      return `${castTo(expr, type)} ${COMPARISON_OP[filter.op]} {${valueParam}:${type}}`;
-    }
-  }
-}
-
-function compileFilterClauses(
-  filters: InsightsFilter[],
-  params: Record<string, unknown>,
-): string[] {
-  return filters.map((filter, index) => compileFilter(filter, index, params));
-}
-
 function aggregationExpr(aggregation: Aggregation): string {
   return aggregation === 'unique_users' ? 'uniqExact(distinct_id)' : 'count(DISTINCT insert_id)';
 }
 
 /** `timestamp >= {from:DateTime64} AND timestamp < {to+1day}` (contracts §14: inclusive dates). */
 function dateRangeParams(query: InsightsQuery): { from: string; toExclusive: string } {
-  const fromMs = parseDateOnlyUTC(query.date_range.from);
-  const toExclusiveMs = parseDateOnlyUTC(query.date_range.to) + MS_PER_DAY;
-  return { from: toChDateTime64(fromMs), toExclusive: toChDateTime64(toExclusiveMs) };
+  return compileDateRange(query.date_range.from, query.date_range.to);
 }
 
 function compileTopBreakdownValuesQuery(query: InsightsQuery, projectId: string): CompiledQuery {

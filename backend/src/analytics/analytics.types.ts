@@ -84,3 +84,68 @@ export interface SessionsSummaryResponse {
   avg_duration_ms: number;
   by_day: SessionsByDay[];
 }
+
+/** POST /query/funnels response (contracts §15). */
+export interface FunnelStepResult {
+  event: string;
+  count: number;
+  /** `count / prev_count` (`1.0` for step 0, `0` when the denominator is `0`). */
+  conversion_from_prev: number;
+  /** `count / step0_count` (`1.0` for step 0, `0` when the denominator is `0`). */
+  conversion_from_top: number;
+}
+
+export interface FunnelBreakdownResult {
+  value: string;
+  steps: FunnelStepResult[];
+  overall_conversion: number;
+}
+
+export interface FunnelResponse {
+  steps: FunnelStepResult[];
+  overall_conversion: number;
+  /** Present only when a `breakdown` is requested. */
+  breakdowns?: FunnelBreakdownResult[];
+}
+
+/** POST /query/retention response (contracts §15). */
+export interface RetentionPeriodCell {
+  period: number;
+  count: number;
+  rate: number;
+}
+
+export interface RetentionCohort {
+  cohort: string;
+  size: number;
+  periods: RetentionPeriodCell[];
+}
+
+export interface RetentionAverage {
+  period: number;
+  rate: number;
+}
+
+export interface RetentionResponse {
+  cohorts: RetentionCohort[];
+  averages: RetentionAverage[];
+}
+
+/** POST /query/flows response (contracts §15). Sankey-ready; node ids are `"step:event"`. */
+export interface FlowNode {
+  id: string;
+  step: number;
+  event: string;
+  value: number;
+}
+
+export interface FlowLink {
+  source: string;
+  target: string;
+  value: number;
+}
+
+export interface FlowResponse {
+  nodes: FlowNode[];
+  links: FlowLink[];
+}
