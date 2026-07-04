@@ -230,3 +230,42 @@ Real ClickHouse read over `analytics.events` for that `project_id`:
   "by_event": [ { "event": "checkout_completed", "count": 12 }, { "event": "product_viewed", "count": 40 } ] }
 ```
 `total` and per-event `count` use `count(DISTINCT insert_id)` (exact under retries). `by_event` ordered by count desc. All-time (no date filter in this MVP). Empty project → `{ total: 0, by_event: [] }`. Auth + membership enforced as above.
+
+---
+
+## 13. Tenancy management API (added 2026-07-04)
+
+Org / member / invitation / project / account management. All under `/api/v1`, JWT access-token auth (§11). **Role matrix** (admin > analyst > viewer), enforced by a `RolesGuard` that resolves the org from the route's `:orgId` (or the `:projectId`'s org) and checks the caller's membership role:
+- **Reads** (list orgs/members/projects/tokens/summary, get invitation): any member (viewer+).
+- **Mutations** (rename org, member role change/remove, invitations, project create/rename/delete, token create/revoke): **admin**.
+- **Create org** and **self account** actions: any authenticated user.
+A non-member gets **403** for a scoped route; unknown ids **404**; unauthenticated **401**. RFC 7807 throughout.
+
+### Account (self)
+- `PATCH /api/v1/auth/me { name }` → `200` updated `{id,email,name}`.
+- `POST /api/v1/auth/password { current_password, new_password (min 8) }` → `204` (verifies current via argon2, re-hashes). Wrong current → `401`.
+
+### Organizations
+- `POST /api/v1/orgs { name }` → `201 { id, name, role:"admin" }` (creator becomes admin member).
+- `GET /api/v1/orgs` → `{ orgs:[{ id, name, role }] }` (caller's orgs + their role).
+- `PATCH /api/v1/orgs/:orgId { name }` (admin) → `200 { id, name }`.
+
+### Members & permissions
+- `GET /api/v1/orgs/:orgId/members` (member) → `{ members:[{ user:{id,email,name}, role }] }`.
+- `PATCH /api/v1/orgs/:orgId/members/:userId { role }` (admin) → `200`. **Cannot demote the last admin** → `409`.
+- `DELETE /api/v1/orgs/:orgId/members/:userId` (admin) → `204`. **Cannot remove the last admin** → `409`.
+
+### Invitations (shareable link, no email provider)
+- `POST /api/v1/orgs/:orgId/invitations { role }` (admin) → `201 { id, role, token, invite_path:"/invite/<token>", expires_at }` (expires in 7 days). Admin copies the link and shares it.
+- `GET /api/v1/orgs/:orgId/invitations` (admin) → `{ invitations:[{ id, role, expires_at }] }` (pending = not accepted, not expired).
+- `DELETE /api/v1/orgs/:orgId/invitations/:invitationId` (admin) → `204`.
+- `GET /api/v1/invitations/:token` (public) → `{ org_name, role, expires_at }`; `404` unknown, `410` expired/already accepted.
+- `POST /api/v1/invitations/:token/accept` (auth) → creates `Membership(caller, org, role)`, sets `accepted_by` → `200 { org_id, role }`. Already a member → `200` (idempotent, keeps existing role). `410` if expired/accepted.
+
+### Projects & tokens management
+- `POST /api/v1/orgs/:orgId/projects { name, timezone? }` (admin) → `201 { id, org_id, name, timezone, ingest_token }` (creates the project + an initial SdkToken).
+- `PATCH /api/v1/projects/:projectId { name?, timezone? }` (admin) → `200 { id, name, timezone }`.
+- `DELETE /api/v1/projects/:projectId` (admin) → `204` (cascades tokens; ClickHouse event data is left as-is).
+- `GET /api/v1/projects/:projectId/tokens` (admin) → `{ tokens:[{ id, token, label, created_at }] }` (non-revoked).
+- `POST /api/v1/projects/:projectId/tokens { label? }` (admin) → `201 { id, token, label }` (new `mam_`+32hex).
+- `DELETE /api/v1/projects/:projectId/tokens/:tokenId` (admin) → `204` (sets `revoked_at`; the ingest guard already rejects revoked tokens).
