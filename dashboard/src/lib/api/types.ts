@@ -44,12 +44,30 @@ export interface SignupRequest {
 export interface Project {
   id: string;
   org_id: string;
+  /** Added by contracts §12 — the owning organization's display name. */
+  org_name: string;
   name: string;
   timezone: string;
+  /** Added by contracts §12 — included because the requester owns this project. */
+  ingest_token: string;
 }
 
 export interface ListProjectsResponse {
   projects: Project[];
+}
+
+// --- Projects & minimal analytics read (contracts §12) ---
+
+export interface EventSummaryRow {
+  event: string;
+  count: number;
+}
+
+/** `GET /projects/:projectId/events/summary` — all-time, no date filter in this MVP. */
+export interface EventSummaryResponse {
+  project_id: string;
+  total: number;
+  by_event: EventSummaryRow[];
 }
 
 // --- Auth & TOTP 2FA (contracts §11) ---

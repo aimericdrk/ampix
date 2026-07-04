@@ -63,7 +63,7 @@ describe('LoginForm', () => {
     await userEvent.type(screen.getByLabelText('Password'), TEST_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
 
-    await screen.findByText(/later milestones/i);
+    await screen.findByRole('heading', { name: 'Demo App' });
     expect(router.state.location.pathname).toBe('/projects/0197f6a0-0000-7000-8000-0000000000aa');
   });
 

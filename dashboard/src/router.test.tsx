@@ -38,10 +38,11 @@ describe('router', () => {
     expect(await screen.findByText(/tok_abc123/)).toBeInTheDocument();
   });
 
-  it('shows the project placeholder for /projects/:id', async () => {
+  it('shows the project detail view for /projects/:id', async () => {
     authState.refreshValid = true;
     renderApp('/projects/0197f6a0-0000-7000-8000-0000000000aa');
-    expect(await screen.findByText(/later milestones/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Demo App' })).toBeInTheDocument();
+    expect(await screen.findByText('Total events')).toBeInTheDocument();
   });
 
   it('renders not-found for unknown urls', async () => {

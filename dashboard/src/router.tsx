@@ -13,7 +13,7 @@ import { LoginPage } from './features/auth/components/LoginPage';
 import { SecuritySettingsPage } from './features/auth/components/SecuritySettingsPage';
 import { SignupPage } from './features/auth/components/SignupPage';
 import { authStore } from './features/auth/store';
-import { ProjectPlaceholderPage } from './features/projects/components/ProjectPlaceholderPage';
+import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
 import { restoreSession } from './lib/api/client';
 
@@ -99,7 +99,7 @@ const projectsRoute = createRoute({
 const projectDetailRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId',
-  component: ProjectPlaceholderPage,
+  component: ProjectDetailPage,
 });
 
 const securitySettingsRoute = createRoute({

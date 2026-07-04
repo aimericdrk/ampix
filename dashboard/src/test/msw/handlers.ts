@@ -3,8 +3,10 @@ import type {
   Activate2faResponse,
   AuthResponse,
   AuthUser,
+  EventSummaryResponse,
   ListProjectsResponse,
   MeResponse,
+  Project,
   Setup2faResponse,
 } from '../../lib/api/types';
 
@@ -34,6 +36,25 @@ export const MOCK_QR_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 /** A single pre-seeded recovery code accepted once by /2fa/verify or /2fa/disable. */
 export const MFA_RECOVERY_CODE = 'RECOVERY-CODE-0';
+
+/** Fixture project (contracts §12) — org_name + ingest_token included, requester owns it. */
+export const TEST_PROJECT: Project = {
+  id: '0197f6a0-0000-7000-8000-0000000000aa',
+  org_id: '0197f6a0-0000-7000-8000-0000000000bb',
+  org_name: "Ada's Workspace",
+  name: 'Demo App',
+  timezone: 'UTC',
+  ingest_token: 'mam_0123456789abcdef0123456789abcdef',
+};
+
+/** Deterministic sample for GET /projects/:projectId/events/summary (contracts §12). */
+export const EVENT_SUMMARY_FIXTURE: Omit<EventSummaryResponse, 'project_id'> = {
+  total: 52,
+  by_event: [
+    { event: 'checkout_completed', count: 32 },
+    { event: 'product_viewed', count: 20 },
+  ],
+};
 
 interface Fixture {
   user: AuthUser;
@@ -228,15 +249,20 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token)) {
       return problem(401, 'Access token invalid or expired');
     }
-    const response: ListProjectsResponse = {
-      projects: [
-        {
-          id: '0197f6a0-0000-7000-8000-0000000000aa',
-          org_id: '0197f6a0-0000-7000-8000-0000000000bb',
-          name: 'Demo App',
-          timezone: 'UTC',
-        },
-      ],
+    const response: ListProjectsResponse = { projects: [TEST_PROJECT] };
+    return HttpResponse.json(response);
+  }),
+
+  // --- Projects & minimal analytics read (contracts §12) ---
+
+  http.get('/api/v1/projects/:projectId/events/summary', ({ request, params }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token)) {
+      return problem(401, 'Access token invalid or expired');
+    }
+    const response: EventSummaryResponse = {
+      project_id: params.projectId as string,
+      ...EVENT_SUMMARY_FIXTURE,
     };
     return HttpResponse.json(response);
   }),
