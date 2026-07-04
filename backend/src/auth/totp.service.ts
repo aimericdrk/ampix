@@ -4,7 +4,8 @@ import * as QRCode from 'qrcode';
 import type Redis from 'ioredis';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { REDIS } from '../redis/redis.module';
-import { requireAuthConfig } from './auth-config.util';
+import { requireAuthConfig, requireTotpEncKey } from './auth-config.util';
+import { decodeEncryptionKey, decryptSecret, encryptSecret } from './crypto/aes-gcm';
 
 /**
  * otplib's `authenticator` preset defaults — 30 s step, 6 digits, SHA-1 — are exactly RFC 6238 /
@@ -56,12 +57,25 @@ export class TotpService {
     }
   }
 
+  /**
+   * Stores the not-yet-activated secret in Redis, ENCRYPTED with the same AES-256-GCM helper used
+   * for the persisted (post-activation) secret in `users.totp_secret` — at-rest protection must be
+   * consistent regardless of whether the secret currently lives in Postgres or in this short-lived
+   * Redis staging area, rather than the secret sitting in plaintext for up to
+   * `PENDING_SECRET_TTL_SECONDS` just because it hasn't been activated yet.
+   */
   async storePending(userId: string, secret: string): Promise<void> {
-    await this.redis.set(pendingKey(userId), secret, 'EX', PENDING_SECRET_TTL_SECONDS);
+    const key = decodeEncryptionKey(requireTotpEncKey(this.config));
+    const encrypted = encryptSecret(secret, key);
+    await this.redis.set(pendingKey(userId), encrypted, 'EX', PENDING_SECRET_TTL_SECONDS);
   }
 
+  /** Inverse of `storePending`: decrypts before returning. `null` if nothing is pending / expired. */
   async getPending(userId: string): Promise<string | null> {
-    return this.redis.get(pendingKey(userId));
+    const stored = await this.redis.get(pendingKey(userId));
+    if (!stored) return null;
+    const key = decodeEncryptionKey(requireTotpEncKey(this.config));
+    return decryptSecret(stored, key);
   }
 
   async clearPending(userId: string): Promise<void> {

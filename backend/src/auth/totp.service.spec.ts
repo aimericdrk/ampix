@@ -70,11 +70,32 @@ describe('TotpService', () => {
   it('stores, reads, and clears a pending secret in Redis with a TTL', async () => {
     const { totp, redis } = makeService();
     await totp.storePending('user-1', 'SECRET123');
-    expect(redis.store.get('2fa:pending:user-1')).toBe('SECRET123');
     expect(redis.ttls.get('2fa:pending:user-1')).toBe(10 * 60);
     await expect(totp.getPending('user-1')).resolves.toBe('SECRET123');
     await totp.clearPending('user-1');
     await expect(totp.getPending('user-1')).resolves.toBeNull();
+  });
+
+  it('encrypts the pending secret at rest — Redis never sees the plaintext', async () => {
+    const { totp, redis } = makeService();
+    await totp.storePending('user-1', 'SECRET123');
+    const stored = redis.store.get('2fa:pending:user-1');
+    expect(stored).toBeDefined();
+    expect(stored).not.toBe('SECRET123');
+    expect(stored).not.toContain('SECRET123');
+    // encryptSecret's format: base64url iv.tag.ciphertext, dot-separated.
+    expect(stored).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  });
+
+  it('encrypts with a fresh IV each time, so storing the same secret twice yields different ciphertext', async () => {
+    const { totp, redis } = makeService();
+    await totp.storePending('user-1', 'SECRET123');
+    const first = redis.store.get('2fa:pending:user-1');
+    await totp.storePending('user-1', 'SECRET123');
+    const second = redis.store.get('2fa:pending:user-1');
+    expect(first).not.toBe(second);
+    // Both still decrypt back to the same plaintext.
+    await expect(totp.getPending('user-1')).resolves.toBe('SECRET123');
   });
 
   it('getPending returns null when nothing is pending', async () => {

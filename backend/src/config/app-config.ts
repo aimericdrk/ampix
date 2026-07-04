@@ -44,6 +44,14 @@ function isUrlWithScheme(value: string, schemes: string[]): boolean {
   }
 }
 
+/**
+ * Same truthy parsing COOKIE_SECURE's Zod preprocess (below) uses for the raw env string.
+ * Shared so the schema-level coercion and the cross-field production check can never drift.
+ */
+function isCookieSecureTruthy(raw: string | undefined): boolean {
+  return raw === 'true' || raw === '1';
+}
+
 /** Environment schema per shared contracts §3 and §11. Unknown keys in process.env are ignored. */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -71,7 +79,7 @@ const envSchema = z.object({
   TOTP_ISSUER: z.string().min(1).default('MyAmpMix'),
   TOTP_ENC_KEY: z.string().optional(),
   COOKIE_SECURE: z.preprocess(
-    (v) => (v === undefined ? false : v === 'true' || v === '1'),
+    (v) => (v === undefined ? false : isCookieSecureTruthy(v as string)),
     z.boolean(),
   ),
   COOKIE_DOMAIN: z.string().optional(),
@@ -127,6 +135,16 @@ function collectCrossFieldProblems(env: NodeJS.ProcessEnv): string[] {
 
   if (env.TOTP_ENC_KEY && decodeKeyBytes(env.TOTP_ENC_KEY) !== 32) {
     problems.push('TOTP_ENC_KEY: must decode to exactly 32 bytes (64 hex chars or base64)');
+  }
+
+  // The refresh cookie (contracts §11) must never be sent over plaintext HTTP. Dev defaults to
+  // false for localhost convenience, but a production deploy that leaves COOKIE_SECURE unset/false
+  // is a real vulnerability (session hijacking over an unencrypted network), not just a footgun —
+  // so it's a hard config error here rather than a silent default.
+  if (env.NODE_ENV === 'production' && !isCookieSecureTruthy(env.COOKIE_SECURE)) {
+    problems.push(
+      'COOKIE_SECURE: must be true in production (the refresh cookie must never be sent over plaintext HTTP)',
+    );
   }
 
   return problems;

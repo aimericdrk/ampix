@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { SlidingWindowRateLimiter } from '../ingestion/rate-limiter';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -24,7 +23,6 @@ import { TwoFactorAttemptLimiter } from './two-factor-attempt-limiter';
     TotpService,
     RecoveryCodeService,
     TwoFactorAttemptLimiter,
-    SlidingWindowRateLimiter,
     JwtAuthGuard,
   ],
   exports: [JwtAuthGuard, TokenService],

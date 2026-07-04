@@ -13,6 +13,10 @@ const validEnv: NodeJS.ProcessEnv = {
   JWT_ACCESS_SECRET: 'a'.repeat(32),
   JWT_REFRESH_SECRET: 'b'.repeat(32),
   TOTP_ENC_KEY: validTotpEncKey,
+  // NODE_ENV is 'production' above, which now requires this to be true (see the "COOKIE_SECURE in
+  // production" describe block below) — set here so every other test in this file, which isn't
+  // concerned with cookie-secure enforcement, keeps passing unmodified.
+  COOKIE_SECURE: 'true',
 };
 
 describe('loadConfig', () => {
@@ -149,7 +153,7 @@ describe('loadConfig', () => {
   });
 
   describe('§11 auth/2FA defaults', () => {
-    it('applies the documented defaults when unset', () => {
+    it('applies the documented TTL/issuer defaults when unset', () => {
       const config = loadConfig(validEnv);
       expect(config.auth).toEqual({
         accessTokenTtl: 900,
@@ -157,9 +161,17 @@ describe('loadConfig', () => {
         mfaTokenTtl: 300,
         totpIssuer: 'MyAmpMix',
         totpEncKey: validTotpEncKey,
-        cookieSecure: false,
+        // validEnv sets this explicitly (NODE_ENV=production requires it) — see the dedicated
+        // "defaults to false outside production" test below for the actual default-value behavior.
+        cookieSecure: true,
         cookieDomain: undefined,
       });
+    });
+
+    it('defaults COOKIE_SECURE to false when unset outside production', () => {
+      const { COOKIE_SECURE, ...rest } = validEnv;
+      const config = loadConfig({ ...rest, NODE_ENV: 'development' });
+      expect(config.auth!.cookieSecure).toBe(false);
     });
 
     it('coerces COOKIE_SECURE from a string and honors an explicit COOKIE_DOMAIN', () => {
@@ -186,6 +198,33 @@ describe('loadConfig', () => {
       expect(config.auth!.refreshTokenTtl).toBe(120);
       expect(config.auth!.mfaTokenTtl).toBe(30);
       expect(config.auth!.totpIssuer).toBe('CustomIssuer');
+    });
+  });
+
+  describe('COOKIE_SECURE enforcement in production (security hardening)', () => {
+    it('rejects production config with COOKIE_SECURE=false', () => {
+      expect(() => loadConfig({ ...validEnv, COOKIE_SECURE: 'false' })).toThrow(/COOKIE_SECURE/);
+    });
+
+    it('rejects production config with COOKIE_SECURE unset (defaults false)', () => {
+      const { COOKIE_SECURE, ...rest } = validEnv;
+      expect(() => loadConfig(rest)).toThrow(/COOKIE_SECURE/);
+    });
+
+    it('accepts production config with COOKIE_SECURE=true', () => {
+      expect(() => loadConfig({ ...validEnv, COOKIE_SECURE: 'true' })).not.toThrow();
+    });
+
+    it('does not require COOKIE_SECURE outside production — dev keeps the false default', () => {
+      const { COOKIE_SECURE, ...rest } = validEnv;
+      const config = loadConfig({ ...rest, NODE_ENV: 'development' });
+      expect(config.auth!.cookieSecure).toBe(false);
+    });
+
+    it('does not require COOKIE_SECURE under NODE_ENV=test', () => {
+      const { COOKIE_SECURE, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, TOTP_ENC_KEY, ...rest } =
+        validEnv;
+      expect(() => loadConfig({ ...rest, NODE_ENV: 'test' })).not.toThrow();
     });
   });
 
