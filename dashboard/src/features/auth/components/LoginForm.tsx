@@ -5,8 +5,10 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
+import { isMfaRequired } from '../../../lib/api/types';
 import { login } from '../api';
 import { firstFieldErrors, validateLogin, type FieldErrors } from '../validation';
+import { TwoFactorChallengeForm } from './TwoFactorChallengeForm';
 
 export function LoginForm() {
   const router = useRouter();
@@ -14,11 +16,20 @@ export function LoginForm() {
   const { toast } = useToast();
   const [values, setValues] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // 2FA step-up only — kept in component state, never persisted (contracts §11:
+  // mfa_token must not outlive this screen in localStorage/sessionStorage).
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+
+  const goToDestination = () => router.history.push(search.redirect ?? '/projects');
 
   const mutation = useMutation({
     mutationFn: login,
-    onSuccess: () => {
-      router.history.push(search.redirect ?? '/projects');
+    onSuccess: (response) => {
+      if (isMfaRequired(response)) {
+        setMfaToken(response.mfa_token);
+        return;
+      }
+      goToDestination();
     },
     onError: (error: Error) => {
       // 4xx problems render inline below; unexpected failures get a toast.
@@ -31,6 +42,10 @@ export function LoginForm() {
       }
     },
   });
+
+  if (mfaToken) {
+    return <TwoFactorChallengeForm mfaToken={mfaToken} onVerified={goToDestination} />;
+  }
 
   const problem =
     mutation.error instanceof ApiError && mutation.error.problem.status < 500

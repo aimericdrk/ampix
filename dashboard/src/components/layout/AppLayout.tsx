@@ -48,6 +48,12 @@ export function AppLayout() {
           >
             Projects
           </Link>
+          <Link
+            to="/settings/security"
+            className="block rounded-md px-3 py-2 text-sm hover:bg-border/40 [&.active]:bg-border/40 [&.active]:font-medium"
+          >
+            Security
+          </Link>
           <ul aria-label="Coming soon" className="mt-4 space-y-1 text-sm text-text-muted">
             {UPCOMING_SECTIONS.map((section) => (
               <li key={section} className="px-3 py-1">

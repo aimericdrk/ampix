@@ -10,6 +10,7 @@ import { NotFoundPage } from './components/NotFoundPage';
 import { RouteErrorPage } from './components/RouteErrorPage';
 import { InvitePage } from './features/auth/components/InvitePage';
 import { LoginPage } from './features/auth/components/LoginPage';
+import { SecuritySettingsPage } from './features/auth/components/SecuritySettingsPage';
 import { SignupPage } from './features/auth/components/SignupPage';
 import { authStore } from './features/auth/store';
 import { ProjectPlaceholderPage } from './features/projects/components/ProjectPlaceholderPage';
@@ -101,12 +102,18 @@ const projectDetailRoute = createRoute({
   component: ProjectPlaceholderPage,
 });
 
+const securitySettingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/settings/security',
+  component: SecuritySettingsPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   signupRoute,
   inviteRoute,
-  privateRoute.addChildren([projectsRoute, projectDetailRoute]),
+  privateRoute.addChildren([projectsRoute, projectDetailRoute, securitySettingsRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

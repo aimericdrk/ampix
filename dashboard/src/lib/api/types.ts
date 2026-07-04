@@ -1,4 +1,4 @@
-// API types per shared contracts §7 (and design spec §14 assumptions).
+// API types per shared contracts §7, §11 (and design spec §14 assumptions).
 // Hand-written for phase 1; to be replaced by OpenAPI-generated types with identical names.
 
 export interface AuthUser {
@@ -7,9 +7,27 @@ export interface AuthUser {
   name: string;
 }
 
-export interface AuthResponse {
+/** A resolved session: fresh access token + user, with the refresh cookie set/rotated server-side. */
+export interface AuthSuccess {
   access_token: string;
   user: AuthUser;
+}
+
+/**
+ * Login step-up (contracts §11): 2FA is on for this account, so `/auth/login`
+ * returns this instead of a session. `mfa_token` is a short-lived (5 min) JWT
+ * that is only ever accepted by `/auth/2fa/verify` — never usable as an access token.
+ */
+export interface MfaRequired {
+  mfa_required: true;
+  mfa_token: string;
+}
+
+/** `POST /auth/login` returns one of these; every other auth endpoint always resolves AuthSuccess. */
+export type AuthResponse = AuthSuccess | MfaRequired;
+
+export function isMfaRequired(response: AuthResponse): response is MfaRequired {
+  return 'mfa_required' in response;
 }
 
 export interface LoginRequest {
@@ -32,4 +50,38 @@ export interface Project {
 
 export interface ListProjectsResponse {
   projects: Project[];
+}
+
+// --- Auth & TOTP 2FA (contracts §11) ---
+
+export interface Verify2faRequest {
+  mfa_token: string;
+  /** A 6-digit TOTP code, or a single-use recovery code. */
+  code: string;
+}
+
+export interface MeResponse {
+  user: AuthUser;
+  two_factor_enabled: boolean;
+}
+
+/** `POST /2fa/setup` response — a pending, not-yet-active TOTP secret. */
+export interface Setup2faResponse {
+  otpauth_url: string;
+  secret: string;
+  /** PNG data URI of the otpauth URL, ready to drop straight into an `<img src>`. */
+  qr_data_url: string;
+}
+
+export interface Activate2faRequest {
+  code: string;
+}
+
+export interface Activate2faResponse {
+  /** 10 single-use codes, shown exactly once — the server only ever persists hashes. */
+  recovery_codes: string[];
+}
+
+export interface Disable2faRequest {
+  code: string;
 }

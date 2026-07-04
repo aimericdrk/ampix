@@ -1,7 +1,7 @@
 import { authStore } from '../../features/auth/store';
 import { getRuntimeConfig } from '../config';
 import { ApiError, problemFromResponse } from './problem';
-import type { AuthResponse } from './types';
+import type { AuthSuccess } from './types';
 
 export interface ApiFetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
   /** JSON-serializable request body. */
@@ -12,7 +12,15 @@ export interface ApiFetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
 /** Auth endpoints are never themselves refresh-retried. */
 // /auth/logout is deliberately absent: a stale-token logout should still refresh-and-replay
 // so the revocation call reaches the server and the httpOnly refresh cookie gets cleared.
-const AUTH_PATHS = new Set(['/api/v1/auth/login', '/api/v1/auth/signup', '/api/v1/auth/refresh']);
+// /auth/2fa/verify is included: it authenticates with a short-lived mfa_token, not an access
+// token, so a 401 there means a bad/expired code — refresh-and-replay would be meaningless
+// (there is no session yet to refresh).
+const AUTH_PATHS = new Set([
+  '/api/v1/auth/login',
+  '/api/v1/auth/signup',
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/2fa/verify',
+]);
 
 let refreshInFlight: Promise<boolean> | null = null;
 
@@ -23,7 +31,7 @@ async function doRefresh(): Promise<boolean> {
       credentials: 'include',
     });
     if (!res.ok) return false;
-    const body = (await res.json()) as AuthResponse;
+    const body = (await res.json()) as AuthSuccess;
     authStore.setSession(body.access_token, body.user);
     return true;
   } catch {
