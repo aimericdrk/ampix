@@ -1,0 +1,13 @@
+# Dart/Flutter build artifacts — never commit these for the example app.
+.dart_tool/
+build/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# The example is a throwaway app; its resolved lockfile is not committed
+# (the SDK it depends on is a path dependency resolved fresh each run).
+pubspec.lock
+
+# OS / editor cruft
+.DS_Store
