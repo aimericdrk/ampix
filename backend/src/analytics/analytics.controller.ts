@@ -1,11 +1,25 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AnalyticsService } from './analytics.service';
 import type {
   EventsMetaResponse,
   InsightsResponse,
+  LiveEventsResponse,
   PropertiesMetaResponse,
+  SessionsSummaryResponse,
+  UserProfileResponse,
+  UsersResponse,
 } from './analytics.types';
 
 /**
@@ -45,5 +59,45 @@ export class AnalyticsController {
     @Query('event') event?: string,
   ): Promise<PropertiesMetaResponse> {
     return this.analytics.listProperties(req.user!.id, projectId, event);
+  }
+
+  @Get('events/live')
+  async eventsLive(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Query('limit') limit?: string,
+    @Query('before') before?: string,
+  ): Promise<LiveEventsResponse> {
+    return this.analytics.getLiveEvents(req.user!.id, projectId, limit, before);
+  }
+
+  @Get('users')
+  async users(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ): Promise<UsersResponse> {
+    return this.analytics.listUsers(req.user!.id, projectId, search, limit, cursor);
+  }
+
+  @Get('users/:distinctId')
+  async userProfile(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Param('distinctId') distinctId: string,
+  ): Promise<UserProfileResponse> {
+    return this.analytics.getUserProfile(req.user!.id, projectId, distinctId);
+  }
+
+  @Get('sessions/summary')
+  async sessionsSummary(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ): Promise<SessionsSummaryResponse> {
+    return this.analytics.getSessionsSummary(req.user!.id, projectId, from, to);
   }
 }

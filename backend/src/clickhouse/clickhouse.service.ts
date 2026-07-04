@@ -54,6 +54,17 @@ export function toChDateTime64(ms: number): string {
   return new Date(ms).toISOString().replace('T', ' ').slice(0, 23);
 }
 
+/**
+ * Inverse of {@link toChDateTime64}: turns a ClickHouse DateTime64(3, 'UTC') value as returned by
+ * JSONEachRow ('YYYY-MM-DD HH:mm:ss.SSS') back into a standard ISO-8601 UTC instant
+ * ('YYYY-MM-DDTHH:mm:ss.SSSZ') for API responses (contracts §14: live feed / users / sessions
+ * timestamps are all `<iso>`). Pure string surgery — the value is already UTC wall-clock text with
+ * no timezone marker, so no `Date` round-trip (and its precision-loss risk) is needed.
+ */
+export function fromChDateTime64(raw: string): string {
+  return `${raw.replace(' ', 'T')}Z`;
+}
+
 @Injectable()
 export class ClickHouseService implements EventSink, OnApplicationShutdown {
   private readonly client: ClickHouseClient;

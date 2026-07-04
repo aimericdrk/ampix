@@ -249,4 +249,320 @@ describe('AnalyticsService', () => {
       expect(clickhouse.query).not.toHaveBeenCalled();
     });
   });
+
+  describe('getLiveEvents', () => {
+    function row(overrides: Record<string, unknown> = {}) {
+      return {
+        insert_id: 'i1',
+        event: 'checkout_completed',
+        distinct_id: 'u1',
+        timestamp: '2026-06-01 12:00:00.000',
+        os: 'ios',
+        app_version: '1.0.0',
+        ...overrides,
+      };
+    }
+
+    it('checks membership, maps rows, and derives next_before from the last row', async () => {
+      const clickhouse = makeClickhouse([
+        [
+          row({ timestamp: '2026-06-01 12:00:00.500' }),
+          row({ insert_id: 'i2', timestamp: '2026-06-01 11:00:00.000' }),
+        ],
+      ]);
+      const projects = makeProjects();
+      const service = makeService(clickhouse, projects);
+
+      const result = await service.getLiveEvents(USER_ID, PROJECT_ID);
+
+      expect(projects.assertMembership).toHaveBeenCalledWith(USER_ID, PROJECT_ID);
+      expect(result.events).toEqual([
+        {
+          insert_id: 'i1',
+          event: 'checkout_completed',
+          distinct_id: 'u1',
+          timestamp: '2026-06-01T12:00:00.500Z',
+          os: 'ios',
+          app_version: '1.0.0',
+        },
+        {
+          insert_id: 'i2',
+          event: 'checkout_completed',
+          distinct_id: 'u1',
+          timestamp: '2026-06-01T11:00:00.000Z',
+          os: 'ios',
+          app_version: '1.0.0',
+        },
+      ]);
+      // next_before = the LAST returned row's timestamp, not the first.
+      expect(result.next_before).toBe('2026-06-01T11:00:00.000Z');
+    });
+
+    it('next_before is null when the page is empty', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getLiveEvents(USER_ID, PROJECT_ID);
+
+      expect(result.events).toEqual([]);
+      expect(result.next_before).toBeNull();
+    });
+
+    it('binds the (clamped) limit and omits the before clause when before is absent', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getLiveEvents(USER_ID, PROJECT_ID, '9999');
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).not.toContain('before');
+      expect(params).toEqual({ projectId: PROJECT_ID, limit: 100 }); // clamped to MAX_LIMIT
+    });
+
+    it('binds `before` as a param (never string-interpolated) when present', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getLiveEvents(USER_ID, PROJECT_ID, '10', '2026-06-01T00:00:00.000Z');
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('{before:DateTime64}');
+      expect(sql).not.toContain('2026-06-01T00:00:00.000Z');
+      expect(params).toMatchObject({ before: '2026-06-01 00:00:00.000', limit: 10 });
+    });
+
+    it('propagates a membership rejection without querying ClickHouse', async () => {
+      const clickhouse = makeClickhouse();
+      const projects = makeProjects(() =>
+        Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
+      );
+      const service = makeService(clickhouse, projects);
+
+      await expect(service.getLiveEvents(USER_ID, PROJECT_ID)).rejects.toMatchObject({
+        problem: { status: 403 },
+      });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listUsers', () => {
+    it('checks membership and maps rows to the users-list shape', async () => {
+      const clickhouse = makeClickhouse([
+        [{ distinct_id: 'u1', last_seen: '2026-06-01 12:00:00.000', event_count: '5' }],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.listUsers(USER_ID, PROJECT_ID);
+
+      expect(result.users).toEqual([
+        { distinct_id: 'u1', last_seen: '2026-06-01T12:00:00.000Z', event_count: 5 },
+      ]);
+      expect(result.next_cursor).toBeNull();
+    });
+
+    it('binds `search` as a plain param value — the caller text is never concatenated into the SQL', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID, "u1'; DROP TABLE events; --");
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('startsWith(distinct_id, {search:String})');
+      expect(sql).not.toContain('DROP TABLE');
+      expect(params).toMatchObject({ search: "u1'; DROP TABLE events; --" });
+    });
+
+    it('omits the search clause entirely when search is not given', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID);
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).not.toContain('startsWith');
+      expect(params.search).toBeUndefined();
+    });
+
+    it('binds cursor and paginates: fetching limit+1 rows to compute next_cursor', async () => {
+      const clickhouse = makeClickhouse([
+        [
+          { distinct_id: 'u1', last_seen: '2026-06-01 12:00:00.000', event_count: 1 },
+          { distinct_id: 'u2', last_seen: '2026-06-01 12:00:00.000', event_count: 1 },
+        ],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.listUsers(USER_ID, PROJECT_ID, undefined, '1', 'u0');
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('distinct_id > {cursor:String}');
+      expect(params).toMatchObject({ cursor: 'u0', limit: 2 }); // limit(1) + 1 lookahead row
+      // Only `limit` (1) users are returned; the lookahead row becomes next_cursor, not a 3rd user.
+      expect(result.users).toHaveLength(1);
+      expect(result.next_cursor).toBe('u1');
+    });
+
+    it('next_cursor is null when fewer rows than limit come back (no more pages)', async () => {
+      const clickhouse = makeClickhouse([
+        [{ distinct_id: 'u1', last_seen: '2026-06-01 12:00:00.000', event_count: 1 }],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.listUsers(USER_ID, PROJECT_ID, undefined, '50');
+
+      expect(result.next_cursor).toBeNull();
+    });
+
+    it('propagates a membership rejection without querying ClickHouse', async () => {
+      const projects = makeProjects(() =>
+        Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
+      );
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, projects);
+
+      await expect(service.listUsers(USER_ID, PROJECT_ID)).rejects.toMatchObject({
+        problem: { status: 403 },
+      });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getUserProfile', () => {
+    const DISTINCT_ID = 'u1';
+
+    it('checks membership and combines profile + aggregate + recent-events rows', async () => {
+      const clickhouse = makeClickhouse([
+        [{ properties: { plan: 'pro' } }],
+        [
+          {
+            first_seen: '2026-06-01 09:00:00.000',
+            last_seen: '2026-06-02 09:00:00.000',
+            event_count: '3',
+          },
+        ],
+        [
+          { insert_id: 'i2', event: 'b', timestamp: '2026-06-02 09:00:00.000' },
+          { insert_id: 'i1', event: 'a', timestamp: '2026-06-01 09:00:00.000' },
+        ],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getUserProfile(USER_ID, PROJECT_ID, DISTINCT_ID);
+
+      expect(clickhouse.query).toHaveBeenCalledTimes(3);
+      // Every call binds distinctId as a param, never interpolates it.
+      for (const [sql, params] of clickhouse.query.mock.calls) {
+        expect(sql).toContain('{distinctId:String}');
+        expect(params).toMatchObject({ distinctId: DISTINCT_ID });
+      }
+      expect(result).toEqual({
+        distinct_id: DISTINCT_ID,
+        profile: { plan: 'pro' },
+        first_seen: '2026-06-01T09:00:00.000Z',
+        last_seen: '2026-06-02T09:00:00.000Z',
+        event_count: 3,
+        recent_events: [
+          { insert_id: 'i2', event: 'b', timestamp: '2026-06-02T09:00:00.000Z' },
+          { insert_id: 'i1', event: 'a', timestamp: '2026-06-01T09:00:00.000Z' },
+        ],
+      });
+    });
+
+    it('empty profile -> {} (never null/undefined), and unknown user -> null seens + zero count', async () => {
+      const clickhouse = makeClickhouse([
+        [],
+        [
+          {
+            first_seen: '1970-01-01 00:00:00.000',
+            last_seen: '1970-01-01 00:00:00.000',
+            event_count: '0',
+          },
+        ],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getUserProfile(USER_ID, PROJECT_ID, 'ghost');
+
+      expect(result.profile).toEqual({});
+      expect(result.first_seen).toBeNull();
+      expect(result.last_seen).toBeNull();
+      expect(result.event_count).toBe(0);
+      expect(result.recent_events).toEqual([]);
+    });
+
+    it('propagates a membership rejection without querying ClickHouse', async () => {
+      const projects = makeProjects(() =>
+        Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
+      );
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, projects);
+
+      await expect(service.getUserProfile(USER_ID, PROJECT_ID, DISTINCT_ID)).rejects.toMatchObject({
+        problem: { status: 403 },
+      });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getSessionsSummary', () => {
+    it('checks membership, reads $session_end/$duration_ms, and zero-fills by_day onto the date grid', async () => {
+      const clickhouse = makeClickhouse([
+        [{ sessions: '3', avg_duration_ms: 2000 }],
+        [{ day: '2026-06-01', sessions: '2', avg_duration_ms: 1500 }],
+      ]);
+      const projects = makeProjects();
+      const service = makeService(clickhouse, projects);
+
+      const result = await service.getSessionsSummary(
+        USER_ID,
+        PROJECT_ID,
+        '2026-06-01',
+        '2026-06-02',
+      );
+
+      expect(projects.assertMembership).toHaveBeenCalledWith(USER_ID, PROJECT_ID);
+      expect(result.sessions).toBe(3);
+      expect(result.avg_duration_ms).toBe(2000);
+      expect(result.by_day).toEqual([
+        { t: '2026-06-01', sessions: 2, avg_duration_ms: 1500 },
+        { t: '2026-06-02', sessions: 0, avg_duration_ms: 0 }, // zero-filled: no matching row
+      ]);
+    });
+
+    it('the $session_end / $duration_ms references are fixed literals, not bound params (not user input)', async () => {
+      const clickhouse = makeClickhouse([[{ sessions: 0, avg_duration_ms: 0 }], []]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getSessionsSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-01');
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain("'$session_end'");
+      expect(sql).toContain("'$duration_ms'");
+      expect(params).not.toHaveProperty('event');
+      expect(params).not.toHaveProperty('durationKey');
+    });
+
+    it('defaults to the trailing 30-day window when from/to are omitted', async () => {
+      const clickhouse = makeClickhouse([[{ sessions: 0, avg_duration_ms: 0 }], []]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getSessionsSummary(USER_ID, PROJECT_ID);
+
+      expect(clickhouse.query).toHaveBeenCalledTimes(2);
+    });
+
+    it('propagates a membership rejection without querying ClickHouse', async () => {
+      const projects = makeProjects(() =>
+        Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
+      );
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, projects);
+
+      await expect(
+        service.getSessionsSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-02'),
+      ).rejects.toMatchObject({ problem: { status: 403 } });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
 });

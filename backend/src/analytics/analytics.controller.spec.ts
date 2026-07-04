@@ -13,6 +13,10 @@ function makeController() {
     runInsightsQuery: jest.fn(),
     listEventNames: jest.fn(),
     listProperties: jest.fn(),
+    getLiveEvents: jest.fn(),
+    listUsers: jest.fn(),
+    getUserProfile: jest.fn(),
+    getSessionsSummary: jest.fn(),
   };
   const controller = new AnalyticsController(analytics as unknown as AnalyticsService);
   return { controller, analytics };
@@ -73,6 +77,107 @@ describe('AnalyticsController', () => {
       await controller.metaProperties(fakeRequest(), 'p1', undefined);
 
       expect(analytics.listProperties).toHaveBeenCalledWith(USER.id, 'p1', undefined);
+    });
+  });
+
+  describe('eventsLive', () => {
+    it('delegates to the service with the caller id, projectId, limit, and before', async () => {
+      const { controller, analytics } = makeController();
+      const response = { events: [], next_before: null };
+      analytics.getLiveEvents.mockResolvedValue(response);
+
+      const result = await controller.eventsLive(fakeRequest(), 'p1', '50', '2026-06-01T00:00:00Z');
+
+      expect(analytics.getLiveEvents).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        '50',
+        '2026-06-01T00:00:00Z',
+      );
+      expect(result).toEqual(response);
+    });
+
+    it('works with no query params at all', async () => {
+      const { controller, analytics } = makeController();
+      analytics.getLiveEvents.mockResolvedValue({ events: [], next_before: null });
+
+      await controller.eventsLive(fakeRequest(), 'p1', undefined, undefined);
+
+      expect(analytics.getLiveEvents).toHaveBeenCalledWith(USER.id, 'p1', undefined, undefined);
+    });
+  });
+
+  describe('users', () => {
+    it('delegates to the service with the caller id, projectId, search, limit, and cursor', async () => {
+      const { controller, analytics } = makeController();
+      const response = { users: [], next_cursor: null };
+      analytics.listUsers.mockResolvedValue(response);
+
+      const result = await controller.users(fakeRequest(), 'p1', 'alice', '20', 'u5');
+
+      expect(analytics.listUsers).toHaveBeenCalledWith(USER.id, 'p1', 'alice', '20', 'u5');
+      expect(result).toEqual(response);
+    });
+  });
+
+  describe('userProfile', () => {
+    it('delegates to the service with the caller id, projectId, and distinctId path param', async () => {
+      const { controller, analytics } = makeController();
+      const response = {
+        distinct_id: 'u1',
+        profile: {},
+        first_seen: null,
+        last_seen: null,
+        event_count: 0,
+        recent_events: [],
+      };
+      analytics.getUserProfile.mockResolvedValue(response);
+
+      const result = await controller.userProfile(fakeRequest(), 'p1', 'u1');
+
+      expect(analytics.getUserProfile).toHaveBeenCalledWith(USER.id, 'p1', 'u1');
+      expect(result).toEqual(response);
+    });
+  });
+
+  describe('sessionsSummary', () => {
+    it('delegates to the service with the caller id, projectId, from, and to', async () => {
+      const { controller, analytics } = makeController();
+      const response = { sessions: 0, avg_duration_ms: 0, by_day: [] };
+      analytics.getSessionsSummary.mockResolvedValue(response);
+
+      const result = await controller.sessionsSummary(
+        fakeRequest(),
+        'p1',
+        '2026-06-01',
+        '2026-06-02',
+      );
+
+      expect(analytics.getSessionsSummary).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        '2026-06-01',
+        '2026-06-02',
+      );
+      expect(result).toEqual(response);
+    });
+
+    it('works with no from/to query params at all', async () => {
+      const { controller, analytics } = makeController();
+      analytics.getSessionsSummary.mockResolvedValue({
+        sessions: 0,
+        avg_duration_ms: 0,
+        by_day: [],
+      });
+
+      await controller.sessionsSummary(fakeRequest(), 'p1', undefined, undefined);
+
+      expect(analytics.getSessionsSummary).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        undefined,
+        undefined,
+      );
     });
   });
 });
