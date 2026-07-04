@@ -41,9 +41,7 @@ class PurchaseAutocapture {
     @visibleForTesting AutocaptureTrackFn? track,
   }) : _purchaseStream =
            purchaseStream ??
-           const EventChannel(
-             purchasesChannelName,
-           ).receiveBroadcastStream(),
+           const EventChannel(purchasesChannelName).receiveBroadcastStream(),
        _track = track ?? _defaultTrack;
 
   final Stream<dynamic> _purchaseStream;

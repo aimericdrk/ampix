@@ -63,25 +63,22 @@ void main() {
       await controller.close();
     });
 
-    test(
-      r'a native app_store payload emits $in_app_purchase with the §4 '
-      r'properties mapped and $purchase_source "native"',
-      () async {
-        controller.add(_nativePayload());
-        await pumpEventQueue();
+    test(r'a native app_store payload emits $in_app_purchase with the §4 '
+        r'properties mapped and $purchase_source "native"', () async {
+      controller.add(_nativePayload());
+      await pumpEventQueue();
 
-        expect(emitted, hasLength(1));
-        final event = emitted.single;
-        expect(event.event, r'$in_app_purchase');
-        expect(event.properties[r'$product_id'], 'com.myampmix.pro_month');
-        expect(event.properties[r'$price'], 9.99);
-        expect(event.properties[r'$currency'], 'USD');
-        expect(event.properties[r'$quantity'], 1);
-        expect(event.properties[r'$transaction_id'], 'tx_1000000123456789');
-        expect(event.properties[r'$store'], 'app_store');
-        expect(event.properties[r'$purchase_source'], 'native');
-      },
-    );
+      expect(emitted, hasLength(1));
+      final event = emitted.single;
+      expect(event.event, r'$in_app_purchase');
+      expect(event.properties[r'$product_id'], 'com.myampmix.pro_month');
+      expect(event.properties[r'$price'], 9.99);
+      expect(event.properties[r'$currency'], 'USD');
+      expect(event.properties[r'$quantity'], 1);
+      expect(event.properties[r'$transaction_id'], 'tx_1000000123456789');
+      expect(event.properties[r'$store'], 'app_store');
+      expect(event.properties[r'$purchase_source'], 'native');
+    });
 
     test(
       r'a native play_store payload maps through to $store "play_store"',
@@ -143,11 +140,7 @@ void main() {
         ..add('not a map')
         ..add(<String, Object?>{}) // missing everything
         ..add({'productId': '', 'transactionId': 'tx', 'store': 'app_store'})
-        ..add({
-          'productId': 'sku',
-          'transactionId': '',
-          'store': 'app_store',
-        })
+        ..add({'productId': 'sku', 'transactionId': '', 'store': 'app_store'})
         ..add({'productId': 'sku', 'transactionId': 'tx', 'store': 'nope'})
         ..add({'productId': 'sku', 'transactionId': 'tx', 'store': null})
         ..add({'productId': null, 'transactionId': 'tx', 'store': 'app_store'})
@@ -195,22 +188,21 @@ void main() {
       await purchaseController.close();
     });
 
-    Future<void> initSdk({required bool autocapturePurchases}) =>
-        MyAmpMix.init(
-          'mam_0123456789abcdef0123456789abcdef',
-          config: MyAmpMixConfig(
-            serverUrl: 'http://localhost:8080',
-            autocapturePurchases: autocapturePurchases,
-          ),
-          overrides: SdkOverrides(
-            clock: clock,
-            database: database,
-            keyValueStore: keyValueStore,
-            contextDataSource: FakeContextDataSource(),
-            random: FixedRandom(0.5),
-            purchaseStream: purchaseController.stream,
-          ),
-        );
+    Future<void> initSdk({required bool autocapturePurchases}) => MyAmpMix.init(
+      'mam_0123456789abcdef0123456789abcdef',
+      config: MyAmpMixConfig(
+        serverUrl: 'http://localhost:8080',
+        autocapturePurchases: autocapturePurchases,
+      ),
+      overrides: SdkOverrides(
+        clock: clock,
+        database: database,
+        keyValueStore: keyValueStore,
+        contextDataSource: FakeContextDataSource(),
+        random: FixedRandom(0.5),
+        purchaseStream: purchaseController.stream,
+      ),
+    );
 
     // Asserts against the injected local queue directly, exactly like
     // myampmix_observer_test.dart's facade-wired group: no real network
@@ -220,33 +212,25 @@ void main() {
       for (final row in await store.oldest(1000)) row.event,
     ];
 
-    test(
-      r'autocapturePurchases: true delivers a full-context $in_app_purchase '
-      'to the local queue via MyAmpMix.instance.track',
-      () async {
-        await initSdk(autocapturePurchases: true);
-        purchaseController.add(_nativePayload());
-        await pumpEventQueue();
+    test(r'autocapturePurchases: true delivers a full-context $in_app_purchase '
+        'to the local queue via MyAmpMix.instance.track', () async {
+      await initSdk(autocapturePurchases: true);
+      purchaseController.add(_nativePayload());
+      await pumpEventQueue();
 
-        final events = await queuedEvents();
-        final purchase = events.firstWhere(
-          (e) => e.event == r'$in_app_purchase',
-        );
-        expect(purchase.properties[r'$product_id'], 'com.myampmix.pro_month');
-        expect(purchase.properties[r'$price'], 9.99);
-        expect(purchase.properties[r'$currency'], 'USD');
-        expect(purchase.properties[r'$quantity'], 1);
-        expect(
-          purchase.properties[r'$transaction_id'],
-          'tx_1000000123456789',
-        );
-        expect(purchase.properties[r'$store'], 'app_store');
-        expect(purchase.properties[r'$purchase_source'], 'native');
-        expect(purchase.distinctId, isNotEmpty);
-        expect(purchase.sessionId, isNotEmpty);
-        expect(purchase.context.sdkVersion, '0.1.0');
-      },
-    );
+      final events = await queuedEvents();
+      final purchase = events.firstWhere((e) => e.event == r'$in_app_purchase');
+      expect(purchase.properties[r'$product_id'], 'com.myampmix.pro_month');
+      expect(purchase.properties[r'$price'], 9.99);
+      expect(purchase.properties[r'$currency'], 'USD');
+      expect(purchase.properties[r'$quantity'], 1);
+      expect(purchase.properties[r'$transaction_id'], 'tx_1000000123456789');
+      expect(purchase.properties[r'$store'], 'app_store');
+      expect(purchase.properties[r'$purchase_source'], 'native');
+      expect(purchase.distinctId, isNotEmpty);
+      expect(purchase.sessionId, isNotEmpty);
+      expect(purchase.context.sdkVersion, '0.1.0');
+    });
 
     test(
       r'autocapturePurchases: false suppresses $in_app_purchase entirely',
@@ -289,9 +273,7 @@ void main() {
 
         final events = await queuedEvents();
         final manual = events.firstWhere((e) => e.event == 'purchase');
-        final native = events.firstWhere(
-          (e) => e.event == r'$in_app_purchase',
-        );
+        final native = events.firstWhere((e) => e.event == r'$in_app_purchase');
 
         expect(manual.event.startsWith(r'$'), isFalse);
         expect(native.event.startsWith(r'$'), isTrue);
@@ -302,19 +284,16 @@ void main() {
       },
     );
 
-    test(
-      'a malformed native payload through the real facade never throws and '
-      'is dropped, while an unrelated track() still goes through',
-      () async {
-        await initSdk(autocapturePurchases: true);
-        purchaseController.add({'unexpected': 'shape'});
-        MyAmpMix.instance.track('after_malformed');
-        await pumpEventQueue();
+    test('a malformed native payload through the real facade never throws and '
+        'is dropped, while an unrelated track() still goes through', () async {
+      await initSdk(autocapturePurchases: true);
+      purchaseController.add({'unexpected': 'shape'});
+      MyAmpMix.instance.track('after_malformed');
+      await pumpEventQueue();
 
-        final events = await queuedEvents();
-        expect(events.any((e) => e.event == 'after_malformed'), isTrue);
-        expect(events.where((e) => e.event == r'$in_app_purchase'), isEmpty);
-      },
-    );
+      final events = await queuedEvents();
+      expect(events.any((e) => e.event == 'after_malformed'), isTrue);
+      expect(events.where((e) => e.event == r'$in_app_purchase'), isEmpty);
+    });
   });
 }
