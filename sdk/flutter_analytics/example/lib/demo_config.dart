@@ -21,4 +21,4 @@ const String demoServerUrl = 'http://localhost:8080';
 /// server), uploads get 401, but the app still runs normally and the on-screen
 /// Event Log still shows every SDK call, because the SDK never throws into the
 /// host app regardless of network or auth failures.
-const String demoToken = 'mam_00000000000000000000000000000000';
+const String demoToken = 'mam_a5857ba6d091bf8f6c96d7f84f0b35db';

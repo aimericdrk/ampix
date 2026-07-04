@@ -8,7 +8,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const DEMO_TOKEN = 'mam_00000000000000000000000000000000';
+const DEMO_TOKEN = 'mam_a5857ba6d091bf8f6c96d7f84f0b35db';
 
 async function main() {
   const existing = await prisma.sdkToken.findUnique({ where: { token: DEMO_TOKEN } });

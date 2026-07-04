@@ -9,5 +9,16 @@ coverage/
 # (the SDK it depends on is a path dependency resolved fresh each run).
 pubspec.lock
 
+# Generated platform scaffolding — recreated by `flutter create .` when you run
+# the example; source (lib/, test/, pubspec.yaml) is what's tracked.
+/android/
+/ios/
+/linux/
+/macos/
+/windows/
+/web/
+.metadata
+*.iml
+
 # OS / editor cruft
 .DS_Store
