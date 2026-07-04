@@ -1,14 +1,50 @@
 import { Link } from '@tanstack/react-router';
+import { useState, type FormEvent } from 'react';
+import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from '../../../components/ui/dialog';
+import { Input } from '../../../components/ui/input';
+import { useToast } from '../../../components/ui/toast';
+import { useOrgRole } from '../../orgs/api';
+import { useCurrentOrgId } from '../../orgs/store';
 import { ApiError } from '../../../lib/api/problem';
-import { useProjects } from '../api';
+import { useCreateProject, useProjects } from '../api';
 
 export function ProjectsPage() {
   const { data, isPending, error } = useProjects();
+  const currentOrgId = useCurrentOrgId();
+  const role = useOrgRole(currentOrgId ?? undefined);
+  const canCreate = role === 'admin';
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <section>
-      <h1 className="mb-6 text-2xl font-semibold">Projects</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Projects</h1>
+        {currentOrgId && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                disabled={!canCreate}
+                title={canCreate ? undefined : 'Only organization admins can create projects'}
+              >
+                New project
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogTitle>New project</DialogTitle>
+              <DialogDescription>Creates a project with a fresh ingest token.</DialogDescription>
+              <NewProjectForm orgId={currentOrgId} onCreated={() => setDialogOpen(false)} />
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
       {isPending && <p role="status">Loading projects…</p>}
       {error && (
         <p role="alert" className="text-danger">
@@ -36,5 +72,61 @@ export function ProjectsPage() {
       </div>
       {data && data.projects.length === 0 && <p className="text-text-muted">No projects yet.</p>}
     </section>
+  );
+}
+
+function NewProjectForm({ orgId, onCreated }: { orgId: string; onCreated: () => void }) {
+  const { toast } = useToast();
+  const [name, setName] = useState('');
+  const createProject = useCreateProject(orgId);
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    createProject.mutate(
+      { name: name.trim() },
+      {
+        onSuccess: () => {
+          toast({ title: 'Project created' });
+          setName('');
+          onCreated();
+        },
+        onError: (error) =>
+          toast({
+            title: 'Could not create project',
+            description: error instanceof ApiError ? error.problem.title : 'Something went wrong.',
+            variant: 'error',
+          }),
+      },
+    );
+  };
+
+  const problem = createProject.error instanceof ApiError ? createProject.error.problem : null;
+
+  return (
+    <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
+      <div>
+        <label htmlFor="new-project-name" className="mb-1 block text-sm font-medium">
+          Project name
+        </label>
+        <Input
+          id="new-project-name"
+          value={name}
+          aria-invalid={Boolean(problem)}
+          onChange={(e) => {
+            setName(e.target.value);
+            createProject.reset();
+          }}
+        />
+      </div>
+      {problem && (
+        <p role="alert" className="text-sm text-danger">
+          {problem.title}
+        </p>
+      )}
+      <Button type="submit" className="w-full" disabled={createProject.isPending || !name.trim()}>
+        {createProject.isPending ? 'Creating…' : 'Create project'}
+      </Button>
+    </form>
   );
 }

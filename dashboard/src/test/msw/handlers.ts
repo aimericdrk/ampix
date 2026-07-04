@@ -1,13 +1,28 @@
 import { http, HttpResponse } from 'msw';
 import type {
   Activate2faResponse,
+  AcceptInvitationResponse,
   AuthResponse,
   AuthUser,
+  CreatedProject,
+  CreatedToken,
+  CreateInvitationResponse,
+  CreateOrgResponse,
   EventSummaryResponse,
+  Invitation,
+  InvitationPreview,
+  ListInvitationsResponse,
+  ListMembersResponse,
+  ListOrgsResponse,
   ListProjectsResponse,
+  ListTokensResponse,
   MeResponse,
+  Org,
+  OrgRole,
   Project,
+  RenameOrgResponse,
   Setup2faResponse,
+  UpdateProjectResponse,
 } from '../../lib/api/types';
 
 export const TEST_USER: AuthUser = {
@@ -78,7 +93,12 @@ const TOKEN_USERS: Record<string, AuthUser> = {
 };
 
 function userForToken(token: string | null): AuthUser | null {
-  return token ? (TOKEN_USERS[token] ?? null) : null;
+  if (!token) return null;
+  const base = TOKEN_USERS[token];
+  if (!base) return null;
+  // Reflects a PATCH /auth/me rename without mutating the shared fixture constant.
+  const overrideName = orgsState.userNames.get(base.id);
+  return overrideName ? { ...base, name: overrideName } : base;
 }
 
 /** Mutable mock-server state; reset between tests via resetAuthState(). */
@@ -93,6 +113,11 @@ export const authState = {
   pendingSecret: new Map<string, string>(),
   /** Unused recovery codes per email — single-use, consumed by /2fa/verify or /2fa/disable. */
   recoveryCodes: new Map<string, Set<string>>([[MFA_USER.email, new Set([MFA_RECOVERY_CODE])]]),
+  /** Current password per email — mutable so POST /auth/password can be verified end-to-end. */
+  passwords: new Map<string, string>([
+    [TEST_USER.email, TEST_PASSWORD],
+    [MFA_USER.email, MFA_PASSWORD],
+  ]),
 };
 
 export function resetAuthState(): void {
@@ -102,6 +127,10 @@ export function resetAuthState(): void {
   authState.twoFactorEnabled = new Set([MFA_USER.email]);
   authState.pendingSecret = new Map();
   authState.recoveryCodes = new Map([[MFA_USER.email, new Set([MFA_RECOVERY_CODE])]]);
+  authState.passwords = new Map([
+    [TEST_USER.email, TEST_PASSWORD],
+    [MFA_USER.email, MFA_PASSWORD],
+  ]);
 }
 
 function problem(status: number, title: string, extra?: Record<string, unknown>) {
@@ -128,6 +157,176 @@ function checkCode(email: string, code: string | undefined): boolean {
     return true;
   }
   return false;
+}
+
+// --- Tenancy management fixtures (contracts §13) ---
+
+/** Ada's Workspace — TEST_USER is admin, MFA_USER is analyst. Matches TEST_PROJECT.org_id/org_name. */
+export const TEST_ORG_ID = TEST_PROJECT.org_id;
+export const TEST_ORG_NAME = TEST_PROJECT.org_name;
+
+/** A second org where TEST_USER is only a viewer — used to test role-gated UI. */
+export const VIEWER_ORG_ID = '0197f6a0-0000-7000-8000-0000000000cc';
+export const VIEWER_ORG_NAME = 'Read-Only Co';
+
+/**
+ * A third org neither fixture user belongs to yet — the target of the fixed invitation below, so
+ * accepting it exercises real membership creation rather than the "already a member" no-op path.
+ */
+export const INVITE_ONLY_ORG_ID = '0197f6a0-0000-7000-8000-0000000000dd';
+export const INVITE_ONLY_ORG_NAME = 'New Client Co';
+
+/** A fixed, never-expired invitation token for the invite-accept happy-path tests. */
+export const FIXED_INVITE_TOKEN = 'fixed-invite-token-abc123';
+export const FIXED_INVITE_ROLE: OrgRole = 'analyst';
+
+interface MembershipRecord {
+  orgId: string;
+  user: AuthUser;
+  role: OrgRole;
+}
+
+interface OrgRecord {
+  id: string;
+  name: string;
+}
+
+interface InvitationRecord {
+  id: string;
+  orgId: string;
+  role: OrgRole;
+  token: string;
+  expiresAt: string;
+  acceptedBy: string | null;
+}
+
+interface ProjectRecord {
+  id: string;
+  orgId: string;
+  name: string;
+  timezone: string;
+}
+
+interface TokenRecord {
+  id: string;
+  projectId: string;
+  token: string;
+  label: string;
+  createdAt: string;
+  revoked: boolean;
+}
+
+function futureIso(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function initialOrgsState() {
+  return {
+    orgs: [
+      { id: TEST_ORG_ID, name: TEST_ORG_NAME },
+      { id: VIEWER_ORG_ID, name: VIEWER_ORG_NAME },
+      { id: INVITE_ONLY_ORG_ID, name: INVITE_ONLY_ORG_NAME },
+    ] as OrgRecord[],
+    memberships: [
+      { orgId: TEST_ORG_ID, user: TEST_USER, role: 'admin' as OrgRole },
+      { orgId: TEST_ORG_ID, user: MFA_USER, role: 'analyst' as OrgRole },
+      { orgId: VIEWER_ORG_ID, user: TEST_USER, role: 'viewer' as OrgRole },
+      { orgId: VIEWER_ORG_ID, user: MFA_USER, role: 'admin' as OrgRole },
+    ] as MembershipRecord[],
+    invitations: [
+      {
+        id: 'invitation-fixed-1',
+        orgId: INVITE_ONLY_ORG_ID,
+        role: FIXED_INVITE_ROLE,
+        token: FIXED_INVITE_TOKEN,
+        expiresAt: futureIso(7),
+        acceptedBy: null,
+      },
+    ] as InvitationRecord[],
+    projects: [
+      {
+        id: TEST_PROJECT.id,
+        orgId: TEST_PROJECT.org_id,
+        name: TEST_PROJECT.name,
+        timezone: TEST_PROJECT.timezone,
+      },
+    ] as ProjectRecord[],
+    tokens: [
+      {
+        id: 'token-1',
+        projectId: TEST_PROJECT.id,
+        token: TEST_PROJECT.ingest_token,
+        label: 'Default',
+        createdAt: futureIso(-30),
+        revoked: false,
+      },
+    ] as TokenRecord[],
+    /** Display-name overrides from PATCH /auth/me, keyed by user id. */
+    userNames: new Map<string, string>(),
+    nextId: 1,
+  };
+}
+
+export const orgsState = initialOrgsState();
+
+export function resetOrgsState(): void {
+  const fresh = initialOrgsState();
+  orgsState.orgs = fresh.orgs;
+  orgsState.memberships = fresh.memberships;
+  orgsState.invitations = fresh.invitations;
+  orgsState.projects = fresh.projects;
+  orgsState.tokens = fresh.tokens;
+  orgsState.userNames = fresh.userNames;
+  orgsState.nextId = fresh.nextId;
+}
+
+function nextId(prefix: string): string {
+  orgsState.nextId += 1;
+  return `${prefix}-${orgsState.nextId}`;
+}
+
+function generateToken(): string {
+  let hex = '';
+  for (let i = 0; i < 32; i += 1) hex += Math.floor(Math.random() * 16).toString(16);
+  return `mam_${hex}`;
+}
+
+function membershipsFor(userId: string): MembershipRecord[] {
+  return orgsState.memberships.filter((m) => m.user.id === userId);
+}
+
+function roleFor(orgId: string, userId: string): OrgRole | undefined {
+  return orgsState.memberships.find((m) => m.orgId === orgId && m.user.id === userId)?.role;
+}
+
+function adminCount(orgId: string): number {
+  return orgsState.memberships.filter((m) => m.orgId === orgId && m.role === 'admin').length;
+}
+
+function orgById(orgId: string): OrgRecord | undefined {
+  return orgsState.orgs.find((o) => o.id === orgId);
+}
+
+function projectRecordById(projectId: string): ProjectRecord | undefined {
+  return orgsState.projects.find((p) => p.id === projectId);
+}
+
+/** The requester's `ingest_token` for a project — its earliest non-revoked token. */
+function ingestTokenFor(projectId: string): string {
+  const active = orgsState.tokens.find((t) => t.projectId === projectId && !t.revoked);
+  return active?.token ?? '';
+}
+
+function toProject(record: ProjectRecord): Project {
+  const org = orgById(record.orgId);
+  return {
+    id: record.id,
+    org_id: record.orgId,
+    org_name: org?.name ?? '',
+    name: record.name,
+    timezone: record.timezone,
+    ingest_token: ingestTokenFor(record.id),
+  };
 }
 
 export const handlers = [
@@ -244,16 +443,263 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  // --- Account (self) management (contracts §13) ---
+
+  http.patch('/api/v1/auth/me', async ({ request }) => {
+    const user = userForToken(bearerToken(request));
+    if (!user) return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as { name?: string };
+    if (!body.name?.trim()) {
+      return problem(400, 'Validation failed', { errors: { name: ['required'] } });
+    }
+    orgsState.userNames.set(user.id, body.name.trim());
+    const updated: AuthUser = { ...user, name: body.name.trim() };
+    return HttpResponse.json(updated);
+  }),
+
+  http.post('/api/v1/auth/password', async ({ request }) => {
+    const user = userForToken(bearerToken(request));
+    if (!user) return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as { current_password?: string; new_password?: string };
+    const stored = authState.passwords.get(user.email);
+    if (!body.current_password || body.current_password !== stored) {
+      return problem(401, 'Current password is incorrect');
+    }
+    if (!body.new_password || body.new_password.length < 8) {
+      return problem(400, 'Validation failed', {
+        errors: { new_password: ['must be at least 8 characters'] },
+      });
+    }
+    authState.passwords.set(user.email, body.new_password);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // --- Organizations (contracts §13) ---
+
+  http.post('/api/v1/orgs', async ({ request }) => {
+    const user = userForToken(bearerToken(request));
+    if (!user) return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as { name?: string };
+    if (!body.name?.trim()) {
+      return problem(400, 'Validation failed', { errors: { name: ['required'] } });
+    }
+    const org: OrgRecord = { id: nextId('org'), name: body.name.trim() };
+    orgsState.orgs.push(org);
+    orgsState.memberships.push({ orgId: org.id, user, role: 'admin' });
+    const response: CreateOrgResponse = { id: org.id, name: org.name, role: 'admin' };
+    return HttpResponse.json(response, { status: 201 });
+  }),
+
+  http.get('/api/v1/orgs', ({ request }) => {
+    const user = userForToken(bearerToken(request));
+    if (!user) return problem(401, 'Access token invalid or expired');
+    const orgs: Org[] = membershipsFor(user.id).map((m) => {
+      const org = orgById(m.orgId);
+      return { id: m.orgId, name: org?.name ?? '', role: m.role };
+    });
+    const response: ListOrgsResponse = { orgs };
+    return HttpResponse.json(response);
+  }),
+
+  http.patch('/api/v1/orgs/:orgId', async ({ request, params }) => {
+    const user = userForToken(bearerToken(request));
+    if (!user) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    const org = orgById(orgId);
+    if (!org) return problem(404, 'Organization not found');
+    const role = roleFor(orgId, user.id);
+    if (!role) return problem(403, 'Not a member of this organization');
+    if (role !== 'admin') return problem(403, 'Only admins can rename the organization');
+    const body = (await request.json()) as { name?: string };
+    if (!body.name?.trim()) {
+      return problem(400, 'Validation failed', { errors: { name: ['required'] } });
+    }
+    org.name = body.name.trim();
+    const response: RenameOrgResponse = { id: org.id, name: org.name };
+    return HttpResponse.json(response);
+  }),
+
+  // --- Members & permissions (contracts §13) ---
+
+  http.get('/api/v1/orgs/:orgId/members', ({ request, params }) => {
+    const user = userForToken(bearerToken(request));
+    if (!user) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    if (!roleFor(orgId, user.id)) return problem(403, 'Not a member of this organization');
+    const response: ListMembersResponse = {
+      members: orgsState.memberships
+        .filter((m) => m.orgId === orgId)
+        .map((m) => ({ user: m.user, role: m.role })),
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.patch('/api/v1/orgs/:orgId/members/:userId', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    const targetUserId = params.userId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can change member roles');
+    const membership = orgsState.memberships.find(
+      (m) => m.orgId === orgId && m.user.id === targetUserId,
+    );
+    if (!membership) return problem(404, 'Member not found');
+    const body = (await request.json()) as { role?: OrgRole };
+    if (!body.role) return problem(400, 'Validation failed', { errors: { role: ['required'] } });
+    if (membership.role === 'admin' && body.role !== 'admin' && adminCount(orgId) <= 1) {
+      return problem(409, 'Cannot demote the last admin');
+    }
+    membership.role = body.role;
+    // apiFetch always parses non-204 responses as JSON — an empty body would throw client-side.
+    return HttpResponse.json({ id: membership.user.id, role: membership.role });
+  }),
+
+  http.delete('/api/v1/orgs/:orgId/members/:userId', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    const targetUserId = params.userId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can remove members');
+    const membership = orgsState.memberships.find(
+      (m) => m.orgId === orgId && m.user.id === targetUserId,
+    );
+    if (!membership) return problem(404, 'Member not found');
+    if (membership.role === 'admin' && adminCount(orgId) <= 1) {
+      return problem(409, 'Cannot remove the last admin');
+    }
+    orgsState.memberships = orgsState.memberships.filter(
+      (m) => !(m.orgId === orgId && m.user.id === targetUserId),
+    );
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // --- Invitations (contracts §13) ---
+
+  http.post('/api/v1/orgs/:orgId/invitations', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can create invitations');
+    const body = (await request.json()) as { role?: OrgRole };
+    if (!body.role) return problem(400, 'Validation failed', { errors: { role: ['required'] } });
+    const invitation: InvitationRecord = {
+      id: nextId('invitation'),
+      orgId,
+      role: body.role,
+      token: nextId('invite-token'),
+      expiresAt: futureIso(7),
+      acceptedBy: null,
+    };
+    orgsState.invitations.push(invitation);
+    const response: CreateInvitationResponse = {
+      id: invitation.id,
+      role: invitation.role,
+      token: invitation.token,
+      invite_path: `/invite/${invitation.token}`,
+      expires_at: invitation.expiresAt,
+    };
+    return HttpResponse.json(response, { status: 201 });
+  }),
+
+  http.get('/api/v1/orgs/:orgId/invitations', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can list invitations');
+    const now = Date.now();
+    const invitations: Invitation[] = orgsState.invitations
+      .filter(
+        (inv) => inv.orgId === orgId && !inv.acceptedBy && new Date(inv.expiresAt).getTime() > now,
+      )
+      .map((inv) => ({ id: inv.id, role: inv.role, expires_at: inv.expiresAt }));
+    const response: ListInvitationsResponse = { invitations };
+    return HttpResponse.json(response);
+  }),
+
+  http.delete('/api/v1/orgs/:orgId/invitations/:invitationId', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can revoke invitations');
+    const invitationId = params.invitationId as string;
+    const exists = orgsState.invitations.some(
+      (inv) => inv.id === invitationId && inv.orgId === orgId,
+    );
+    if (!exists) return problem(404, 'Invitation not found');
+    orgsState.invitations = orgsState.invitations.filter((inv) => inv.id !== invitationId);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get('/api/v1/invitations/:token', ({ params }) => {
+    const token = params.token as string;
+    const invitation = orgsState.invitations.find((inv) => inv.token === token);
+    if (!invitation) return problem(404, 'Invitation not found');
+    if (invitation.acceptedBy || new Date(invitation.expiresAt).getTime() <= Date.now()) {
+      return problem(410, 'This invitation has expired or has already been used');
+    }
+    const org = orgById(invitation.orgId);
+    const response: InvitationPreview = {
+      org_name: org?.name ?? '',
+      role: invitation.role,
+      expires_at: invitation.expiresAt,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/invitations/:token/accept', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const token = params.token as string;
+    const invitation = orgsState.invitations.find((inv) => inv.token === token);
+    if (!invitation) return problem(404, 'Invitation not found');
+
+    const existing = orgsState.memberships.find(
+      (m) => m.orgId === invitation.orgId && m.user.id === caller.id,
+    );
+    if (existing) {
+      const response: AcceptInvitationResponse = { org_id: invitation.orgId, role: existing.role };
+      return HttpResponse.json(response);
+    }
+
+    if (new Date(invitation.expiresAt).getTime() <= Date.now()) {
+      return problem(410, 'This invitation has expired or has already been used');
+    }
+    if (invitation.acceptedBy && invitation.acceptedBy !== caller.id) {
+      return problem(410, 'This invitation has expired or has already been used');
+    }
+
+    orgsState.memberships.push({ orgId: invitation.orgId, user: caller, role: invitation.role });
+    invitation.acceptedBy = caller.id;
+    const response: AcceptInvitationResponse = { org_id: invitation.orgId, role: invitation.role };
+    return HttpResponse.json(response);
+  }),
+
+  // --- Projects (contracts §12, §13) ---
+
   http.get('/api/v1/projects', ({ request }) => {
     const token = bearerToken(request);
     if (!token || !ACCEPTED_TOKENS.has(token)) {
       return problem(401, 'Access token invalid or expired');
     }
-    const response: ListProjectsResponse = { projects: [TEST_PROJECT] };
+    const response: ListProjectsResponse = { projects: orgsState.projects.map(toProject) };
     return HttpResponse.json(response);
   }),
-
-  // --- Projects & minimal analytics read (contracts §12) ---
 
   http.get('/api/v1/projects/:projectId/events/summary', ({ request, params }) => {
     const token = bearerToken(request);
@@ -265,5 +711,135 @@ export const handlers = [
       ...EVENT_SUMMARY_FIXTURE,
     };
     return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/orgs/:orgId/projects', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can create projects');
+    const body = (await request.json()) as { name?: string; timezone?: string };
+    if (!body.name?.trim()) {
+      return problem(400, 'Validation failed', { errors: { name: ['required'] } });
+    }
+    const record: ProjectRecord = {
+      id: nextId('project'),
+      orgId,
+      name: body.name.trim(),
+      timezone: body.timezone?.trim() || 'UTC',
+    };
+    orgsState.projects.push(record);
+    const token: TokenRecord = {
+      id: nextId('token'),
+      projectId: record.id,
+      token: generateToken(),
+      label: 'Default',
+      createdAt: new Date().toISOString(),
+      revoked: false,
+    };
+    orgsState.tokens.push(token);
+    const response: CreatedProject = {
+      id: record.id,
+      org_id: orgId,
+      name: record.name,
+      timezone: record.timezone,
+      ingest_token: token.token,
+    };
+    return HttpResponse.json(response, { status: 201 });
+  }),
+
+  http.patch('/api/v1/projects/:projectId', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can update the project');
+    const body = (await request.json()) as { name?: string; timezone?: string };
+    if (body.name?.trim()) record.name = body.name.trim();
+    if (body.timezone?.trim()) record.timezone = body.timezone.trim();
+    const response: UpdateProjectResponse = {
+      id: record.id,
+      name: record.name,
+      timezone: record.timezone,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.delete('/api/v1/projects/:projectId', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can delete the project');
+    orgsState.projects = orgsState.projects.filter((p) => p.id !== projectId);
+    orgsState.tokens = orgsState.tokens.filter((t) => t.projectId !== projectId);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // --- Tokens (contracts §13) ---
+
+  http.get('/api/v1/projects/:projectId/tokens', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can view tokens');
+    const response: ListTokensResponse = {
+      tokens: orgsState.tokens
+        .filter((t) => t.projectId === projectId && !t.revoked)
+        .map((t) => ({ id: t.id, token: t.token, label: t.label, created_at: t.createdAt })),
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/tokens', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can create tokens');
+    const body = (await request.json()) as { label?: string };
+    const token: TokenRecord = {
+      id: nextId('token'),
+      projectId,
+      token: generateToken(),
+      label: body.label?.trim() || 'Untitled',
+      createdAt: new Date().toISOString(),
+      revoked: false,
+    };
+    orgsState.tokens.push(token);
+    const response: CreatedToken = { id: token.id, token: token.token, label: token.label };
+    return HttpResponse.json(response, { status: 201 });
+  }),
+
+  http.delete('/api/v1/projects/:projectId/tokens/:tokenId', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (callerRole !== 'admin') return problem(403, 'Only admins can revoke tokens');
+    const tokenId = params.tokenId as string;
+    const token = orgsState.tokens.find((t) => t.id === tokenId && t.projectId === projectId);
+    if (!token) return problem(404, 'Token not found');
+    token.revoked = true;
+    return new HttpResponse(null, { status: 204 });
   }),
 ];

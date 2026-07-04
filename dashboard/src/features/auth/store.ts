@@ -36,6 +36,12 @@ export const authStore = {
     state = { accessToken: null, user: null, status: 'anonymous' };
     emit();
   },
+  /** Reflects a self-service profile change (e.g. `PATCH /auth/me`) without touching the token. */
+  updateUser(user: AuthUser): void {
+    if (!state.user) return;
+    state = { ...state, user };
+    emit();
+  },
   /** Back to the fresh-page-load state ('unknown'). Used by tests and full logout-reload paths. */
   reset(): void {
     state = INITIAL_STATE;

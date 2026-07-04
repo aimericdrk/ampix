@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../auth/store';
@@ -21,13 +21,15 @@ describe('ProjectDetailPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}`);
 
     expect(await screen.findByRole('heading', { name: TEST_PROJECT.name })).toBeInTheDocument();
-    expect(screen.getByText(TEST_PROJECT.org_name)).toBeInTheDocument();
-    expect(screen.getByText(TEST_PROJECT.ingest_token)).toBeInTheDocument();
+    // Scoped to <main>: the org name also appears in the sidebar's org switcher.
+    const main = screen.getByRole('main');
+    expect(within(main).getByText(TEST_PROJECT.org_name)).toBeInTheDocument();
+    expect(within(main).getByText(TEST_PROJECT.ingest_token)).toBeInTheDocument();
 
     expect(await screen.findByText('Total events')).toBeInTheDocument();
     expect(screen.getByText(String(EVENT_SUMMARY_FIXTURE.total))).toBeInTheDocument();
 
-    const table = screen.getByRole('table');
+    const table = within(main).getByRole('table', { name: 'Events by name' });
     for (const row of EVENT_SUMMARY_FIXTURE.by_event) {
       expect(screen.getByText(row.event)).toBeInTheDocument();
       expect(table).toHaveTextContent(String(row.count));

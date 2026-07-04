@@ -8,14 +8,17 @@ import {
 import { AppLayout } from './components/layout/AppLayout';
 import { NotFoundPage } from './components/NotFoundPage';
 import { RouteErrorPage } from './components/RouteErrorPage';
+import { AccountPage } from './features/auth/components/AccountPage';
 import { InvitePage } from './features/auth/components/InvitePage';
 import { LoginPage } from './features/auth/components/LoginPage';
 import { SecuritySettingsPage } from './features/auth/components/SecuritySettingsPage';
 import { SignupPage } from './features/auth/components/SignupPage';
 import { authStore } from './features/auth/store';
+import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
 import { restoreSession } from './lib/api/client';
+import { sanitizeRedirect } from './lib/safe-redirect';
 
 /** Resolve the session exactly once per page load before any guarded navigation. */
 async function ensureAuthResolved(): Promise<void> {
@@ -39,21 +42,11 @@ const indexRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
-  // Single enforcement point for the post-login redirect (open-redirect
-  // guard): only same-app absolute paths pass — must start with '/' but not
-  // '//' (protocol-relative URL), and must not contain '\\' (browsers treat
-  // backslashes as slashes when resolving URLs, so '/\\evil.com' would be a
-  // protocol-relative bypass). Anything else is dropped so LoginForm falls
-  // back to /projects. The explicit `undefined` matters: matches inherit
-  // the RAW parent search, so an omitted key would leak through.
+  // See sanitizeRedirect for the open-redirect guard this enforces. The
+  // explicit `undefined` matters: matches inherit the RAW parent search, so
+  // an omitted key would leak through.
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
-    redirect:
-      typeof search.redirect === 'string' &&
-      search.redirect.startsWith('/') &&
-      !search.redirect.startsWith('//') &&
-      !search.redirect.includes('\\')
-        ? search.redirect
-        : undefined,
+    redirect: sanitizeRedirect(search.redirect),
   }),
   beforeLoad: async () => {
     await ensureAuthResolved();
@@ -65,6 +58,11 @@ const loginRoute = createRoute({
 const signupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/signup',
+  // Same redirect guard as /login (invite-accept sends unauthenticated
+  // visitors here too — contracts §13 invite flow).
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect: sanitizeRedirect(search.redirect),
+  }),
   beforeLoad: async () => {
     await ensureAuthResolved();
     if (authStore.getState().status === 'authenticated') throw redirect({ to: '/projects' });
@@ -75,6 +73,11 @@ const signupRoute = createRoute({
 const inviteRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/invite/$token',
+  // Public route, but must know whether the visitor is already signed in
+  // (via the refresh cookie) to offer "Accept" vs. "log in / sign up first".
+  beforeLoad: async () => {
+    await ensureAuthResolved();
+  },
   component: InvitePage,
 });
 
@@ -108,12 +111,30 @@ const securitySettingsRoute = createRoute({
   component: SecuritySettingsPage,
 });
 
+const accountRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/account',
+  component: AccountPage,
+});
+
+const orgSettingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/orgs/$orgId/settings',
+  component: OrgSettingsPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   signupRoute,
   inviteRoute,
-  privateRoute.addChildren([projectsRoute, projectDetailRoute, securitySettingsRoute]),
+  privateRoute.addChildren([
+    projectsRoute,
+    projectDetailRoute,
+    securitySettingsRoute,
+    accountRoute,
+    orgSettingsRoute,
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });

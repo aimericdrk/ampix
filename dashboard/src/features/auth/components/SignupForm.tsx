@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
+import { useRouter, useSearch } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -10,6 +10,7 @@ import { firstFieldErrors, validateSignup, type FieldErrors } from '../validatio
 
 export function SignupForm() {
   const router = useRouter();
+  const search = useSearch({ from: '/signup' });
   const { toast } = useToast();
   const [values, setValues] = useState({ name: '', email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -17,7 +18,9 @@ export function SignupForm() {
   const mutation = useMutation({
     mutationFn: signup,
     onSuccess: () => {
-      router.history.push('/projects');
+      // Invite-accept (contracts §13) sends unauthenticated visitors here with
+      // ?redirect=/invite/<token>; everyone else lands on /projects as before.
+      router.history.push(search.redirect ?? '/projects');
     },
     onError: (error: Error) => {
       if (!(error instanceof ApiError) || error.problem.status >= 500) {

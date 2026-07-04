@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { authStore } from '../features/auth/store';
-import { resetAuthState } from './msw/handlers';
+import { currentOrgStore } from '../features/orgs/store';
+import { resetAuthState, resetOrgsState } from './msw/handlers';
 import { server } from './msw/server';
 
 // Radix UI relies on browser APIs jsdom does not implement.
@@ -20,7 +21,9 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   resetAuthState();
+  resetOrgsState();
   authStore.reset();
+  currentOrgStore.reset();
   localStorage.clear();
 });
 

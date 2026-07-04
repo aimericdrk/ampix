@@ -5,14 +5,20 @@ import {
   type Activate2faResponse,
   type AuthResponse,
   type AuthSuccess,
+  type AuthUser,
+  type ChangePasswordRequest,
   type Disable2faRequest,
   type LoginRequest,
   type MeResponse,
   type SignupRequest,
   type Setup2faResponse,
+  type UpdateNameRequest,
   type Verify2faRequest,
 } from '../../lib/api/types';
 import { authStore } from './store';
+
+/** Shared TanStack Query key for `GET /auth/me`, used by both Security and Account pages. */
+export const ME_QUERY_KEY = ['auth', 'me'] as const;
 
 export async function login(input: LoginRequest): Promise<AuthResponse> {
   const response = await apiFetch<AuthResponse>('/api/v1/auth/login', {
@@ -75,4 +81,18 @@ export function disable2fa(input: Disable2faRequest): Promise<void> {
     method: 'POST',
     body: input,
   });
+}
+
+// --- Account (self) management (contracts §13) ---
+
+/** Updates the caller's display name; also reflects the change into the in-memory session. */
+export async function updateName(input: UpdateNameRequest): Promise<AuthUser> {
+  const user = await apiFetch<AuthUser>('/api/v1/auth/me', { method: 'PATCH', body: input });
+  authStore.updateUser(user);
+  return user;
+}
+
+/** Changes the caller's password; wrong `current_password` rejects with 401. */
+export function changePassword(input: ChangePasswordRequest): Promise<void> {
+  return apiFetch<void>('/api/v1/auth/password', { method: 'POST', body: input });
 }

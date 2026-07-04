@@ -33,9 +33,11 @@ describe('router', () => {
     expect(router.state.location.pathname).toBe('/projects');
   });
 
-  it('renders the invite placeholder with the token from the path', async () => {
+  it('renders an invalid-invitation message for an unknown token', async () => {
     renderApp('/invite/tok_abc123');
-    expect(await screen.findByText(/tok_abc123/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/This invitation link is invalid or does not exist/),
+    ).toBeInTheDocument();
   });
 
   it('shows the project detail view for /projects/:id', async () => {

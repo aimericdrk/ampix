@@ -5,9 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { Input } from '../../../components/ui/input';
 import { ApiError } from '../../../lib/api/problem';
 import type { Setup2faResponse } from '../../../lib/api/types';
-import { activate2fa, disable2fa, getMe, setup2fa } from '../api';
-
-const ME_QUERY_KEY = ['auth', 'me'];
+import { activate2fa, disable2fa, getMe, ME_QUERY_KEY, setup2fa } from '../api';
 
 export function SecuritySettingsPage() {
   const query = useQuery({ queryKey: ME_QUERY_KEY, queryFn: getMe });

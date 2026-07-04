@@ -103,3 +103,150 @@ export interface Activate2faResponse {
 export interface Disable2faRequest {
   code: string;
 }
+
+// --- Tenancy management (contracts §13) ---
+
+/** Role matrix (contracts §13): admin > analyst > viewer. */
+export type OrgRole = 'admin' | 'analyst' | 'viewer';
+
+export const ORG_ROLES: OrgRole[] = ['admin', 'analyst', 'viewer'];
+
+/** An org as seen by the caller, with their own role in it. */
+export interface Org {
+  id: string;
+  name: string;
+  role: OrgRole;
+}
+
+export interface ListOrgsResponse {
+  orgs: Org[];
+}
+
+export interface CreateOrgRequest {
+  name: string;
+}
+
+/** `POST /orgs` — creator becomes admin. */
+export type CreateOrgResponse = Org;
+
+export interface RenameOrgRequest {
+  name: string;
+}
+
+export interface RenameOrgResponse {
+  id: string;
+  name: string;
+}
+
+export interface OrgMemberUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export interface OrgMember {
+  user: OrgMemberUser;
+  role: OrgRole;
+}
+
+export interface ListMembersResponse {
+  members: OrgMember[];
+}
+
+export interface UpdateMemberRoleRequest {
+  role: OrgRole;
+}
+
+export interface CreateInvitationRequest {
+  role: OrgRole;
+}
+
+/** `POST /orgs/:orgId/invitations` — includes the token; share `invite_path` with the invitee. */
+export interface CreateInvitationResponse {
+  id: string;
+  role: OrgRole;
+  token: string;
+  invite_path: string;
+  expires_at: string;
+}
+
+/** A pending invitation as listed by `GET /orgs/:orgId/invitations` — no token exposed. */
+export interface Invitation {
+  id: string;
+  role: OrgRole;
+  expires_at: string;
+}
+
+export interface ListInvitationsResponse {
+  invitations: Invitation[];
+}
+
+/** `GET /invitations/:token` (public) — enough to render "invited to X as Y". */
+export interface InvitationPreview {
+  org_name: string;
+  role: OrgRole;
+  expires_at: string;
+}
+
+export interface AcceptInvitationResponse {
+  org_id: string;
+  role: OrgRole;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  timezone?: string;
+}
+
+/** `POST /orgs/:orgId/projects` response — no `org_name` (unlike the `Project` list shape). */
+export interface CreatedProject {
+  id: string;
+  org_id: string;
+  name: string;
+  timezone: string;
+  ingest_token: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  timezone?: string;
+}
+
+export interface UpdateProjectResponse {
+  id: string;
+  name: string;
+  timezone: string;
+}
+
+export interface SdkToken {
+  id: string;
+  token: string;
+  label: string;
+  created_at: string;
+}
+
+export interface ListTokensResponse {
+  tokens: SdkToken[];
+}
+
+export interface CreateTokenRequest {
+  label?: string;
+}
+
+/** `POST /projects/:projectId/tokens` response — the new token, shown once. */
+export interface CreatedToken {
+  id: string;
+  token: string;
+  label: string;
+}
+
+// --- Account (self) management (contracts §13) ---
+
+export interface UpdateNameRequest {
+  name: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}

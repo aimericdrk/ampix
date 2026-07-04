@@ -1,7 +1,9 @@
 import { Link, Outlet, useRouter } from '@tanstack/react-router';
 import { logout } from '../../features/auth/api';
 import { authStore, useAuth } from '../../features/auth/store';
+import { currentOrgStore } from '../../features/orgs/store';
 import { Button } from '../ui/button';
+import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -26,6 +28,7 @@ export function AppLayout() {
       // A failed server call must never block local logout.
     } finally {
       authStore.clearSession(); // idempotent — logout() already clears on any outcome
+      currentOrgStore.reset(); // don't leak the previous user's org selection
       router.history.push('/login');
     }
   };
@@ -40,7 +43,10 @@ export function AppLayout() {
       </a>
       <aside className="flex w-60 flex-col border-r border-border bg-surface p-4">
         <div className="mb-6 text-lg font-semibold">MyAmpMix</div>
-        <ProjectSwitcher />
+        <OrgSwitcher />
+        <div className="mt-3">
+          <ProjectSwitcher />
+        </div>
         <nav aria-label="Primary" className="mt-6 flex-1">
           <Link
             to="/projects"
@@ -64,6 +70,12 @@ export function AppLayout() {
         </nav>
         <div className="mt-auto space-y-2 border-t border-border pt-4">
           <ThemeToggle />
+          <Link
+            to="/account"
+            className="block rounded-md px-3 py-2 text-sm hover:bg-border/40 [&.active]:bg-border/40 [&.active]:font-medium"
+          >
+            Account
+          </Link>
           <div className="truncate px-3 text-xs text-text-muted">{user?.email}</div>
           <Button
             variant="secondary"
