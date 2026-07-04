@@ -9,3 +9,5 @@ pnpm-lock.yaml
 sdk/
 # Hand-authored specs/plans are not reformatted
 docs/
+**/test-results/
+**/playwright-report/

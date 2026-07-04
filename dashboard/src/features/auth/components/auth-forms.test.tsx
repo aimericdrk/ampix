@@ -92,6 +92,14 @@ describe('LoginForm', () => {
     expect(loginSearch(router)).toEqual({});
   });
 
+  it('ignores backslash-based protocol-relative bypasses (/\\evil.com)', async () => {
+    // Browsers treat backslashes as slashes during URL resolution, so
+    // '/\\evil.com' resolves to https://evil.com — must be dropped too.
+    const { router } = renderApp('/login?redirect=%2F%5Cevil.com');
+    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    expect(loginSearch(router)).toEqual({});
+  });
+
   it('renders server-side field errors at the matching field instead of the banner', async () => {
     respondWithFieldErrors('/api/v1/auth/login', {
       email: ['Email domain is not allowed', 'second message ignored'],
