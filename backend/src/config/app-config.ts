@@ -91,6 +91,10 @@ const envSchema = z.object({
     z.boolean(),
   ),
   COOKIE_DOMAIN: z.string().optional(),
+  // §20 — pino base log level. At the default `info`, successful (2xx/3xx) request logs are
+  // suppressed (app.module maps them to `debug` via customLogLevel) while app logs (info) and
+  // 4xx/5xx request logs still surface. Raise to `debug`/`trace` to see successful-request logs.
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
 export interface AppConfig {
@@ -108,6 +112,10 @@ export interface AppConfig {
   // Optional so pre-existing AppConfig fixtures keep compiling; loadConfig always populates it
   // (to undefined when unset → the in-memory screenshot store fallback kicks in).
   firebaseStorageBucket?: string;
+  // §20 — pino base log level. Optional (rather than required) so pre-existing hand-built AppConfig
+  // fixtures outside this task's scope (e.g. test/integration/clickhouse.int-spec.ts) keep compiling
+  // without every fixture needing an update. loadConfig() always populates it (default 'info').
+  logLevel?: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   // Optional (rather than required) so pre-existing AppConfig fixtures outside this task's scope
   // (e.g. test/integration/clickhouse.int-spec.ts, owned by concurrent work) keep compiling
   // without every hand-built fixture needing an update. loadConfig() always populates it.
@@ -205,6 +213,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ingestRateLimitPerMin: v.INGEST_RATE_LIMIT_PER_MIN,
     screenshotMaxKb: v.SCREENSHOT_MAX_KB,
     firebaseStorageBucket: v.FIREBASE_STORAGE_BUCKET,
+    logLevel: v.LOG_LEVEL,
     auth: {
       accessTokenTtl: v.ACCESS_TOKEN_TTL,
       refreshTokenTtl: v.REFRESH_TOKEN_TTL,
@@ -265,6 +274,7 @@ export function describeConfig(config: AppConfig): Record<string, string> {
   };
   return {
     NODE_ENV: config.nodeEnv,
+    LOG_LEVEL: config.logLevel ?? 'info',
     PORT: String(config.port),
     DATABASE_HOST: db.host,
     DATABASE_NAME: db.name,

@@ -56,6 +56,26 @@ describe('loadConfig', () => {
     ).toBe('my-app.appspot.com');
   });
 
+  describe('§20 LOG_LEVEL', () => {
+    it('defaults to info when unset', () => {
+      expect(loadConfig(validEnv).logLevel).toBe('info');
+    });
+
+    it('accepts every valid pino level', () => {
+      for (const level of ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const) {
+        expect(loadConfig({ ...validEnv, LOG_LEVEL: level }).logLevel).toBe(level);
+      }
+    });
+
+    it('rejects an unknown level', () => {
+      expect(() => loadConfig({ ...validEnv, LOG_LEVEL: 'verbose' })).toThrow(/LOG_LEVEL/);
+    });
+
+    it('is surfaced in the redacted describe output', () => {
+      expect(describeConfig(loadConfig({ ...validEnv, LOG_LEVEL: 'debug' })).LOG_LEVEL).toBe('debug');
+    });
+  });
+
   it('crashes with a clear message naming the missing var', () => {
     const { DATABASE_URL, ...withoutDb } = validEnv;
     expect(() => loadConfig(withoutDb)).toThrow(/DATABASE_URL/);

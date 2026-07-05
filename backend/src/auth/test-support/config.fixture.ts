@@ -14,6 +14,7 @@ export function makeAuthTestConfig(overrides: Partial<AppConfig> = {}): AppConfi
     ingestMaxBodyKb: 1024,
     ingestRateLimitPerMin: 1000,
     screenshotMaxKb: 512,
+    logLevel: 'info',
     auth: {
       accessTokenTtl: 900,
       refreshTokenTtl: 2_592_000,
