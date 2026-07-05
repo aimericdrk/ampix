@@ -2,7 +2,7 @@
 
 ## 1. What it is
 
-MyAmpMix is a self-hosted, Mixpanel-style product-analytics SDK for Flutter. You call `track()`/`identify()`/`people.*` in your app; the SDK writes every call to a local offline queue first, then batches and gzip-uploads it to your own MyAmpMix backend (`/ingest/events`, `/ingest/profiles`), which lands the data in ClickHouse. **Phase 1 scope:** instrumentation is fully manual — there is no autocapture of taps or screen views yet (the `MyAmpMixObserver`/`MyAmpMixTracker` widgets ship in a later milestone, M2), and there is no analytics dashboard UI yet to browse the data — querying comes in a later phase, so for now you confirm events arrived by querying ClickHouse directly (§12).
+MyAmpMix is a self-hosted, Mixpanel-style product-analytics SDK for Flutter. You call `track()`/`identify()`/`people.*` in your app; the SDK writes every call to a local offline queue first, then batches and gzip-uploads it to your own MyAmpMix backend (`/ingest/events`, `/ingest/profiles`), which lands the data in ClickHouse. Beyond manual `track()`, the SDK also **autocaptures** — screen views, taps/rage-taps, native in-app purchases, marketing attribution, and (optionally) one screenshot per screen per app version — all `$`-prefixed and toggleable (§14 below). A React dashboard ships alongside for browsing/visualizing the data (insights, funnels, retention, user-path map, click heatmaps, cohorts, custom dashboards).
 
 ## 2. Install
 
@@ -45,6 +45,12 @@ Future<void> main() async {
       sessionTimeout: Duration(minutes: 30),       // background time before a session rotates
       maxRetryDelay: Duration(minutes: 5),         // cap on exponential retry backoff
       debug: false,                                // enable internal SDK logging (debug builds only)
+      // Autocapture toggles (all default true) — see §14:
+      autocaptureScreens: true,                    // $screen_view via MyAmpMixObserver
+      autocaptureTaps: true,                       // $tap / $rage_tap via MyAmpMixTracker
+      autocapturePurchases: true,                  // native $in_app_purchase (StoreKit / Play Billing)
+      autocaptureAttribution: true,                // deep-link UTM + Android install referrer → $campaign_touch
+      autocaptureScreenshots: true,                // one screenshot per screen per app version
     ),
   );
 
@@ -161,3 +167,31 @@ docker compose -f infra/docker-compose.yml exec clickhouse \
 - **Events never show up in ClickHouse** — check the token is real (the demo token from `pnpm dev`, or one created via Prisma Studio per §3), that the stack is up (`pnpm dev`), and that `serverUrl` is reachable from the device/emulator (`10.0.2.2` on the Android emulator, not `localhost`).
 - Set `config.debug: true` to see internal SDK logs (dropped properties, rejected batches, retry scheduling) via `debugPrint`.
 - By design, nothing the SDK does — including a failed `init` — crashes the host app.
+
+## 14. Autocapture
+
+All autocapture is `$`-prefixed and reserved (so it's always distinguishable from your own manual events, which are never `$`-prefixed) and each stream is independently toggleable via `MyAmpMixConfig` (§3, all default `true`).
+
+**Screen views & taps** — wire the two widgets once:
+
+```dart
+MaterialApp(
+  navigatorObservers: [MyAmpMixObserver()],   // → $screen_view (with $previous_screen, $time_on_previous_ms)
+  builder: (context, child) =>
+      MyAmpMixTracker(child: child!),          // → $tap / $rage_tap (widget type/label/position, non-blocking)
+);
+```
+
+**Native in-app purchases** (`autocapturePurchases`) — no wiring needed: the SDK observes StoreKit (iOS) / Play Billing (Android) and emits `$in_app_purchase` (`$product_id`, `$price`, `$currency`, `$store`, `$purchase_source: "native"`) for the app's own store transactions, always distinct from a purchase you track manually.
+
+**Attribution** (`autocaptureAttribution`) — the Android install referrer is captured automatically; for deep links, call `MyAmpMix.instance.trackDeepLink(uri)` from your link handler. UTM params are persisted (first- and last-touch) and attached to every event; a `$campaign_touch` is emitted on each new touch.
+
+**Screenshots** (`autocaptureScreenshots`) — the SDK captures **one screenshot per screen per app version** (persisted, so a screen is never re-captured for the same version) and uploads it to your backend (Firebase Storage), powering the dashboard's user-path map and click heatmaps. To exclude sensitive UI (PII, payment fields) from captures, wrap it:
+
+```dart
+MyAmpMixPrivacy(child: CreditCardForm())   // masked (solid block) in screenshots
+```
+
+> Privacy note: screenshot autocapture captures rendered UI. Wrap anything sensitive in `MyAmpMixPrivacy`, or disable the feature entirely with `autocaptureScreenshots: false`. (MVP masking is opt-in per widget; it does not auto-redact arbitrary text.)
+
+To disable any stream, set its config flag to `false` — e.g. `autocaptureScreenshots: false`.
