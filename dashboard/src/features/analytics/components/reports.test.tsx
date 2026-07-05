@@ -4,25 +4,13 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import type { CreateReportRequest } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
-import {
-  META_PROPERTIES_FIXTURE,
-  TEST_PROJECT,
-  TEST_USER,
-  VALID_ACCESS_TOKEN,
-} from '../../../test/msw/handlers';
+import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
 import { TEST_REPORT_INSIGHTS_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
-}
-
-async function waitForInsightsMeta() {
-  const firstProperty = META_PROPERTIES_FIXTURE.properties[0];
-  if (!firstProperty) throw new Error('META_PROPERTIES_FIXTURE must not be empty');
-  const breakdown = screen.getByLabelText('Breakdown (optional)');
-  await within(breakdown).findByRole('option', { name: firstProperty.name });
 }
 
 describe('Saved reports', () => {
@@ -49,10 +37,10 @@ describe('Saved reports', () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/insights`);
     await screen.findByRole('heading', { name: 'Insights' });
-    await waitForInsightsMeta();
+    // The builder pre-selects the first event (checkout_completed) — wait for its row.
+    await screen.findByLabelText('Measure for checkout_completed');
 
-    await userEvent.type(screen.getByLabelText('Add an event'), 'checkout_completed');
-    await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-06-01' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-01' } });
 

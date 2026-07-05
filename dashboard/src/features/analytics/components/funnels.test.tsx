@@ -24,15 +24,16 @@ async function waitForMetaLoaded() {
   await within(breakdown).findByRole('option', { name: firstProperty.name });
 }
 
+/** Pick a step event from the searchable dropdown (events come from META_EVENTS_FIXTURE). */
 async function addStep(name: string) {
-  await userEvent.type(screen.getByLabelText('Add a step event'), name);
   await userEvent.click(screen.getByRole('button', { name: 'Add step' }));
+  await userEvent.click(await screen.findByRole('option', { name }));
 }
 
 const THREE_STEP_RESPONSE: FunnelResponse = {
   steps: [
-    { event: 'app_open', count: 1000, conversion_from_prev: 1, conversion_from_top: 1 },
-    { event: 'signup_started', count: 620, conversion_from_prev: 0.62, conversion_from_top: 0.62 },
+    { event: 'app_opened', count: 1000, conversion_from_prev: 1, conversion_from_top: 1 },
+    { event: 'signup_completed', count: 620, conversion_from_prev: 0.62, conversion_from_top: 0.62 },
     {
       event: 'checkout_completed',
       count: 145,
@@ -58,14 +59,15 @@ describe('FunnelsPage', () => {
     await screen.findByRole('heading', { name: 'Funnels' });
     await waitForMetaLoaded();
 
-    await addStep('app_open');
-    await addStep('signup_started');
+    await addStep('app_opened');
+    await addStep('signup_completed');
     await addStep('checkout_completed');
 
     // A per-step filter on step 1 (os = android) — the first "Add filter" belongs to step 1.
     await userEvent.click(screen.getAllByRole('button', { name: 'Add filter' })[0]!);
     await userEvent.type(screen.getByLabelText('Step 1 filter value 1'), 'android');
 
+    await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-06-01' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-01' } });
     fireEvent.change(screen.getByLabelText('Conversion window (days)'), { target: { value: '14' } });
@@ -77,8 +79,8 @@ describe('FunnelsPage', () => {
 
     expect(capturedBody).toEqual({
       steps: [
-        { event: 'app_open', filters: [{ property: 'os', op: 'eq', value: 'android' }] },
-        { event: 'signup_started', filters: [] },
+        { event: 'app_opened', filters: [{ property: 'os', op: 'eq', value: 'android' }] },
+        { event: 'signup_completed', filters: [] },
         { event: 'checkout_completed', filters: [] },
       ],
       date_range: { from: '2026-06-01', to: '2026-07-01' },
@@ -93,8 +95,8 @@ describe('FunnelsPage', () => {
     // clash.
     const table = screen.getByRole('table', { name: 'Funnel data table' });
     const rows = within(table).getAllByRole('row').slice(1);
-    const appRow = rows.find((r) => within(r).queryByText('app_open'));
-    const signupRow = rows.find((r) => within(r).queryByText('signup_started'));
+    const appRow = rows.find((r) => within(r).queryByText('app_opened'));
+    const signupRow = rows.find((r) => within(r).queryByText('signup_completed'));
     const checkoutRow = rows.find((r) => within(r).queryByText('checkout_completed'));
 
     expect(within(appRow as HTMLElement).getByText('1,000')).toBeInTheDocument();
@@ -161,7 +163,7 @@ describe('FunnelsPage', () => {
     await screen.findByRole('heading', { name: 'Funnels' });
     await waitForMetaLoaded();
 
-    await addStep('app_open');
+    await addStep('app_opened');
     await addStep('checkout_completed');
     await userEvent.selectOptions(screen.getByLabelText('Breakdown (optional)'), 'utm_source');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
@@ -187,7 +189,7 @@ describe('FunnelsPage', () => {
     await screen.findByRole('heading', { name: 'Funnels' });
     await waitForMetaLoaded();
 
-    await addStep('app_open');
+    await addStep('app_opened');
     await addStep('checkout_completed');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
@@ -206,7 +208,7 @@ describe('FunnelsPage', () => {
     await screen.findByRole('heading', { name: 'Funnels' });
     await waitForMetaLoaded();
 
-    await addStep('app_open');
+    await addStep('app_opened');
     await addStep('checkout_completed');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 

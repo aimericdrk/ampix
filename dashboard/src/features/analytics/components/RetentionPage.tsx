@@ -14,13 +14,8 @@ import { useMetaEvents, useMetaProperties, useRunRetention } from '../api';
 import { RetentionChart } from './RetentionChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
-import {
-  cleanFilters,
-  DateRangeFields,
-  defaultDate,
-  EventNameInput,
-  FilterRows,
-} from './builder-controls';
+import { cleanFilters, defaultDate, FilterRows } from './builder-controls';
+import { DateRangePresets, EventSelectField } from './explore-controls';
 
 const INTERVAL_LABELS: Record<RetentionInterval, string> = {
   day: 'Day',
@@ -93,13 +88,13 @@ export function RetentionPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
-            <EventNameInput
-              id="retention-born-event"
+            <EventSelectField
               label="Born event"
               value={bornEvent}
               onChange={setBornEvent}
               options={eventOptions}
-              placeholder="e.g. signup_completed"
+              isLoading={metaEvents.isPending}
+              placeholder="Select event…"
             />
             <FilterRows
               idPrefix="retention-born-filter"
@@ -111,13 +106,14 @@ export function RetentionPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <EventNameInput
-              id="retention-return-event"
-              label="Return event (optional — defaults to born event)"
+            <EventSelectField
+              label="Return event"
               value={returnEvent}
               onChange={setReturnEvent}
               options={eventOptions}
-              placeholder="e.g. app_open"
+              isLoading={metaEvents.isPending}
+              placeholder="Defaults to the born event"
+              allowClear
             />
             <FilterRows
               idPrefix="retention-return-filter"
@@ -128,12 +124,14 @@ export function RetentionPage() {
             />
           </div>
 
-          <DateRangeFields
+          <DateRangePresets
             idPrefix="retention-date"
             from={dateFrom}
             to={dateTo}
-            onFrom={setDateFrom}
-            onTo={setDateTo}
+            onChange={(from, to) => {
+              setDateFrom(from);
+              setDateTo(to);
+            }}
           />
 
           <div className="flex flex-wrap gap-4">

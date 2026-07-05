@@ -12,6 +12,12 @@ function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
 }
 
+/** Choose the anchor event from its searchable dropdown (events come from META_EVENTS_FIXTURE). */
+async function pickAnchor(name: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'Anchor event' }));
+  await userEvent.click(await screen.findByRole('option', { name }));
+}
+
 const RESPONSE: FlowsResponse = {
   nodes: [
     { id: '0:app_open', step: 0, event: 'app_open', value: 1000 },
@@ -40,7 +46,8 @@ describe('FlowsPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/flows`);
     await screen.findByRole('heading', { name: 'Flows' });
 
-    await userEvent.type(screen.getByLabelText('Anchor event'), 'app_open');
+    await pickAnchor('app_opened');
+    await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-06-01' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-01' } });
     await userEvent.selectOptions(screen.getByLabelText('Unit'), 'user');
@@ -52,7 +59,7 @@ describe('FlowsPage', () => {
     await screen.findByRole('img', { name: 'Event flow Sankey diagram' });
 
     expect(capturedBody).toEqual({
-      anchor: { event: 'app_open', filters: [] },
+      anchor: { event: 'app_opened', filters: [] },
       direction: 'forward',
       date_range: { from: '2026-06-01', to: '2026-07-01' },
       steps: 2,
@@ -97,7 +104,7 @@ describe('FlowsPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/flows`);
     await screen.findByRole('heading', { name: 'Flows' });
 
-    await userEvent.type(screen.getByLabelText('Anchor event'), 'app_open');
+    await pickAnchor('app_opened');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     expect(await screen.findByRole('button', { name: 'Running…' })).toBeDisabled();
@@ -114,7 +121,7 @@ describe('FlowsPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/flows`);
     await screen.findByRole('heading', { name: 'Flows' });
 
-    await userEvent.type(screen.getByLabelText('Anchor event'), 'app_open');
+    await pickAnchor('app_opened');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     expect(await screen.findByText('No flow data for this query yet.')).toBeInTheDocument();

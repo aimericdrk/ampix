@@ -15,13 +15,8 @@ import { useMetaEvents, useMetaProperties, useRunFlows } from '../api';
 import { FlowsChart } from './FlowsChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { SaveAsReportButton } from './report-actions';
-import {
-  cleanFilters,
-  DateRangeFields,
-  defaultDate,
-  EventNameInput,
-  FilterRows,
-} from './builder-controls';
+import { cleanFilters, defaultDate, FilterRows } from './builder-controls';
+import { DateRangePresets, EventSelectField } from './explore-controls';
 
 const DIRECTION_LABELS: Record<FlowsDirection, string> = {
   forward: 'Forward (events after anchor)',
@@ -85,13 +80,13 @@ export function FlowsPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
-            <EventNameInput
-              id="flows-anchor-event"
+            <EventSelectField
               label="Anchor event"
               value={anchorEvent}
               onChange={setAnchorEvent}
               options={eventOptions}
-              placeholder="e.g. app_open"
+              isLoading={metaEvents.isPending}
+              placeholder="Select event…"
             />
             <FilterRows
               idPrefix="flows-anchor-filter"
@@ -102,12 +97,14 @@ export function FlowsPage() {
             />
           </div>
 
-          <DateRangeFields
+          <DateRangePresets
             idPrefix="flows-date"
             from={dateFrom}
             to={dateTo}
-            onFrom={setDateFrom}
-            onTo={setDateTo}
+            onChange={(from, to) => {
+              setDateFrom(from);
+              setDateTo(to);
+            }}
           />
 
           <div className="flex flex-wrap gap-4">

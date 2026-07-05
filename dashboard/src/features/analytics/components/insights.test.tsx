@@ -1,32 +1,25 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import type { InsightsQueryDefinition } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
-import {
-  META_PROPERTIES_FIXTURE,
-  TEST_PROJECT,
-  TEST_USER,
-  VALID_ACCESS_TOKEN,
-} from '../../../test/msw/handlers';
+import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { defaultDate } from './builder-controls';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
 }
 
-async function waitForMetaLoaded() {
-  const firstProperty = META_PROPERTIES_FIXTURE.properties[0];
-  if (!firstProperty) throw new Error('META_PROPERTIES_FIXTURE must not be empty');
-  const breakdownSelect = screen.getByLabelText('Breakdown (optional)');
-  await within(breakdownSelect).findByRole('option', { name: firstProperty.name });
-  return breakdownSelect;
+/** The default event (first in META_EVENTS_FIXTURE) is pre-selected on load — wait for its row. */
+function waitForDefaultEvent() {
+  return screen.findByLabelText('Measure for checkout_completed');
 }
 
 describe('InsightsPage', () => {
-  it('builds the §14 query definition from the builder state and renders the series in the chart and table', async () => {
+  it('auto-runs a sensible default on load and renders a chart with no Run button', async () => {
     let capturedBody: InsightsQueryDefinition | undefined;
     server.use(
       http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
@@ -35,19 +28,8 @@ describe('InsightsPage', () => {
           series: [
             {
               name: 'checkout_completed',
-              breakdown_value: 'tiktok',
-              data: [
-                { t: '2026-06-29', value: 5 },
-                { t: '2026-06-30', value: 7 },
-              ],
-            },
-            {
-              name: 'checkout_completed',
-              breakdown_value: 'facebook',
-              data: [
-                { t: '2026-06-29', value: 2 },
-                { t: '2026-06-30', value: 9 },
-              ],
+              breakdown_value: null,
+              data: [{ t: '2026-06-29', value: 5 }],
             },
           ],
         });
@@ -57,70 +39,129 @@ describe('InsightsPage', () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/insights`);
     await screen.findByRole('heading', { name: 'Insights' });
-    await waitForMetaLoaded();
 
-    // Add one event, then switch its aggregation to unique_users.
-    await userEvent.type(screen.getByLabelText('Add an event'), 'checkout_completed');
+    // A chart appears with no interaction — the builder pre-selected the first event and ran itself.
+    await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+    expect(screen.queryByRole('button', { name: 'Run' })).toBeNull();
+
+    expect(capturedBody?.events).toEqual([{ name: 'checkout_completed', aggregation: 'total' }]);
+    expect(capturedBody?.interval).toBe('day');
+    expect(capturedBody?.filters).toEqual([]);
+    expect(capturedBody?.date_range).toEqual({ from: defaultDate(30), to: defaultDate(0) });
+  });
+
+  it('adds a series by picking a real event from the searchable dropdown (no typing a raw name)', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+    await waitForDefaultEvent();
+
     await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
-    expect(screen.getByText('checkout_completed')).toBeInTheDocument();
-    await userEvent.selectOptions(
-      screen.getByLabelText('Aggregation for checkout_completed'),
-      'unique_users',
+    const search = screen.getByRole('combobox', { name: 'Add event' });
+
+    // The already-selected event is excluded; the list only offers events that actually exist.
+    expect(screen.queryByRole('option', { name: 'checkout_completed' })).toBeNull();
+    expect(screen.getByRole('option', { name: 'product_viewed' })).toBeInTheDocument();
+
+    // Typing filters the real events — there is no way to invent a name.
+    await userEvent.type(search, 'sign');
+    expect(screen.queryByRole('option', { name: 'product_viewed' })).toBeNull();
+    await userEvent.click(screen.getByRole('option', { name: 'signup_completed' }));
+
+    expect(await screen.findByLabelText('Measure for signup_completed')).toBeInTheDocument();
+    // Picking closes the dropdown.
+    expect(screen.queryByRole('option', { name: 'app_opened' })).toBeNull();
+  });
+
+  it('builds the §14 query from the plain-language + demoted controls (measure, group by, filter, custom range)', async () => {
+    let capturedBody: InsightsQueryDefinition | undefined;
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+        capturedBody = (await request.json()) as InsightsQueryDefinition;
+        return HttpResponse.json({
+          series: [
+            {
+              name: 'checkout_completed',
+              breakdown_value: 'ios',
+              data: [{ t: '2026-06-29', value: 5 }],
+            },
+          ],
+        });
+      }),
     );
 
-    // Date range + interval.
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+    await waitForDefaultEvent();
+
+    // Plain-language measure control ("Count" / "Unique users", never "aggregation").
+    const measure = screen.getByLabelText('Measure for checkout_completed');
+    expect(within(measure).getByRole('option', { name: 'Count' })).toBeInTheDocument();
+    await userEvent.selectOptions(measure, 'Unique users');
+
+    // Group by is demoted behind a "+ Group by" action until asked for.
+    expect(screen.queryByLabelText('Group by')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Group by' }));
+    await userEvent.selectOptions(screen.getByLabelText('Group by'), 'utm_source');
+
+    // Filters are demoted too; revealing seeds one editable row.
+    await userEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    await userEvent.selectOptions(screen.getByLabelText('Filter property 1'), 'app_version');
+    await userEvent.selectOptions(screen.getByLabelText('Filter operator 1'), 'eq');
+    await userEvent.type(screen.getByLabelText('Filter value 1'), 'ios');
+
+    // "Custom" reveals the exact from/to inputs.
+    await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-06-29' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-06-30' } });
-    await userEvent.selectOptions(screen.getByLabelText('Interval'), 'week');
 
-    // One filter.
-    await userEvent.click(screen.getByRole('button', { name: 'Add filter' }));
-    await userEvent.selectOptions(screen.getByLabelText('Filter property'), 'app_version');
-    await userEvent.selectOptions(screen.getByLabelText('Filter operator'), 'eq');
-    await userEvent.type(screen.getByLabelText('Filter value'), 'ios');
-
-    // Breakdown.
-    await userEvent.selectOptions(screen.getByLabelText('Breakdown (optional)'), 'utm_source');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
-
-    await screen.findByRole('img', { name: 'Insights line chart' });
-
-    expect(capturedBody).toEqual({
-      events: [{ name: 'checkout_completed', aggregation: 'unique_users' }],
-      date_range: { from: '2026-06-29', to: '2026-06-30' },
-      interval: 'week',
-      filters: [{ property: 'app_version', op: 'eq', value: 'ios' }],
-      breakdown: { property: 'utm_source' },
-    });
-
-    // The table view is always present, regardless of the chart-type toggle — one row per
-    // (event × breakdown value × date) bucket, so scope each assertion to its own row.
-    const table = screen.getByRole('table', { name: 'Insights data table' });
-    const dataRows = within(table).getAllByRole('row').slice(1);
-    const tiktokJune30 = dataRows.find(
-      (row) => within(row).queryByText('tiktok') && within(row).queryByText('2026-06-30'),
+    await waitFor(
+      () =>
+        expect(capturedBody).toEqual({
+          events: [{ name: 'checkout_completed', aggregation: 'unique_users' }],
+          date_range: { from: '2026-06-29', to: '2026-06-30' },
+          interval: 'day',
+          filters: [{ property: 'app_version', op: 'eq', value: 'ios' }],
+          breakdown: { property: 'utm_source' },
+        }),
+      { timeout: 3000 },
     );
-    const facebookJune30 = dataRows.find(
-      (row) => within(row).queryByText('facebook') && within(row).queryByText('2026-06-30'),
+  });
+
+  it('re-runs automatically when a date-range preset is chosen', async () => {
+    let capturedBody: InsightsQueryDefinition | undefined;
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+        capturedBody = (await request.json()) as InsightsQueryDefinition;
+        return HttpResponse.json({
+          series: [
+            { name: 'checkout_completed', breakdown_value: null, data: [{ t: '2026-06-29', value: 1 }] },
+          ],
+        });
+      }),
     );
-    expect(tiktokJune30).toBeDefined();
-    expect(facebookJune30).toBeDefined();
-    expect(within(tiktokJune30 as HTMLElement).getByText('7')).toBeInTheDocument();
-    expect(within(facebookJune30 as HTMLElement).getByText('9')).toBeInTheDocument();
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+    await waitForDefaultEvent();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Last 7 days' }));
+
+    await waitFor(
+      () => expect(capturedBody?.date_range).toEqual({ from: defaultDate(7), to: defaultDate(0) }),
+      { timeout: 3000 },
+    );
   });
 
   it('switches between line, bar, number, and table views via the chart-type toggle', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/insights`);
     await screen.findByRole('heading', { name: 'Insights' });
-    await waitForMetaLoaded();
+    await waitForDefaultEvent();
 
-    await userEvent.type(screen.getByLabelText('Add an event'), 'product_viewed');
-    await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
-
-    await screen.findByRole('img', { name: 'Insights line chart' });
+    await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
     expect(screen.queryByRole('img', { name: 'Insights bar chart' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('radio', { name: 'Bar' }));
@@ -129,7 +170,9 @@ describe('InsightsPage', () => {
 
     await userEvent.click(screen.getByRole('radio', { name: 'Number' }));
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'product_viewed' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'checkout_completed' }),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('radio', { name: 'Table' }));
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
@@ -140,14 +183,13 @@ describe('InsightsPage', () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/insights`);
     await screen.findByRole('heading', { name: 'Insights' });
-    await waitForMetaLoaded();
+    await waitForDefaultEvent();
 
-    await userEvent.type(screen.getByLabelText('Add an event'), 'product_viewed');
-    await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
-    await userEvent.selectOptions(screen.getByLabelText('Breakdown (optional)'), 'utm_source');
-    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+    // A breakdown yields multiple series, so the composition (pie) view has something to compose.
+    await userEvent.click(screen.getByRole('button', { name: 'Group by' }));
+    await userEvent.selectOptions(screen.getByLabelText('Group by'), 'utm_source');
 
-    await screen.findByRole('img', { name: 'Insights line chart' });
+    await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
 
     await userEvent.click(screen.getByRole('radio', { name: 'Area' }));
     await screen.findByRole('img', { name: 'Insights area chart' });
@@ -160,5 +202,20 @@ describe('InsightsPage', () => {
     await screen.findByRole('img', { name: 'Insights pie chart' });
     // The composition legend carries each series' identity + value, never color alone.
     expect(screen.getByRole('list', { name: 'Composition legend' })).toBeInTheDocument();
+  });
+
+  it('shows a friendly empty state when the project has no events yet', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/meta/events', () =>
+        HttpResponse.json({ events: [] }),
+      ),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+
+    expect(await screen.findByText('No events tracked yet')).toBeInTheDocument();
+    expect(screen.queryByRole('img')).toBeNull();
   });
 });

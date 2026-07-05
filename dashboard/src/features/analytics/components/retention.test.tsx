@@ -12,6 +12,12 @@ function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
 }
 
+/** Choose an event for a labelled field from its searchable dropdown. */
+async function pickEvent(field: string, name: string) {
+  await userEvent.click(screen.getByRole('button', { name: field }));
+  await userEvent.click(await screen.findByRole('option', { name }));
+}
+
 // Period-1 average is size-weighted: (320*0.65 + 180*0.50) / (320 + 180) = 298 / 500 = 0.596.
 const RESPONSE: RetentionResponse = {
   cohorts: [
@@ -63,11 +69,9 @@ describe('RetentionPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/retention`);
     await screen.findByRole('heading', { name: 'Retention' });
 
-    await userEvent.type(screen.getByLabelText('Born event'), 'signup_completed');
-    await userEvent.type(
-      screen.getByLabelText('Return event (optional — defaults to born event)'),
-      'app_open',
-    );
+    await pickEvent('Born event', 'signup_completed');
+    await pickEvent('Return event', 'app_opened');
+    await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-06-01' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-01' } });
     await userEvent.selectOptions(screen.getByLabelText('Interval'), 'week');
@@ -79,7 +83,7 @@ describe('RetentionPage', () => {
 
     expect(capturedBody).toEqual({
       born_event: { name: 'signup_completed', filters: [] },
-      return_event: { name: 'app_open', filters: [] },
+      return_event: { name: 'app_opened', filters: [] },
       date_range: { from: '2026-06-01', to: '2026-07-01' },
       interval: 'week',
       periods: 2,
@@ -116,7 +120,7 @@ describe('RetentionPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/retention`);
     await screen.findByRole('heading', { name: 'Retention' });
 
-    await userEvent.type(screen.getByLabelText('Born event'), 'signup_completed');
+    await pickEvent('Born event', 'signup_completed');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     await screen.findByRole('table', { name: 'Retention cohort heatmap' });
@@ -136,7 +140,7 @@ describe('RetentionPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/retention`);
     await screen.findByRole('heading', { name: 'Retention' });
 
-    await userEvent.type(screen.getByLabelText('Born event'), 'signup_completed');
+    await pickEvent('Born event', 'signup_completed');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     expect(await screen.findByRole('button', { name: 'Running…' })).toBeDisabled();
@@ -153,7 +157,7 @@ describe('RetentionPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/retention`);
     await screen.findByRole('heading', { name: 'Retention' });
 
-    await userEvent.type(screen.getByLabelText('Born event'), 'signup_completed');
+    await pickEvent('Born event', 'signup_completed');
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     expect(await screen.findByText('No cohorts for this query yet.')).toBeInTheDocument();

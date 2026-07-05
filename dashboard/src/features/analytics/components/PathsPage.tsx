@@ -2,7 +2,6 @@ import { useParams } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
-import { Input } from '../../../components/ui/input';
 import { PageShell } from '../../../components/layout/PageShell';
 import { ApiError } from '../../../lib/api/problem';
 import type {
@@ -14,7 +13,8 @@ import type {
 import { FLOWS_DIRECTIONS, FLOWS_UNITS } from '../../../lib/api/types';
 import { useRunScreenPaths, useScreens } from '../api';
 import { formatExactNumber } from '../format';
-import { DateRangeFields, defaultDate } from './builder-controls';
+import { defaultDate } from './builder-controls';
+import { DateRangePresets, EventSelectField } from './explore-controls';
 import { MermaidDiagram } from './charts/MermaidDiagram';
 import { PathMap } from './PathMap';
 import { buildScreenPathsMermaid, screenLabel } from './path-layout';
@@ -86,30 +86,26 @@ export function PathsPage() {
           <CardTitle>Path builder</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <div>
-            <label htmlFor="paths-anchor" className="mb-1 block text-sm font-medium">
-              Anchor screen (optional)
-            </label>
-            <Input
-              id="paths-anchor"
-              list="paths-anchor-options"
-              placeholder="Leave blank to start from top entry screens"
-              value={anchorScreen}
-              onChange={(e) => setAnchorScreen(e.target.value)}
-            />
-            <datalist id="paths-anchor-options">
-              {screenOptions.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </div>
+          <EventSelectField
+            label="Anchor screen"
+            value={anchorScreen}
+            onChange={setAnchorScreen}
+            options={screenOptions}
+            isLoading={screens.isPending}
+            noun="screen"
+            placeholder="Any entry screen"
+            emptyLabel="No screens captured yet."
+            allowClear
+          />
 
-          <DateRangeFields
+          <DateRangePresets
             idPrefix="paths-date"
             from={dateFrom}
             to={dateTo}
-            onFrom={setDateFrom}
-            onTo={setDateTo}
+            onChange={(from, to) => {
+              setDateFrom(from);
+              setDateTo(to);
+            }}
           />
 
           <div className="flex flex-wrap gap-4">

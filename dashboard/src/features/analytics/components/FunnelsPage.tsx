@@ -1,5 +1,5 @@
 import { useParams } from '@tanstack/react-router';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { ApiError } from '../../../lib/api/problem';
@@ -15,13 +15,8 @@ import { useMetaEvents, useMetaProperties, useRunFunnels } from '../api';
 import { FunnelChart } from './FunnelChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
-import {
-  cleanFilters,
-  DateRangeFields,
-  defaultDate,
-  EventNameInput,
-  FilterRows,
-} from './builder-controls';
+import { cleanFilters, defaultDate, FilterRows } from './builder-controls';
+import { DateRangePresets, EventPicker } from './explore-controls';
 
 const MAX_STEPS = 8;
 
@@ -42,7 +37,6 @@ export function FunnelsPage() {
   const runFunnels = useRunFunnels(projectId);
 
   const [steps, setSteps] = useState<StepDraft[]>([]);
-  const [stepDraft, setStepDraft] = useState('');
   const [dateFrom, setDateFrom] = useState(() => defaultDate(30));
   const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [windowDays, setWindowDays] = useState(7);
@@ -54,12 +48,9 @@ export function FunnelsPage() {
   const eventOptions = metaEvents.data?.events ?? [];
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
 
-  const addStep = (formEvent: FormEvent) => {
-    formEvent.preventDefault();
-    const name = stepDraft.trim();
+  const addStep = (name: string) => {
     if (!name || steps.length >= MAX_STEPS) return;
     setSteps((current) => [...current, { event: name, filters: [] }]);
-    setStepDraft('');
   };
 
   const removeStep = (index: number) => {
@@ -122,24 +113,6 @@ export function FunnelsPage() {
         <CardContent className="flex flex-col gap-6">
           <div>
             <span className="mb-1 block text-sm font-medium">Steps (2–{MAX_STEPS}, in order)</span>
-            <form onSubmit={addStep} className="flex items-end gap-2">
-              <div className="flex-1">
-                <EventNameInput
-                  id="funnel-step-draft"
-                  label="Add a step event"
-                  value={stepDraft}
-                  onChange={setStepDraft}
-                  options={eventOptions}
-                  placeholder="e.g. app_open"
-                />
-              </div>
-              <Button type="submit" size="sm" disabled={!stepDraft.trim() || steps.length >= MAX_STEPS}>
-                Add step
-              </Button>
-            </form>
-            {steps.length < 2 && (
-              <p className="mt-1 text-xs text-text-muted">Add at least two steps to run a funnel.</p>
-            )}
 
             {steps.length > 0 && (
               <ul className="mt-3 flex flex-col gap-3">
@@ -193,14 +166,30 @@ export function FunnelsPage() {
                 ))}
               </ul>
             )}
+
+            <div className="mt-3">
+              <EventPicker
+                options={eventOptions}
+                onSelect={addStep}
+                isLoading={metaEvents.isPending}
+                disabled={steps.length >= MAX_STEPS}
+                comboLabel="Add step"
+                triggerLabel="Add step"
+              />
+            </div>
+            {steps.length < 2 && (
+              <p className="mt-2 text-xs text-text-muted">Add at least two steps to run a funnel.</p>
+            )}
           </div>
 
-          <DateRangeFields
+          <DateRangePresets
             idPrefix="funnel-date"
             from={dateFrom}
             to={dateTo}
-            onFrom={setDateFrom}
-            onTo={setDateTo}
+            onChange={(from, to) => {
+              setDateFrom(from);
+              setDateTo(to);
+            }}
           />
 
           <div className="flex flex-wrap gap-4">

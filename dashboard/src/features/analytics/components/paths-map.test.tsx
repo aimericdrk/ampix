@@ -53,7 +53,9 @@ describe('PathsPage — user-path map', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/paths`);
     await screen.findByRole('heading', { name: 'Paths' });
 
-    await userEvent.type(screen.getByLabelText('Anchor screen (optional)'), 'home');
+    await userEvent.click(screen.getByRole('button', { name: 'Anchor screen' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'home' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-06-01' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-01' } });
     await userEvent.selectOptions(screen.getByLabelText('Unit'), 'user');
