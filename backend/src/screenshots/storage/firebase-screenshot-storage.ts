@@ -13,8 +13,10 @@ type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>;
  */
 export class FirebaseScreenshotStorage implements ScreenshotStorage {
   private readonly bucket: Bucket;
+  readonly bucketName: string;
 
   constructor(bucketName: string) {
+    this.bucketName = bucketName;
     // Reuse an already-initialized default app (idempotent across module re-instantiation) rather
     // than calling initializeApp twice, which throws.
     const app: App =
@@ -22,6 +24,24 @@ export class FirebaseScreenshotStorage implements ScreenshotStorage {
         ? getApps()[0]
         : initializeApp({ credential: applicationDefault(), storageBucket: bucketName });
     this.bucket = getStorage(app).bucket(bucketName);
+  }
+
+  async probe(): Promise<{ ok: boolean; detail?: string }> {
+    // Lightweight, read-only reachability + credentials check. `exists()` round-trips to GCS with
+    // the resolved credentials, so it fails loudly on bad/absent ADC, a wrong/missing bucket, or
+    // insufficient IAM — exactly the states that otherwise leave the bucket silently empty.
+    try {
+      const [exists] = await this.bucket.exists();
+      if (!exists) {
+        return {
+          ok: false,
+          detail: `bucket "${this.bucketName}" does not exist or the credentials cannot see it`,
+        };
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   async put(objectPath: string, bytes: Buffer, contentType: string): Promise<void> {

@@ -17,6 +17,13 @@ export interface StoredScreenshot {
  * overwrites in place and the metadata row in Postgres references the path.
  */
 export interface ScreenshotStorage {
+  /**
+   * Boot-time connectivity/credentials self-check. Resolves `{ok:true}` when the backing store is
+   * reachable and writable, or `{ok:false, detail}` describing WHY (bad credentials, wrong bucket,
+   * missing permissions) — never throws, so a failed probe surfaces loudly in logs at startup
+   * instead of silently on the first upload. The in-memory fake is always `{ok:true}`.
+   */
+  probe(): Promise<{ ok: boolean; detail?: string }>;
   /** Writes (overwriting) the bytes at `objectPath` with the given content type. */
   put(objectPath: string, bytes: Buffer, contentType: string): Promise<void>;
   /** Reads the object back for streaming, or `null` if it doesn't exist. */

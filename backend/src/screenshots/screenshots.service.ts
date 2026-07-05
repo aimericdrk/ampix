@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { Readable } from 'node:stream';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { ProblemException } from '../common/problem-details';
@@ -62,13 +62,44 @@ export function screenshotObjectPath(
  * project membership (viewer+) via {@link ProjectsService}, the same tenancy check §14/§19 use.
  */
 @Injectable()
-export class ScreenshotsService {
+export class ScreenshotsService implements OnModuleInit {
+  private readonly logger = new Logger(ScreenshotsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly projects: ProjectsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
   ) {}
+
+  /**
+   * Boot-time storage self-check. Probes the configured backend once so bad credentials / a wrong or
+   * missing bucket / insufficient permissions surface LOUDLY at startup instead of silently on the
+   * first upload (bucket stays empty, logs say nothing). Never crashes boot — screenshots degrade,
+   * the rest of the app keeps running. Only the Firebase backend is probed for reachability; the
+   * in-memory fallback (no bucket configured) has nothing remote to reach.
+   */
+  async onModuleInit(): Promise<void> {
+    const bucket = this.config.firebaseStorageBucket;
+    if (!bucket) {
+      // In-memory fallback (dev/test) — the provider already warned bytes aren't persisted.
+      return;
+    }
+    let result: { ok: boolean; detail?: string };
+    try {
+      result = await this.storage.probe();
+    } catch (err) {
+      // probe() is contracted never to throw, but never let a storage hiccup take down boot.
+      result = { ok: false, detail: err instanceof Error ? err.message : String(err) };
+    }
+    if (result.ok) {
+      this.logger.log(`✓ Firebase Storage reachable: gs://${bucket}`);
+    } else {
+      this.logger.error(
+        `✗ Firebase Storage NOT reachable: ${result.detail ?? 'unknown error'} (bucket gs://${bucket}) — screenshot uploads will fail until this is fixed`,
+      );
+    }
+  }
 
   /**
    * Validates (type / size / required fields), writes the bytes to storage at the deterministic
@@ -82,7 +113,24 @@ export class ScreenshotsService {
     const storagePath = screenshotObjectPath(input.projectId, input.screenName, input.appVersion);
     // Put the bytes first: if this fails we throw and never persist a metadata row pointing at a
     // missing object. The deterministic path makes both the put and a later upsert idempotent.
-    await this.storage.put(storagePath, input.image, input.contentType);
+    try {
+      await this.storage.put(storagePath, input.image, input.contentType);
+    } catch (err) {
+      // The bucket stays empty and nobody knows why — so make it LOUD: the real error (message +
+      // stack) plus the path and bucket go to the logs at ERROR, and the underlying reason rides
+      // along in the 502 detail so the HTTP response itself explains the failure.
+      const reason = err instanceof Error ? err.message : String(err);
+      const bucket = this.config.firebaseStorageBucket;
+      this.logger.error(
+        `screenshot storage put FAILED screen=${input.screenName} app_version=${input.appVersion} path=${storagePath}${bucket ? ` bucket=gs://${bucket}` : ''}: ${reason}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new ProblemException({
+        status: 502,
+        title: 'Bad Gateway',
+        detail: `Failed to store screenshot in object storage: ${reason}`,
+      });
+    }
     await this.prisma.screenCapture.upsert({
       where: {
         projectId_screenName_appVersion: {
@@ -109,6 +157,9 @@ export class ScreenshotsService {
         imageHash: input.imageHash,
       },
     });
+    this.logger.log(
+      `screenshot stored screen=${input.screenName} app_version=${input.appVersion} path=${storagePath}`,
+    );
     return { stored: true };
   }
 

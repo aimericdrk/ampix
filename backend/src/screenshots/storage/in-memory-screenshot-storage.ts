@@ -15,6 +15,11 @@ interface StoredBytes {
 export class InMemoryScreenshotStorage implements ScreenshotStorage {
   private readonly objects = new Map<string, StoredBytes>();
 
+  async probe(): Promise<{ ok: boolean; detail?: string }> {
+    // Purely in-process — always reachable. There is nothing remote to fail against.
+    return { ok: true };
+  }
+
   async put(objectPath: string, bytes: Buffer, contentType: string): Promise<void> {
     // Copy so a later mutation of the caller's buffer can't corrupt the stored bytes.
     this.objects.set(objectPath, { bytes: Buffer.from(bytes), contentType });

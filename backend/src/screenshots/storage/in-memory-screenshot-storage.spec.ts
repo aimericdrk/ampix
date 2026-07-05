@@ -58,4 +58,9 @@ describe('InMemoryScreenshotStorage', () => {
     const store = new InMemoryScreenshotStorage();
     expect(await store.signedUrl(path)).toBe(`memory://screenshots/${path}`);
   });
+
+  it('probe always reports reachable (nothing remote to fail against)', async () => {
+    const store = new InMemoryScreenshotStorage();
+    await expect(store.probe()).resolves.toEqual({ ok: true });
+  });
 });

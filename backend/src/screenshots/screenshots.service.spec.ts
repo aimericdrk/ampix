@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Readable } from 'node:stream';
 import type { AppConfig } from '../config/app-config';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -21,6 +22,7 @@ interface PrismaMock {
 }
 
 interface StorageMock {
+  probe: jest.Mock;
   put: jest.Mock;
   getStream: jest.Mock;
   signedUrl: jest.Mock;
@@ -35,7 +37,7 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function makeService(screenshotMaxKb = 512) {
+function makeService(screenshotMaxKb = 512, configOverrides: Partial<AppConfig> = {}) {
   const prismaMock: PrismaMock = {
     screenCapture: {
       upsert: jest.fn().mockResolvedValue({}),
@@ -44,6 +46,7 @@ function makeService(screenshotMaxKb = 512) {
     },
   };
   const storageMock: StorageMock = {
+    probe: jest.fn().mockResolvedValue({ ok: true }),
     put: jest.fn().mockResolvedValue(undefined),
     getStream: jest.fn().mockResolvedValue(null),
     signedUrl: jest.fn().mockResolvedValue('memory://x'),
@@ -52,7 +55,7 @@ function makeService(screenshotMaxKb = 512) {
   const assertMembership = jest.fn().mockResolvedValue(undefined);
   const prisma = prismaMock as unknown as PrismaService;
   const projects = { assertMembership } as unknown as ProjectsService;
-  const config = { screenshotMaxKb } as AppConfig;
+  const config = { screenshotMaxKb, ...configOverrides } as AppConfig;
   const storage = storageMock as unknown as ScreenshotStorage;
   return {
     service: new ScreenshotsService(prisma, projects, config, storage),
@@ -168,6 +171,104 @@ describe('ScreenshotsService', () => {
       await expect(service.store(makeInput({ appVersion: '' }))).rejects.toMatchObject({
         problem: { status: 400 },
       });
+    });
+
+    it('logs at ERROR and throws 502 (with the underlying reason) when storage.put rejects', async () => {
+      const { service, prisma, storage } = makeService(512, {
+        firebaseStorageBucket: 'my-bucket.appspot.com',
+      });
+      storage.put.mockRejectedValue(new Error('permission denied on bucket'));
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.store(makeInput())).rejects.toMatchObject({
+        problem: {
+          status: 502,
+          title: 'Bad Gateway',
+          detail: expect.stringContaining('permission denied on bucket'),
+        },
+      });
+
+      // Never persist a metadata row pointing at bytes that were never written.
+      expect(prisma.screenCapture.upsert).not.toHaveBeenCalled();
+      // The real error + context (path, bucket) reached the logs at ERROR level.
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const [message] = errorSpy.mock.calls[0];
+      expect(message).toContain('permission denied on bucket');
+      expect(message).toContain(screenshotObjectPath(PROJECT, 'checkout', '1.0.0'));
+      expect(message).toContain('my-bucket.appspot.com');
+      errorSpy.mockRestore();
+    });
+
+    it('logs the stored path at LOG level on success', async () => {
+      const { service } = makeService();
+      const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+
+      await service.store(makeInput());
+
+      const logged = logSpy.mock.calls.map((c) => String(c[0]));
+      expect(
+        logged.some(
+          (line) =>
+            line.includes('screenshot stored') &&
+            line.includes('screen=checkout') &&
+            line.includes('app_version=1.0.0') &&
+            line.includes(screenshotObjectPath(PROJECT, 'checkout', '1.0.0')),
+        ),
+      ).toBe(true);
+      logSpy.mockRestore();
+    });
+  });
+
+  describe('onModuleInit (boot-time storage probe)', () => {
+    it('probes and logs reachability when a Firebase bucket is configured', async () => {
+      const { service, storage } = makeService(512, {
+        firebaseStorageBucket: 'my-bucket.appspot.com',
+      });
+      const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+
+      await service.onModuleInit();
+
+      expect(storage.probe).toHaveBeenCalledTimes(1);
+      const logged = logSpy.mock.calls.map((c) => String(c[0]));
+      expect(
+        logged.some((line) => line.includes('reachable') && line.includes('gs://my-bucket.appspot.com')),
+      ).toBe(true);
+      logSpy.mockRestore();
+    });
+
+    it('logs at ERROR (without crashing) when the probe reports the bucket is NOT reachable', async () => {
+      const { service, storage } = makeService(512, {
+        firebaseStorageBucket: 'wrong-bucket',
+      });
+      storage.probe.mockResolvedValue({ ok: false, detail: 'bucket does not exist' });
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const [message] = errorSpy.mock.calls[0];
+      expect(message).toContain('NOT reachable');
+      expect(message).toContain('bucket does not exist');
+      errorSpy.mockRestore();
+    });
+
+    it('does not crash boot even if the probe itself throws', async () => {
+      const { service, storage } = makeService(512, {
+        firebaseStorageBucket: 'boom-bucket',
+      });
+      storage.probe.mockRejectedValue(new Error('network unreachable'));
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(String(errorSpy.mock.calls[0][0])).toContain('network unreachable');
+      errorSpy.mockRestore();
+    });
+
+    it('skips the probe entirely when no bucket is configured (in-memory fallback)', async () => {
+      const { service, storage } = makeService(); // no firebaseStorageBucket
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+      expect(storage.probe).not.toHaveBeenCalled();
     });
   });
 
