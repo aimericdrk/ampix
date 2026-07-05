@@ -3,7 +3,7 @@ import 'package:myampmix_analytics/src/pipeline/event_pipeline.dart';
 import 'package:myampmix_analytics/src/util/logger.dart';
 
 void main() {
-  const logger = MamLogger(enabled: false);
+  const logger = MamLogger();
 
   test('preserves scalars, null and lists of scalars', () {
     final input = <String, Object?>{

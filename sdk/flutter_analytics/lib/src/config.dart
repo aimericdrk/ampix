@@ -1,3 +1,11 @@
+/// Verbosity of the SDK's internal, debug-only logging (shared-contracts §20).
+///
+/// Ascending verbosity: [none] silences everything, each subsequent value
+/// permits strictly more. The SDK only ever emits internal diagnostics — it
+/// never surfaces errors to the host app — and every emission is additionally
+/// gated to debug builds (`kDebugMode`), so nothing is ever printed in release.
+enum MyAmpMixLogLevel { none, error, warn, info, debug }
+
 /// Immutable SDK configuration passed to `MyAmpMix.init`.
 class MyAmpMixConfig {
   const MyAmpMixConfig({
@@ -8,6 +16,7 @@ class MyAmpMixConfig {
     this.sessionTimeout = const Duration(minutes: 30),
     this.maxRetryDelay = const Duration(minutes: 5),
     this.debug = false,
+    this.logLevel = MyAmpMixLogLevel.none,
     this.autocaptureScreens = true,
     this.autocaptureTaps = true,
     this.autocapturePurchases = true,
@@ -38,7 +47,33 @@ class MyAmpMixConfig {
   final Duration maxRetryDelay;
 
   /// Enables internal logging in debug builds.
+  ///
+  /// Retained for back-compat; prefer [logLevel]. When [logLevel] is left at
+  /// its default [MyAmpMixLogLevel.none] and this is `true`, the effective
+  /// level is promoted to [MyAmpMixLogLevel.debug] (see [effectiveLogLevel]).
   final bool debug;
+
+  /// Verbosity of the SDK's internal, debug-only logging (shared-contracts
+  /// §20). Defaults to [MyAmpMixLogLevel.none] (silent), preserving the SDK's
+  /// historically quiet default. Filtering is by effective level: internal
+  /// diagnostics emit at [MyAmpMixLogLevel.debug], error-carrying diagnostics
+  /// at [MyAmpMixLogLevel.error]. See [effectiveLogLevel] for the exact
+  /// interaction with the legacy [debug] flag.
+  final MyAmpMixLogLevel logLevel;
+
+  /// The log level the SDK actually applies, reconciling [logLevel] with the
+  /// legacy [debug] flag.
+  ///
+  /// - When [logLevel] is set to anything other than its default
+  ///   [MyAmpMixLogLevel.none], it wins outright.
+  /// - When [logLevel] is left at [MyAmpMixLogLevel.none] **and** [debug] is
+  ///   `true`, the effective level is [MyAmpMixLogLevel.debug] (back-compat:
+  ///   `debug: true` used to enable full internal logging).
+  /// - Otherwise the effective level is [MyAmpMixLogLevel.none].
+  MyAmpMixLogLevel get effectiveLogLevel =>
+      logLevel == MyAmpMixLogLevel.none && debug
+      ? MyAmpMixLogLevel.debug
+      : logLevel;
 
   /// Enables `MyAmpMixObserver` to emit `$screen_view` (design §11, M2).
   /// Independently toggleable from [autocaptureTaps].

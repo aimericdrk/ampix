@@ -29,7 +29,7 @@ class ScreenshotAutocapture {
     required String serverUrl,
     required String token,
     required Future<String> Function() appVersion,
-    MamLogger logger = const MamLogger(enabled: false),
+    MamLogger logger = const MamLogger(),
   }) : _capturer = capturer,
        _client = client,
        _store = store,

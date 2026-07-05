@@ -92,7 +92,7 @@ class MyAmpMix {
   static MyAmpMix get instance => _instance;
 
   bool _initialized = false;
-  MamLogger _logger = const MamLogger(enabled: false);
+  MamLogger _logger = const MamLogger();
   bool _autocaptureScreens = true;
   bool _autocaptureTaps = true;
   bool _autocapturePurchases = true;
@@ -126,8 +126,8 @@ class MyAmpMix {
     @visibleForTesting SdkOverrides? overrides,
   }) async {
     if (_instance._initialized) {
-      MamLogger(
-        enabled: config.debug,
+      MamLogger.fromConfig(
+        config,
       ).log('MyAmpMix.init ignored: SDK is already initialized.');
       return;
     }
@@ -136,8 +136,8 @@ class MyAmpMix {
       await sdk._start(token, config, overrides);
       _instance = sdk;
     } on Object catch (error, stackTrace) {
-      MamLogger(
-        enabled: config.debug,
+      MamLogger.fromConfig(
+        config,
       ).log('init failed; SDK disabled', error, stackTrace);
     }
   }
@@ -148,7 +148,9 @@ class MyAmpMix {
     SdkOverrides? overrides,
   ) async {
     WidgetsFlutterBinding.ensureInitialized();
-    _logger = MamLogger(enabled: config.debug);
+    // Compute the effective level once here; `_logger` is then threaded to
+    // every sub-component (uploader, pipeline, people, screenshot autocapture).
+    _logger = MamLogger.fromConfig(config);
     _autocaptureScreens = config.autocaptureScreens;
     _autocaptureTaps = config.autocaptureTaps;
     _autocapturePurchases = config.autocapturePurchases;

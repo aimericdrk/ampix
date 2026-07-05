@@ -65,7 +65,7 @@ class EventPipeline {
        _maxQueueSize = maxQueueSize,
        _isOptedOut = isOptedOut,
        _idFactory = idFactory ?? (() => const Uuid().v7()),
-       _logger = logger ?? const MamLogger(enabled: false);
+       _logger = logger ?? const MamLogger();
 
   final Clock _clock;
   final EventStore _store;

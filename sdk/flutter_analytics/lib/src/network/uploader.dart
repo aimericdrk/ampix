@@ -39,7 +39,7 @@ class Uploader {
     this.baseRetryDelay = const Duration(seconds: 2),
     this.maxRetryDelay = const Duration(minutes: 5),
     math.Random? random,
-    MamLogger logger = const MamLogger(enabled: false),
+    MamLogger logger = const MamLogger(),
   }) : _client = client,
        _events = events,
        _profiles = profiles,

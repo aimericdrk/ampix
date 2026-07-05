@@ -15,7 +15,7 @@ class People {
     required bool Function() isOptedOut,
     required int maxQueueSize,
     void Function(int queuedCount)? onQueued,
-    MamLogger logger = const MamLogger(enabled: false),
+    MamLogger logger = const MamLogger(),
     void Function(Future<void> Function() body)? schedule,
   }) : _store = store,
        _distinctId = distinctId,
