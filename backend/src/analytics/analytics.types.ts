@@ -149,3 +149,48 @@ export interface FlowResponse {
   nodes: FlowNode[];
   links: FlowLink[];
 }
+
+/** POST /query/click-heatmap response (contracts §19). Empty grid cells are omitted; `cx`/`cy` are
+ *  0-based cell indices (`cx` 0..cols-1, `cy` 0..rows-1). */
+export interface HeatmapCell {
+  cx: number;
+  cy: number;
+  count: number;
+}
+
+export interface ClickHeatmapResponse {
+  screen_name: string;
+  /** Total taps counted (sum of every cell's count — i.e. qualifying `$tap`s after dropping 0-size screens). */
+  total: number;
+  cells: HeatmapCell[];
+}
+
+/** GET /metrics/engagement response (contracts §19). All user counts use the canonical `uid` (§17). */
+export type EngagementMetric = 'dau' | 'wau' | 'mau';
+
+export interface EngagementActivePoint {
+  t: string;
+  /** `dau`|`wau`|`mau`, chosen by the query interval (day|week|month). */
+  metric: EngagementMetric;
+  value: number;
+}
+
+export interface EngagementStickinessPoint {
+  t: string;
+  /** Active-users-in-bucket ÷ distinct active users over the whole range (DAU/MAU-style ratio). */
+  value: number;
+}
+
+export interface EngagementNewReturningPoint {
+  t: string;
+  /** Users whose first-ever event falls in this bucket. */
+  new: number;
+  /** Active users in this bucket first seen before it. */
+  returning: number;
+}
+
+export interface EngagementResponse {
+  active: EngagementActivePoint[];
+  stickiness: EngagementStickinessPoint[];
+  new_vs_returning: EngagementNewReturningPoint[];
+}

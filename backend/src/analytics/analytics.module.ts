@@ -6,11 +6,13 @@ import { AdvancedAnalyticsController } from './advanced-analytics.controller';
 import { AdvancedAnalyticsService } from './advanced-analytics.service';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
+import { V2AnalyticsController } from './v2-analytics.controller';
+import { V2AnalyticsService } from './v2-analytics.service';
 
 @Module({
   imports: [AuthModule, ProjectsModule, CohortsModule],
-  controllers: [AnalyticsController, AdvancedAnalyticsController],
-  providers: [AnalyticsService, AdvancedAnalyticsService],
+  controllers: [AnalyticsController, AdvancedAnalyticsController, V2AnalyticsController],
+  providers: [AnalyticsService, AdvancedAnalyticsService, V2AnalyticsService],
   // Exported so the §16 saved-reports/dashboards runner can execute stored definitions through the
   // exact same injection-safe engine (re-validating on every run).
   exports: [AnalyticsService, AdvancedAnalyticsService],

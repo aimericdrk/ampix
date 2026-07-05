@@ -13,5 +13,7 @@ import { DashboardsService } from './dashboards.service';
   imports: [AuthModule, AuthzModule, ReportsModule],
   controllers: [DashboardsController],
   providers: [DashboardsService],
+  // DashboardsService is exported so §19 templates can materialize a dashboard + tiles through it.
+  exports: [DashboardsService],
 })
 export class DashboardsModule {}

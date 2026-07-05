@@ -14,6 +14,7 @@ import { ReportsService } from './reports.service';
   imports: [AuthModule, AuthzModule, AnalyticsModule],
   controllers: [ReportsController],
   providers: [ReportsService, AnalysisRunnerService],
-  exports: [AnalysisRunnerService],
+  // ReportsService is exported so §19 templates can materialize saved reports through it.
+  exports: [AnalysisRunnerService, ReportsService],
 })
 export class ReportsModule {}
