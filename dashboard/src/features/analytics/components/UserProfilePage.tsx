@@ -1,9 +1,9 @@
-import { Link, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { ApiError } from '../../../lib/api/problem';
 import { formatExactNumber } from '../format';
 import { useUserProfile } from '../api';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 
 export function UserProfilePage() {
   const { projectId, distinctId } = useParams({
@@ -12,19 +12,14 @@ export function UserProfilePage() {
   const { data, isPending, isError, error } = useUserProfile(projectId, distinctId);
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <div>
-        <Link
-          to="/projects/$projectId/users"
-          params={{ projectId }}
-          className="text-sm text-accent underline"
-        >
-          ← Users
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold">{distinctId}</h1>
-      </div>
-
+    <PageShell
+      projectId={projectId}
+      title={distinctId}
+      breadcrumbs={[
+        { label: 'Users', to: '/projects/$projectId/users', params: { projectId } },
+        { label: distinctId },
+      ]}
+    >
       {isPending && <p role="status">Loading user profile…</p>}
       {isError && (
         <p role="alert" className="text-danger">
@@ -111,6 +106,6 @@ export function UserProfilePage() {
           </Card>
         </>
       )}
-    </section>
+    </PageShell>
   );
 }

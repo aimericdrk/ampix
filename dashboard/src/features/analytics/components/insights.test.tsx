@@ -135,4 +135,30 @@ describe('InsightsPage', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getAllByRole('table')).toHaveLength(1);
   });
+
+  it('offers the richer chart types (area, stacked, pie) from the chart-type picker', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+    await waitForMetaLoaded();
+
+    await userEvent.type(screen.getByLabelText('Add an event'), 'product_viewed');
+    await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+    await userEvent.selectOptions(screen.getByLabelText('Breakdown (optional)'), 'utm_source');
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await screen.findByRole('img', { name: 'Insights line chart' });
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Area' }));
+    await screen.findByRole('img', { name: 'Insights area chart' });
+    expect(screen.queryByRole('img', { name: 'Insights line chart' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Stacked' }));
+    await screen.findByRole('img', { name: 'Insights stacked bar chart' });
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Pie' }));
+    await screen.findByRole('img', { name: 'Insights pie chart' });
+    // The composition legend carries each series' identity + value, never color alone.
+    expect(screen.getByRole('list', { name: 'Composition legend' })).toBeInTheDocument();
+  });
 });

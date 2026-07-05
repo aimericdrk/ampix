@@ -30,7 +30,7 @@ import {
   useMetaProperties,
   useUpdateCohort,
 } from '../api';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 import { cleanFilters, EventNameInput, FilterRows, VALUELESS_OPS } from './builder-controls';
 
 const MATCH_LABELS: Record<CohortMatch, string> = {
@@ -185,15 +185,17 @@ export function CohortsPage() {
       : null;
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Cohorts</h1>
+    <PageShell
+      projectId={projectId}
+      title="Cohorts"
+      description="Define reusable audiences from behavior and properties."
+      breadcrumbs={[{ label: 'Audience' }, { label: 'Cohorts' }]}
+      actions={
         <Button type="button" variant="secondary" onClick={resetBuilder}>
           New cohort
         </Button>
-      </div>
-
+      }
+    >
       <Card>
         <CardHeader>
           <CardTitle>Saved cohorts</CardTitle>
@@ -373,7 +375,7 @@ export function CohortsPage() {
           )}
         </CardContent>
       </Card>
-    </section>
+    </PageShell>
   );
 }
 

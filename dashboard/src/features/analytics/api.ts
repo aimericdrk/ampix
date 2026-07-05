@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api/client';
 import type {
+  ApplyTemplateResponse,
   Cohort,
   CohortPreviewResponse,
   CreateCohortRequest,
@@ -19,6 +20,7 @@ import type {
   ListCohortsResponse,
   ListDashboardsResponse,
   ListReportsResponse,
+  ListTemplatesResponse,
   ListUsersResponse,
   LiveEventsResponse,
   MetaEventsResponse,
@@ -29,6 +31,7 @@ import type {
   RunReportRequest,
   SavedReport,
   SessionsSummaryResponse,
+  TemplateId,
   UpdateCohortRequest,
   UpdateDashboardRequest,
   UpdateLayoutRequest,
@@ -392,6 +395,37 @@ export function useDeleteTile(projectId: string, dashboardId: string) {
         method: 'DELETE',
       }),
     onSuccess: () => invalidateDashboard(queryClient, projectId, dashboardId),
+  });
+}
+
+// --- Templates gallery (contracts §19) ---
+
+/** The fixed template catalog (`GET /api/v1/templates`) — auth-only, shared across projects. */
+export function useTemplates() {
+  return useQuery({
+    queryKey: ['templates'],
+    queryFn: () => apiFetch<ListTemplatesResponse>('/api/v1/templates'),
+  });
+}
+
+/**
+ * Applies a template (`POST /projects/:projectId/templates/:templateId/apply`) — the server
+ * materializes the bundle as real cohorts/reports/a dashboard and returns the new dashboard id.
+ * Invalidates the dashboards + reports + cohorts caches so the newly created rows show up.
+ */
+export function useApplyTemplate(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (templateId: TemplateId) =>
+      apiFetch<ApplyTemplateResponse>(
+        `${base(projectId)}/templates/${templateId}/apply`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dashboardsKey(projectId) });
+      void queryClient.invalidateQueries({ queryKey: reportsKey(projectId) });
+      void queryClient.invalidateQueries({ queryKey: cohortsKey(projectId) });
+    },
   });
 }
 

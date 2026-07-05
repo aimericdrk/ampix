@@ -5,7 +5,7 @@
  * `var(--series-N)` here rather than hard-coded hex so dark mode is a selected step, not an
  * auto-invert, and every consumer (recharts marks, legend swatches, stat tiles) stays in sync.
  */
-const SERIES_COLOR_VARS = [
+export const SERIES_COLOR_VARS = [
   'var(--series-1)',
   'var(--series-2)',
   'var(--series-3)',
@@ -16,7 +16,16 @@ const SERIES_COLOR_VARS = [
   'var(--series-8)',
 ] as const;
 
-const SERIES_OTHER_COLOR_VAR = 'var(--series-other)';
+export const SERIES_OTHER_COLOR_VAR = 'var(--series-other)';
+
+/**
+ * Fixed-order categorical color for the Nth entity in a stable list (pie slices, stacked segments,
+ * standalone series). Identity is the list index the caller supplies — never rank — so a filtered-out
+ * entity never repaints its neighbours. A 9th+ entity folds into --series-other (dataviz spec).
+ */
+export function colorForIndex(index: number): string {
+  return SERIES_COLOR_VARS[index] ?? SERIES_OTHER_COLOR_VAR;
+}
 
 /** A separator that can't appear in an event name or property value, so keys never collide. */
 const KEY_SEPARATOR = '\u0000';

@@ -13,7 +13,7 @@ import { Input } from '../../../components/ui/input';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { useCreateDashboard, useDashboards } from '../api';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 
 export function DashboardsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/dashboards' });
@@ -21,10 +21,12 @@ export function DashboardsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dashboards</h1>
+    <PageShell
+      projectId={projectId}
+      title="Dashboards"
+      description="Pin charts together into shareable boards."
+      breadcrumbs={[{ label: 'Saved' }, { label: 'Dashboards' }]}
+      actions={
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>New dashboard</Button>
@@ -35,8 +37,8 @@ export function DashboardsPage() {
             <NewDashboardForm projectId={projectId} onCreated={() => setDialogOpen(false)} />
           </DialogContent>
         </Dialog>
-      </div>
-
+      }
+    >
       {dashboards.isPending && <p role="status">Loading dashboards…</p>}
       {dashboards.error && (
         <p role="alert" className="text-danger">
@@ -71,7 +73,7 @@ export function DashboardsPage() {
           </Link>
         ))}
       </div>
-    </section>
+    </PageShell>
   );
 }
 

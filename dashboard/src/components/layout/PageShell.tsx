@@ -1,0 +1,79 @@
+import { Link } from '@tanstack/react-router';
+import { type ReactNode } from 'react';
+
+export interface Breadcrumb {
+  label: string;
+  /** A TanStack route path; omit for the current (non-link) page. */
+  to?: string;
+  params?: Record<string, string>;
+}
+
+/**
+ * The consistent page frame every screen wears: optional breadcrumbs, a title, a short description,
+ * and a right-aligned primary-action slot — so pages feel uniform and calm. When a `projectId` is
+ * given, a leading "Home" breadcrumb linking to the project overview is prepended automatically.
+ * Children are laid out in a single column with the standard 6-gap rhythm.
+ */
+export function PageShell({
+  projectId,
+  title,
+  description,
+  breadcrumbs,
+  actions,
+  children,
+}: {
+  projectId?: string;
+  title: string;
+  description?: ReactNode;
+  breadcrumbs?: Breadcrumb[];
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  const crumbs: Breadcrumb[] = [];
+  if (projectId && breadcrumbs && breadcrumbs.length > 0) {
+    crumbs.push({ label: 'Home', to: '/projects/$projectId/home', params: { projectId } });
+  }
+  if (breadcrumbs) crumbs.push(...breadcrumbs);
+
+  return (
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        {crumbs.length > 0 && (
+          <nav aria-label="Breadcrumb">
+            <ol className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
+              {crumbs.map((crumb, index) => {
+                const isLast = index === crumbs.length - 1;
+                return (
+                  <li key={`${crumb.label}-${index}`} className="flex items-center gap-1.5">
+                    {crumb.to && !isLast ? (
+                      <Link
+                        to={crumb.to}
+                        params={crumb.params}
+                        className="hover:text-text hover:underline"
+                      >
+                        {crumb.label}
+                      </Link>
+                    ) : (
+                      <span aria-current={isLast ? 'page' : undefined} className={isLast ? 'text-text' : undefined}>
+                        {crumb.label}
+                      </span>
+                    )}
+                    {!isLast && <span aria-hidden="true">/</span>}
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        )}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold">{title}</h1>
+            {description && <p className="mt-1 max-w-2xl text-sm text-text-muted">{description}</p>}
+          </div>
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}

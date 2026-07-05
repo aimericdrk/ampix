@@ -1,6 +1,6 @@
-import { Link, useParams, useRouter } from '@tanstack/react-router';
+import { useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
-import { ProjectAnalyticsNav } from '../../analytics/components/ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import {
@@ -33,17 +33,14 @@ export function ProjectDetailPage() {
   const isAdmin = role === 'admin';
 
   return (
-    <section className="flex flex-col gap-6">
-      <div>
-        <Link to="/projects" className="text-sm text-accent underline">
-          ← Projects
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold">{project?.name ?? 'Project'}</h1>
-        {project && <p className="text-sm text-text-muted">{project.org_name}</p>}
-      </div>
-
-      <ProjectAnalyticsNav projectId={projectId} />
-
+    <PageShell
+      title={project?.name ?? 'Project'}
+      description={project?.org_name}
+      breadcrumbs={[
+        { label: 'Projects', to: '/projects' },
+        { label: project?.name ?? 'Project' },
+      ]}
+    >
       {project && (
         <Card className="max-w-lg">
           <CardHeader>
@@ -114,7 +111,7 @@ export function ProjectDetailPage() {
           onDeleted={() => router.history.push('/projects')}
         />
       )}
-    </section>
+    </PageShell>
   );
 }
 

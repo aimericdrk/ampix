@@ -1,4 +1,4 @@
-import { Link, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import {
@@ -21,7 +21,7 @@ import {
   useSaveLayout,
 } from '../api';
 import { DashboardGrid, packLayout, type GridTile } from './DashboardGrid';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 
 const DEFAULT_TILE_W = 6;
 const DEFAULT_TILE_H = 2;
@@ -117,24 +117,22 @@ export function DashboardViewPage() {
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Link to="/projects/$projectId/dashboards" params={{ projectId }} className="text-sm text-accent underline">
-            ← Dashboards
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold">{dashboard.data?.name ?? 'Dashboard'}</h1>
-        </div>
-        <div className="flex items-center gap-2">
+    <PageShell
+      projectId={projectId}
+      title={dashboard.data?.name ?? 'Dashboard'}
+      breadcrumbs={[
+        { label: 'Dashboards', to: '/projects/$projectId/dashboards', params: { projectId } },
+        { label: dashboard.data?.name ?? 'Dashboard' },
+      ]}
+      actions={
+        <>
           <AddTileDialog projectId={projectId} dashboardId={dashboardId} layout={layout} />
           <Button onClick={handleSaveLayout} disabled={!dirty || saveLayout.isPending}>
             {saveLayout.isPending ? 'Saving…' : 'Save layout'}
           </Button>
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {dashboard.isPending && <p role="status">Loading dashboard…</p>}
       {dashboard.error && (
         <p role="alert" className="text-danger">
@@ -154,7 +152,7 @@ export function DashboardViewPage() {
           onRemove={handleRemove}
         />
       )}
-    </section>
+    </PageShell>
   );
 }
 

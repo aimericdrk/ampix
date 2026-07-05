@@ -4,7 +4,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { ApiError } from '../../../lib/api/problem';
 import { useUsersList } from '../api';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 
 export function UsersPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/users' });
@@ -21,10 +21,12 @@ export function UsersPage() {
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Users</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Users"
+      description="Search and browse the people behind your events."
+      breadcrumbs={[{ label: 'Audience' }, { label: 'Users' }]}
+    >
       <form onSubmit={handleSearchSubmit} className="flex max-w-sm items-end gap-2">
         <div className="flex-1">
           <label htmlFor="user-search" className="mb-1 block text-sm font-medium">
@@ -101,6 +103,6 @@ export function UsersPage() {
           )}
         </>
       )}
-    </section>
+    </PageShell>
   );
 }

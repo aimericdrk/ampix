@@ -14,6 +14,8 @@ import { LoginPage } from './features/auth/components/LoginPage';
 import { SecuritySettingsPage } from './features/auth/components/SecuritySettingsPage';
 import { SignupPage } from './features/auth/components/SignupPage';
 import { authStore } from './features/auth/store';
+import { HomePage } from './features/analytics/components/HomePage';
+import { TemplatesPage } from './features/analytics/components/TemplatesPage';
 import { InsightsPage } from './features/analytics/components/InsightsPage';
 import { FunnelsPage } from './features/analytics/components/FunnelsPage';
 import { RetentionPage } from './features/analytics/components/RetentionPage';
@@ -116,6 +118,20 @@ const projectDetailRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId',
   component: ProjectDetailPage,
+});
+
+// --- v2 home overview + templates gallery (contracts §19) ---
+
+const homeRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/home',
+  component: HomePage,
+});
+
+const templatesRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/templates',
+  component: TemplatesPage,
 });
 
 // --- Core analytics, Phase 3 (contracts §14) — all scoped to the selected project ---
@@ -228,6 +244,8 @@ export const routeTree = rootRoute.addChildren([
   privateRoute.addChildren([
     projectsRoute,
     projectDetailRoute,
+    homeRoute,
+    templatesRoute,
     insightsRoute,
     funnelsRoute,
     retentionRoute,

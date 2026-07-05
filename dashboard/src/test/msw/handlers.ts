@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { phase5Handlers } from './phase5-handlers';
+import { phase5Handlers, TEMPLATES_FIXTURE } from './phase5-handlers';
 import type {
   Activate2faResponse,
   AcceptInvitationResponse,
@@ -1153,6 +1153,16 @@ export const handlers = [
     return HttpResponse.json(SESSIONS_SUMMARY_FIXTURE);
   }),
 
-  // --- Cohorts, saved reports & custom dashboards (contracts §16) ---
+  // --- Templates catalog (contracts §19) — auth-only, shared across projects ---
+
+  http.get('/api/v1/templates', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token)) {
+      return problem(401, 'Access token invalid or expired');
+    }
+    return HttpResponse.json({ templates: TEMPLATES_FIXTURE });
+  }),
+
+  // --- Cohorts, saved reports & custom dashboards (contracts §16) + templates apply (§19) ---
   ...phase5Handlers,
 ];

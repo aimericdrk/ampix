@@ -15,8 +15,8 @@ import type {
 } from '../../../lib/api/types';
 import { INSIGHTS_FILTER_OPS, INSIGHTS_INTERVALS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunInsights } from '../api';
-import { InsightsChart } from './InsightsChart';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { InsightsChart, type InsightsChartType } from './InsightsChart';
+import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
 
 const MAX_EVENTS = 5;
@@ -54,6 +54,8 @@ export function InsightsPage() {
   const [breakdownProperty, setBreakdownProperty] = useState('');
   const [cohortId, setCohortId] = useState('');
   const [result, setResult] = useState<InsightsResponse | null>(null);
+  // The selected visualization is part of the builder state, so it persists across re-runs.
+  const [chartType, setChartType] = useState<InsightsChartType>('line');
 
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
 
@@ -114,10 +116,12 @@ export function InsightsPage() {
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Insights</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Insights"
+      description="Trend any event over time, break it down, and switch how it's visualized."
+      breadcrumbs={[{ label: 'Explore' }, { label: 'Insights' }]}
+    >
       <Card>
         <CardHeader>
           <CardTitle>Query builder</CardTitle>
@@ -355,8 +359,13 @@ export function InsightsPage() {
       )}
 
       {result && result.series.length > 0 && (
-        <InsightsChart series={result.series} eventOrder={events.map((e) => e.name)} />
+        <InsightsChart
+          series={result.series}
+          eventOrder={events.map((e) => e.name)}
+          chartType={chartType}
+          onChartTypeChange={setChartType}
+        />
       )}
-    </section>
+    </PageShell>
   );
 }

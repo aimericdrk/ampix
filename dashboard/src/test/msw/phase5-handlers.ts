@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import type {
   AnalysisDefinition,
   AnalysisResult,
+  ApplyTemplateResponse,
   Cohort,
   CohortDefinition,
   CohortPreviewResponse,
@@ -20,6 +21,9 @@ import type {
   ReportKind,
   SavedReport,
   SavedReportSummary,
+  TemplateId,
+  TemplateKindCounts,
+  TemplateSummary,
 } from '../../lib/api/types';
 
 // Self-contained Phase-5 (§16) mock. It deliberately imports nothing from ./handlers to avoid a
@@ -100,6 +104,115 @@ function resultForKind(kind: ReportKind): AnalysisResult {
       return FLOWS_RESULT;
   }
 }
+
+/** A valid, minimal §14/§15 query definition per kind — used to seed template-applied reports. */
+function defaultDefinitionForKind(kind: ReportKind): AnalysisDefinition {
+  const date_range = { from: '2026-06-01', to: '2026-07-01' };
+  switch (kind) {
+    case 'insights':
+      return {
+        events: [{ name: 'app_open', aggregation: 'total' }],
+        date_range,
+        interval: 'day',
+        filters: [],
+      };
+    case 'funnel':
+      return {
+        steps: [
+          { event: 'app_open', filters: [] },
+          { event: 'checkout_completed', filters: [] },
+        ],
+        date_range,
+        window_days: 7,
+        order: 'any',
+      };
+    case 'retention':
+      return {
+        born_event: { name: 'app_open', filters: [] },
+        date_range,
+        interval: 'week',
+        periods: 4,
+      };
+    case 'flows':
+      return {
+        anchor: { event: 'app_open', filters: [] },
+        direction: 'forward',
+        date_range,
+        steps: 2,
+        max_nodes_per_step: 5,
+        unit: 'session',
+      };
+  }
+}
+
+// --- Template catalog (contracts §19) — fixed, seeded server-side ---
+
+interface TemplateBundleReport {
+  title: string;
+  kind: ReportKind;
+}
+
+interface TemplateBundle extends TemplateSummary {
+  /** The saved-report definitions this template materializes; one dashboard tile per report. */
+  reports: TemplateBundleReport[];
+}
+
+/** kind_counts derived from a bundle's report list, so the two never drift. */
+function kindCounts(reports: TemplateBundleReport[]): TemplateKindCounts {
+  const counts: TemplateKindCounts = {};
+  for (const r of reports) counts[r.kind] = (counts[r.kind] ?? 0) + 1;
+  return counts;
+}
+
+function bundle(
+  id: TemplateId,
+  name: string,
+  description: string,
+  reports: TemplateBundleReport[],
+): TemplateBundle {
+  return { id, name, description, kind_counts: kindCounts(reports), reports };
+}
+
+export const TEMPLATE_CATALOG: TemplateBundle[] = [
+  bundle('acquisition', 'Acquisition', 'Where new users come from and how many arrive.', [
+    { title: 'New users over time', kind: 'insights' },
+    { title: 'Traffic by source', kind: 'insights' },
+  ]),
+  bundle(
+    'activation-funnel',
+    'Activation funnel',
+    'The steps from first open to activation, and where users drop.',
+    [
+      { title: 'Activation funnel', kind: 'funnel' },
+      { title: 'Activations over time', kind: 'insights' },
+    ],
+  ),
+  bundle('engagement', 'Engagement', 'Active usage, session depth and feature adoption.', [
+    { title: 'Daily active events', kind: 'insights' },
+    { title: 'Feature usage', kind: 'insights' },
+  ]),
+  bundle('retention', 'Retention', 'How well users come back, week over week.', [
+    { title: 'Weekly retention', kind: 'retention' },
+    { title: 'Returning users', kind: 'insights' },
+  ]),
+  bundle('revenue', 'Revenue', 'Purchases, revenue trends and paying users.', [
+    { title: 'Revenue over time', kind: 'insights' },
+    { title: 'Paying users', kind: 'insights' },
+  ]),
+  bundle('product-usage', 'Product usage', 'Which features get used and how they convert.', [
+    { title: 'Top events', kind: 'insights' },
+    { title: 'Core-action funnel', kind: 'funnel' },
+  ]),
+  bundle('user-paths', 'User paths', 'The most common journeys through your product.', [
+    { title: 'Paths from home', kind: 'flows' },
+    { title: 'Entry events', kind: 'insights' },
+  ]),
+];
+
+/** The `GET /api/v1/templates` payload (summaries only — no bundle internals). */
+export const TEMPLATES_FIXTURE: TemplateSummary[] = TEMPLATE_CATALOG.map(
+  ({ id, name, description, kind_counts }) => ({ id, name, description, kind_counts }),
+);
 
 const SEED_COHORT_DEFINITION: CohortDefinition = {
   match: 'all',
@@ -634,5 +747,64 @@ export const phase5Handlers = [
     if (!dashboardById(id)) return problem(404, 'Dashboard not found');
     phase5State.dashboards = phase5State.dashboards.filter((d) => d.id !== id);
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // --- Templates apply (§19) — materializes a bundle as real reports + a dashboard ---
+
+  http.post(`${V1}/templates/:templateId/apply`, ({ request, params }) => {
+    if (unauthorized(request)) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const templateId = params.templateId as TemplateId;
+    const template = TEMPLATE_CATALOG.find((t) => t.id === templateId);
+    if (!template) return problem(404, 'Template not found');
+
+    // Idempotency: a template applied to a project maps to a dashboard named after the template.
+    // Re-applying returns the existing dashboard rather than creating a duplicate (skip-if-exists).
+    const existing = phase5State.dashboards.find(
+      (d) => d.projectId === projectId && d.name === template.name,
+    );
+    if (existing) {
+      return HttpResponse.json({ dashboard_id: existing.id } satisfies ApplyTemplateResponse);
+    }
+
+    // Materialize one saved report per bundle entry, then a dashboard with one tile per report.
+    const tiles: TileRecord[] = template.reports.map((report, index) => {
+      const reportRecord: ReportRecord = {
+        id: nextId('report'),
+        projectId,
+        name: report.title,
+        kind: report.kind,
+        definition: defaultDefinitionForKind(report.kind),
+        createdAt: NOW,
+        updatedAt: NOW,
+      };
+      phase5State.reports.push(reportRecord);
+      return {
+        id: nextId('tile'),
+        title: report.title,
+        kind: report.kind,
+        savedReportId: reportRecord.id,
+        inlineDefinition: null,
+        x: (index % 2) * 6,
+        y: Math.floor(index / 2) * 2,
+        w: 6,
+        h: 2,
+        position: index,
+      };
+    });
+
+    const dashboard: DashboardRecord = {
+      id: nextId('dashboard'),
+      projectId,
+      name: template.name,
+      tiles,
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    phase5State.dashboards.push(dashboard);
+    return HttpResponse.json(
+      { dashboard_id: dashboard.id } satisfies ApplyTemplateResponse,
+      { status: 201 },
+    );
   }),
 ];

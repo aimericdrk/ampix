@@ -15,12 +15,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { formatCompactNumber, formatExactNumber } from '../format';
 import { assignSeriesColors, seriesKey, seriesLabel } from '../palette';
 import type { InsightsSeries } from '../../../lib/api/types';
+import { AreaTrendChart, StackedBarChart } from './charts/SeriesCharts';
+import { CompositionPieChart, type PieSlice } from './charts/CompositionPieChart';
 
-type ChartType = 'line' | 'bar' | 'number' | 'table';
+export type InsightsChartType = 'line' | 'bar' | 'area' | 'stacked' | 'pie' | 'number' | 'table';
 
-const CHART_TYPES: { value: ChartType; label: string }[] = [
+export const INSIGHTS_CHART_TYPES: { value: InsightsChartType; label: string }[] = [
   { value: 'line', label: 'Line' },
   { value: 'bar', label: 'Bar' },
+  { value: 'area', label: 'Area' },
+  { value: 'stacked', label: 'Stacked' },
+  { value: 'pie', label: 'Pie' },
   { value: 'number', label: 'Number' },
   { value: 'table', label: 'Table' },
 ];
@@ -68,29 +73,49 @@ const TOOLTIP_STYLE = {
 };
 
 /**
- * Renders an insights result set: a chart-type toggle (line | bar | number | table) over the
- * primary visualization, plus an ALWAYS-visible raw data table underneath — per the dataviz spec,
- * identity is never carried by color alone, so the table (and, for 2+ series, the legend) stays
- * reachable regardless of which chart is selected.
+ * Renders an insights result set with a chart-type picker (line · bar · area · stacked · pie ·
+ * number · table) over the primary visualization, plus an ALWAYS-visible raw data table underneath.
+ * Per the dataviz spec, identity is never carried by color alone: the table (and, for 2+ series, the
+ * legend) stays reachable regardless of which chart is selected, and colors are assigned by series
+ * identity in fixed order (never repainted when a series drops out). The picker is controlled by the
+ * page so the choice persists in the builder state.
  */
 export function InsightsChart({
   series,
   eventOrder,
+  chartType: controlledType,
+  onChartTypeChange,
 }: {
   series: InsightsSeries[];
   /** The order events were added in the builder — colors key off this, not the response's array
    * order, so a filter that drops a series never repaints the survivors. */
   eventOrder: string[];
+  /** Controlled selection (persisted in the page's builder state). Omit to run uncontrolled. */
+  chartType?: InsightsChartType;
+  onChartTypeChange?: (next: InsightsChartType) => void;
 }) {
-  const [chartType, setChartType] = useState<ChartType>('line');
+  const [internalType, setInternalType] = useState<InsightsChartType>('line');
+  const chartType = controlledType ?? internalType;
+  const setChartType = onChartTypeChange ?? setInternalType;
   const colors = useMemo(() => assignSeriesColors(series, eventOrder), [series, eventOrder]);
   const { rows, keys, labels } = useMemo(() => pivot(series), [series]);
   const showLegend = keys.length > 1;
+  const colorFor = (key: string) => colors.get(key) ?? 'var(--series-1)';
+
+  const pieSlices: PieSlice[] = useMemo(
+    () =>
+      keys.map((key) => ({
+        key,
+        label: labels.get(key) ?? key,
+        value: rows.reduce((sum, row) => sum + (Number(row[key]) || 0), 0),
+      })),
+    [keys, labels, rows],
+  );
 
   return (
     <div className="flex flex-col gap-6">
-      <div role="radiogroup" aria-label="Chart type" className="flex gap-1">
-        {CHART_TYPES.map((option) => (
+      <div role="radiogroup" aria-label="Chart type" className="flex flex-wrap gap-1">
+        {INSIGHTS_CHART_TYPES.map((option) => (
           <button
             key={option.value}
             type="button"
@@ -132,11 +157,11 @@ export function InsightsChart({
                     type="monotone"
                     dataKey={key}
                     name={labels.get(key)}
-                    stroke={colors.get(key)}
+                    stroke={colorFor(key)}
                     strokeWidth={2}
                     dot={{
                       r: 4,
-                      fill: colors.get(key),
+                      fill: colorFor(key),
                       stroke: 'var(--chart-surface)',
                       strokeWidth: 2,
                     }}
@@ -163,7 +188,7 @@ export function InsightsChart({
                     key={key}
                     dataKey={key}
                     name={labels.get(key)}
-                    fill={colors.get(key)}
+                    fill={colorFor(key)}
                     radius={[4, 4, 0, 0]}
                     maxBarSize={24}
                   />
@@ -172,6 +197,24 @@ export function InsightsChart({
             )}
           </ResponsiveContainer>
         </div>
+      )}
+
+      {chartType === 'area' && (
+        <AreaTrendChart rows={rows} keys={keys} labels={labels} colorFor={colorFor} ariaLabel="Insights area chart" />
+      )}
+
+      {chartType === 'stacked' && (
+        <StackedBarChart
+          rows={rows}
+          keys={keys}
+          labels={labels}
+          colorFor={colorFor}
+          ariaLabel="Insights stacked bar chart"
+        />
+      )}
+
+      {chartType === 'pie' && (
+        <CompositionPieChart slices={pieSlices} colorFor={colorFor} ariaLabel="Insights pie chart" />
       )}
 
       {chartType === 'number' && (

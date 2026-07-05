@@ -787,3 +787,47 @@ export function isTileError(
 ): result is { error: string } {
   return 'error' in result;
 }
+
+// --- v2 templates (contracts §19) ---
+// Amplitude-parity, seeded server-side. `GET /api/v1/templates` is auth-only (not project-scoped);
+// applying a template materializes real Cohorts/SavedReports/Dashboard rows (§16) in the project.
+
+/** The fixed §19 template catalog id set. */
+export type TemplateId =
+  | 'acquisition'
+  | 'activation-funnel'
+  | 'engagement'
+  | 'retention'
+  | 'revenue'
+  | 'product-usage'
+  | 'user-paths';
+
+export const TEMPLATE_IDS: TemplateId[] = [
+  'acquisition',
+  'activation-funnel',
+  'engagement',
+  'retention',
+  'revenue',
+  'product-usage',
+  'user-paths',
+];
+
+/** How many saved-report definitions of each §14/§15 kind the bundle contains. */
+export type TemplateKindCounts = Partial<Record<ReportKind, number>>;
+
+/** One catalog entry from `GET /api/v1/templates`. */
+export interface TemplateSummary {
+  id: TemplateId;
+  name: string;
+  description: string;
+  kind_counts: TemplateKindCounts;
+}
+
+export interface ListTemplatesResponse {
+  templates: TemplateSummary[];
+}
+
+/** `POST /projects/:projectId/templates/:templateId/apply` — returns the created dashboard's id. */
+export interface ApplyTemplateResponse {
+  dashboard_id: string;
+}

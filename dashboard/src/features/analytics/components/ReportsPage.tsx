@@ -5,7 +5,7 @@ import { ApiError } from '../../../lib/api/problem';
 import type { ReportKind, SavedReportSummary } from '../../../lib/api/types';
 import { REPORT_KINDS } from '../../../lib/api/types';
 import { useDeleteReport, useReports } from '../api';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 
 const KIND_LABELS: Record<ReportKind, string> = {
   insights: 'Insights',
@@ -23,10 +23,12 @@ export function ReportsPage() {
     (reports.data?.reports ?? []).filter((report) => report.kind === kind);
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Reports</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Reports"
+      description="Your saved analyses, ready to re-run or add to a dashboard."
+      breadcrumbs={[{ label: 'Saved' }, { label: 'Reports' }]}
+    >
       {reports.isPending && <p role="status">Loading reports…</p>}
       {reports.error && (
         <p role="alert" className="text-danger">
@@ -82,6 +84,6 @@ export function ReportsPage() {
           })}
         </div>
       )}
-    </section>
+    </PageShell>
   );
 }

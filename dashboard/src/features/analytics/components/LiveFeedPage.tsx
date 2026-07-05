@@ -2,7 +2,7 @@ import { useParams } from '@tanstack/react-router';
 import { Button } from '../../../components/ui/button';
 import { ApiError } from '../../../lib/api/problem';
 import { useLiveEvents } from '../api';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 
 export function LiveFeedPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/live' });
@@ -12,10 +12,12 @@ export function LiveFeedPage() {
   const events = data?.pages.flatMap((page) => page.events) ?? [];
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Live</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Live"
+      description="Watch events arrive in near real time as your app sends them."
+      breadcrumbs={[{ label: 'Audience' }, { label: 'Live' }]}
+    >
       {isPending && <p role="status">Loading live events…</p>}
       {isError && (
         <p role="alert" className="text-danger">
@@ -75,6 +77,6 @@ export function LiveFeedPage() {
           )}
         </>
       )}
-    </section>
+    </PageShell>
   );
 }

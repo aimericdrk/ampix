@@ -1,4 +1,4 @@
-import { Link, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -6,7 +6,7 @@ import { ApiError } from '../../../lib/api/problem';
 import type { ReportKind, RetentionInterval } from '../../../lib/api/types';
 import { useReport, useRunReport } from '../api';
 import { CohortSelect } from './report-actions';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 import { analysisResultIsEmpty, ReportChart } from './ReportChart';
 
 const KIND_LABELS: Record<ReportKind, string> = {
@@ -50,17 +50,15 @@ export function ReportDetailPage() {
   const kind = report.data?.kind;
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-
-      <div>
-        <Link to="/projects/$projectId/reports" params={{ projectId }} className="text-sm text-accent underline">
-          ← Reports
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold">{report.data?.name ?? 'Report'}</h1>
-        {kind && <p className="text-sm text-text-muted">{KIND_LABELS[kind]} report</p>}
-      </div>
-
+    <PageShell
+      projectId={projectId}
+      title={report.data?.name ?? 'Report'}
+      description={kind ? `${KIND_LABELS[kind]} report` : undefined}
+      breadcrumbs={[
+        { label: 'Reports', to: '/projects/$projectId/reports', params: { projectId } },
+        { label: report.data?.name ?? 'Report' },
+      ]}
+    >
       {report.isPending && <p role="status">Loading report…</p>}
       {report.error && (
         <p role="alert" className="text-danger">
@@ -103,6 +101,6 @@ export function ReportDetailPage() {
       {kind && result && !analysisResultIsEmpty(kind, result) && (
         <ReportChart kind={kind} result={result} interval={interval} eventOrder={eventOrder} />
       )}
-    </section>
+    </PageShell>
   );
 }

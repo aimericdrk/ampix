@@ -12,7 +12,7 @@ import type {
 import { RETENTION_INTERVALS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunRetention } from '../api';
 import { RetentionChart } from './RetentionChart';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
 import {
   cleanFilters,
@@ -81,10 +81,12 @@ export function RetentionPage() {
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Retention</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Retention"
+      description="Measure how many users come back over time after a first action."
+      breadcrumbs={[{ label: 'Explore' }, { label: 'Retention' }]}
+    >
       <Card>
         <CardHeader>
           <CardTitle>Retention builder</CardTitle>
@@ -203,6 +205,6 @@ export function RetentionPage() {
           interval={interval}
         />
       )}
-    </section>
+    </PageShell>
   );
 }

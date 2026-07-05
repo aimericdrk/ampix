@@ -13,7 +13,7 @@ import type {
 import { FUNNEL_ORDERS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFunnels } from '../api';
 import { FunnelChart } from './FunnelChart';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
 import {
   cleanFilters,
@@ -109,10 +109,12 @@ export function FunnelsPage() {
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Funnels</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Funnels"
+      description="See how users move through an ordered sequence of steps, and where they drop off."
+      breadcrumbs={[{ label: 'Explore' }, { label: 'Funnels' }]}
+    >
       <Card>
         <CardHeader>
           <CardTitle>Funnel builder</CardTitle>
@@ -288,6 +290,6 @@ export function FunnelsPage() {
           breakdowns={result.breakdowns}
         />
       )}
-    </section>
+    </PageShell>
   );
 }

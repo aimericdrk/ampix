@@ -13,7 +13,7 @@ import type {
 import { FLOWS_DIRECTIONS, FLOWS_UNITS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFlows } from '../api';
 import { FlowsChart } from './FlowsChart';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 import { SaveAsReportButton } from './report-actions';
 import {
   cleanFilters,
@@ -73,10 +73,12 @@ export function FlowsPage() {
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Flows</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Flows"
+      description="Explore the common paths users take before or after a key event."
+      breadcrumbs={[{ label: 'Explore' }, { label: 'Paths' }]}
+    >
       <Card>
         <CardHeader>
           <CardTitle>Flow builder</CardTitle>
@@ -202,6 +204,6 @@ export function FlowsPage() {
       {result && result.nodes.length > 0 && (
         <FlowsChart nodes={result.nodes} links={result.links} />
       )}
-    </section>
+    </PageShell>
   );
 }

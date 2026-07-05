@@ -14,7 +14,7 @@ import { Input } from '../../../components/ui/input';
 import { ApiError } from '../../../lib/api/problem';
 import { formatDurationMs, formatExactNumber } from '../format';
 import { useSessionsSummary } from '../api';
-import { ProjectAnalyticsNav } from './ProjectAnalyticsNav';
+import { PageShell } from '../../../components/layout/PageShell';
 
 function defaultDate(daysAgo: number): string {
   const d = new Date();
@@ -37,10 +37,12 @@ export function SessionsPage() {
   const { data, isPending, isError, error } = useSessionsSummary(projectId, from, to);
 
   return (
-    <section className="flex flex-col gap-6">
-      <ProjectAnalyticsNav projectId={projectId} />
-      <h1 className="text-2xl font-semibold">Sessions</h1>
-
+    <PageShell
+      projectId={projectId}
+      title="Sessions"
+      description="Session volume and average duration over the selected range."
+      breadcrumbs={[{ label: 'Audience' }, { label: 'Sessions' }]}
+    >
       <div className="flex flex-wrap gap-4">
         <div>
           <label htmlFor="sessions-from" className="mb-1 block text-sm font-medium">
@@ -162,6 +164,6 @@ export function SessionsPage() {
           )}
         </>
       )}
-    </section>
+    </PageShell>
   );
 }
