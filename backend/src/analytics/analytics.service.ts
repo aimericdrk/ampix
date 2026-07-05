@@ -19,6 +19,7 @@ import type {
   UsersResponse,
 } from './analytics.types';
 import { Bucket, buildBucketGrid, parseDateOnlyUTC } from './bucket-grid';
+import { canonicalization, RESOLVE_CANONICAL_ID_SQL } from './identity';
 import { compileInsightsQuery } from './insights.compiler';
 import { insightsQuerySchema } from './insights-query.schema';
 import { EVENT_COLUMN_WHITELIST } from './property-resolver';
@@ -160,7 +161,13 @@ export class AnalyticsService {
       const params = breakdownValues
         ? { ...seriesQuery.params, breakdownValues }
         : seriesQuery.params;
-      const rows = await this.clickhouse.query<SeriesRow>(seriesQuery.sql, params);
+      // `settings` is set only for `unique_users` series (contracts §17: the canonicalizing LEFT
+      // JOIN needs `join_use_nulls=1`); `total` series pass `undefined` and keep default behavior.
+      const rows = await this.clickhouse.query<SeriesRow>(
+        seriesQuery.sql,
+        params,
+        seriesQuery.settings,
+      );
 
       if (breakdownValues) {
         for (const breakdownValue of breakdownValues) {
@@ -281,11 +288,13 @@ export class AnalyticsService {
 
   /**
    * GET /users — the users explorer list, derived from `events` (there is no standalone "users"
-   * table). `search` is a distinct_id PREFIX match bound as a plain param to ClickHouse's
-   * `startsWith(...)` — the caller's text is never concatenated into the SQL string, and
-   * `startsWith` needs no `%`-wildcard massaging at all. Keyset-paginated by `distinct_id`
-   * (`cursor` = the last id from the previous page): fetches one extra row to know whether a
-   * `next_cursor` exists without a second COUNT query.
+   * table). Identity-resolved (contracts §17): rows are grouped/counted by the CANONICAL id
+   * (`uid` = the identified user for an anon that logged in, else the raw id) via the shared
+   * `canonicalization()` helper, so an anonymous→identified user appears ONCE. The shown
+   * `distinct_id` is that canonical `uid`; `search` is a canonical-id PREFIX match and `cursor`
+   * keyset-paginates over the canonical id — both bound as plain params (never concatenated) and
+   * evaluated over the canonical expression, not the raw column. Fetches one extra row to know
+   * whether a `next_cursor` exists without a second COUNT query.
    */
   async listUsers(
     userId: string,
@@ -296,26 +305,32 @@ export class AnalyticsService {
   ): Promise<UsersResponse> {
     await this.projects.assertMembership(userId, projectId);
     const limit = clampLimit(limitRaw);
+    const canon = canonicalization();
 
     const params: Record<string, unknown> = { projectId, limit: limit + 1 };
-    const whereClauses = ['project_id = {projectId:UUID}'];
+    const whereClauses = ['e.project_id = {projectId:UUID}'];
     if (searchRaw) {
       params.search = searchRaw;
-      whereClauses.push('startsWith(distinct_id, {search:String})');
+      whereClauses.push(`startsWith(${canon.uid}, {search:String})`);
     }
     if (cursorRaw) {
       params.cursor = cursorRaw;
-      whereClauses.push('distinct_id > {cursor:String}');
+      whereClauses.push(`${canon.uid} > {cursor:String}`);
     }
 
     const rows = await this.clickhouse.query<UserRow>(
-      `SELECT distinct_id, max(timestamp) AS last_seen, count(DISTINCT insert_id) AS event_count
-       FROM events
+      `WITH ${canon.cte}
+       SELECT ${canon.uid} AS distinct_id,
+              max(e.timestamp) AS last_seen,
+              count(DISTINCT e.insert_id) AS event_count
+       FROM events AS e
+       ${canon.join}
        WHERE ${whereClauses.join('\n         AND ')}
-       GROUP BY distinct_id
-       ORDER BY distinct_id
+       GROUP BY ${canon.uid}
+       ORDER BY ${canon.uid}
        LIMIT {limit:UInt64}`,
       params,
+      canon.settings,
     );
 
     const hasMore = rows.length > limit;
@@ -330,13 +345,17 @@ export class AnalyticsService {
   }
 
   /**
-   * GET /users/:distinctId — one user's profile + activity. `distinctId` is free-form
-   * client-supplied text (not a UUID-shaped id like `projectId`), so it's always bound as
-   * `{distinctId:String}`, never interpolated. The 3 lookups are independent of each other, so
-   * they run concurrently; `Promise.all` still starts them in this fixed order, keeping mocked
-   * `clickhouse.query` call sequences deterministic in tests. An unknown `distinctId` isn't a 404
-   * — it just yields an empty profile / zero counts / no recent events, since it may simply be a
-   * user with a profile op but zero events yet, or vice versa.
+   * GET /users/:distinctId — one user's MERGED profile + activity (contracts §17). `distinctId` is
+   * free-form client text (not a UUID like `projectId`), so it is always bound as a param, never
+   * interpolated. Two-step identity resolution: (1) resolve the requested id to its canonical id —
+   * if the caller passed an `anon_id` that aliases to a user, we return that user's profile; a
+   * plain user id (or an unknown id) resolves to itself. (2) aggregate events by canonical `uid`,
+   * so the profile for user `X` includes events from `X` AND from every anon_id whose canonical is
+   * `X`. The event lookups are canonicalized via the shared `canonicalization()` helper; the
+   * profile itself comes from `user_profiles FINAL` keyed by the canonical id. The 3 post-resolution
+   * lookups are independent and run concurrently; `Promise.all` starts them in a fixed order,
+   * keeping mocked `clickhouse.query` call sequences deterministic in tests. An unknown id isn't a
+   * 404 — it just yields an empty profile / zero counts / no recent events.
    */
   async getUserProfile(
     userId: string,
@@ -345,34 +364,50 @@ export class AnalyticsService {
   ): Promise<UserProfileResponse> {
     await this.projects.assertMembership(userId, projectId);
 
-    const idParams = { projectId, distinctId };
+    // Step 1: resolve the requested id to its canonical id (empty result -> it is already canonical
+    // or simply unknown, so fall back to the requested id).
+    const resolvedRows = await this.clickhouse.query<{ canonical_id: string }>(
+      RESOLVE_CANONICAL_ID_SQL,
+      { projectId, distinctId },
+    );
+    const canonicalId = resolvedRows[0]?.canonical_id || distinctId;
+
+    // Step 2: profile (canonical id) + merged events (canonical `uid`).
+    const canon = canonicalization();
+    const idParams = { projectId, canonicalId };
     const [profileRows, aggRows, recentRows] = await Promise.all([
       this.clickhouse.query<ProfilePropertiesRow>(
         `SELECT properties
          FROM user_profiles FINAL
          WHERE project_id = {projectId:UUID}
-           AND distinct_id = {distinctId:String}
+           AND distinct_id = {canonicalId:String}
          LIMIT 1`,
         idParams,
       ),
       this.clickhouse.query<UserAggRow>(
-        `SELECT
-           min(timestamp) AS first_seen,
-           max(timestamp) AS last_seen,
-           count(DISTINCT insert_id) AS event_count
-         FROM events
-         WHERE project_id = {projectId:UUID}
-           AND distinct_id = {distinctId:String}`,
+        `WITH ${canon.cte}
+         SELECT
+           min(e.timestamp) AS first_seen,
+           max(e.timestamp) AS last_seen,
+           count(DISTINCT e.insert_id) AS event_count
+         FROM events AS e
+         ${canon.join}
+         WHERE e.project_id = {projectId:UUID}
+           AND ${canon.uid} = {canonicalId:String}`,
         idParams,
+        canon.settings,
       ),
       this.clickhouse.query<RecentEventRow>(
-        `SELECT insert_id, event, timestamp
-         FROM events
-         WHERE project_id = {projectId:UUID}
-           AND distinct_id = {distinctId:String}
-         ORDER BY timestamp DESC
+        `WITH ${canon.cte}
+         SELECT e.insert_id AS insert_id, e.event AS event, e.timestamp AS timestamp
+         FROM events AS e
+         ${canon.join}
+         WHERE e.project_id = {projectId:UUID}
+           AND ${canon.uid} = {canonicalId:String}
+         ORDER BY e.timestamp DESC
          LIMIT 50`,
         idParams,
+        canon.settings,
       ),
     ]);
 
@@ -383,7 +418,7 @@ export class AnalyticsService {
     const lastSeen = eventCount > 0 ? fromChDateTime64(aggRows[0].last_seen) : null;
 
     return {
-      distinct_id: distinctId,
+      distinct_id: canonicalId,
       profile: profileRows[0]?.properties ?? {},
       first_seen: firstSeen,
       last_seen: lastSeen,

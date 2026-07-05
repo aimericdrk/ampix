@@ -372,9 +372,26 @@ describe('AnalyticsService', () => {
       await service.listUsers(USER_ID, PROJECT_ID, "u1'; DROP TABLE events; --");
 
       const [sql, params] = clickhouse.query.mock.calls[0];
-      expect(sql).toContain('startsWith(distinct_id, {search:String})');
+      // §17: search matches the CANONICAL id prefix, still a bound param.
+      expect(sql).toContain(
+        'startsWith(coalesce(aliases.canonical_id, e.distinct_id), {search:String})',
+      );
       expect(sql).not.toContain('DROP TABLE');
       expect(params).toMatchObject({ search: "u1'; DROP TABLE events; --" });
+    });
+
+    it('groups/counts by the canonical `uid` and runs under join_use_nulls=1 (contracts §17)', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID);
+
+      const [sql, , settings] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('WITH aliases AS (');
+      expect(sql).toContain('LEFT JOIN aliases ON e.distinct_id = aliases.anon_id');
+      expect(sql).toContain('coalesce(aliases.canonical_id, e.distinct_id) AS distinct_id');
+      expect(sql).toContain('GROUP BY coalesce(aliases.canonical_id, e.distinct_id)');
+      expect(settings).toEqual({ join_use_nulls: 1 });
     });
 
     it('omits the search clause entirely when search is not given', async () => {
@@ -400,7 +417,7 @@ describe('AnalyticsService', () => {
       const result = await service.listUsers(USER_ID, PROJECT_ID, undefined, '1', 'u0');
 
       const [sql, params] = clickhouse.query.mock.calls[0];
-      expect(sql).toContain('distinct_id > {cursor:String}');
+      expect(sql).toContain('coalesce(aliases.canonical_id, e.distinct_id) > {cursor:String}');
       expect(params).toMatchObject({ cursor: 'u0', limit: 2 }); // limit(1) + 1 lookahead row
       // Only `limit` (1) users are returned; the lookahead row becomes next_cursor, not a 3rd user.
       expect(result.users).toHaveLength(1);
@@ -435,8 +452,10 @@ describe('AnalyticsService', () => {
   describe('getUserProfile', () => {
     const DISTINCT_ID = 'u1';
 
-    it('checks membership and combines profile + aggregate + recent-events rows', async () => {
+    it('resolves the id, then combines the canonical profile + aggregate + recent-events rows', async () => {
       const clickhouse = makeClickhouse([
+        // 1) identity resolution: `u1` is already canonical (no alias row) -> '' -> falls back to u1.
+        [{ canonical_id: '' }],
         [{ properties: { plan: 'pro' } }],
         [
           {
@@ -454,11 +473,16 @@ describe('AnalyticsService', () => {
 
       const result = await service.getUserProfile(USER_ID, PROJECT_ID, DISTINCT_ID);
 
-      expect(clickhouse.query).toHaveBeenCalledTimes(3);
-      // Every call binds distinctId as a param, never interpolates it.
-      for (const [sql, params] of clickhouse.query.mock.calls) {
-        expect(sql).toContain('{distinctId:String}');
-        expect(params).toMatchObject({ distinctId: DISTINCT_ID });
+      // 1 resolution query + 3 data queries.
+      expect(clickhouse.query).toHaveBeenCalledTimes(4);
+      // The resolution query binds the requested id as {distinctId:String} (never interpolated).
+      const [resolveSql, resolveParams] = clickhouse.query.mock.calls[0];
+      expect(resolveSql).toContain('{distinctId:String}');
+      expect(resolveParams).toMatchObject({ distinctId: DISTINCT_ID });
+      // The 3 data queries key off the resolved canonical id (here == u1) as {canonicalId:String}.
+      for (const [sql, params] of clickhouse.query.mock.calls.slice(1)) {
+        expect(sql).toContain('{canonicalId:String}');
+        expect(params).toMatchObject({ canonicalId: DISTINCT_ID });
       }
       expect(result).toEqual({
         distinct_id: DISTINCT_ID,
@@ -473,8 +497,42 @@ describe('AnalyticsService', () => {
       });
     });
 
+    it("resolves an anon_id to its canonical user and returns THAT user's merged profile (§17)", async () => {
+      const clickhouse = makeClickhouse([
+        // 1) resolution: the requested `anon_x` aliases to canonical user `user_42`.
+        [{ canonical_id: 'user_42' }],
+        [{ properties: { plan: 'pro' } }],
+        [
+          {
+            first_seen: '2026-06-01 09:00:00.000',
+            last_seen: '2026-06-02 09:00:00.000',
+            event_count: '6',
+          },
+        ],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getUserProfile(USER_ID, PROJECT_ID, 'anon_x');
+
+      // The response is keyed by the canonical id, and the data queries filter on it.
+      expect(result.distinct_id).toBe('user_42');
+      expect(result.event_count).toBe(6);
+      for (const [, params] of clickhouse.query.mock.calls.slice(1)) {
+        expect(params).toMatchObject({ canonicalId: 'user_42' });
+      }
+      // The event lookups canonicalize via the alias map under join_use_nulls=1.
+      const [aggSql, , aggSettings] = clickhouse.query.mock.calls[2];
+      expect(aggSql).toContain('LEFT JOIN aliases ON e.distinct_id = aliases.anon_id');
+      expect(aggSql).toContain(
+        'coalesce(aliases.canonical_id, e.distinct_id) = {canonicalId:String}',
+      );
+      expect(aggSettings).toEqual({ join_use_nulls: 1 });
+    });
+
     it('empty profile -> {} (never null/undefined), and unknown user -> null seens + zero count', async () => {
       const clickhouse = makeClickhouse([
+        [{ canonical_id: '' }],
         [],
         [
           {
@@ -489,6 +547,7 @@ describe('AnalyticsService', () => {
 
       const result = await service.getUserProfile(USER_ID, PROJECT_ID, 'ghost');
 
+      expect(result.distinct_id).toBe('ghost');
       expect(result.profile).toEqual({});
       expect(result.first_seen).toBeNull();
       expect(result.last_seen).toBeNull();

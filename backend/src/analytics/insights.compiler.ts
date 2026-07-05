@@ -1,3 +1,4 @@
+import type { ClickHouseSettings } from '@clickhouse/client';
 import { BUCKET_EXPR, Bucket, buildBucketGrid } from './bucket-grid';
 import {
   CohortPredicate,
@@ -5,7 +6,8 @@ import {
   compileDateRange,
   compileFilterClauses,
 } from './filter-compiler';
-import type { Aggregation, InsightsEvent, InsightsQuery } from './insights-query.schema';
+import { canonicalization } from './identity';
+import type { InsightsEvent, InsightsQuery } from './insights-query.schema';
 import { resolveProperty } from './property-resolver';
 
 /** contracts §14: breakdown series are capped at the top 20 values. */
@@ -18,6 +20,12 @@ export interface CompiledQuery {
 
 export interface CompiledEventSeriesQuery extends CompiledQuery {
   eventName: string;
+  /**
+   * ClickHouse settings this query MUST run with, when present. The `unique_users` aggregation
+   * canonicalizes ids (contracts §17) via a LEFT JOIN whose `coalesce(...)` is only correct under
+   * `join_use_nulls=1`; `total` queries carry no settings (default behavior).
+   */
+  settings?: ClickHouseSettings;
 }
 
 export interface CompiledInsightsQuery {
@@ -38,8 +46,9 @@ export interface CompiledInsightsQuery {
   seriesQueries: CompiledEventSeriesQuery[];
 }
 
-function aggregationExpr(aggregation: Aggregation): string {
-  return aggregation === 'unique_users' ? 'uniqExact(distinct_id)' : 'count(DISTINCT insert_id)';
+/** The `total` aggregation expression. `unique_users` is compiled separately (it canonicalizes). */
+function totalExpr(): string {
+  return 'count(DISTINCT insert_id)';
 }
 
 /** `timestamp >= {from:DateTime64} AND timestamp < {to+1day}` (contracts §14: inclusive dates). */
@@ -122,10 +131,40 @@ function compileEventSeriesQuery(
     whereClauses.push(`${breakdownExpr} IN {breakdownValues:Array(String)}`);
   }
 
+  // `unique_users` (contracts §17): count DISTINCT *canonical* users, not raw distinct_ids, so an
+  // anon→identified user is counted once. The per-event scan (identical to `total`'s, incl. filters,
+  // breakdown and any §16 cohort predicate on the raw distinct_id) is wrapped in a subquery `ev`;
+  // the outer query LEFT JOINs the alias map and aggregates `uniqExact(uid)`. Wrapping keeps the
+  // inner scan free of the join (so its bare column references stay unambiguous) and confines the
+  // alias join to the outer projection. `total` stays a single-level scan.
+  if (event.aggregation === 'unique_users') {
+    const canon = canonicalization('ev.distinct_id');
+    // The outer projection reads only the subquery's passthrough columns (`bucket_ts`,
+    // `breakdown_value`) — the raw event columns behind `breakdownExpr` are not in scope there.
+    const outerBreakdownSelect = query.breakdown ? 'breakdown_value,\n  ' : '';
+    const sql = [
+      `WITH ${canon.cte}`,
+      'SELECT',
+      '  bucket_ts,',
+      `  ${outerBreakdownSelect}uniqExact(${canon.uid}) AS value`,
+      'FROM (',
+      '  SELECT',
+      `    toUnixTimestamp(${bucketExpr}) AS bucket_ts,`,
+      `    ${breakdownSelect}distinct_id`,
+      '  FROM events',
+      `  WHERE ${whereClauses.join('\n    AND ')}`,
+      ') AS ev',
+      canon.join,
+      `GROUP BY bucket_ts${groupByExtra}`,
+      'ORDER BY bucket_ts',
+    ].join('\n');
+    return { eventName: event.name, sql, params, settings: canon.settings };
+  }
+
   const sql = [
     'SELECT',
     `  toUnixTimestamp(${bucketExpr}) AS bucket_ts,`,
-    `  ${breakdownSelect}${aggregationExpr(event.aggregation)} AS value`,
+    `  ${breakdownSelect}${totalExpr()} AS value`,
     'FROM events',
     `WHERE ${whereClauses.join('\n  AND ')}`,
     `GROUP BY bucket_ts${groupByExtra}`,

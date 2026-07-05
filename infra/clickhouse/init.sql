@@ -45,6 +45,27 @@ CREATE TABLE IF NOT EXISTS analytics.identity_mappings (
 ) ENGINE = ReplacingMergeTree(created_at)
 ORDER BY (project_id, anon_id);
 
+-- Identity resolution (contracts §17). The SDK emits a reserved `$identify` event on identify():
+-- its `distinct_id` is the new (post-login) user id and it carries property `$anon_id` = the
+-- pre-login anonymous id. This MV projects those links into `analytics.identity_mappings` so the
+-- read side can merge an anonymous user with their identified self (anon_id -> canonical_id).
+-- `$identify` / `$anon_id` are OUR fixed reserved constants (contracts §4/§17), embedded as SQL
+-- literals here — never bound from user input — exactly as `$session_end` / `$duration_ms` are in
+-- `daily_sessions_mv`. `toJSONString(properties)` is required because `properties` is the native
+-- JSON type, not a String column (verified against clickhouse-server:24.8). Rows whose `$anon_id`
+-- is empty are skipped (no link to record).
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics.identity_mappings_mv
+TO analytics.identity_mappings
+AS
+SELECT
+  project_id,
+  JSONExtractString(toJSONString(properties), '$anon_id') AS anon_id,
+  distinct_id AS canonical_id,
+  timestamp AS created_at
+FROM analytics.events
+WHERE event = '$identify'
+  AND JSONExtractString(toJSONString(properties), '$anon_id') != '';
+
 -- Phase 3 rollup materialized views (contracts §14). Fed continuously from `analytics.events` as
 -- new rows land. Correctness note (contracts §14): the Phase 3 insights/meta endpoints
 -- intentionally query RAW events for exact, `DISTINCT insert_id`-deduplicated results — these

@@ -46,12 +46,33 @@ describe('compileInsightsQuery', () => {
       expect(compiled.seriesQueries[0].sql).toContain('count(DISTINCT insert_id) AS value');
     });
 
-    it('unique_users -> uniqExact(distinct_id)', () => {
+    it('unique_users -> uniqExact of the CANONICAL id (contracts §17), not the raw distinct_id', () => {
       const compiled = compileInsightsQuery(
         baseQuery({ events: [{ name: 'checkout_completed', aggregation: 'unique_users' }] }),
         PROJECT_ID,
       );
-      expect(compiled.seriesQueries[0].sql).toContain('uniqExact(distinct_id) AS value');
+      const { sql, settings } = compiled.seriesQueries[0];
+      // Canonicalizes via the aliases CTE + LEFT JOIN, aggregating uniqExact(uid).
+      expect(sql).toContain('WITH aliases AS (');
+      expect(sql).toContain('FROM identity_mappings');
+      expect(sql).toContain('LEFT JOIN aliases ON ev.distinct_id = aliases.anon_id');
+      expect(sql).toContain('uniqExact(coalesce(aliases.canonical_id, ev.distinct_id)) AS value');
+      // Raw, un-canonicalized `uniqExact(distinct_id)` must NOT be what we count.
+      expect(sql).not.toContain('uniqExact(distinct_id)');
+      // The canonicalizing LEFT JOIN's coalesce is only correct under join_use_nulls=1.
+      expect(settings).toEqual({ join_use_nulls: 1 });
+      // The inner scan still binds the event name + project as params (never interpolated).
+      expect(sql).toContain('event = {eventName:String}');
+      expect(sql).toContain('project_id = {projectId:UUID}');
+    });
+
+    it('total carries no query settings (single-level scan, default behavior)', () => {
+      const compiled = compileInsightsQuery(
+        baseQuery({ events: [{ name: 'checkout_completed', aggregation: 'total' }] }),
+        PROJECT_ID,
+      );
+      expect(compiled.seriesQueries[0].settings).toBeUndefined();
+      expect(compiled.seriesQueries[0].sql).not.toContain('aliases');
     });
   });
 
@@ -95,7 +116,9 @@ describe('compileInsightsQuery', () => {
         expect(q.sql).toContain('event = {eventName:String}');
       }
       // Aggregation differs per event and must be reflected independently.
-      expect(compiled.seriesQueries[1].sql).toContain('uniqExact(distinct_id)');
+      expect(compiled.seriesQueries[1].sql).toContain(
+        'uniqExact(coalesce(aliases.canonical_id, ev.distinct_id))',
+      );
       expect(compiled.seriesQueries[0].sql).toContain('count(DISTINCT insert_id)');
     });
   });
