@@ -36,3 +36,9 @@ images/
 .swarm/
 .firebase/
 .superpowers/
+
+# Firebase / GCP service-account keys and other credential files (NEVER commit)
+google-service-account.json
+**/google-service-account.json
+*-service-account*.json
+*.serviceaccount.json
