@@ -23,6 +23,14 @@ export function ProjectsPage() {
   const canCreate = role === 'admin';
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // `GET /projects` returns every project across ALL the user's orgs (each
+  // tagged with `org_id`); scope the list to the selected org so switching
+  // organizations actually changes what's shown. Before an org is resolved
+  // (transient null) show everything rather than an empty grid.
+  const projects = (data?.projects ?? []).filter(
+    (project) => currentOrgId === null || project.org_id === currentOrgId,
+  );
+
   return (
     <section>
       <div className="mb-6 flex items-center justify-between">
@@ -52,7 +60,7 @@ export function ProjectsPage() {
         </p>
       )}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-        {data?.projects.map((project) => (
+        {projects.map((project) => (
           <Link
             key={project.id}
             to="/projects/$projectId"
@@ -70,7 +78,9 @@ export function ProjectsPage() {
           </Link>
         ))}
       </div>
-      {data && data.projects.length === 0 && <p className="text-text-muted">No projects yet.</p>}
+      {data && projects.length === 0 && (
+        <p className="text-text-muted">No projects in this organization yet.</p>
+      )}
     </section>
   );
 }
