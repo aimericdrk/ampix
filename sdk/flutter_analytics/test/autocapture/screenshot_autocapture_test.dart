@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -11,6 +11,7 @@ import 'package:myampmix_analytics/myampmix_analytics.dart';
 import 'package:myampmix_analytics/src/autocapture/screenshot_autocapture.dart';
 import 'package:myampmix_analytics/src/storage/database.dart';
 import 'package:myampmix_analytics/src/storage/key_value_store.dart';
+import 'package:myampmix_analytics/src/util/logger.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';
@@ -271,6 +272,168 @@ void main() {
       await build(capturer: capturer, client: client).onScreenView('');
       expect(capturer.captureCount, 0);
       expect(requests, isEmpty);
+    });
+  });
+
+  // Diagnosability (shared-contracts §20): the capture/upload path must be
+  // observable via `logLevel`. Captures whatever the real MamLogger routes
+  // through `debugPrint` (the same seam as logger_test), so these assertions
+  // exercise the actual level gate — the test runner always runs in a debug
+  // build (`kDebugMode == true`).
+  group('ScreenshotAutocapture diagnostics via logLevel', () {
+    late List<http.Request> requests;
+    late InMemoryKeyValueStore store;
+    late List<String> lines;
+    late DebugPrintCallback originalDebugPrint;
+
+    setUp(() {
+      requests = [];
+      store = InMemoryKeyValueStore();
+      lines = <String>[];
+      originalDebugPrint = debugPrint;
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) lines.add(message);
+      };
+    });
+
+    tearDown(() => debugPrint = originalDebugPrint);
+
+    ScreenshotAutocapture build({
+      required ScreenshotCapturer capturer,
+      required http.Client client,
+      required MyAmpMixLogLevel logLevel,
+      String appVersion = '1.4.2',
+    }) => ScreenshotAutocapture(
+      capturer: capturer,
+      client: client,
+      store: store,
+      serverUrl: 'http://localhost:8080',
+      token: token,
+      appVersion: () async => appVersion,
+      logger: MamLogger(level: logLevel),
+    );
+
+    test('a non-202 upload logs an error-level rejection with status + body '
+        'snippet, and still leaves the pair unmarked', () async {
+      final client = MockClient((request) async {
+        requests.add(request);
+        return http.Response('invalid token', 401);
+      });
+
+      await build(
+        capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
+        client: client,
+        // error level is enough for the rejection — it is error-carrying.
+        logLevel: MyAmpMixLogLevel.error,
+      ).onScreenView('Home');
+
+      expect(requests, hasLength(1));
+      expect(store.values, isEmpty); // NOT marked → retries next launch
+      final rejection = lines.where(
+        (l) => l.contains('screenshot upload rejected'),
+      );
+      expect(rejection, hasLength(1));
+      expect(rejection.single, contains('status=401'));
+      expect(rejection.single, contains('invalid token'));
+    });
+
+    test('the logged body snippet is capped at ~500 chars', () async {
+      final hugeBody = 'x' * 2000;
+      final client = MockClient((request) async {
+        requests.add(request);
+        return http.Response(hugeBody, 500);
+      });
+
+      await build(
+        capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
+        client: client,
+        logLevel: MyAmpMixLogLevel.error,
+      ).onScreenView('Home');
+
+      final rejection = lines
+          .firstWhere((l) => l.contains('screenshot upload rejected'));
+      // The 500-char snippet is present verbatim, but the full 2000-char body
+      // is not — capped, not dumped whole.
+      expect(rejection, contains('x' * 500));
+      expect(rejection, isNot(contains('x' * 501)));
+    });
+
+    test('at error level the debug lifecycle logs stay silent (only the '
+        'rejection surfaces)', () async {
+      final client = MockClient((request) async {
+        requests.add(request);
+        return http.Response('boom', 500);
+      });
+      await build(
+        capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
+        client: client,
+        logLevel: MyAmpMixLogLevel.error,
+      ).onScreenView('Home');
+
+      expect(
+        lines.any((l) => l.contains('screenshot upload rejected')),
+        isTrue,
+      );
+      // No debug-level ("uploaded"/"skipped"/"returned null") noise at error.
+      expect(lines.any((l) => l.contains('screenshot uploaded')), isFalse);
+      expect(lines.any((l) => l.contains('screenshot skipped')), isFalse);
+    });
+
+    test('at debug level a successful upload and a subsequent skip both log',
+        () async {
+      final client = MockClient((request) async {
+        requests.add(request);
+        return http.Response('{"stored": true}', 202);
+      });
+
+      // First view → captured + uploaded (status 202).
+      await build(
+        capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
+        client: client,
+        logLevel: MyAmpMixLogLevel.debug,
+      ).onScreenView('Home');
+      expect(
+        lines.any((l) => l.contains('screenshot uploaded: Home (status 202)')),
+        isTrue,
+      );
+
+      lines.clear();
+
+      // Relaunch, same store → persisted-skip is now visible.
+      await build(
+        capturer: FakeScreenshotCapturer(result: shot([9, 9, 9])),
+        client: client,
+        logLevel: MyAmpMixLogLevel.debug,
+      ).onScreenView('Home');
+      expect(
+        lines.any(
+          (l) => l.contains(
+            'screenshot skipped (already captured this app_version): Home',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('at debug level a null capture logs "capture returned null"',
+        () async {
+      final client = MockClient((request) async {
+        requests.add(request);
+        return http.Response('', 202);
+      });
+      await build(
+        capturer: FakeScreenshotCapturer(result: null),
+        client: client,
+        logLevel: MyAmpMixLogLevel.debug,
+      ).onScreenView('Home');
+
+      expect(requests, isEmpty);
+      expect(
+        lines.any(
+          (l) => l.contains('screenshot capture returned null: Home'),
+        ),
+        isTrue,
+      );
     });
   });
 

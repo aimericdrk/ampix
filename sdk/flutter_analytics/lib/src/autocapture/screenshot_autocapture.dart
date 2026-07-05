@@ -68,7 +68,13 @@ class ScreenshotAutocapture {
     try {
       final appVersion = await _appVersion();
       final captured = await _loadCaptured(appVersion);
-      if (captured.contains(screenName)) return; // persisted once-per-version
+      if (captured.contains(screenName)) {
+        // persisted once-per-version — visible under `logLevel: debug`.
+        _logger.log(
+          'screenshot skipped (already captured this app_version): $screenName',
+        );
+        return;
+      }
 
       final flightKey = '$appVersion|$screenName';
       if (_inFlight.contains(flightKey)) return;
@@ -77,13 +83,17 @@ class ScreenshotAutocapture {
         final shot = await _capturer.capture();
         // No screenshot (capture/encode failed): drop silently and do NOT
         // mark, so the next launch retries this screen.
-        if (shot == null || shot.bytes.isEmpty) return;
+        if (shot == null || shot.bytes.isEmpty) {
+          _logger.log('screenshot capture returned null: $screenName');
+          return;
+        }
 
         final hash = sha256.convert(shot.bytes).toString();
         final delivered = await _upload(screenName, appVersion, shot, hash);
         if (delivered) {
           captured.add(screenName);
           await _persist(appVersion, captured);
+          _logger.log('screenshot uploaded: $screenName (status 202)');
         }
       } finally {
         _inFlight.remove(flightKey);
@@ -120,10 +130,31 @@ class ScreenshotAutocapture {
               ),
             );
       final response = await _client.send(request);
-      // Drain the body so the connection is released; the status decides
-      // success. The backend answers 202 whether it stored or skipped a dup.
-      await response.stream.drain<void>();
-      return response.statusCode == 202;
+      // The backend answers 202 whether it stored or skipped a dup.
+      if (response.statusCode == 202) {
+        // Drain the body so the connection is released.
+        await response.stream.drain<void>();
+        return true;
+      }
+      // Non-202 (e.g. 401 bad token, 500 backend/Firebase failure): make the
+      // rejection VISIBLE instead of silently dropping it. Read a bounded
+      // snippet of the body (this also drains the stream, releasing the
+      // connection) and log it at ERROR level. Still return false so the pair
+      // is left unmarked and retried next launch.
+      String bodySnippet;
+      try {
+        final body = await response.stream.bytesToString();
+        bodySnippet = body.length > 500 ? body.substring(0, 500) : body;
+      } on Object {
+        // Body unreadable — still surface the status.
+        bodySnippet = '';
+      }
+      _logger.log(
+        'screenshot upload rejected: status=${response.statusCode} '
+        'body=$bodySnippet',
+        'HTTP ${response.statusCode}',
+      );
+      return false;
     } on Object catch (error, stackTrace) {
       // Never-throw + retry-next-launch: a failed upload returns false so the
       // pair is left unmarked.
