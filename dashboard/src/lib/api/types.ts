@@ -538,6 +538,71 @@ export interface FlowsResponse {
   links: FlowLink[];
 }
 
+// --- Screens, user-path map & click heatmap (contracts §18/§19, v2) ---
+
+/** §18 `GET /screens` row — one per captured screen (bounded, deduped per app version). */
+export interface ScreenSummary {
+  screen_name: string;
+  capture_count: number;
+  latest_captured_at: string;
+  width: number;
+  height: number;
+}
+
+export interface ScreensResponse {
+  screens: ScreenSummary[];
+}
+
+/**
+ * §19 `POST /query/screen-paths` body — like §15 flows, BUT nodes are SCREENS (the `$screen_name`
+ * of `$screen_view` events). Omit `anchor_screen` to start from the top entry screens.
+ */
+export interface ScreenPathsQuery {
+  /** Optional fixed starting screen; omitted → the top entry screens. */
+  anchor_screen?: string;
+  direction: FlowsDirection;
+  date_range: InsightsDateRange;
+  steps: number;
+  max_nodes_per_step: number;
+  unit: FlowsUnit;
+}
+
+/**
+ * Same Sankey shape as §15 flows (`{nodes,links}`): `FlowNode.event` carries the screen name and
+ * `FlowNode.id` is `"{step}:{screen_name}"`; `$other`/`$end` are synthetic nodes.
+ */
+export interface ScreenPathsResponse {
+  nodes: FlowNode[];
+  links: FlowLink[];
+}
+
+/** Click-heatmap grid — `cols`/`rows` each 1..100. */
+export interface HeatmapGrid {
+  cols: number;
+  rows: number;
+}
+
+/** §19 `POST /query/click-heatmap` body. */
+export interface ClickHeatmapQuery {
+  screen_name: string;
+  date_range: InsightsDateRange;
+  grid: HeatmapGrid;
+  filters: InsightsFilter[];
+}
+
+/** One populated grid cell: `cx`∈0..cols-1, `cy`∈0..rows-1; empty cells are omitted from the response. */
+export interface ClickHeatmapCell {
+  cx: number;
+  cy: number;
+  count: number;
+}
+
+export interface ClickHeatmapResponse {
+  screen_name: string;
+  total: number;
+  cells: ClickHeatmapCell[];
+}
+
 // --- Cohorts/reports/dashboards (contracts §16) ---
 // Request/response shapes mirror shared-contracts §16 exactly (the concurrent Phase-5 backend builds
 // against the same section, re-validating every stored definition with the §14/§15 zod schemas).

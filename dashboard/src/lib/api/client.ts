@@ -76,23 +76,44 @@ async function parse<T>(res: Response): Promise<T> {
 }
 
 /**
- * Typed transport for every API call:
- * runtime base URL + credentials + bearer injection + RFC 7807 errors +
- * 401 silent-refresh-and-replay (exactly one replay; auth endpoints excluded).
+ * Runtime base URL + credentials + bearer injection + 401 silent-refresh-and-replay (exactly one
+ * replay; auth endpoints excluded). Returns the raw `Response` so both JSON and binary (blob)
+ * callers share the identical transport + refresh semantics.
  */
-export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+async function sendWithRefresh(path: string, options: ApiFetchOptions): Promise<Response> {
   const res = await send(path, options);
   if (res.status === 401 && !AUTH_PATHS.has(path)) {
     const refreshed = await refreshSession();
     if (!refreshed) {
       authStore.clearSession();
-      throw new ApiError(await problemFromResponse(res));
+      return res;
     }
     const replay = await send(path, options);
     // A 401 on the freshly-refreshed token means the session is truly dead
     // (e.g. user disabled); log out locally instead of looping refresh-replay.
     if (replay.status === 401) authStore.clearSession();
-    return parse<T>(replay);
+    return replay;
   }
-  return parse<T>(res);
+  return res;
+}
+
+/**
+ * Typed transport for every JSON API call:
+ * runtime base URL + credentials + bearer injection + RFC 7807 errors +
+ * 401 silent-refresh-and-replay (exactly one replay; auth endpoints excluded).
+ */
+export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  return parse<T>(await sendWithRefresh(path, options));
+}
+
+/**
+ * Binary variant of {@link apiFetch} for authed, membership-gated asset GETs (e.g. §18 screen
+ * images): a bare `<img src>` can't carry the bearer token, so we fetch the bytes through the same
+ * authed transport and hand back a `Blob` the caller turns into an object URL. RFC 7807 errors and
+ * the single 401 refresh-replay behave exactly as the JSON path.
+ */
+export async function apiFetchBlob(path: string, options: ApiFetchOptions = {}): Promise<Blob> {
+  const res = await sendWithRefresh(path, options);
+  if (!res.ok) throw new ApiError(await problemFromResponse(res));
+  return res.blob();
 }

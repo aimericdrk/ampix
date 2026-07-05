@@ -11,6 +11,14 @@ window.HTMLElement.prototype.hasPointerCapture ??= () => false;
 window.HTMLElement.prototype.setPointerCapture ??= () => {};
 window.HTMLElement.prototype.releasePointerCapture ??= () => {};
 window.HTMLElement.prototype.scrollIntoView ??= () => {};
+
+// TanStack Router's scroll restoration calls window.scrollTo, which jsdom leaves unimplemented.
+window.scrollTo = () => {};
+
+// jsdom does not implement object URLs; the authed-screenshot flow (§18) turns image blobs into
+// object URLs, so stub them for the <img>/heatmap-overlay components.
+window.URL.createObjectURL = () => 'blob:mock-screenshot';
+window.URL.revokeObjectURL = () => {};
 globalThis.ResizeObserver ??= class ResizeObserver {
   observe(): void {}
   unobserve(): void {}

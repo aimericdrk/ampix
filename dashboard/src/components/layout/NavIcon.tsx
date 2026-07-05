@@ -4,6 +4,7 @@ export type IconName =
   | 'funnel'
   | 'retention'
   | 'paths'
+  | 'heatmap'
   | 'cohorts'
   | 'users'
   | 'sessions'
@@ -22,6 +23,7 @@ const PATHS: Record<IconName, string> = {
   funnel: 'M3 4h18l-7 8v7l-4-2v-5z',
   retention: 'M4 12a8 8 0 0 1 13.7-5.6L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.7 5.6L4 16M4 20v-4h4',
   paths: 'M6 4v6a4 4 0 0 0 4 4h4M18 10l3 3-3 3M6 4h.01M6 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  heatmap: 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16M14 4v16',
   cohorts: 'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20a6 6 0 0 1 12 0M16 6a3 3 0 0 1 0 6M18 20a6 6 0 0 0-4-5.7',
   users: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20a8 8 0 0 1 16 0',
   sessions: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',

@@ -10,10 +10,15 @@ import type {
   CreateInvitationResponse,
   CreateOrgResponse,
   EventSummaryResponse,
+  ClickHeatmapQuery,
+  ClickHeatmapResponse,
   FlowsQueryDefinition,
   FlowsResponse,
   FunnelQueryDefinition,
   FunnelResponse,
+  ScreenPathsQuery,
+  ScreenPathsResponse,
+  ScreensResponse,
   Invitation,
   InvitationPreview,
   InsightsQueryDefinition,
@@ -218,6 +223,46 @@ export const FLOWS_FIXTURE: FlowsResponse = {
     { source: '0:app_open', target: '1:$end', value: 300 },
   ],
 };
+
+// --- Screens, user-path map & click heatmap fixtures (contracts §18/§19) ---
+
+export const SCREENS_FIXTURE: ScreensResponse = {
+  screens: [
+    { screen_name: 'home', capture_count: 3, latest_captured_at: '2026-07-01T10:00:00Z', width: 390, height: 844 },
+    { screen_name: 'catalog', capture_count: 2, latest_captured_at: '2026-07-01T10:05:00Z', width: 390, height: 844 },
+    { screen_name: 'checkout', capture_count: 1, latest_captured_at: '2026-07-01T10:10:00Z', width: 390, height: 844 },
+  ],
+};
+
+/** Same Sankey shape as §15 flows, but nodes are screens (`$screen_name`). */
+export const SCREEN_PATHS_FIXTURE: ScreenPathsResponse = {
+  nodes: [
+    { id: '0:home', step: 0, event: 'home', value: 1000 },
+    { id: '1:catalog', step: 1, event: 'catalog', value: 620 },
+    { id: '1:$end', step: 1, event: '$end', value: 380 },
+    { id: '2:checkout', step: 2, event: 'checkout', value: 240 },
+  ],
+  links: [
+    { source: '0:home', target: '1:catalog', value: 620 },
+    { source: '0:home', target: '1:$end', value: 380 },
+    { source: '1:catalog', target: '2:checkout', value: 240 },
+  ],
+};
+
+export const CLICK_HEATMAP_FIXTURE: ClickHeatmapResponse = {
+  screen_name: 'checkout',
+  total: 87,
+  cells: [
+    { cx: 2, cy: 5, count: 42 },
+    { cx: 8, cy: 30, count: 25 },
+    { cx: 15, cy: 38, count: 20 },
+  ],
+};
+
+/** A tiny opaque PNG-ish byte payload — enough for `Response.blob()`; not decoded in jsdom. */
+export const SCREEN_IMAGE_BYTES = new Uint8Array([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+]);
 
 interface Fixture {
   user: AuthUser;
@@ -1091,6 +1136,47 @@ export const handlers = [
     if (!body.anchor?.event) return problem(400, 'Invalid flow: anchor event required');
     if (body.steps < 1 || body.steps > 5) return problem(400, 'Invalid flow: steps out of range');
     return HttpResponse.json(FLOWS_FIXTURE);
+  }),
+
+  // --- Screens, user-path map & click heatmap (contracts §18/§19) ---
+
+  http.get('/api/v1/projects/:projectId/screens', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SCREENS_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/screens/:screenName/image', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return new HttpResponse(SCREEN_IMAGE_BYTES, {
+      headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=3600' },
+    });
+  }),
+
+  http.post('/api/v1/projects/:projectId/query/screen-paths', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as ScreenPathsQuery;
+    if (body.steps < 1 || body.steps > 5) return problem(400, 'Invalid screen-paths: steps out of range');
+    if (body.max_nodes_per_step < 1 || body.max_nodes_per_step > 20)
+      return problem(400, 'Invalid screen-paths: max_nodes_per_step out of range');
+    return HttpResponse.json(SCREEN_PATHS_FIXTURE);
+  }),
+
+  http.post('/api/v1/projects/:projectId/query/click-heatmap', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as ClickHeatmapQuery;
+    if (!body.screen_name) return problem(400, 'Invalid heatmap: screen_name required');
+    const { cols, rows } = body.grid;
+    if (cols < 1 || cols > 100 || rows < 1 || rows > 100)
+      return problem(400, 'Invalid heatmap: grid out of range');
+    return HttpResponse.json({ ...CLICK_HEATMAP_FIXTURE, screen_name: body.screen_name });
   }),
 
   http.get('/api/v1/projects/:projectId/events/live', ({ request }) => {

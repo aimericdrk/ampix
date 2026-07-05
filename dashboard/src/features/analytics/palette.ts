@@ -43,6 +43,47 @@ export function seriesLabel(name: string, breakdownValue: string | null): string
   return breakdownValue ? `${name} · ${breakdownValue}` : name;
 }
 
+/**
+ * Sequential single-hue ramp (dataviz spec) — the validated BLUE scale, light→dark. Continuous
+ * magnitude only (the click-heatmap): the lightest step reads as "near zero" and recedes toward the
+ * surface; darker = more taps. One hue, never a rainbow. Shared light/dark because heatmap cells sit
+ * over an opaque screenshot, not a themed chart surface.
+ */
+export const SEQUENTIAL_BLUE_RAMP = [
+  '#cde2fb',
+  '#9ec5f4',
+  '#6da7ec',
+  '#3987e5',
+  '#256abf',
+  '#184f95',
+  '#0d366b',
+] as const;
+
+function lerpChannel(a: number, b: number, frac: number): number {
+  return Math.round(a + (b - a) * frac);
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
+
+/**
+ * Maps a normalized magnitude `t`∈[0,1] onto the sequential blue ramp, interpolating in sRGB between
+ * adjacent validated stops. `t` outside [0,1] or non-finite clamps to the ends.
+ */
+export function sequentialColor(t: number): string {
+  const clamped = Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0));
+  const stops = SEQUENTIAL_BLUE_RAMP;
+  const scaled = clamped * (stops.length - 1);
+  const lower = Math.floor(scaled);
+  if (lower >= stops.length - 1) return stops[stops.length - 1]!;
+  const frac = scaled - lower;
+  const [r1, g1, b1] = hexToRgb(stops[lower]!);
+  const [r2, g2, b2] = hexToRgb(stops[lower + 1]!);
+  return `rgb(${lerpChannel(r1, r2, frac)}, ${lerpChannel(g1, g2, frac)}, ${lerpChannel(b1, b2, frac)})`;
+}
+
 interface SeriesIdentity {
   name: string;
   breakdown_value: string | null;

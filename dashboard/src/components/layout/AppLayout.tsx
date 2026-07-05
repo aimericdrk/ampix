@@ -36,8 +36,9 @@ function projectGroups(): NavGroup[] {
         { label: 'Insights', to: p('/insights'), icon: 'insights' },
         { label: 'Funnels', to: p('/funnels'), icon: 'funnel' },
         { label: 'Retention', to: p('/retention'), icon: 'retention' },
-        // "Paths" renders the existing flows view until the dedicated screen-paths backend lands.
-        { label: 'Paths', to: p('/flows'), icon: 'paths' },
+        // "Paths" is the interactive user-path map + Mermaid view (screen-paths, §19).
+        { label: 'Paths', to: p('/paths'), icon: 'paths' },
+        { label: 'Heatmap', to: p('/heatmap'), icon: 'heatmap' },
       ],
     },
     {

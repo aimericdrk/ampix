@@ -20,6 +20,8 @@ import { InsightsPage } from './features/analytics/components/InsightsPage';
 import { FunnelsPage } from './features/analytics/components/FunnelsPage';
 import { RetentionPage } from './features/analytics/components/RetentionPage';
 import { FlowsPage } from './features/analytics/components/FlowsPage';
+import { PathsPage } from './features/analytics/components/PathsPage';
+import { HeatmapPage } from './features/analytics/components/HeatmapPage';
 import { CohortsPage } from './features/analytics/components/CohortsPage';
 import { ReportsPage } from './features/analytics/components/ReportsPage';
 import { ReportDetailPage } from './features/analytics/components/ReportDetailPage';
@@ -162,6 +164,20 @@ const flowsRoute = createRoute({
   component: FlowsPage,
 });
 
+// --- v2 flagship visuals (contracts §18/§19): user-path map + click heatmap ---
+
+const pathsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/paths',
+  component: PathsPage,
+});
+
+const heatmapRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/heatmap',
+  component: HeatmapPage,
+});
+
 // --- Cohorts, saved reports & custom dashboards, Phase 5 (contracts §16) ---
 
 const cohortsRoute = createRoute({
@@ -250,6 +266,8 @@ export const routeTree = rootRoute.addChildren([
     funnelsRoute,
     retentionRoute,
     flowsRoute,
+    pathsRoute,
+    heatmapRoute,
     cohortsRoute,
     reportsRoute,
     reportDetailRoute,

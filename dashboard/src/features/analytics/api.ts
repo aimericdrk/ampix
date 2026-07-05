@@ -1,6 +1,11 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../../lib/api/client';
+import { apiFetch, apiFetchBlob } from '../../lib/api/client';
 import type {
+  ClickHeatmapQuery,
+  ClickHeatmapResponse,
+  ScreenPathsQuery,
+  ScreenPathsResponse,
+  ScreensResponse,
   ApplyTemplateResponse,
   Cohort,
   CohortPreviewResponse,
@@ -97,6 +102,56 @@ export function useRunFlows(projectId: string) {
   return useMutation({
     mutationFn: (query: FlowsQueryDefinition) =>
       apiFetch<FlowsResponse>(`${base(projectId)}/query/flows`, {
+        method: 'POST',
+        body: query,
+      }),
+  });
+}
+
+// --- Screens, user-path map & click heatmap (contracts §18/§19) ---
+
+/** §18 `GET /screens` — the captured-screen catalog powering the path-map thumbnails + heatmap picker. */
+export function useScreens(projectId: string) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'screens'],
+    queryFn: () => apiFetch<ScreensResponse>(`${base(projectId)}/screens`),
+  });
+}
+
+/**
+ * §18 `GET /screens/:screenName/image` as a Blob — the endpoint is membership-gated, so a bare
+ * `<img src>` (which can't send the bearer token) would 401. We fetch the bytes through the authed
+ * transport; the consuming component turns the blob into an object URL. `enabled` gates the request
+ * until a real screen is chosen; `staleTime: Infinity` because a screenshot is immutable per version.
+ */
+export function useScreenImageBlob(projectId: string, screenName: string, enabled = true) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'screen-image', screenName],
+    queryFn: () =>
+      apiFetchBlob(`${base(projectId)}/screens/${encodeURIComponent(screenName)}/image`),
+    enabled: enabled && screenName.length > 0,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
+/** §19 `POST /query/screen-paths` — the user-path-map data source (Sankey-shaped, nodes = screens). */
+export function useRunScreenPaths(projectId: string) {
+  return useMutation({
+    mutationFn: (query: ScreenPathsQuery) =>
+      apiFetch<ScreenPathsResponse>(`${base(projectId)}/query/screen-paths`, {
+        method: 'POST',
+        body: query,
+      }),
+  });
+}
+
+/** §19 `POST /query/click-heatmap` — bucketed tap counts to overlay on a screen's screenshot. */
+export function useRunClickHeatmap(projectId: string) {
+  return useMutation({
+    mutationFn: (query: ClickHeatmapQuery) =>
+      apiFetch<ClickHeatmapResponse>(`${base(projectId)}/query/click-heatmap`, {
         method: 'POST',
         body: query,
       }),
