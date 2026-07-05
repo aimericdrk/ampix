@@ -478,3 +478,36 @@ Verification: unit tests (cohort/report/dashboard zod schemas incl. the exactly-
 12-col bounds; cohort compiler SQL shape + injection regression like §14/§15), a real-stack e2e proving
 a known cohort resolves to the exact expected users AND that a cohort-filtered insight returns the
 narrowed counts, dashboard tile CRUD + `/data` batch-run, and a dashboard-frontend functional test.
+
+## 17. Identity resolution — anonymous → identified merge (added 2026-07-05)
+
+Fixes: a user tracked anonymously and THEN logged in shows up as **two different users**. The SDK
+already emits the link — on `identify(userId)` it sends a reserved `$identify` event whose
+`distinct_id` is the new `userId` and which carries property `$anon_id` = the pre-login id (§4). Events
+before login have `distinct_id = anon_id`; after login `distinct_id = userId`. Nothing on the backend
+consumed `$identify`, so the two id-spaces were never merged. This section makes the analytics read side
+resolve `anon_id → userId`.
+
+### ClickHouse alias map (add to `infra/clickhouse/init.sql`, idempotent)
+- Table `analytics.identity_aliases (project_id UUID, alias_id String, canonical_id String, ts DateTime64(3))`
+  `ENGINE = ReplacingMergeTree(ts) ORDER BY (project_id, alias_id)` — one canonical id per alias, latest wins.
+- MV `identity_aliases_mv` on `events`: `WHERE event = '$identify' AND JSONExtractString(toJSONString(properties), '$anon_id') != ''`
+  → `SELECT project_id, JSONExtractString(toJSONString(properties),'$anon_id') AS alias_id, distinct_id AS canonical_id, timestamp AS ts`.
+  (`$identify`/`$anon_id`/`$alias` are OUR fixed reserved constants — embedded as SQL literals, never bound from user input, matching how `$session_end`/`$duration_ms` are handled in §14.)
+
+### Canonicalization (read side, injection-safe)
+Provide a single reusable helper (a `WITH aliases AS (SELECT project_id, alias_id, argMax(canonical_id, ts) AS canonical_id FROM identity_aliases WHERE project_id = {projectId:UUID} GROUP BY project_id, alias_id)` CTE + a `LEFT JOIN … ON e.distinct_id = aliases.alias_id` yielding `coalesce(aliases.canonical_id, e.distinct_id) AS uid`). Single-level resolution (anon→user) is sufficient; do not chain. Apply `uid` (the canonical id) instead of raw `distinct_id` in:
+- **Users explorer** — `GET /users` (group/count by `uid`; `distinct_id` shown is the canonical `uid`; search matches the canonical id prefix) and `GET /users/:distinctId` (a profile for id `X` includes events from `X` **and** from every `alias_id` whose canonical is `X` — i.e. filter on `uid = {id}` after resolution; also resolve when the caller passes an `anon_id` that aliases to a user, redirect/return the canonical profile). This is the primary visible fix.
+- **Insights `unique_users`** — `uniqExact(uid)` instead of `uniqExact(distinct_id)`.
+- **Funnels / retention / flows** unique-user counts SHOULD use `uid` too (same helper); if any is deferred, say so in the report.
+
+`total` (event counts via `count(DISTINCT insert_id)`) is unaffected. Raw-event queries stay authoritative/exact.
+
+### Verification
+Real-stack e2e (`backend/test/e2e/identity-resolution.e2e-spec.ts`, following `analytics.e2e-spec.ts`):
+ingest a KNOWN sequence for one physical user — N anonymous events with `distinct_id = <anon>`, then an
+`$identify` event (`distinct_id = <user>`, `$anon_id = <anon>`), then M identified events with
+`distinct_id = <user>` — plus a separate unrelated user. Assert: `GET /users` returns **one** merged user
+for that person (not two), the merged profile's `event_count` = N + M (+ the identify event), and an
+insights `unique_users` over the whole set counts that person **once**. Unit tests for the canonicalization
+SQL builder (shape + that it never interpolates user input).
