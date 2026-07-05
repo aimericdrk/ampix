@@ -86,6 +86,7 @@ model Project {
   cohorts   Cohort[]
   savedReports SavedReport[]
   dashboards Dashboard[]
+  screenCaptures ScreenCapture[]
 
   @@map("projects")
 }
@@ -208,4 +209,33 @@ model DashboardTile {
 
   @@index([dashboardId, position])
   @@map("dashboard_tiles")
+}
+
+/**
+ * §18 — automatic screenshot pipeline metadata. Exactly ONE image per
+ * `(project_id, screen_name, app_version)` (the SDK captures each screen once per app version), so
+ * this set is inherently bounded (#screens × #versions). The image BYTES live in Firebase Storage
+ * (GCS); this table holds only metadata + `storage_path`, the deterministic object path in the
+ * bucket (e.g. `screens/{project_id}/{screen_name}/{app_version}.jpg`). `POST /ingest/screenshots`
+ * puts the bytes at that path (overwrite) and UPSERTs this row, so `captured_at` records the first
+ * upload of a version and `updated_at` the last replace.
+ */
+model ScreenCapture {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  screenName  String   @map("screen_name")
+  storagePath String   @map("storage_path")
+  contentType String   @map("content_type")
+  width       Int
+  height      Int
+  appVersion  String   @map("app_version")
+  imageHash   String   @map("image_hash")
+  capturedAt  DateTime @default(now()) @map("captured_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, screenName, appVersion])
+  @@index([projectId, screenName])
+  @@map("screen_captures")
 }

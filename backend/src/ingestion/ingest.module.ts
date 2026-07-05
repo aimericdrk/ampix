@@ -15,5 +15,10 @@ import { SlidingWindowRateLimiter } from './rate-limiter';
     IngestRateLimitGuard,
     SlidingWindowRateLimiter,
   ],
+  // Exported so the §18 screenshots ingest controller (ScreenshotsModule) reuses the exact same
+  // SDK-token auth + per-token rate limiting as /ingest/events instead of duplicating the guards.
+  // SlidingWindowRateLimiter is exported too: it's a constructor dependency of IngestRateLimitGuard,
+  // so it must be resolvable wherever that guard is instantiated.
+  exports: [SdkTokenGuard, IngestRateLimitGuard, SlidingWindowRateLimiter],
 })
 export class IngestModule {}

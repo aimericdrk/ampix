@@ -72,6 +72,14 @@ const envSchema = z.object({
   INGEST_MAX_BODY_KB: z.coerce.number().int().positive().default(1024),
   // Contracts §4 fixes this at 1000; the env override exists only so tests can exercise 429s cheaply.
   INGEST_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(1000),
+  // §18 — per-upload cap for automatic screenshots (JPEG bytes). Default 512 KB.
+  SCREENSHOT_MAX_KB: z.coerce.number().int().positive().default(512),
+  // §18 — Firebase Storage (GCS) bucket the screenshot bytes are written to. When unset the app
+  // falls back to an in-memory fake store (dev/test) and logs a warning. Credentials come from
+  // GOOGLE_APPLICATION_CREDENTIALS (service-account JSON path) or Application Default Credentials,
+  // both read directly from the environment by firebase-admin.
+  FIREBASE_STORAGE_BUCKET: z.string().min(1).optional(),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().min(1).optional(),
   // §11 — auth & TOTP 2FA.
   ACCESS_TOKEN_TTL: z.coerce.number().int().positive().default(900),
   REFRESH_TOKEN_TTL: z.coerce.number().int().positive().default(2_592_000),
@@ -96,6 +104,10 @@ export interface AppConfig {
   ingestMaxBatch: number;
   ingestMaxBodyKb: number;
   ingestRateLimitPerMin: number;
+  screenshotMaxKb: number;
+  // Optional so pre-existing AppConfig fixtures keep compiling; loadConfig always populates it
+  // (to undefined when unset → the in-memory screenshot store fallback kicks in).
+  firebaseStorageBucket?: string;
   // Optional (rather than required) so pre-existing AppConfig fixtures outside this task's scope
   // (e.g. test/integration/clickhouse.int-spec.ts, owned by concurrent work) keep compiling
   // without every hand-built fixture needing an update. loadConfig() always populates it.
@@ -191,6 +203,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ingestMaxBatch: v.INGEST_MAX_BATCH,
     ingestMaxBodyKb: v.INGEST_MAX_BODY_KB,
     ingestRateLimitPerMin: v.INGEST_RATE_LIMIT_PER_MIN,
+    screenshotMaxKb: v.SCREENSHOT_MAX_KB,
+    firebaseStorageBucket: v.FIREBASE_STORAGE_BUCKET,
     auth: {
       accessTokenTtl: v.ACCESS_TOKEN_TTL,
       refreshTokenTtl: v.REFRESH_TOKEN_TTL,
@@ -264,6 +278,8 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     INGEST_MAX_BATCH: String(config.ingestMaxBatch),
     INGEST_MAX_BODY_KB: String(config.ingestMaxBodyKb),
     INGEST_RATE_LIMIT_PER_MIN: String(config.ingestRateLimitPerMin),
+    SCREENSHOT_MAX_KB: String(config.screenshotMaxKb),
+    FIREBASE_STORAGE_BUCKET: config.firebaseStorageBucket ?? '(not set — in-memory screenshot store)',
     TOTP_ISSUER: auth.totpIssuer,
     TOTP_ENC_KEY: redacted(auth.totpEncKey),
     ACCESS_TOKEN_TTL: String(auth.accessTokenTtl),

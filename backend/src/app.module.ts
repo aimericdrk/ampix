@@ -16,6 +16,7 @@ import { CohortsModule } from './cohorts/cohorts.module';
 import { ReportsModule } from './reports/reports.module';
 import { DashboardsModule } from './dashboards/dashboards.module';
 import { TemplatesModule } from './templates/templates.module';
+import { ScreenshotsModule } from './screenshots/screenshots.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { TemplatesModule } from './templates/templates.module';
     ReportsModule,
     DashboardsModule,
     TemplatesModule,
+    ScreenshotsModule,
   ],
 })
 export class AppModule {}

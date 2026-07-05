@@ -27,6 +27,7 @@ describe('loadConfig', () => {
     expect(config.ingestMaxBatch).toBe(100);
     expect(config.ingestMaxBodyKb).toBe(1024);
     expect(config.ingestRateLimitPerMin).toBe(1000);
+    expect(config.screenshotMaxKb).toBe(512);
     expect(config.databaseUrl).toBe(validEnv.DATABASE_URL);
     expect(config.redisUrl).toBe('redis://localhost:6379');
     expect(config.clickhouse).toEqual({
@@ -41,6 +42,18 @@ describe('loadConfig', () => {
     const config = loadConfig({ ...validEnv, PORT: '9090', INGEST_MAX_BATCH: '50' });
     expect(config.port).toBe(9090);
     expect(config.ingestMaxBatch).toBe(50);
+  });
+
+  it('overrides SCREENSHOT_MAX_KB when set and rejects a non-positive value (§18)', () => {
+    expect(loadConfig({ ...validEnv, SCREENSHOT_MAX_KB: '256' }).screenshotMaxKb).toBe(256);
+    expect(() => loadConfig({ ...validEnv, SCREENSHOT_MAX_KB: '0' })).toThrow(/SCREENSHOT_MAX_KB/);
+  });
+
+  it('reads FIREBASE_STORAGE_BUCKET, defaulting to undefined (§18 in-memory fallback)', () => {
+    expect(loadConfig(validEnv).firebaseStorageBucket).toBeUndefined();
+    expect(
+      loadConfig({ ...validEnv, FIREBASE_STORAGE_BUCKET: 'my-app.appspot.com' }).firebaseStorageBucket,
+    ).toBe('my-app.appspot.com');
   });
 
   it('crashes with a clear message naming the missing var', () => {

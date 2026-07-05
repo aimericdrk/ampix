@@ -22,6 +22,7 @@ function makeConfig(url: string): AppConfig {
     ingestMaxBatch: 100,
     ingestMaxBodyKb: 1024,
     ingestRateLimitPerMin: 1000,
+    screenshotMaxKb: 512,
   };
 }
 
