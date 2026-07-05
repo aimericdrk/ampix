@@ -12,7 +12,11 @@ Future<void> main() async {
   // demo keeps working either way — see lib/demo_config.dart.
   await MyAmpMix.init(
     demoToken,
-    config: const MyAmpMixConfig(serverUrl: demoServerUrl, debug: true),
+    config: const MyAmpMixConfig(
+      serverUrl: demoServerUrl,
+      debug: true,
+      logLevel: MyAmpMixLogLevel.debug,
+    ),
   );
 
   // Demonstrates registerSuperProperties: attached to every event tracked
@@ -33,6 +37,12 @@ class ShopApp extends StatelessWidget {
     return MaterialApp(
       title: 'MyAmpMix Shop Demo',
       theme: ThemeData(colorSchemeSeed: Colors.deepPurple, useMaterial3: true),
+      // REQUIRED for autocapture: MyAmpMixObserver emits `$screen_view` on every
+      // navigation — which is ALSO what triggers automatic screenshot capture
+      // (§18). Without it, no screen views and no screenshots are ever captured.
+      navigatorObservers: [MyAmpMixObserver()],
+      // MyAmpMixTracker autocaptures `$tap` / `$rage_tap` (powers click heatmaps).
+      builder: (context, child) => MyAmpMixTracker(child: child ?? const SizedBox.shrink()),
       home: const RootScreen(),
     );
   }
