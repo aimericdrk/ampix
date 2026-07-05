@@ -12,6 +12,7 @@ class MyAmpMixConfig {
     this.autocaptureTaps = true,
     this.autocapturePurchases = true,
     this.autocaptureAttribution = true,
+    this.autocaptureScreenshots = true,
   }) : assert(
          flushAt > 0 && flushAt <= 100,
          'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
@@ -72,4 +73,18 @@ class MyAmpMixConfig {
   /// `MyAmpMix.init()` from touching a platform channel in their widget
   /// tests. Independently toggleable from the other autocapture flags.
   final bool autocaptureAttribution;
+
+  /// Enables automatic screenshot capture (shared-contracts §18): on each
+  /// `$screen_view` the SDK renders the current frame via a root
+  /// `RepaintBoundary`, downscales it (≤ 640px longest side, JPEG q≈70) and
+  /// uploads it to `POST /ingest/screenshots`. Throttled to **once per
+  /// `(screen_name, app_version)`** — a screen is captured only the first time
+  /// it is viewed under the current `app_version` and never again for that
+  /// version (persisted across sessions/relaunches). Wrap PII in
+  /// `MyAmpMixPrivacy` to black it out of captures. Like the other
+  /// real-surface autocaptures this is gated at wire-time so
+  /// `autocaptureScreenshots: false` keeps `MyAmpMix.init()` from ever
+  /// rendering/uploading a frame in widget tests. Independently toggleable
+  /// from the other autocapture flags.
+  final bool autocaptureScreenshots;
 }

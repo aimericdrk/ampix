@@ -343,6 +343,10 @@ void main() {
         // attribution/*_test.dart) that injects a stream instead.
         autocapturePurchases: false,
         autocaptureAttribution: false,
+        // Disable screenshot autocapture: its default capturer renders a real
+        // `RepaintBoundary` frame, which has no place in a tap-focused suite.
+        // screenshot_autocapture_test.dart injects a fake capturer for §18.
+        autocaptureScreenshots: false,
       ),
       overrides: SdkOverrides(
         clock: clock,

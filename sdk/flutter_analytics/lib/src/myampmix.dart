@@ -8,6 +8,8 @@ import 'package:uuid/uuid.dart';
 import 'attribution/attribution_autocapture.dart';
 import 'attribution/attribution_store.dart';
 import 'autocapture/purchase_autocapture.dart';
+import 'autocapture/screenshot_autocapture.dart';
+import 'autocapture/screenshot_capturer.dart';
 import 'config.dart';
 import 'context/context_collector.dart';
 import 'context/platform_context_data_source.dart';
@@ -41,6 +43,7 @@ class SdkOverrides {
     this.eventStore,
     this.purchaseStream,
     this.attributionStream,
+    this.screenshotCapturer,
   });
 
   final Clock? clock;
@@ -68,6 +71,13 @@ class SdkOverrides {
   /// driven with a fake referrer payload instead of a real platform channel.
   /// Not part of the frozen §8 surface.
   final Stream<dynamic>? attributionStream;
+
+  /// Test-only seam replacing the real `RepaintBoundary`-backed screenshot
+  /// capturer so the capture→hash→throttle→upload mapping (§18) can be driven
+  /// with canned JPEG bytes instead of rendering a real frame. Only consulted
+  /// when `config.autocaptureScreenshots` is true. Not part of the frozen §8
+  /// surface.
+  final ScreenshotCapturer? screenshotCapturer;
 }
 
 /// Public facade — the exact shared-contracts §8 surface. Every method is
@@ -87,6 +97,7 @@ class MyAmpMix {
   bool _autocaptureTaps = true;
   bool _autocapturePurchases = true;
   bool _autocaptureAttribution = true;
+  bool _autocaptureScreenshots = true;
 
   late final AnalyticsDatabase _database;
   late final AttributionStore _attribution;
@@ -100,6 +111,7 @@ class MyAmpMix {
   _SdkLifecycleObserver? _observer;
   PurchaseAutocapture? _purchaseAutocapture;
   AttributionAutocapture? _attributionAutocapture;
+  ScreenshotAutocapture? _screenshotAutocapture;
 
   /// Profile operations (`people.set/setOnce/increment/append/unset/deleteUser`).
   People people = People.noop();
@@ -141,10 +153,13 @@ class MyAmpMix {
     _autocaptureTaps = config.autocaptureTaps;
     _autocapturePurchases = config.autocapturePurchases;
     _autocaptureAttribution = config.autocaptureAttribution;
+    _autocaptureScreenshots = config.autocaptureScreenshots;
     final clock = overrides?.clock ?? const SystemClock();
     final idFactory = overrides?.idFactory ?? (() => const Uuid().v7());
     final keyValueStore =
         overrides?.keyValueStore ?? await SharedPrefsKeyValueStore.open();
+    final contextDataSource =
+        overrides?.contextDataSource ?? PlatformContextDataSource();
     _database = overrides?.database ?? AnalyticsDatabase.open();
     final events = overrides?.eventStore ?? DriftEventStore(_database);
     final profiles = DriftProfileOpStore(_database);
@@ -183,8 +198,9 @@ class MyAmpMix {
     );
     await _optOut.load();
 
+    final httpClient = overrides?.httpClient ?? http.Client();
     _uploader = Uploader(
-      client: overrides?.httpClient ?? http.Client(),
+      client: httpClient,
       events: events,
       profiles: profiles,
       serverUrl: config.serverUrl,
@@ -205,7 +221,7 @@ class MyAmpMix {
       superProperties: _superProperties,
       timedEvents: _timedEvents,
       contextCollector: ContextCollector(
-        overrides?.contextDataSource ?? PlatformContextDataSource(),
+        contextDataSource,
         attribution: _attribution,
       ),
       maxQueueSize: config.maxQueueSize,
@@ -284,10 +300,54 @@ class MyAmpMix {
       );
       _attributionAutocapture!.start();
     }
+
+    // Automatic screenshot capture (shared-contracts §18). Gated on
+    // `config.autocaptureScreenshots` (default true) for the SAME fake-async
+    // reason as the purchase/attribution blocks: the default capturer renders
+    // a real `RepaintBoundary` frame, so leaving it wired would make a plain
+    // `MyAmpMix.init()` try to render/upload under `testWidgets`. When enabled
+    // we build it from the injected capturer (or the real
+    // `RepaintBoundary` one) and reuse the same http client the uploader uses.
+    // Triggered lazily from `track()` on `$screen_view`; captures each screen
+    // at most once per `app_version` (persisted in the keyValueStore).
+    if (config.autocaptureScreenshots) {
+      _screenshotAutocapture = ScreenshotAutocapture(
+        capturer:
+            overrides?.screenshotCapturer ??
+            RepaintBoundaryScreenshotCapturer(),
+        client: httpClient,
+        store: keyValueStore,
+        serverUrl: config.serverUrl,
+        token: token,
+        appVersion: () async => (await contextDataSource.appInfo()).version,
+        logger: _logger,
+      );
+    }
   }
 
-  void track(String event, {Map<String, Object?>? properties}) =>
-      _guard('track', () => _pipeline.track(event, properties));
+  void track(String event, {Map<String, Object?>? properties}) {
+    _guard('track', () => _pipeline.track(event, properties));
+    _maybeCaptureScreenshot(event, properties);
+  }
+
+  /// Fires automatic screenshot capture on a `$screen_view` when enabled
+  /// (shared-contracts §18). Fire-and-forget and fully guarded inside
+  /// [ScreenshotAutocapture.onScreenView]; runs OUTSIDE the `_guard` chain so
+  /// a slow capture/upload never blocks later track/identify calls. A no-op
+  /// unless screenshot autocapture is wired (`config.autocaptureScreenshots`)
+  /// and the caller is opted in.
+  void _maybeCaptureScreenshot(
+    String event,
+    Map<String, Object?>? properties,
+  ) {
+    final capture = _screenshotAutocapture;
+    if (capture == null) return;
+    if (event != r'$screen_view') return;
+    if (_optOut.isOptedOut) return;
+    final screenName = properties?[r'$screen_name'];
+    if (screenName is! String || screenName.isEmpty) return;
+    unawaited(capture.onScreenView(screenName));
+  }
 
   /// Records a marketing-attribution touch from a deep link / app link the
   /// host app received (shared-contracts §4/§5). The host owns its own
@@ -347,6 +407,12 @@ class MyAmpMix {
   /// is always available regardless of this flag.
   bool get autocaptureAttributionEnabled =>
       _initialized && _autocaptureAttribution;
+
+  /// Whether automatic screenshot capture is enabled
+  /// (`config.autocaptureScreenshots`, shared-contracts §18). Not part of the
+  /// frozen §8 method surface, but a public property of the facade class.
+  bool get autocaptureScreenshotsEnabled =>
+      _initialized && _autocaptureScreenshots;
 
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);
