@@ -510,3 +510,39 @@ ingest a KNOWN sequence for one physical user — N anonymous events with `disti
 for that person (not two), the merged profile's `event_count` = N + M (+ the identify event), and an
 insights `unique_users` over the whole set counts that person **once**. Unit tests for the canonicalization
 SQL builder (shape + that it never interpolates user input).
+
+## 18. Screenshot capture pipeline — automatic (added 2026-07-05, v2)
+
+User decision: page images for the path map + click heatmap are captured **automatically** (SDK → backend → dashboard), not uploaded. Cost/privacy guardrails are built in: the backend keeps a BOUNDED, DEDUPED set per screen (not one image per user/event).
+
+### SDK (Flutter, gated like every real-channel autocapture)
+- New config `autocaptureScreenshots` (default true) + `SdkOverrides.screenshotCapturer` test seam. Gate the capture wiring on the flag (same escape-hatch/fake-async rule as `autocapturePurchases`/`autocaptureAttribution` — §gated pattern in myampmix.dart).
+- On `$screen_view`, capture the current frame via a root `RepaintBoundary` (`RenderRepaintBoundary.toImage`) → downscale to ≤ 640px longest side → JPEG q≈70. **Throttle**: at most one upload per (`$screen_name`) per app session, and skip if the image hash matches the last one sent for that screen (client-side dedupe). Never-throw (design §13): any capture/encode failure is dropped silently.
+- **Privacy**: a `MyAmpMixPrivacy(child: …)` widget masks its subtree (solid block) in captures; document that developers should wrap PII/input fields. MVP does not auto-mask all text — call this out in HOW-TO-USE.md.
+- Upload: `POST /ingest/screenshots` (multipart/form-data) `Authorization: Bearer <sdk_token>`, fields: `screen_name`, `app_version`, `width`, `height`, `image_hash`, `image` (JPEG bytes). → `202 {"stored": bool}` (backend may reject a dup/over-cap without error). Rate-limited per token.
+
+### Backend (storage strategy: bounded, no new paid infra)
+- Postgres table `screen_captures(id uuid, project_id fk, screen_name, image bytea, content_type, width int, height int, app_version, image_hash, captured_at, updated_at)`, unique `(project_id, screen_name, image_hash)`. **Cap** at most N (config `SCREENSHOT_MAX_PER_SCREEN`, default 5) captures per (project_id, screen_name), evicting the oldest — bounds storage (Cloud-Run-stateless-safe, no object store). Prisma migration `v2_screen_captures`.
+- `POST /ingest/screenshots` (ingest module, token auth): validate size (≤ `SCREENSHOT_MAX_KB`, default 512) + content-type; upsert on the unique key; enforce the per-screen cap. `202`.
+- Read: `GET /api/v1/projects/:projectId/screens` (viewer+) → `{screens:[{screen_name, capture_count, latest_captured_at, width, height}]}`; `GET /api/v1/projects/:projectId/screens/:screenName/image?hash=<optional>` → the JPEG bytes (Cache-Control), newest capture if no hash. Membership-gated.
+
+Verification: SDK unit test of the capture→hash→throttle→upload mapping via an injected fake capturer (no real rendering). Backend e2e: POST /ingest/screenshots stores + caps + dedupes; GET returns the image; membership enforced.
+
+## 19. v2 analytics — click heatmap, screen paths, engagement metrics, templates (added 2026-07-05, v2)
+
+All read endpoints under `/api/v1/projects/:projectId/...`, viewer+ membership, FULLY parameterized ClickHouse (reuse §14 `resolveProperty`/filter-compiler/date handling), and — where users are counted — the §17 canonical `uid`.
+
+### POST /query/click-heatmap
+Body: `{ "screen_name": "checkout", "date_range": {from,to}, "grid": { "cols": 20, "rows": 40 }, "filters": [] }` (cols/rows 1..100). Engine: over `$tap` events with `$screen_name = {screen:String}`, normalize each tap to `[0,1]²` via `$pos_x / screen_width`, `$pos_y / screen_height` (context columns; skip rows with 0 width/height), bucket into the `cols×rows` grid, `count()` per cell. → `{ "screen_name", "total": N, "cells": [ { "cx", "cy", "count" } ] }` (cx∈0..cols-1, cy∈0..rows-1; empty cells omitted). Powers the heatmap overlay on the screen's screenshot.
+
+### POST /query/screen-paths
+Like §15 flows BUT nodes are **screens** (the `$screen_name` property of `$screen_view` events), not event names — the existing flows engine keys nodes on event name, which can't distinguish screens. Body: `{ "anchor_screen"?: "home", "direction": "forward"|"backward", "date_range", "steps": 1..5, "max_nodes_per_step": 1..20, "unit": "session"|"user" }` (omit `anchor_screen` → start from the top entry screens). Per unit, order `$screen_view` by timestamp, take the `$screen_name` sequence, aggregate transitions `uniqExact(uid)`, top-N per step + `$other`/`$end`. → same Sankey shape as §15 flows (`{nodes:[{id,step,event:screen_name,value}], links:[{source,target,value}]}`). This is the user-path-map data source.
+
+### GET /metrics/engagement?from=&to=&interval=day|week|month
+Active-user + stickiness metrics using canonical `uid` (§17). → `{ "active": [ {"t","dau"|"wau"|"mau" as chosen by interval, "value"} ], "stickiness": [ {"t","value"} ] (DAU/MAU ratio), "new_vs_returning": [ {"t","new","returning"} ] }`. "New" = uid whose first-ever event is in the bucket; "returning" = active uid seen before the bucket. Reuses the rollup MVs where exact-safe; raw events otherwise.
+
+### Templates (Amplitude-parity, seeded server-side)
+- `GET /api/v1/templates` (auth) → `{ "templates":[ {"id","name","description","kind_counts"} ] }`. Fixed catalog: `acquisition`, `activation-funnel`, `engagement`, `retention`, `revenue`, `product-usage`, `user-paths`. Each is a code-defined bundle of saved-report definitions (§14/§15) + a dashboard layout (§16).
+- `POST /api/v1/projects/:projectId/templates/:templateId/apply` (analyst+) → materializes the bundle as real Cohorts/SavedReports/Dashboard rows (§16) in the project and returns `{ "dashboard_id" }`. Idempotency: name-suffix or skip-if-exists; state it.
+
+Verification: click-heatmap e2e (known taps at known normalized positions → exact cell counts); screen-paths e2e (known screen sequence → exact nodes/links incl `$end`); engagement e2e (known active users across days → exact DAU/MAU/stickiness); template-apply e2e (creates the expected reports+dashboard). Unit tests for each compiler (shape + injection-safety).
