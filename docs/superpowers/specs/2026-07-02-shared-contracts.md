@@ -549,3 +549,13 @@ Active-user + stickiness metrics using canonical `uid` (§17). → `{ "active": 
 - `POST /api/v1/projects/:projectId/templates/:templateId/apply` (analyst+) → materializes the bundle as real Cohorts/SavedReports/Dashboard rows (§16) in the project and returns `{ "dashboard_id" }`. Idempotency: name-suffix or skip-if-exists; state it.
 
 Verification: click-heatmap e2e (known taps at known normalized positions → exact cell counts); screen-paths e2e (known screen sequence → exact nodes/links incl `$end`); engagement e2e (known active users across days → exact DAU/MAU/stickiness); template-apply e2e (creates the expected reports+dashboard). Unit tests for each compiler (shape + injection-safety).
+
+## 20. Configurable logging (added 2026-07-06)
+
+Both the backend and the SDK expose a log-LEVEL setting so operators/developers control verbosity.
+
+### Backend — `LOG_LEVEL` env (validated app-config §3)
+`LOG_LEVEL` ∈ `fatal|error|warn|info|debug|trace|silent`, **default `info`**. Wires the pino logger's base `level`. **HTTP request auto-logging (pino-http) is emitted per-response at: `debug` for 2xx/3xx, `warn` for 4xx, `error` for 5xx** — so at the default `info`, successful-request logs are SUPPRESSED (only shown when `LOG_LEVEL=debug`/`trace`), while application logs (info) and client/server error requests still surface. Implement via `LoggerModule.forRootAsync` injecting the config: set `pinoHttp.level = config.logLevel` and a `customLogLevel(req,res,err)` returning the mapping above. Add `LOG_LEVEL` to `.env.example`.
+
+### SDK — `MyAmpMixConfig.logLevel` (Dart)
+Public enum `MyAmpMixLogLevel { none, error, warn, info, debug }` (ascending verbosity). `MyAmpMixConfig.logLevel` **default `none`** (silent — preserves today's default-quiet behavior). Back-compat: when `logLevel` is left at its default and the existing `debug: true` flag is set, the effective level is `debug`. `MamLogger` filters by the effective level: internal diagnostics log at `debug`, error-carrying diagnostics at `error`; still gated to `kDebugMode` as today (the SDK never prints in release builds). Existing `debug` flag stays for back-compat.
