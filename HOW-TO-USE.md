@@ -190,6 +190,8 @@ MaterialApp(
 
 **How to populate them:** in a DEBUG build, set `autocaptureScreenshots: true`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition: at least `screenshotSettleDelay` (a `Duration`, default **~1s**) AND until the UI stops animating. Bump `screenshotSettleDelay` if your transitions are longer/heavier and captures still look mid-animation.
 
+For correctly-framed full-screen captures, wrap your app in `MyAmpMixTracker` via `MaterialApp.builder` (the screen-view/tap wiring above already does this): the SDK captures the dedicated `RepaintBoundary` the tracker provides — the whole screen — rather than guessing a boundary from the render tree. Without the tracker mounted it falls back to the largest boundary on screen.
+
 **Non-route navigation (bottom-nav tabs, IndexedStack, PageView):** these aren't Navigator pushes, so `MyAmpMixObserver` can't see them — every tab would collapse into one screen. Call `trackScreen` yourself when the visible screen changes:
 ```dart
 NavigationBar(

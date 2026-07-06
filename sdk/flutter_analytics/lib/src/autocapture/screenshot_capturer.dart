@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
 import 'myampmix_privacy.dart';
+import 'screenshot_boundary_key.dart';
 
 /// Longest-side cap for an uploaded screenshot (shared-contracts §18).
 const int kMaxScreenshotEdge = 640;
@@ -54,13 +55,16 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
   RepaintBoundaryScreenshotCapturer({
     GlobalKey? boundaryKey,
     Duration maxSettle = const Duration(milliseconds: 2500),
-  }) : _boundaryKey = boundaryKey,
+  }) : _boundaryKey = boundaryKey ?? myAmpMixScreenshotBoundaryKey,
        _maxSettle = maxSettle;
 
-  /// Optional key of a `RepaintBoundary` the host app wraps around its root.
-  /// When absent, the first `RenderRepaintBoundary` reachable from the root
-  /// element is used (Flutter inserts one under `MaterialApp`/`WidgetsApp`).
-  final GlobalKey? _boundaryKey;
+  /// Key of the full-screen `RepaintBoundary` to capture. Defaults to
+  /// [myAmpMixScreenshotBoundaryKey], the boundary [MyAmpMixTracker] wraps
+  /// around the app subtree — so when the tracker is mounted this resolves to
+  /// the whole screen. When that key isn't mounted, `_resolveBoundary` falls
+  /// back to the LARGEST `RenderRepaintBoundary` on screen (the full-screen
+  /// one), never the first/partial sub-boundary a depth-first walk would hit.
+  final GlobalKey _boundaryKey;
 
   /// Upper bound on how long to wait for the UI to stop animating before
   /// capturing anyway (so a screen with a persistent animation still shoots).
@@ -87,11 +91,21 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
           format: ui.ImageByteFormat.rawRgba,
         );
         if (rgba == null) return null;
+        // Use the EXACT bytes the ByteData views (honour its offset/length),
+        // copied into a fresh, tightly-packed buffer at offset 0 — passing
+        // `rgba.buffer` alone would hand over the whole underlying ByteBuffer
+        // and misread every row, mis-framing the image. `toByteData(rawRgba)`
+        // is RGBA, so declare the channel order explicitly.
+        final bytes = rgba.buffer.asUint8List(
+          rgba.offsetInBytes,
+          rgba.lengthInBytes,
+        );
         final image = img.Image.fromBytes(
           width: uiImage.width,
           height: uiImage.height,
-          bytes: rgba.buffer,
+          bytes: Uint8List.fromList(bytes).buffer,
           numChannels: 4,
+          order: img.ChannelOrder.rgba,
         );
         _applyPrivacyMasks(image, pixelRatio);
         final jpeg = img.encodeJpg(image, quality: kScreenshotJpegQuality);
@@ -131,22 +145,37 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
   }
 
   RenderRepaintBoundary? _resolveBoundary() {
-    final key = _boundaryKey;
-    if (key != null) {
-      final object = key.currentContext?.findRenderObject();
-      if (object is RenderRepaintBoundary) return object;
-    }
-    return _firstBoundary(WidgetsBinding.instance.rootElement?.renderObject);
+    final object = _boundaryKey.currentContext?.findRenderObject();
+    if (object is RenderRepaintBoundary) return object;
+    return _largestBoundary(WidgetsBinding.instance.rootElement?.renderObject);
   }
 
-  RenderRepaintBoundary? _firstBoundary(RenderObject? node) {
-    if (node == null) return null;
-    if (node is RenderRepaintBoundary) return node;
-    RenderRepaintBoundary? found;
-    node.visitChildren((child) {
-      found ??= _firstBoundary(child);
-    });
-    return found;
+  /// Fallback when [_boundaryKey] isn't mounted: walk the render tree and
+  /// return the LARGEST-area `RenderRepaintBoundary` — the full-screen one —
+  /// instead of the first match a depth-first walk hits (often a partial
+  /// sub-boundary like a list item or overlay entry → mis-framed capture).
+  /// Never throws; returns `null` if nothing sized is found.
+  RenderRepaintBoundary? _largestBoundary(RenderObject? root) {
+    if (root == null) return null;
+    RenderRepaintBoundary? best;
+    var bestArea = -1.0;
+    void visit(RenderObject node) {
+      try {
+        if (node is RenderRepaintBoundary && node.hasSize) {
+          final area = node.size.width * node.size.height;
+          if (area > bestArea) {
+            bestArea = area;
+            best = node;
+          }
+        }
+        node.visitChildren(visit);
+      } on Object {
+        // Skip a node we can't measure/traverse; keep scanning the rest.
+      }
+    }
+
+    visit(root);
+    return best;
   }
 
   /// Paints a solid black rectangle over every mounted [MyAmpMixPrivacy]

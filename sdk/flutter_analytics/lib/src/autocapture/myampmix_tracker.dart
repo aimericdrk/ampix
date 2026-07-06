@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../myampmix.dart';
 import '../util/clock.dart';
 import 'myampmix_observer.dart';
+import 'screenshot_boundary_key.dart';
 
 /// Tap slop (design §11): a pointer down/up pair within this many logical
 /// pixels of each other counts as a tap, not a drag.
@@ -241,12 +242,19 @@ class _MyAmpMixTrackerState extends State<MyAmpMixTracker> {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: _onPointerDown,
-      onPointerUp: _onPointerUp,
-      onPointerCancel: _onPointerCancel,
-      child: widget.child,
+    // Wrap the app subtree in a keyed `RepaintBoundary` so the screenshot
+    // capturer (shared-contracts §18) renders the WHOLE screen from a stable,
+    // SDK-controlled boundary instead of the first/partial one a tree walk
+    // would find — the same subtree we already observe for taps.
+    return RepaintBoundary(
+      key: myAmpMixScreenshotBoundaryKey,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _onPointerDown,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerCancel,
+        child: widget.child,
+      ),
     );
   }
 }
