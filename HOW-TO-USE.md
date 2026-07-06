@@ -45,12 +45,12 @@ Future<void> main() async {
       sessionTimeout: Duration(minutes: 30),       // background time before a session rotates
       maxRetryDelay: Duration(minutes: 5),         // cap on exponential retry backoff
       debug: false,                                // enable internal SDK logging (debug builds only)
-      // Autocapture toggles (all default true) — see §14:
-      autocaptureScreens: true,                    // $screen_view via MyAmpMixObserver
-      autocaptureTaps: true,                       // $tap / $rage_tap via MyAmpMixTracker
-      autocapturePurchases: true,                  // native $in_app_purchase (StoreKit / Play Billing)
-      autocaptureAttribution: true,                // deep-link UTM + Android install referrer → $campaign_touch
-      autocaptureScreenshots: true,                // one screenshot per screen per app version
+      // Autocapture toggles — see §14:
+      autocaptureScreens: true,                    // default true — $screen_view via MyAmpMixObserver
+      autocaptureTaps: true,                       // default true — $tap / $rage_tap via MyAmpMixTracker
+      autocapturePurchases: true,                  // default true — native $in_app_purchase (StoreKit / Play Billing)
+      autocaptureAttribution: true,                // default true — deep-link UTM + Android install referrer
+      autocaptureScreenshots: false,               // default FALSE — dev/reference tool, debug-only (see §14)
     ),
   );
 
@@ -186,12 +186,24 @@ MaterialApp(
 
 **Attribution** (`autocaptureAttribution`) — the Android install referrer is captured automatically; for deep links, call `MyAmpMix.instance.trackDeepLink(uri)` from your link handler. UTM params are persisted (first- and last-touch) and attached to every event; a `$campaign_touch` is emitted on each new touch.
 
-**Screenshots** (`autocaptureScreenshots`) — the SDK captures **one screenshot per screen per app version** (persisted, so a screen is never re-captured for the same version) and uploads it to your backend (Firebase Storage), powering the dashboard's user-path map and click heatmaps. To exclude sensitive UI (PII, payment fields) from captures, wrap it:
+**Screenshots** (`autocaptureScreenshots`, default **false**) — a **developer/reference tool, not a per-user feature.** It is off by default and only ever runs in **debug builds** — a release/production build never captures or uploads, so your end users never send screenshots (bounded storage, no PII collected in the wild). These reference images power the dashboard's user-path map and click heatmaps.
 
+**How to populate them:** in a DEBUG build, set `autocaptureScreenshots: true`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition.
+
+**Meaningful names:** screen names come from your routes. Give routes names so they aren't `MaterialPageRoute<void>`:
+```dart
+Navigator.push(context, MaterialPageRoute(
+  settings: const RouteSettings(name: 'product_detail'),   // ← becomes the $screen_name
+  builder: (_) => const ProductDetailScreen(),
+));
+// or a custom mapping without renaming routes:
+MyAmpMixObserver(screenNameExtractor: (route) => route.settings.name ?? myNameFor(route))
+```
+
+**Retake / fix a bad capture:** delete it in the dashboard (Screens → Retake/Delete), then call `MyAmpMix.instance.retakeScreenshots()` and re-navigate in a debug build to re-capture. Wrap PII/payment fields to keep them out of captures:
 ```dart
 MyAmpMixPrivacy(child: CreditCardForm())   // masked (solid block) in screenshots
 ```
+> MVP masking is opt-in per widget; it does not auto-redact arbitrary text.
 
-> Privacy note: screenshot autocapture captures rendered UI. Wrap anything sensitive in `MyAmpMixPrivacy`, or disable the feature entirely with `autocaptureScreenshots: false`. (MVP masking is opt-in per widget; it does not auto-redact arbitrary text.)
-
-To disable any stream, set its config flag to `false` — e.g. `autocaptureScreenshots: false`.
+To disable any autocapture stream, set its flag to `false` (screens/taps/purchases/attribution default true; screenshots default false).
