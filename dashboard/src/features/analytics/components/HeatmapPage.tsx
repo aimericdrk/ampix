@@ -220,6 +220,7 @@ function HeatmapCanvas({
       projectId={projectId}
       screenName={screenName}
       alt={`Screenshot of ${screenName}`}
+      cacheKey={summary?.latest_image_hash}
       className="mx-auto w-full max-w-xs rounded-lg border border-border"
       aspectRatio={aspectRatio}
     >

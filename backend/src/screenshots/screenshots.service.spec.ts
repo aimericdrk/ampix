@@ -287,9 +287,9 @@ describe('ScreenshotsService', () => {
       const newer = new Date('2026-07-02T10:00:00.000Z');
       const older = new Date('2026-07-01T10:00:00.000Z');
       prisma.screenCapture.findMany.mockResolvedValue([
-        { screenName: 'checkout', width: 640, height: 1280, capturedAt: newer },
-        { screenName: 'checkout', width: 320, height: 640, capturedAt: older },
-        { screenName: 'home', width: 400, height: 800, capturedAt: older },
+        { screenName: 'checkout', width: 640, height: 1280, capturedAt: newer, imageHash: 'hash-checkout-2', appVersion: '2.0.0' },
+        { screenName: 'checkout', width: 320, height: 640, capturedAt: older, imageHash: 'hash-checkout-1', appVersion: '1.0.0' },
+        { screenName: 'home', width: 400, height: 800, capturedAt: older, imageHash: 'hash-home', appVersion: '1.0.0' },
       ]);
 
       const result = await service.listScreens(USER, PROJECT);
@@ -301,6 +301,7 @@ describe('ScreenshotsService', () => {
       // Neither bytes nor a storage path are selected (cheap metadata read).
       const select = prisma.screenCapture.findMany.mock.calls[0][0].select;
       expect(select).not.toHaveProperty('storagePath');
+      // The newest capture per screen supplies latest_image_hash / latest_app_version (rows desc).
       expect(result.screens).toEqual([
         {
           screen_name: 'checkout',
@@ -308,6 +309,8 @@ describe('ScreenshotsService', () => {
           latest_captured_at: newer.toISOString(),
           width: 640,
           height: 1280,
+          latest_image_hash: 'hash-checkout-2',
+          latest_app_version: '2.0.0',
         },
         {
           screen_name: 'home',
@@ -315,6 +318,8 @@ describe('ScreenshotsService', () => {
           latest_captured_at: older.toISOString(),
           width: 400,
           height: 800,
+          latest_image_hash: 'hash-home',
+          latest_app_version: '1.0.0',
         },
       ]);
     });

@@ -139,6 +139,11 @@ export function useDeleteScreen(projectId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: screensKey(projectId) });
+      // A same-session retake reuses the screen name, so also drop any cached image blobs for this
+      // project — the content hash changes, but this guarantees an immediate refetch after a delete.
+      void queryClient.invalidateQueries({
+        queryKey: ['analytics', projectId, 'screen-image'],
+      });
     },
   });
 }
@@ -147,13 +152,27 @@ export function useDeleteScreen(projectId: string) {
  * §18 `GET /screens/:screenName/image` as a Blob — the endpoint is membership-gated, so a bare
  * `<img src>` (which can't send the bearer token) would 401. We fetch the bytes through the authed
  * transport; the consuming component turns the blob into an object URL. `enabled` gates the request
- * until a real screen is chosen; `staleTime: Infinity` because a screenshot is immutable per version.
+ * until a real screen is chosen.
+ *
+ * `cacheKey` is the screen's latest `image_hash`: it is folded into BOTH the query key AND the request
+ * URL (`?hash=…`) so the blob is content-addressed. A new capture ⇒ new hash ⇒ new key + new URL ⇒ a
+ * guaranteed fresh fetch (and a browser-cache miss), which is what makes `staleTime: Infinity` correct.
+ * When no hash is known yet the bare `/image` is fetched (the backend serves the newest capture).
  */
-export function useScreenImageBlob(projectId: string, screenName: string, enabled = true) {
+export function useScreenImageBlob(
+  projectId: string,
+  screenName: string,
+  enabled = true,
+  cacheKey?: string,
+) {
   return useQuery({
-    queryKey: ['analytics', projectId, 'screen-image', screenName],
-    queryFn: () =>
-      apiFetchBlob(`${base(projectId)}/screens/${encodeURIComponent(screenName)}/image`),
+    queryKey: ['analytics', projectId, 'screen-image', screenName, cacheKey ?? null],
+    queryFn: () => {
+      const query = cacheKey ? `?hash=${encodeURIComponent(cacheKey)}` : '';
+      return apiFetchBlob(
+        `${base(projectId)}/screens/${encodeURIComponent(screenName)}/image${query}`,
+      );
+    },
     enabled: enabled && screenName.length > 0,
     retry: false,
     staleTime: Infinity,

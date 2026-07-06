@@ -38,10 +38,13 @@ export function PathMap({
   projectId,
   nodes,
   links,
+  screenHashes,
 }: {
   projectId: string;
   nodes: FlowNode[];
   links: FlowLink[];
+  /** screen_name → latest `image_hash`, so each node's screenshot is content-addressed (retake-safe). */
+  screenHashes?: Map<string, string>;
 }) {
   const layout = useMemo(() => computePathLayout(nodes, links), [nodes, links]);
   const [transform, setTransform] = useState<Transform>({ x: 24, y: 24, scale: 1 });
@@ -145,7 +148,12 @@ export function PathMap({
           </svg>
 
           {layout.nodes.map((node) => (
-            <PathNodeCard key={node.id} projectId={projectId} node={node} />
+            <PathNodeCard
+              key={node.id}
+              projectId={projectId}
+              node={node}
+              cacheKey={screenHashes?.get(node.event)}
+            />
           ))}
         </div>
       </div>
@@ -153,7 +161,15 @@ export function PathMap({
   );
 }
 
-function PathNodeCard({ projectId, node }: { projectId: string; node: PositionedNode }) {
+function PathNodeCard({
+  projectId,
+  node,
+  cacheKey,
+}: {
+  projectId: string;
+  node: PositionedNode;
+  cacheKey?: string;
+}) {
   const synthetic = isSyntheticScreen(node.event);
   return (
     <div
@@ -173,6 +189,7 @@ function PathNodeCard({ projectId, node }: { projectId: string; node: Positioned
           projectId={projectId}
           screenName={node.event}
           alt={`Screenshot of ${node.event}`}
+          cacheKey={cacheKey}
           className="flex-1"
         />
       )}

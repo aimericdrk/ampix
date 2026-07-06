@@ -47,6 +47,11 @@ export function PathsPage() {
   const [result, setResult] = useState<ScreenPathsResponse | null>(null);
 
   const screenOptions = screens.data?.screens.map((s) => s.screen_name) ?? [];
+  // screen_name → latest image_hash, so each map node's screenshot is content-addressed (retake-safe).
+  const screenHashes = useMemo(
+    () => new Map(screens.data?.screens.map((s) => [s.screen_name, s.latest_image_hash]) ?? []),
+    [screens.data],
+  );
 
   const query: ScreenPathsQuery = useMemo(() => {
     const trimmed = anchorScreen.trim();
@@ -205,7 +210,12 @@ export function PathsPage() {
           </div>
 
           {view === 'map' ? (
-            <PathMap projectId={projectId} nodes={result.nodes} links={result.links} />
+            <PathMap
+              projectId={projectId}
+              nodes={result.nodes}
+              links={result.links}
+              screenHashes={screenHashes}
+            />
           ) : (
             <MermaidDiagram chart={mermaidChart} ariaLabel="User path flowchart" />
           )}

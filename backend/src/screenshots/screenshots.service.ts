@@ -25,6 +25,10 @@ export interface ScreenListItem {
   latest_captured_at: string;
   width: number;
   height: number;
+  /** Content hash of the newest capture — the dashboard content-addresses the image URL with it. */
+  latest_image_hash: string;
+  /** App version of the newest capture. */
+  latest_app_version: string;
 }
 
 /** The JPEG stream + content type served by `GET /screens/:screenName/image`. */
@@ -216,7 +220,14 @@ export class ScreenshotsService implements OnModuleInit {
     await this.projects.assertMembership(userId, projectId);
     const rows = await this.prisma.screenCapture.findMany({
       where: { projectId },
-      select: { screenName: true, width: true, height: true, capturedAt: true },
+      select: {
+        screenName: true,
+        width: true,
+        height: true,
+        capturedAt: true,
+        imageHash: true,
+        appVersion: true,
+      },
       orderBy: { capturedAt: 'desc' },
     });
 
@@ -233,6 +244,8 @@ export class ScreenshotsService implements OnModuleInit {
           latest_captured_at: row.capturedAt.toISOString(),
           width: row.width,
           height: row.height,
+          latest_image_hash: row.imageHash,
+          latest_app_version: row.appVersion,
         });
       }
     }

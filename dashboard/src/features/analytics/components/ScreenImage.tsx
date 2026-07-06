@@ -14,6 +14,7 @@ export function ScreenImage({
   screenName,
   alt,
   enabled = true,
+  cacheKey,
   className,
   aspectRatio,
   objectFit = 'cover',
@@ -23,13 +24,15 @@ export function ScreenImage({
   screenName: string;
   alt: string;
   enabled?: boolean;
+  /** The screen's latest `image_hash` — content-addresses the fetch so a retake busts the cache. */
+  cacheKey?: string;
   className?: string;
   /** CSS `aspect-ratio` for the box (e.g. `"9 / 19.5"`) — keeps the overlay aligned without an image. */
   aspectRatio?: string;
   objectFit?: 'cover' | 'contain';
   children?: ReactNode;
 }) {
-  const query = useScreenImageBlob(projectId, screenName, enabled);
+  const query = useScreenImageBlob(projectId, screenName, enabled, cacheKey);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
 
   useEffect(() => {

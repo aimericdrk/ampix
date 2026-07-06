@@ -14,8 +14,8 @@ function signIn() {
 
 const SCREENS: ScreensResponse = {
   screens: [
-    { screen_name: 'home', capture_count: 2, latest_captured_at: '2026-07-01T10:00:00Z', width: 390, height: 844 },
-    { screen_name: 'checkout', capture_count: 1, latest_captured_at: '2026-07-01T10:10:00Z', width: 390, height: 844 },
+    { screen_name: 'home', capture_count: 2, latest_captured_at: '2026-07-01T10:00:00Z', width: 390, height: 844, latest_image_hash: 'hash-home', latest_app_version: '1.0.0' },
+    { screen_name: 'checkout', capture_count: 1, latest_captured_at: '2026-07-01T10:10:00Z', width: 390, height: 844, latest_image_hash: 'hash-checkout', latest_app_version: '1.0.0' },
   ],
 };
 

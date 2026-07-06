@@ -547,6 +547,10 @@ export interface ScreenSummary {
   latest_captured_at: string;
   width: number;
   height: number;
+  /** Content hash of the newest capture — content-addresses the image URL so a retake busts the cache. */
+  latest_image_hash: string;
+  /** App version of the newest capture. */
+  latest_app_version: string;
 }
 
 export interface ScreensResponse {
