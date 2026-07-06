@@ -12,6 +12,7 @@ import type { ScreenshotStorage } from './storage/screenshot-storage.port';
 
 const USER = 'user-1';
 const PROJECT = '018f6b2e-0000-7000-8000-0000000000a1';
+const ORG = '018f6b2e-0000-7000-8000-0000000000b2';
 
 interface PrismaMock {
   screenCapture: {
@@ -19,6 +20,9 @@ interface PrismaMock {
     findMany: jest.Mock;
     findFirst: jest.Mock;
     deleteMany: jest.Mock;
+  };
+  project: {
+    findUnique: jest.Mock;
   };
 }
 
@@ -45,6 +49,9 @@ function makeService(screenshotMaxKb = 512, configOverrides: Partial<AppConfig> 
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    project: {
+      findUnique: jest.fn().mockResolvedValue({ orgId: ORG }),
     },
   };
   const storageMock: StorageMock = {
@@ -82,12 +89,16 @@ function makeInput(overrides: Partial<StoreScreenshotInput> = {}): StoreScreensh
 }
 
 describe('screenshotObjectPath', () => {
-  it('builds a deterministic, URI-encoded object path (no project_id segment)', () => {
-    expect(screenshotObjectPath('checkout', '1.0.0')).toBe('screens/checkout/1.0.0.jpg');
+  it('builds a deterministic {org}/{project}/screen/{name}/{version} path', () => {
+    expect(screenshotObjectPath(ORG, PROJECT, 'checkout', '1.0.0')).toBe(
+      `${ORG}/${PROJECT}/screen/checkout/1.0.0.jpg`,
+    );
   });
 
-  it('encodes unsafe characters so a segment cannot escape the prefix', () => {
-    expect(screenshotObjectPath('a/b', '1.0')).toBe('screens/a%2Fb/1.0.jpg');
+  it('encodes unsafe characters in the name/version so a segment cannot escape its folder', () => {
+    expect(screenshotObjectPath(ORG, PROJECT, 'a/b', '1.0')).toBe(
+      `${ORG}/${PROJECT}/screen/a%2Fb/1.0.jpg`,
+    );
   });
 });
 
@@ -100,7 +111,7 @@ describe('ScreenshotsService', () => {
 
       expect(result).toEqual({ stored: true });
 
-      const expectedPath = screenshotObjectPath('checkout', '1.0.0');
+      const expectedPath = screenshotObjectPath(ORG, PROJECT, 'checkout', '1.0.0');
       expect(storage.put).toHaveBeenCalledWith(expectedPath, input.image, 'image/jpeg');
 
       expect(prisma.screenCapture.upsert).toHaveBeenCalledTimes(1);
@@ -192,7 +203,7 @@ describe('ScreenshotsService', () => {
       expect(errorSpy).toHaveBeenCalledTimes(1);
       const [message] = errorSpy.mock.calls[0];
       expect(message).toContain('permission denied on bucket');
-      expect(message).toContain(screenshotObjectPath('checkout', '1.0.0'));
+      expect(message).toContain(screenshotObjectPath(ORG, PROJECT, 'checkout', '1.0.0'));
       expect(message).toContain('my-bucket.appspot.com');
       errorSpy.mockRestore();
     });
@@ -210,7 +221,7 @@ describe('ScreenshotsService', () => {
             line.includes('screenshot stored') &&
             line.includes('screen=checkout') &&
             line.includes('app_version=1.0.0') &&
-            line.includes(screenshotObjectPath('checkout', '1.0.0')),
+            line.includes(screenshotObjectPath(ORG, PROJECT, 'checkout', '1.0.0')),
         ),
       ).toBe(true);
       logSpy.mockRestore();
