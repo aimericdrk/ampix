@@ -41,8 +41,11 @@ class ScreenshotAutocapture {
        _appVersion = appVersion,
        // Wait for the push/replace transition to finish before capturing so
        // the frame isn't grabbed mid-animation (off-centre / half-painted).
-       // Tests inject Duration.zero so they don't wait.
-       _settleDelay = settleDelay ?? const Duration(milliseconds: 400),
+       // At least 1s by default (matches `MyAmpMixConfig.screenshotSettleDelay`)
+       // so slow/animated transitions finish; the production capturer ALSO
+       // polls `hasScheduledFrame` on top of this. Tests inject Duration.zero
+       // so they don't wait.
+       _settleDelay = settleDelay ?? const Duration(seconds: 1),
        _logger = logger;
 
   /// KeyValueStore key prefix for the persisted captured-screen set. Suffixed

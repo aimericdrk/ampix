@@ -17,6 +17,8 @@ void main() {
     expect(config.autocaptureTaps, isTrue);
     expect(config.autocapturePurchases, isTrue);
     expect(config.autocaptureAttribution, isTrue);
+    expect(config.autocaptureScreenshots, isFalse);
+    expect(config.screenshotSettleDelay, const Duration(seconds: 1));
   });
 
   test('fake clock advances deterministically', () {

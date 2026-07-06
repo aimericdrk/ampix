@@ -188,7 +188,21 @@ MaterialApp(
 
 **Screenshots** (`autocaptureScreenshots`, default **false**) — a **developer/reference tool, not a per-user feature.** It is off by default and only ever runs in **debug builds** — a release/production build never captures or uploads, so your end users never send screenshots (bounded storage, no PII collected in the wild). These reference images power the dashboard's user-path map and click heatmaps.
 
-**How to populate them:** in a DEBUG build, set `autocaptureScreenshots: true`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition.
+**How to populate them:** in a DEBUG build, set `autocaptureScreenshots: true`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition: at least `screenshotSettleDelay` (a `Duration`, default **~1s**) AND until the UI stops animating. Bump `screenshotSettleDelay` if your transitions are longer/heavier and captures still look mid-animation.
+
+**Non-route navigation (bottom-nav tabs, IndexedStack, PageView):** these aren't Navigator pushes, so `MyAmpMixObserver` can't see them — every tab would collapse into one screen. Call `trackScreen` yourself when the visible screen changes:
+```dart
+NavigationBar(
+  selectedIndex: _index,
+  onDestinationSelected: (i) {
+    setState(() => _index = i);
+    MyAmpMix.instance.trackScreen(['catalog', 'cart', 'profile'][i]); // → $screen_view (+ reference screenshot)
+  },
+);
+```
+`trackScreen` emits `$screen_view` (with `$previous_screen` when it changed), keeps `$tap`/`$rage_tap` stamped with the right screen, and captures that screen's reference image — the same path a route push takes. It's a no-op on an empty name and never throws.
+
+**Naming screens — use STABLE names per layout.** A screen name identifies a *layout*, not an *instance*: give each real screen/tab its own stable name, and group dynamic detail screens under ONE name (e.g. every product detail page is `product_detail`, not `product_42`) so they share a single reference screenshot. For per-item analytics, put the id in event properties (e.g. `track('product_viewed', properties: {'product_id': id})`), not in the screen name.
 
 **Meaningful names:** screen names come from your routes. Give routes names so they aren't `MaterialPageRoute<void>`:
 ```dart

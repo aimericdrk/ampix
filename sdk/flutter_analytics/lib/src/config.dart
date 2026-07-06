@@ -22,6 +22,7 @@ class MyAmpMixConfig {
     this.autocapturePurchases = true,
     this.autocaptureAttribution = true,
     this.autocaptureScreenshots = false,
+    this.screenshotSettleDelay = const Duration(seconds: 1),
   }) : assert(
          flushAt > 0 && flushAt <= 100,
          'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
@@ -127,4 +128,16 @@ class MyAmpMixConfig {
   /// names require NAMED routes (`RouteSettings(name: ...)`) — otherwise the
   /// screen falls back to the route's runtime type.
   final bool autocaptureScreenshots;
+
+  /// How long a reference screenshot capture (shared-contracts §18) waits after
+  /// a `$screen_view` before grabbing the frame, so slow / animated screen
+  /// transitions have finished and the frame isn't captured mid-animation.
+  /// Defaults to `const Duration(seconds: 1)`.
+  ///
+  /// This is the MINIMUM wait: capture waits at least this long AND, in
+  /// production, additionally polls until the UI stops animating (the
+  /// `RepaintBoundaryScreenshotCapturer` watches `hasScheduledFrame`), so the
+  /// net is "≥ [screenshotSettleDelay] AND after the transition settles".
+  /// Increase it for heavier / longer transitions.
+  final Duration screenshotSettleDelay;
 }

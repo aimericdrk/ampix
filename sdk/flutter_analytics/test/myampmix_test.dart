@@ -80,9 +80,13 @@ void main() {
     requests = [];
     clock = FakeClock(DateTime.utc(2026, 7, 2, 12));
     keyValueStore = InMemoryKeyValueStore();
+    MyAmpMixObserver.resetForTesting();
   });
 
-  tearDown(() => MyAmpMix.shutdownForTesting());
+  tearDown(() async {
+    await MyAmpMix.shutdownForTesting();
+    MyAmpMixObserver.resetForTesting();
+  });
 
   MockClient acceptAll() => MockClient((request) async {
     requests.add(request);
@@ -333,6 +337,7 @@ void main() {
     final sdk = MyAmpMix.instance;
     expect(() {
       sdk.track('e');
+      sdk.trackScreen('home');
       sdk.trackDeepLink(Uri.parse('https://app.example.com/?utm_source=x'));
       sdk.identify('u');
       sdk.alias('a');
@@ -473,5 +478,76 @@ void main() {
     expect(names.where((n) => n == r'$first_open').length, 1);
 
     await secondDb.close();
+  });
+
+  // --- trackScreen(): manual $screen_view for non-Navigator navigation ------
+
+  test(r'trackScreen emits $screen_view with $screen_name and updates the '
+      'shared currentScreenName', () async {
+    await initSdk();
+    MyAmpMix.instance.trackScreen('catalog');
+    // The shared static is updated synchronously so tap autocapture is stamped.
+    expect(MyAmpMixObserver.currentScreenName, 'catalog');
+
+    MyAmpMix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == r'$screen_view'));
+
+    final view = sentEvents().firstWhere((e) => e['event'] == r'$screen_view');
+    expect((view['properties'] as Map)[r'$screen_name'], 'catalog');
+    // First screen → no previous.
+    expect(
+      (view['properties'] as Map).containsKey(r'$previous_screen'),
+      isFalse,
+    );
+  });
+
+  test(r'trackScreen carries $previous_screen when the screen changed', () async {
+    await initSdk();
+    MyAmpMix.instance.trackScreen('catalog');
+    MyAmpMix.instance.trackScreen('cart');
+    MyAmpMix.instance.flush();
+    await waitFor(
+      () =>
+          sentEvents().where((e) => e['event'] == r'$screen_view').length >= 2,
+    );
+
+    final cart = sentEvents().firstWhere(
+      (e) =>
+          e['event'] == r'$screen_view' &&
+          (e['properties'] as Map)[r'$screen_name'] == 'cart',
+    );
+    expect((cart['properties'] as Map)[r'$previous_screen'], 'catalog');
+    expect(MyAmpMixObserver.currentScreenName, 'cart');
+  });
+
+  test('trackScreen ignores an empty screen name (no event, no state change)',
+      () async {
+    await initSdk();
+    MyAmpMix.instance.trackScreen('');
+    MyAmpMix.instance.flush();
+    await pumpEventQueue();
+
+    expect(sentEvents().where((e) => e['event'] == r'$screen_view'), isEmpty);
+    expect(MyAmpMixObserver.currentScreenName, isNull);
+  });
+
+  test(r're-tracking the SAME screen omits $previous_screen', () async {
+    await initSdk();
+    MyAmpMix.instance.trackScreen('catalog');
+    MyAmpMix.instance.trackScreen('catalog');
+    MyAmpMix.instance.flush();
+    await waitFor(
+      () =>
+          sentEvents().where((e) => e['event'] == r'$screen_view').length >= 2,
+    );
+
+    final views =
+        sentEvents().where((e) => e['event'] == r'$screen_view').toList();
+    expect(
+      views.every(
+        (e) => (e['properties'] as Map).containsKey(r'$previous_screen') == false,
+      ),
+      isTrue,
+    );
   });
 }

@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import 'attribution/attribution_autocapture.dart';
 import 'attribution/attribution_store.dart';
+import 'autocapture/myampmix_observer.dart';
 import 'autocapture/purchase_autocapture.dart';
 import 'autocapture/screenshot_autocapture.dart';
 import 'autocapture/screenshot_capturer.dart';
@@ -83,8 +84,8 @@ class SdkOverrides {
 
   /// Test-only seam overriding the delay the screenshot autocapture waits for
   /// the navigation transition to settle before capturing (production default
-  /// ~400ms). Tests pass `Duration.zero` so they don't wait. Not part of the
-  /// frozen §8 surface.
+  /// comes from `MyAmpMixConfig.screenshotSettleDelay`, ~1s). Tests pass
+  /// `Duration.zero` so they don't wait. Not part of the frozen §8 surface.
   final Duration? screenshotSettleDelay;
 }
 
@@ -338,7 +339,11 @@ class MyAmpMix {
         serverUrl: config.serverUrl,
         token: token,
         appVersion: () async => (await contextDataSource.appInfo()).version,
-        settleDelay: overrides?.screenshotSettleDelay,
+        // Wait AT LEAST `screenshotSettleDelay` (default 1s) — the test seam
+        // still wins so tests pass Duration.zero — on top of the capturer's
+        // own "poll until the transition settles" logic.
+        settleDelay:
+            overrides?.screenshotSettleDelay ?? config.screenshotSettleDelay,
         logger: _logger,
       );
     }
@@ -347,6 +352,39 @@ class MyAmpMix {
   void track(String event, {Map<String, Object?>? properties}) {
     _guard('track', () => _pipeline.track(event, properties));
     _maybeCaptureScreenshot(event, properties);
+  }
+
+  /// Manually records a screen view for navigation the `MyAmpMixObserver`
+  /// (a `NavigatorObserver`) can't see — bottom-nav tabs, `IndexedStack` /
+  /// `PageView` index changes, custom routers. Without this, such switches are
+  /// not route pushes, so no `$screen_view` fires and every tab collapses into
+  /// one screen.
+  ///
+  /// Emits the reserved `$screen_view` (with `$screen_name`, and
+  /// `$previous_screen` when the screen actually changed), updates the shared
+  /// current-screen name (`MyAmpMixObserver.currentScreenName`) so autocaptured
+  /// `$tap` / `$rage_tap` are stamped with the right screen, and — in a debug
+  /// build with `autocaptureScreenshots` on — captures that screen's reference
+  /// screenshot (§18). It routes through the same public [track] path as the
+  /// observer, so the pipeline/guard/screenshot wiring is reused (no duplicate
+  /// trigger). An empty [screenName] is a no-op. Never throws.
+  ///
+  /// Use STABLE names per layout: give each real screen / tab its own name and
+  /// group dynamic detail screens under one (e.g. `product_detail`), using
+  /// event properties for per-item analytics.
+  void trackScreen(String screenName) {
+    try {
+      if (screenName.isEmpty) return;
+      final previous = MyAmpMixObserver.currentScreenName;
+      MyAmpMixObserver.currentScreenName = screenName;
+      final properties = <String, Object?>{r'$screen_name': screenName};
+      if (previous != null && previous != screenName) {
+        properties[r'$previous_screen'] = previous;
+      }
+      track(r'$screen_view', properties: properties);
+    } on Object catch (error, stackTrace) {
+      _logger.log('trackScreen failed', error, stackTrace);
+    }
   }
 
   /// Fires automatic screenshot capture on a `$screen_view` when enabled

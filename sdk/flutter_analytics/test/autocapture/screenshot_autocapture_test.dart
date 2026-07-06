@@ -468,9 +468,13 @@ void main() {
       keyValueStore = InMemoryKeyValueStore();
       database = AnalyticsDatabase(NativeDatabase.memory());
       requests = [];
+      MyAmpMixObserver.resetForTesting();
     });
 
-    tearDown(() => MyAmpMix.shutdownForTesting());
+    tearDown(() async {
+      await MyAmpMix.shutdownForTesting();
+      MyAmpMixObserver.resetForTesting();
+    });
 
     MockClient client() => MockClient((request) async {
       requests.add(request);
@@ -572,6 +576,24 @@ void main() {
 
       expect(screenshotRequests(), isEmpty);
       expect(capturer.captureCount, 0);
+    });
+
+    test('trackScreen (non-route navigation) triggers a capture for the named '
+        'screen', () async {
+      final capturer = FakeScreenshotCapturer(
+        result: shot([1, 2, 3], width: 320, height: 640),
+      );
+      await initSdk(autocaptureScreenshots: true, capturer: capturer);
+
+      // Bottom-nav tab switch: no Navigator push, so the observer can't see it
+      // — trackScreen routes through track() and captures the reference shot.
+      MyAmpMix.instance.trackScreen('catalog');
+      await pumpEventQueue();
+
+      final shots = screenshotRequests();
+      expect(shots, hasLength(1));
+      expect(parseMultipart(shots.single).fields['screen_name'], 'catalog');
+      expect(capturer.captureCount, 1);
     });
   });
 }
