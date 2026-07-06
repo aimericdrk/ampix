@@ -82,16 +82,12 @@ function makeInput(overrides: Partial<StoreScreenshotInput> = {}): StoreScreensh
 }
 
 describe('screenshotObjectPath', () => {
-  it('builds a deterministic, URI-encoded object path', () => {
-    expect(screenshotObjectPath(PROJECT, 'checkout', '1.0.0')).toBe(
-      `screens/${PROJECT}/checkout/1.0.0.jpg`,
-    );
+  it('builds a deterministic, URI-encoded object path (no project_id segment)', () => {
+    expect(screenshotObjectPath('checkout', '1.0.0')).toBe('screens/checkout/1.0.0.jpg');
   });
 
   it('encodes unsafe characters so a segment cannot escape the prefix', () => {
-    expect(screenshotObjectPath(PROJECT, 'a/b', '1.0')).toBe(
-      `screens/${PROJECT}/a%2Fb/1.0.jpg`,
-    );
+    expect(screenshotObjectPath('a/b', '1.0')).toBe('screens/a%2Fb/1.0.jpg');
   });
 });
 
@@ -104,7 +100,7 @@ describe('ScreenshotsService', () => {
 
       expect(result).toEqual({ stored: true });
 
-      const expectedPath = screenshotObjectPath(PROJECT, 'checkout', '1.0.0');
+      const expectedPath = screenshotObjectPath('checkout', '1.0.0');
       expect(storage.put).toHaveBeenCalledWith(expectedPath, input.image, 'image/jpeg');
 
       expect(prisma.screenCapture.upsert).toHaveBeenCalledTimes(1);
@@ -196,7 +192,7 @@ describe('ScreenshotsService', () => {
       expect(errorSpy).toHaveBeenCalledTimes(1);
       const [message] = errorSpy.mock.calls[0];
       expect(message).toContain('permission denied on bucket');
-      expect(message).toContain(screenshotObjectPath(PROJECT, 'checkout', '1.0.0'));
+      expect(message).toContain(screenshotObjectPath('checkout', '1.0.0'));
       expect(message).toContain('my-bucket.appspot.com');
       errorSpy.mockRestore();
     });
@@ -214,7 +210,7 @@ describe('ScreenshotsService', () => {
             line.includes('screenshot stored') &&
             line.includes('screen=checkout') &&
             line.includes('app_version=1.0.0') &&
-            line.includes(screenshotObjectPath(PROJECT, 'checkout', '1.0.0')),
+            line.includes(screenshotObjectPath('checkout', '1.0.0')),
         ),
       ).toBe(true);
       logSpy.mockRestore();

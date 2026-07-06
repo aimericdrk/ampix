@@ -51,17 +51,28 @@ abstract interface class ScreenshotCapturer {
 /// tested (tests inject a fake capturer). Everything is wrapped so a failure
 /// degrades to `null` (no screenshot), never a crash into the host app.
 class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
-  RepaintBoundaryScreenshotCapturer({GlobalKey? boundaryKey})
-    : _boundaryKey = boundaryKey;
+  RepaintBoundaryScreenshotCapturer({
+    GlobalKey? boundaryKey,
+    Duration maxSettle = const Duration(milliseconds: 2500),
+  }) : _boundaryKey = boundaryKey,
+       _maxSettle = maxSettle;
 
   /// Optional key of a `RepaintBoundary` the host app wraps around its root.
   /// When absent, the first `RenderRepaintBoundary` reachable from the root
   /// element is used (Flutter inserts one under `MaterialApp`/`WidgetsApp`).
   final GlobalKey? _boundaryKey;
 
+  /// Upper bound on how long to wait for the UI to stop animating before
+  /// capturing anyway (so a screen with a persistent animation still shoots).
+  final Duration _maxSettle;
+
   @override
   Future<CapturedScreenshot?> capture() async {
     try {
+      // Wait for the navigation transition (or any in-flight animation) to
+      // FINISH before grabbing the frame — otherwise we capture a mid-animation,
+      // off-centre/half-painted frame. Bounded by [_maxSettle].
+      await _awaitUiSettled();
       final boundary = _resolveBoundary();
       if (boundary == null || !boundary.hasSize) return null;
       final logicalLongest = boundary.size.longestSide;
@@ -96,6 +107,26 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
       // Never-throw guarantee (design §13): any rendering/encoding failure
       // degrades to "no screenshot", never a crash.
       return null;
+    }
+  }
+
+  /// Waits for the UI to stop scheduling frames — i.e. the page transition (or
+  /// any in-flight animation) has finished — so the captured frame is settled,
+  /// not mid-animation. Polls `hasScheduledFrame` between frames, capped at
+  /// [_maxSettle] so a screen with a persistent animation still captures.
+  /// Best-effort: any failure just proceeds to capture.
+  Future<void> _awaitUiSettled() async {
+    try {
+      final binding = WidgetsBinding.instance;
+      final stopwatch = Stopwatch()..start();
+      // Await one frame first so a just-started transition has scheduled its
+      // driving frames before we begin polling.
+      await binding.endOfFrame;
+      while (binding.hasScheduledFrame && stopwatch.elapsed < _maxSettle) {
+        await binding.endOfFrame;
+      }
+    } on Object {
+      // Never block/throw: fall through and capture whatever's on screen.
     }
   }
 

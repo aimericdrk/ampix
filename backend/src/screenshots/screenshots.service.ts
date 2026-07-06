@@ -42,16 +42,16 @@ export interface ScreenImageSelector {
 const JPEG_CONTENT_TYPE = 'image/jpeg';
 
 /**
- * Deterministic bucket object path for a capture: `screens/{project}/{screen}/{version}.jpg`. Path
- * segments are URI-encoded so a screen name or app version containing `/` (or other unsafe chars)
- * can neither escape the `screens/{project}` prefix nor collide with another screen.
+ * Deterministic bucket object path for a capture: `screens/{screen}/{version}.jpg`. Path segments
+ * are URI-encoded so a screen name or app version containing `/` (or other unsafe chars) can't
+ * escape the `screens/` prefix. No `project_id` segment (product decision — cleaner paths for a
+ * single-project bucket); per-project isolation + the `(project_id, screen_name, app_version)`
+ * uniqueness still live in the Postgres `screen_captures` row. NOTE: if ONE bucket ever serves
+ * MULTIPLE projects, re-add a `{project_id}` segment here — otherwise two projects with the same
+ * screen name + version would share (overwrite) the same object.
  */
-export function screenshotObjectPath(
-  projectId: string,
-  screenName: string,
-  appVersion: string,
-): string {
-  return `screens/${projectId}/${encodeURIComponent(screenName)}/${encodeURIComponent(appVersion)}.jpg`;
+export function screenshotObjectPath(screenName: string, appVersion: string): string {
+  return `screens/${encodeURIComponent(screenName)}/${encodeURIComponent(appVersion)}.jpg`;
 }
 
 /**
@@ -110,7 +110,7 @@ export class ScreenshotsService implements OnModuleInit {
    */
   async store(input: StoreScreenshotInput): Promise<{ stored: boolean }> {
     this.validate(input);
-    const storagePath = screenshotObjectPath(input.projectId, input.screenName, input.appVersion);
+    const storagePath = screenshotObjectPath(input.screenName, input.appVersion);
     // Put the bytes first: if this fails we throw and never persist a metadata row pointing at a
     // missing object. The deterministic path makes both the put and a later upsert idempotent.
     try {
