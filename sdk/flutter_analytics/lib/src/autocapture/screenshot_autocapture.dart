@@ -29,6 +29,7 @@ class ScreenshotAutocapture {
     required String serverUrl,
     required String token,
     required Future<String> Function() appVersion,
+    Duration? settleDelay,
     MamLogger logger = const MamLogger(),
   }) : _capturer = capturer,
        _client = client,
@@ -38,6 +39,10 @@ class ScreenshotAutocapture {
        _serverUrl = serverUrl.replaceFirst(RegExp(r'/+$'), ''),
        _token = token,
        _appVersion = appVersion,
+       // Wait for the push/replace transition to finish before capturing so
+       // the frame isn't grabbed mid-animation (off-centre / half-painted).
+       // Tests inject Duration.zero so they don't wait.
+       _settleDelay = settleDelay ?? const Duration(milliseconds: 400),
        _logger = logger;
 
   /// KeyValueStore key prefix for the persisted captured-screen set. Suffixed
@@ -51,6 +56,7 @@ class ScreenshotAutocapture {
   final String _serverUrl;
   final String _token;
   final Future<String> Function() _appVersion;
+  final Duration _settleDelay;
   final MamLogger _logger;
 
   /// In-memory cache of the persisted captured-screen set, per app version.
@@ -80,6 +86,11 @@ class ScreenshotAutocapture {
       if (_inFlight.contains(flightKey)) return;
       _inFlight.add(flightKey);
       try {
+        // Let the navigation transition settle so we don't capture a
+        // half-animated / off-centre frame (production ~400ms; 0 in tests).
+        if (_settleDelay > Duration.zero) {
+          await Future<void>.delayed(_settleDelay);
+        }
         final shot = await _capturer.capture();
         // No screenshot (capture/encode failed): drop silently and do NOT
         // mark, so the next launch retries this screen.
@@ -100,6 +111,20 @@ class ScreenshotAutocapture {
       }
     } on Object catch (error, stackTrace) {
       _logger.log('screenshot capture failed', error, stackTrace);
+    }
+  }
+
+  /// RETAKE: clears the persisted "already captured" markers for the CURRENT
+  /// app version (and the in-memory cache) so each screen re-captures on its
+  /// next `$screen_view`. The backend upserts on
+  /// `(project, screen, app_version)`, so re-uploads replace the old images.
+  Future<void> reset() async {
+    _capturedByVersion.clear();
+    try {
+      final appVersion = await _appVersion();
+      await _store.remove('$_markerKeyPrefix$appVersion');
+    } on Object catch (error, stackTrace) {
+      _logger.log('screenshot marker reset failed', error, stackTrace);
     }
   }
 

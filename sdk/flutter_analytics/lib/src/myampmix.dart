@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
@@ -44,6 +45,7 @@ class SdkOverrides {
     this.purchaseStream,
     this.attributionStream,
     this.screenshotCapturer,
+    this.screenshotSettleDelay,
   });
 
   final Clock? clock;
@@ -78,6 +80,12 @@ class SdkOverrides {
   /// when `config.autocaptureScreenshots` is true. Not part of the frozen §8
   /// surface.
   final ScreenshotCapturer? screenshotCapturer;
+
+  /// Test-only seam overriding the delay the screenshot autocapture waits for
+  /// the navigation transition to settle before capturing (production default
+  /// ~400ms). Tests pass `Duration.zero` so they don't wait. Not part of the
+  /// frozen §8 surface.
+  final Duration? screenshotSettleDelay;
 }
 
 /// Public facade — the exact shared-contracts §8 surface. Every method is
@@ -312,7 +320,15 @@ class MyAmpMix {
     // `RepaintBoundary` one) and reuse the same http client the uploader uses.
     // Triggered lazily from `track()` on `$screen_view`; captures each screen
     // at most once per `app_version` (persisted in the keyValueStore).
-    if (config.autocaptureScreenshots) {
+    // Reference screenshots are a DEBUG-ONLY developer tool (§18): gated on
+    // `kDebugMode` so a release/production build never captures or uploads —
+    // only the developer's debug build populates the admin's reference images,
+    // and only when they opt in. A test seam (`overrides?.screenshotCapturer`)
+    // still forces the wiring on for the dedicated screenshot tests.
+    final wantScreenshots =
+        config.autocaptureScreenshots &&
+        (kDebugMode || overrides?.screenshotCapturer != null);
+    if (wantScreenshots) {
       _screenshotAutocapture = ScreenshotAutocapture(
         capturer:
             overrides?.screenshotCapturer ??
@@ -322,6 +338,7 @@ class MyAmpMix {
         serverUrl: config.serverUrl,
         token: token,
         appVersion: () async => (await contextDataSource.appInfo()).version,
+        settleDelay: overrides?.screenshotSettleDelay,
         logger: _logger,
       );
     }
@@ -349,6 +366,20 @@ class MyAmpMix {
     final screenName = properties?[r'$screen_name'];
     if (screenName is! String || screenName.isEmpty) return;
     unawaited(capture.onScreenView(screenName));
+  }
+
+  /// RETAKE reference screenshots (§18): clears the persisted "already
+  /// captured" markers so the next `$screen_view` of each screen re-captures
+  /// and re-uploads its image (the backend upserts, replacing the old one).
+  /// Use after fixing a display bug or deleting an outdated capture in the
+  /// dashboard. A no-op when reference screenshot capture is off (release
+  /// builds / `autocaptureScreenshots: false`). Never throws.
+  Future<void> retakeScreenshots() async {
+    try {
+      await _screenshotAutocapture?.reset();
+    } on Object catch (error, stackTrace) {
+      _logger.log('retakeScreenshots failed', error, stackTrace);
+    }
   }
 
   /// Records a marketing-attribution touch from a deep link / app link the

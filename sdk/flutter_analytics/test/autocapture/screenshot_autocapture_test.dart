@@ -105,6 +105,7 @@ void main() {
       serverUrl: 'http://localhost:8080',
       token: token,
       appVersion: () async => appVersion,
+      settleDelay: Duration.zero,
     );
 
     test(r'first $screen_view POSTs multipart /ingest/screenshots with the '
@@ -150,6 +151,24 @@ void main() {
       // Persisted marker → skipped BEFORE capture; no new capture, no upload.
       expect(second.captureCount, 0);
       expect(requests, hasLength(1));
+    });
+
+    test('reset() (retake) clears the marker so the screen re-captures + re-uploads', () async {
+      final client = recordingClient();
+      final autocapture = build(
+        capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
+        client: client,
+      );
+      await autocapture.onScreenView('Home');
+      expect(requests, hasLength(1));
+      // Already captured this version → skipped.
+      await autocapture.onScreenView('Home');
+      expect(requests, hasLength(1));
+
+      // Retake: clear the persisted marker, re-view → captures + uploads again.
+      await autocapture.reset();
+      await autocapture.onScreenView('Home');
+      expect(requests, hasLength(2));
     });
 
     test('a new app_version re-captures each screen exactly once', () async {
@@ -310,6 +329,7 @@ void main() {
       serverUrl: 'http://localhost:8080',
       token: token,
       appVersion: () async => appVersion,
+      settleDelay: Duration.zero,
       logger: MamLogger(level: logLevel),
     );
 
@@ -477,6 +497,7 @@ void main() {
         contextDataSource: FakeContextDataSource(),
         random: FixedRandom(0.5),
         screenshotCapturer: capturer,
+        screenshotSettleDelay: Duration.zero,
       ),
     );
 

@@ -21,7 +21,7 @@ class MyAmpMixConfig {
     this.autocaptureTaps = true,
     this.autocapturePurchases = true,
     this.autocaptureAttribution = true,
-    this.autocaptureScreenshots = true,
+    this.autocaptureScreenshots = false,
   }) : assert(
          flushAt > 0 && flushAt <= 100,
          'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
@@ -109,17 +109,22 @@ class MyAmpMixConfig {
   /// tests. Independently toggleable from the other autocapture flags.
   final bool autocaptureAttribution;
 
-  /// Enables automatic screenshot capture (shared-contracts §18): on each
-  /// `$screen_view` the SDK renders the current frame via a root
-  /// `RepaintBoundary`, downscales it (≤ 640px longest side, JPEG q≈70) and
-  /// uploads it to `POST /ingest/screenshots`. Throttled to **once per
-  /// `(screen_name, app_version)`** — a screen is captured only the first time
-  /// it is viewed under the current `app_version` and never again for that
-  /// version (persisted across sessions/relaunches). Wrap PII in
-  /// `MyAmpMixPrivacy` to black it out of captures. Like the other
-  /// real-surface autocaptures this is gated at wire-time so
-  /// `autocaptureScreenshots: false` keeps `MyAmpMix.init()` from ever
-  /// rendering/uploading a frame in widget tests. Independently toggleable
-  /// from the other autocapture flags.
+  /// Enables **reference** screenshot capture (shared-contracts §18) — a
+  /// developer tool, **NOT** a per-user feature. It is off by default AND only
+  /// ever runs in **debug builds** (`kDebugMode`): a release/production build
+  /// never captures or uploads, so end users never send screenshots (bounded
+  /// storage, no PII collected in the wild). The intended workflow: set this
+  /// `true` in a DEBUG build, walk through your app once — each screen is
+  /// captured once per `(screen_name, app_version)` and uploaded to
+  /// `POST /ingest/screenshots` to become the ADMIN's reference image for that
+  /// screen (used by the dashboard's user-path map + click heatmaps). Capture
+  /// waits for the navigation transition to settle first (so it isn't grabbed
+  /// mid-animation), renders the current frame via a root `RepaintBoundary`,
+  /// downscales it (≤ 640px longest side, JPEG q≈70), blacks out any
+  /// `MyAmpMixPrivacy` regions, then uploads. To replace a bad/outdated
+  /// capture, delete it in the dashboard and/or call
+  /// `MyAmpMix.instance.retakeScreenshots()` and re-navigate. Meaningful screen
+  /// names require NAMED routes (`RouteSettings(name: ...)`) — otherwise the
+  /// screen falls back to the route's runtime type.
   final bool autocaptureScreenshots;
 }

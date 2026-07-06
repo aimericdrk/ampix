@@ -34,7 +34,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
     MyAmpMix.instance.track('product_clicked', properties: properties);
     EventLog.instance.log('track("product_clicked")', properties);
     Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => ProductDetailScreen(product: product)),
+      // Naming the route gives MyAmpMixObserver a meaningful `$screen_name`
+      // ("product_detail") instead of the useless "MaterialPageRoute<void>".
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'product_detail'),
+        builder: (_) => ProductDetailScreen(product: product),
+      ),
     );
   }
 

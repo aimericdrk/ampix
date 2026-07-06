@@ -16,6 +16,11 @@ Future<void> main() async {
       serverUrl: demoServerUrl,
       debug: true,
       logLevel: MyAmpMixLogLevel.debug,
+      // Reference screenshots are a DEBUG-only developer tool: this demo runs
+      // in debug, so enabling it populates the admin's reference images as you
+      // navigate. A release build never captures/uploads (production users
+      // never send screenshots). See §14 of HOW-TO-USE.md.
+      autocaptureScreenshots: true,
     ),
   );
 

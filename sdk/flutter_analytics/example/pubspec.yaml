@@ -3,7 +3,7 @@ description: >-
   Example Flutter app demonstrating the MyAmpMix analytics SDK
   (myampmix_analytics) via manual instrumentation of a small shopping flow.
 publish_to: none
-version: 0.1.0
+version: 0.1.2
 
 environment:
   sdk: ">=3.8.0 <4.0.0"

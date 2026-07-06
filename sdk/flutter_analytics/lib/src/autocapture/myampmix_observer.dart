@@ -22,10 +22,18 @@ typedef AutocaptureTrackFn =
 /// (design §13).
 class MyAmpMixObserver extends NavigatorObserver {
   MyAmpMixObserver({
+    this.screenNameExtractor,
     @visibleForTesting Clock? clock,
     @visibleForTesting AutocaptureTrackFn? track,
   }) : _clock = clock ?? const SystemClock(),
        _track = track ?? _defaultTrack;
+
+  /// Optional: derive a human-readable screen name from a route. Return `null`
+  /// to fall back to the default (`route.settings.name`, then the route's
+  /// runtime type). Use this when your routes are unnamed so screen names
+  /// aren't the useless `MaterialPageRoute<...>` — e.g.
+  /// `MyAmpMixObserver(screenNameExtractor: (r) => r.settings.name ?? myNameFor(r))`.
+  final String? Function(Route<dynamic> route)? screenNameExtractor;
 
   final Clock _clock;
   final AutocaptureTrackFn _track;
@@ -79,7 +87,10 @@ class MyAmpMixObserver extends NavigatorObserver {
   void _handleRouteChange(Route<dynamic>? route) {
     try {
       if (route == null || route is! PageRoute) return;
-      final screenName = route.settings.name ?? route.runtimeType.toString();
+      final screenName =
+          screenNameExtractor?.call(route) ??
+          route.settings.name ??
+          route.runtimeType.toString();
       final nowMs = _clock.nowMs();
       final previousScreen = currentScreenName;
       final enteredAtMs = _screenEnteredAtMs;
