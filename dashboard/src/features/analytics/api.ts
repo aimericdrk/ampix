@@ -110,11 +110,36 @@ export function useRunFlows(projectId: string) {
 
 // --- Screens, user-path map & click heatmap (contracts §18/§19) ---
 
+const screensKey = (projectId: string) => ['analytics', projectId, 'screens'] as const;
+
 /** §18 `GET /screens` — the captured-screen catalog powering the path-map thumbnails + heatmap picker. */
 export function useScreens(projectId: string) {
   return useQuery({
-    queryKey: ['analytics', projectId, 'screens'],
+    queryKey: screensKey(projectId),
     queryFn: () => apiFetch<ScreensResponse>(`${base(projectId)}/screens`),
+  });
+}
+
+/**
+ * §18 `DELETE /screens/:screenName?app_version=<optional>` (analyst+) — deletes a screen's stored
+ * reference image + metadata (all versions, or a single one when `appVersion` is given) → 204. This is
+ * the dashboard side of "Retake": delete the outdated image here, then the developer re-captures it by
+ * running a debug build (`retakeScreenshots()`) and re-navigating. Invalidates the screens catalog so
+ * the deleted screen drops out of the picker / path-map.
+ */
+export function useDeleteScreen(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ screenName, appVersion }: { screenName: string; appVersion?: string }) => {
+      const query = appVersion ? `?app_version=${encodeURIComponent(appVersion)}` : '';
+      return apiFetch<void>(
+        `${base(projectId)}/screens/${encodeURIComponent(screenName)}${query}`,
+        { method: 'DELETE' },
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: screensKey(projectId) });
+    },
   });
 }
 

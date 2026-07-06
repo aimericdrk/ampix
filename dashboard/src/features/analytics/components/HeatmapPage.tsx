@@ -14,6 +14,7 @@ import { useRunClickHeatmap, useScreens } from '../api';
 import { formatExactNumber } from '../format';
 import { SEQUENTIAL_BLUE_RAMP, sequentialColor } from '../palette';
 import { DateRangeFields, defaultDate } from './builder-controls';
+import { RetakeScreenButton } from './RetakeScreenButton';
 import { ScreenImage } from './ScreenImage';
 
 const DEFAULT_GRID: HeatmapGrid = { cols: 20, rows: 40 };
@@ -127,6 +128,27 @@ export function HeatmapPage() {
             ? runHeatmap.error.problem.title
             : 'Failed to load the heatmap'}
         </p>
+      )}
+
+      {selectedScreen && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <div className="text-sm font-medium">{selectedScreen}</div>
+              <div className="text-xs text-text-muted">
+                Reference screenshot — a developer debug capture (§18).
+              </div>
+            </div>
+            <RetakeScreenButton
+              projectId={projectId}
+              screenName={selectedScreen}
+              onDeleted={() => {
+                setSelectedScreen('');
+                setResult(null);
+              }}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {selectedScreen && result && !hasTaps && (

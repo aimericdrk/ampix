@@ -136,4 +136,84 @@ describe('HeatmapPage — click heatmap viewer', () => {
 
     expect(await screen.findByText('No screens captured yet.')).toBeInTheDocument();
   });
+
+  it('retakes/deletes the selected screen after a confirm step and refreshes the list', async () => {
+    const deleteUrls: string[] = [];
+    server.use(
+      http.get('/api/v1/projects/:projectId/screens', () => {
+        // Once the delete has fired, 'checkout' is gone from the catalog.
+        const screens =
+          deleteUrls.length > 0
+            ? SCREENS.screens.filter((s) => s.screen_name !== 'checkout')
+            : SCREENS.screens;
+        return HttpResponse.json({ screens } satisfies ScreensResponse);
+      }),
+      http.post('/api/v1/projects/:projectId/query/click-heatmap', async ({ request }) => {
+        const body = (await request.json()) as ClickHeatmapQuery;
+        return HttpResponse.json({ ...HEATMAP, screen_name: body.screen_name });
+      }),
+      http.delete('/api/v1/projects/:projectId/screens/:screenName', ({ request }) => {
+        deleteUrls.push(request.url);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
+    await screen.findByRole('heading', { name: 'Click heatmap' });
+    await screen.findByRole('option', { name: 'checkout' });
+    await userEvent.selectOptions(screen.getByLabelText('Screen'), 'checkout');
+
+    // The retake/delete control surfaces for the selected screen; nothing deletes until confirmed.
+    const retake = await screen.findByRole('button', {
+      name: /Retake or delete screenshot for checkout/i,
+    });
+    await userEvent.click(retake);
+    expect(deleteUrls).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+
+    // The DELETE hits the exact §18 URL for the selected screen.
+    await waitFor(() => expect(deleteUrls).toHaveLength(1));
+    const url = new URL(deleteUrls[0]!);
+    expect(url.pathname).toBe(`/api/v1/projects/${TEST_PROJECT.id}/screens/checkout`);
+
+    // Success toast + the screens list refetches (checkout drops out of the picker).
+    expect(await screen.findByText('Screenshot deleted')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('option', { name: 'checkout' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('does not delete when the confirm step is cancelled', async () => {
+    const deleteUrls: string[] = [];
+    server.use(
+      http.get('/api/v1/projects/:projectId/screens', () => HttpResponse.json(SCREENS)),
+      http.post('/api/v1/projects/:projectId/query/click-heatmap', async ({ request }) => {
+        const body = (await request.json()) as ClickHeatmapQuery;
+        return HttpResponse.json({ ...HEATMAP, screen_name: body.screen_name });
+      }),
+      http.delete('/api/v1/projects/:projectId/screens/:screenName', ({ request }) => {
+        deleteUrls.push(request.url);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
+    await screen.findByRole('heading', { name: 'Click heatmap' });
+    await screen.findByRole('option', { name: 'checkout' });
+    await userEvent.selectOptions(screen.getByLabelText('Screen'), 'checkout');
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Retake or delete screenshot for checkout/i }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Back to the single affordance; nothing was deleted.
+    expect(
+      screen.getByRole('button', { name: /Retake or delete screenshot for checkout/i }),
+    ).toBeInTheDocument();
+    expect(deleteUrls).toHaveLength(0);
+  });
 });

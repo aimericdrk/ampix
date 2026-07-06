@@ -1156,6 +1156,14 @@ export const handlers = [
     });
   }),
 
+  // §18 Retake/delete (analyst+): removes a screen's stored image(s) + metadata → 204.
+  http.delete('/api/v1/projects/:projectId/screens/:screenName', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.post('/api/v1/projects/:projectId/query/screen-paths', async ({ request }) => {
     const token = bearerToken(request);
     if (!token || !ACCEPTED_TOKENS.has(token))
