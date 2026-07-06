@@ -3,20 +3,42 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../features/auth/store';
-import { authState, TEST_PROJECT, TEST_USER } from '../../test/msw/handlers';
+import { currentOrgStore } from '../../features/orgs/store';
+import {
+  authState,
+  TEST_ORG_ID,
+  TEST_PROJECT,
+  TEST_USER,
+  VALID_ACCESS_TOKEN,
+  VIEWER_ORG_ID,
+} from '../../test/msw/handlers';
 import { server } from '../../test/msw/server';
 import { renderApp } from '../../test/render-app';
 
 describe('AppLayout', () => {
-  it('shows navigation, the project switcher stub, and the signed-in user', async () => {
+  it('shows navigation, the workspace + project selectors, and the signed-in user', async () => {
     authState.refreshValid = true;
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
 
-    expect(screen.getByRole('navigation')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Projects' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /All projects/ })).toBeDisabled();
+
+    // The project selector is a real, enabled dropdown (no more disabled "All projects" box).
+    const projectSelector = screen.getByRole('button', { name: 'Switch project' });
+    expect(projectSelector).toBeEnabled();
+    expect(within(projectSelector).getByText('All projects')).toBeInTheDocument();
+
     expect(screen.getByText(TEST_USER.email)).toBeInTheDocument();
+  });
+
+  it('places Organization settings in the bottom sidebar cluster as a nav item', async () => {
+    authState.refreshValid = true;
+    renderApp('/projects');
+    await screen.findByRole('heading', { name: 'Projects' });
+
+    const link = await screen.findByRole('link', { name: 'Organization settings' });
+    expect(link).toHaveAttribute('href', `/orgs/${TEST_ORG_ID}/settings`);
   });
 
   it('renders the grouped project sidebar with the active destination marked', async () => {
@@ -35,6 +57,28 @@ describe('AppLayout', () => {
       'aria-current',
       'page',
     );
+  });
+
+  it('leaves a project that belongs to another org when the workspace changes', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    currentOrgStore.setCurrentOrg(TEST_ORG_ID);
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    // Sitting on TEST_ORG's project while TEST_ORG is selected — no redirect.
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    // Switching to an org that does not own this project bounces to the projects list.
+    currentOrgStore.setCurrentOrg(VIEWER_ORG_ID);
+    await screen.findByRole('heading', { name: 'Projects' });
+  });
+
+  it('stays on the project when the selected workspace still owns it', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    currentOrgStore.setCurrentOrg(TEST_ORG_ID);
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+
+    // The active project belongs to the current org, so the guard is a no-op.
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+    expect(screen.queryByRole('heading', { name: 'Projects' })).not.toBeInTheDocument();
   });
 
   it('toggles the theme from the sidebar and persists it', async () => {

@@ -1,8 +1,9 @@
-import { Link, Outlet, useParams, useRouter } from '@tanstack/react-router';
-import { useState, type ReactNode } from 'react';
+import { Link, Outlet, useNavigate, useParams, useRouter } from '@tanstack/react-router';
+import { useEffect, useState, type ReactNode } from 'react';
 import { logout } from '../../features/auth/api';
 import { authStore, useAuth } from '../../features/auth/store';
-import { currentOrgStore } from '../../features/orgs/store';
+import { currentOrgStore, useCurrentOrgId } from '../../features/orgs/store';
+import { useProjects } from '../../features/projects/api';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/button';
 import { NavIcon, type IconName } from './NavIcon';
@@ -86,9 +87,24 @@ function NavLink({ item, projectId }: { item: NavItem; projectId?: string }) {
 export function AppLayout() {
   const { user } = useAuth();
   const router = useRouter();
+  const navigate = useNavigate();
+  const currentOrgId = useCurrentOrgId();
+  const { data: projectsData } = useProjects();
   // Merged params of the active match; present on every project-scoped route.
   const { projectId } = useParams({ strict: false }) as { projectId?: string };
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Switching the workspace must not strand you on another org's project. When
+  // the active project provably belongs to a different org than the selected
+  // one, fall back to the projects list. Guarded on a positively-matched
+  // project so it never fights an in-flight selection or a still-loading query.
+  useEffect(() => {
+    if (!projectId || !currentOrgId || !projectsData) return;
+    const active = projectsData.projects.find((project) => project.id === projectId);
+    if (active && active.org_id !== currentOrgId) {
+      void navigate({ to: '/projects' });
+    }
+  }, [projectId, currentOrgId, projectsData, navigate]);
 
   const handleLogout = async () => {
     try {
@@ -127,21 +143,26 @@ export function AppLayout() {
         </Button>
       </div>
 
+      {/* Full-height column: header + bottom cluster stay fixed; only the nav scrolls. */}
       <aside
         id="app-sidebar"
         className={cn(
-          'z-40 w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface p-4',
+          'z-40 w-60 shrink-0 flex-col border-r border-border bg-surface',
           'md:flex md:sticky md:top-0 md:h-screen',
           mobileOpen ? 'fixed inset-y-0 left-0 flex' : 'hidden',
         )}
       >
-        <div className="mb-6 hidden text-lg font-semibold md:block">MyAmpMix</div>
-        <OrgSwitcher />
-        <div className="mt-3">
+        <div className="flex shrink-0 flex-col gap-3 p-4">
+          <div className="hidden text-lg font-semibold md:block">MyAmpMix</div>
+          <OrgSwitcher />
           <ProjectSwitcher />
         </div>
 
-        <nav aria-label="Primary" className="mt-6 flex-1" onClickCapture={() => setMobileOpen(false)}>
+        <nav
+          aria-label="Primary"
+          className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
+          onClickCapture={() => setMobileOpen(false)}
+        >
           <Link
             to="/projects"
             activeOptions={{ exact: true }}
@@ -167,8 +188,18 @@ export function AppLayout() {
           )}
         </nav>
 
-        <div className="mt-auto space-y-1 border-t border-border pt-4">
-          <ThemeToggle />
+        <div className="mt-auto shrink-0 space-y-1 border-t border-border p-4">
+          {currentOrgId && (
+            <Link
+              to="/orgs/$orgId/settings"
+              params={{ orgId: currentOrgId }}
+              className={NAV_LINK_BASE}
+              activeProps={{ className: NAV_LINK_ACTIVE, 'aria-current': 'page' }}
+            >
+              <NavIcon name="org" />
+              <span>Organization settings</span>
+            </Link>
+          )}
           <Link
             to="/account"
             className={NAV_LINK_BASE}
@@ -185,6 +216,7 @@ export function AppLayout() {
             <NavIcon name="settings" />
             <span>Security</span>
           </Link>
+          <ThemeToggle />
           <div className="truncate px-3 pt-1 text-xs text-text-muted">{user?.email}</div>
           <Button
             variant="secondary"

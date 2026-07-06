@@ -8,7 +8,7 @@ import {
   TEST_PROJECT,
   TEST_USER,
   VALID_ACCESS_TOKEN,
-  VIEWER_ORG_ID,
+  VIEWER_ORG_NAME,
 } from '../../../test/msw/handlers';
 import { renderApp } from '../../../test/render-app';
 
@@ -21,7 +21,8 @@ describe('ProjectsPage — creating a project', () => {
     signInAsAdmin();
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
-    await screen.findByLabelText('Organization'); // wait for org context to settle
+    // Wait for the org context (and admin role) to settle before creating.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New project' })).toBeEnabled());
 
     await userEvent.click(screen.getByRole('button', { name: 'New project' }));
     const dialog = await screen.findByRole('dialog');
@@ -32,18 +33,20 @@ describe('ProjectsPage — creating a project', () => {
     expect(await screen.findByText('Mobile App')).toBeInTheDocument();
   });
 
-  it('disables project creation for a non-admin (viewer) organization', async () => {
+  it('gates project creation on the selected workspace’s role', async () => {
     authStore.setSession(MFA_ACCESS_TOKEN, MFA_USER);
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
-    const select = await screen.findByLabelText<HTMLSelectElement>('Organization');
 
-    // Switch to the org where MFA_USER is only an analyst (not admin: TEST_ORG).
-    // MFA_USER's orgs: TEST_ORG (analyst), VIEWER_ORG (admin) — pick the analyst one.
-    const analystOption = Array.from(select.options).find((o) => o.value !== VIEWER_ORG_ID);
-    if (analystOption) await userEvent.selectOptions(select, analystOption.value);
-
+    // MFA_USER's default workspace is TEST_ORG, where they are only an analyst → disabled.
     await waitFor(() => expect(screen.getByRole('button', { name: 'New project' })).toBeDisabled());
+
+    // Switching to the workspace where MFA_USER is an admin (VIEWER_ORG) enables creation.
+    await userEvent.click(await screen.findByRole('button', { name: 'Switch workspace' }));
+    const menu = await screen.findByRole('menu', { name: 'Switch workspace' });
+    await userEvent.click(within(menu).getByRole('menuitem', { name: VIEWER_ORG_NAME }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New project' })).toBeEnabled());
   });
 });
 

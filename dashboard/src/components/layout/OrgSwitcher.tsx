@@ -1,14 +1,16 @@
-import { Link } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useCreateOrg, useOrgs } from '../../features/orgs/api';
 import { currentOrgStore, useCurrentOrgId } from '../../features/orgs/store';
 import { ApiError } from '../../lib/api/problem';
+import { cn } from '../../lib/cn';
 import { Button } from '../ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
+import { Menu, MENU_ITEM_CLASS, MenuCheck } from '../ui/menu';
 import { useToast } from '../ui/toast';
 
-/** Org context switcher + "New organization" action (contracts §13). */
+/** Workspace (org) switcher — a dropdown that lists the caller's orgs and opens
+ * the "New organization" dialog from the top of the menu (contracts §13). */
 export function OrgSwitcher() {
   const { data, isPending, error } = useOrgs();
   const currentOrgId = useCurrentOrgId();
@@ -35,49 +37,76 @@ export function OrgSwitcher() {
   }
 
   const orgs = data?.orgs ?? [];
+  const currentOrg = orgs.find((org) => org.id === currentOrgId);
 
   return (
-    <div className="space-y-2">
-      <label htmlFor="org-switcher" className="sr-only">
-        Organization
-      </label>
-      <select
-        id="org-switcher"
-        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm text-text"
-        value={currentOrgId ?? ''}
-        onChange={(e) => currentOrgStore.setCurrentOrg(e.target.value || null)}
+    <>
+      <Menu
+        label="Switch workspace"
+        trigger={
+          <span className="flex flex-col">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+              Workspace
+            </span>
+            <span className="truncate text-sm font-medium text-text">
+              {currentOrg?.name ?? 'Select workspace'}
+            </span>
+          </span>
+        }
       >
-        {orgs.length === 0 && <option value="">No organizations</option>}
-        {orgs.map((org) => (
-          <option key={org.id} value={org.id}>
-            {org.name}
-          </option>
-        ))}
-      </select>
+        {({ close }) => (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              className={cn(MENU_ITEM_CLASS, 'font-medium text-accent')}
+              onClick={() => {
+                close();
+                setDialogOpen(true);
+              }}
+            >
+              <span aria-hidden className="text-base leading-none">
+                +
+              </span>
+              New organization
+            </button>
 
-      {currentOrgId && (
-        <Link
-          to="/orgs/$orgId/settings"
-          params={{ orgId: currentOrgId }}
-          className="block text-xs text-accent underline"
-        >
-          Organization settings
-        </Link>
-      )}
+            <div className="my-1 border-t border-border" role="separator" />
+
+            {orgs.length === 0 && (
+              <p className="px-2.5 py-2 text-sm text-text-muted">No organizations</p>
+            )}
+            {orgs.map((org) => {
+              const active = org.id === currentOrgId;
+              return (
+                <button
+                  key={org.id}
+                  type="button"
+                  role="menuitem"
+                  aria-current={active ? 'true' : undefined}
+                  className={MENU_ITEM_CLASS}
+                  onClick={() => {
+                    currentOrgStore.setCurrentOrg(org.id);
+                    close();
+                  }}
+                >
+                  <MenuCheck hidden={!active} />
+                  <span className={active ? 'truncate font-medium' : 'truncate'}>{org.name}</span>
+                </button>
+              );
+            })}
+          </>
+        )}
+      </Menu>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogTrigger asChild>
-          <Button variant="secondary" size="sm" className="w-full">
-            New organization
-          </Button>
-        </DialogTrigger>
         <DialogContent>
           <DialogTitle>New organization</DialogTitle>
           <DialogDescription>You become its admin.</DialogDescription>
           <NewOrgForm onCreated={() => setDialogOpen(false)} />
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 

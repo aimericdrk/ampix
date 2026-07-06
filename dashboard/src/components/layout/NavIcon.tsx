@@ -13,6 +13,7 @@ export type IconName =
   | 'reports'
   | 'templates'
   | 'projects'
+  | 'org'
   | 'account'
   | 'settings';
 
@@ -32,6 +33,7 @@ const PATHS: Record<IconName, string> = {
   reports: 'M6 3h9l5 5v13H6zM15 3v5h5M9 13h7M9 17h7',
   templates: 'M4 5h16v4H4zM4 12h7v8H4zM14 12h6v8h-6z',
   projects: 'M3 7l2-3h5l2 3h7v13H3zM3 7h18',
+  org: 'M3 21h18M5 21V7l7-4 7 4v14M10 21v-4h4v4M9 9h.02M15 9h.02M9 13h.02M15 13h.02',
   account: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21a7 7 0 0 1 14 0',
   settings:
     'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 2h-4l-.4 2.4a7 7 0 0 0-1.7 1l-2.3-1-2 3.4L4.1 11a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.4 2.4h4l.4-2.4a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z',
