@@ -1,7 +1,9 @@
 import {
   Controller,
+  Delete,
   Get,
   Header,
+  HttpCode,
   Param,
   Query,
   Req,
@@ -9,6 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../authz/roles.decorator';
+import { RolesGuard } from '../authz/roles.guard';
 import type { AuthRequest } from '../auth/auth.types';
 import { ScreenListItem, ScreenshotsService } from './screenshots.service';
 
@@ -48,5 +52,22 @@ export class ScreensController {
       { appVersion, hash },
     );
     return new StreamableFile(stream, { type: contentType });
+  }
+
+  /**
+   * §18 retake/delete — removes a screen's reference image(s): all versions, or one when
+   * `app_version` is given. Analyst+ (destructive), via RolesGuard resolving the org from
+   * `:projectId`. `204` even if nothing matched.
+   */
+  @Delete(':screenName')
+  @UseGuards(RolesGuard)
+  @Roles('analyst')
+  @HttpCode(204)
+  async remove(
+    @Param('projectId') projectId: string,
+    @Param('screenName') screenName: string,
+    @Query('app_version') appVersion?: string,
+  ): Promise<void> {
+    await this.screenshots.deleteScreen(projectId, screenName, appVersion);
   }
 }

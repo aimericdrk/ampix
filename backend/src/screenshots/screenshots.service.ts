@@ -260,6 +260,30 @@ export class ScreenshotsService implements OnModuleInit {
     return { stream: object.stream, contentType: object.contentType || capture.contentType };
   }
 
+  /**
+   * §18 retake/delete: removes a screen's stored image(s) — the storage object(s) AND the metadata
+   * row(s). Deletes every version, or a single one when `appVersion` is given. Never fails on a
+   * missing object (`ignoreNotFound` in the adapter). Role gating (analyst+) is enforced by the
+   * controller's `RolesGuard`, so there's no membership re-check here.
+   */
+  async deleteScreen(projectId: string, screenName: string, appVersion?: string): Promise<void> {
+    const where = { projectId, screenName, ...(appVersion ? { appVersion } : {}) };
+    const rows = await this.prisma.screenCapture.findMany({
+      where,
+      select: { storagePath: true },
+    });
+    await Promise.all(
+      rows.map((row) =>
+        this.storage.delete(row.storagePath).catch((error: unknown) => {
+          this.logger.warn(
+            `screenshot object delete failed path=${row.storagePath}: ${String(error)}`,
+          );
+        }),
+      ),
+    );
+    await this.prisma.screenCapture.deleteMany({ where });
+  }
+
   private imageNotFound(): ProblemException {
     return new ProblemException({
       status: 404,

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { AuthzModule } from '../authz/authz.module';
 import { IngestModule } from '../ingestion/ingest.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { ScreensController } from './screens.controller';
@@ -15,7 +16,7 @@ import { screenshotStorageProvider } from './storage/screenshot-storage.provider
  * `assertMembership` tenancy check.
  */
 @Module({
-  imports: [AuthModule, ProjectsModule, IngestModule],
+  imports: [AuthModule, AuthzModule, ProjectsModule, IngestModule],
   controllers: [ScreenshotsIngestController, ScreensController],
   providers: [ScreenshotsService, screenshotStorageProvider],
 })

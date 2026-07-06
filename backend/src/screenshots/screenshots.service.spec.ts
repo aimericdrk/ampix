@@ -18,6 +18,7 @@ interface PrismaMock {
     upsert: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
+    deleteMany: jest.Mock;
   };
 }
 
@@ -43,6 +44,7 @@ function makeService(screenshotMaxKb = 512, configOverrides: Partial<AppConfig> 
       upsert: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
   };
   const storageMock: StorageMock = {
@@ -320,6 +322,40 @@ describe('ScreenshotsService', () => {
       assertMembership.mockRejectedValue(new Error('forbidden'));
       await expect(service.listScreens(USER, PROJECT)).rejects.toThrow('forbidden');
       expect(prisma.screenCapture.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteScreen (retake/delete)', () => {
+    it('deletes the storage objects + metadata rows for all versions of a screen', async () => {
+      const { service, prisma, storage } = makeService();
+      prisma.screenCapture.findMany.mockResolvedValue([
+        { storagePath: 'screens/p/Home/1.0.jpg' },
+        { storagePath: 'screens/p/Home/1.1.jpg' },
+      ]);
+
+      await service.deleteScreen('proj-1', 'Home');
+
+      expect(storage.delete).toHaveBeenCalledWith('screens/p/Home/1.0.jpg');
+      expect(storage.delete).toHaveBeenCalledWith('screens/p/Home/1.1.jpg');
+      expect(prisma.screenCapture.deleteMany).toHaveBeenCalledWith({
+        where: { projectId: 'proj-1', screenName: 'Home' },
+      });
+    });
+
+    it('scopes to a single app_version when given', async () => {
+      const { service, prisma } = makeService();
+      await service.deleteScreen('proj-1', 'Home', '1.2.0');
+      expect(prisma.screenCapture.deleteMany).toHaveBeenCalledWith({
+        where: { projectId: 'proj-1', screenName: 'Home', appVersion: '1.2.0' },
+      });
+    });
+
+    it('never throws when a storage object is already gone', async () => {
+      const { service, prisma, storage } = makeService();
+      prisma.screenCapture.findMany.mockResolvedValue([{ storagePath: 'x' }]);
+      storage.delete.mockRejectedValue(new Error('not found'));
+      await expect(service.deleteScreen('proj-1', 'Home')).resolves.toBeUndefined();
+      expect(prisma.screenCapture.deleteMany).toHaveBeenCalled();
     });
   });
 
