@@ -13,6 +13,11 @@ import { toChDateTime64 } from '../clickhouse/clickhouse.service';
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 100;
 
+/** contracts §14 `/meta/property-values`: a filter-value autosuggest dropdown wants more candidates
+ *  than the live/users feeds, so it caps higher — default 50, hard max 200. */
+export const PROPERTY_VALUES_DEFAULT_LIMIT = 50;
+export const PROPERTY_VALUES_MAX_LIMIT = 200;
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** contracts §14 `/sessions/summary`: "default range last 30 days if omitted". */
 const DEFAULT_RANGE_DAYS = 30;
@@ -60,6 +65,18 @@ export function clampLimit(raw: string | undefined): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_LIMIT;
   return Math.min(Math.floor(parsed), MAX_LIMIT);
+}
+
+/**
+ * Clamps `/meta/property-values`' raw `limit` query param to `[1, {@link PROPERTY_VALUES_MAX_LIMIT}]`,
+ * defaulting to {@link PROPERTY_VALUES_DEFAULT_LIMIT} when absent, non-numeric, or below 1 — same
+ * clamp-never-reject rule as {@link clampLimit}, just with the higher autosuggest ceiling.
+ */
+export function clampPropertyValuesLimit(raw: string | undefined): number {
+  if (raw === undefined) return PROPERTY_VALUES_DEFAULT_LIMIT;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) return PROPERTY_VALUES_DEFAULT_LIMIT;
+  return Math.min(Math.floor(parsed), PROPERTY_VALUES_MAX_LIMIT);
 }
 
 /**

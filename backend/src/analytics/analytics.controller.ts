@@ -17,6 +17,7 @@ import type {
   InsightsResponse,
   LiveEventsResponse,
   PropertiesMetaResponse,
+  PropertyValuesResponse,
   SessionsSummaryResponse,
   UserProfileResponse,
   UsersResponse,
@@ -59,6 +60,17 @@ export class AnalyticsController {
     @Query('event') event?: string,
   ): Promise<PropertiesMetaResponse> {
     return this.analytics.listProperties(req.user!.id, projectId, event);
+  }
+
+  @Get('meta/property-values')
+  async metaPropertyValues(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Query('property') property?: string,
+    @Query('event') event?: string,
+    @Query('limit') limit?: string,
+  ): Promise<PropertyValuesResponse> {
+    return this.analytics.listPropertyValues(req.user!.id, projectId, property, event, limit);
   }
 
   @Get('events/live')

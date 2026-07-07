@@ -29,6 +29,11 @@ export interface PropertiesMetaResponse {
   properties: PropertyMeta[];
 }
 
+/** GET /meta/property-values response (contracts §14) — distinct values of one property. */
+export interface PropertyValuesResponse {
+  values: string[];
+}
+
 /** GET /events/live response (contracts §14). */
 export interface LiveEvent {
   insert_id: string;

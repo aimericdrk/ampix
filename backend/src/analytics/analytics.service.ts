@@ -14,6 +14,7 @@ import type {
   LiveEventsResponse,
   PropertiesMetaResponse,
   PropertyMeta,
+  PropertyValuesResponse,
   SessionsSummaryResponse,
   UserProfileResponse,
   UsersResponse,
@@ -22,8 +23,14 @@ import { Bucket, buildBucketGrid, parseDateOnlyUTC } from './bucket-grid';
 import { canonicalization, RESOLVE_CANONICAL_ID_SQL } from './identity';
 import { compileInsightsQuery } from './insights.compiler';
 import { insightsQuerySchema } from './insights-query.schema';
-import { EVENT_COLUMN_WHITELIST } from './property-resolver';
-import { clampLimit, parseIsoInstantParam, resolveDateOnlyRange } from './read-query.util';
+import { EVENT_COLUMN_WHITELIST, resolveProperty } from './property-resolver';
+import {
+  clampLimit,
+  clampPropertyValuesLimit,
+  parseIsoInstantParam,
+  resolveDateOnlyRange,
+} from './read-query.util';
+import { ProblemException } from '../common/problem-details';
 
 /** contracts §14: metadata endpoints scan "distinct event names / property keys, last 30 days". */
 const META_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
@@ -45,6 +52,10 @@ interface MetaEventRow {
 
 interface MetaPropertyKeyRow {
   key: string;
+}
+
+interface PropertyValueRow {
+  value: string;
 }
 
 interface LiveEventRow {
@@ -240,6 +251,53 @@ export class AnalyticsService {
     }));
 
     return { properties: [...columnProps, ...customProps] };
+  }
+
+  /**
+   * GET /meta/property-values — the DISTINCT values of ONE property over the last 30 days,
+   * frequency-ranked (most frequent first), capped, with empty values excluded — a filter-value
+   * autosuggest dropdown. `property` is resolved via {@link resolveProperty}: a whitelisted column
+   * emits its own literal identifier, anything else is a custom JSON key bound as `{propKey:String}`
+   * — the caller's string is NEVER interpolated into SQL. An absent/blank `property` is a 400 (no
+   * sensible default value list to fall back to), matching the module's "malformed input -> 400"
+   * rule. An optional `event` narrows the scan, bound as `{eventName:String}` exactly as
+   * `listProperties` does. `limit` is clamped (never rejected) — default 50, max 200.
+   */
+  async listPropertyValues(
+    userId: string,
+    projectId: string,
+    property: string | undefined,
+    event?: string,
+    limitRaw?: string,
+  ): Promise<PropertyValuesResponse> {
+    await this.projects.assertMembership(userId, projectId);
+
+    if (property === undefined || property === '') {
+      throw new ProblemException({ status: 400, title: 'Bad Request', detail: 'property: required' });
+    }
+
+    const limit = clampPropertyValuesLimit(limitRaw);
+    const params: Record<string, unknown> = { projectId, since: sinceParam(), limit };
+    const resolved = resolveProperty(property, 'propKey', params);
+
+    let eventClause = '';
+    if (event !== undefined) {
+      params.eventName = event;
+      eventClause = 'AND event = {eventName:String}\n         ';
+    }
+
+    const rows = await this.clickhouse.query<PropertyValueRow>(
+      `SELECT ${resolved.expr} AS value, count() AS cnt
+       FROM events
+       WHERE project_id = {projectId:UUID}
+         AND timestamp >= {since:DateTime64}
+         AND ${resolved.expr} != ''
+         ${eventClause}GROUP BY value
+       ORDER BY cnt DESC, value ASC
+       LIMIT {limit:UInt64}`,
+      params,
+    );
+    return { values: rows.map((row) => row.value) };
   }
 
   /**

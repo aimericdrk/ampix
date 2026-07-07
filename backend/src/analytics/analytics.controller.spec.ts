@@ -13,6 +13,7 @@ function makeController() {
     runInsightsQuery: jest.fn(),
     listEventNames: jest.fn(),
     listProperties: jest.fn(),
+    listPropertyValues: jest.fn(),
     getLiveEvents: jest.fn(),
     listUsers: jest.fn(),
     getUserProfile: jest.fn(),
@@ -77,6 +78,45 @@ describe('AnalyticsController', () => {
       await controller.metaProperties(fakeRequest(), 'p1', undefined);
 
       expect(analytics.listProperties).toHaveBeenCalledWith(USER.id, 'p1', undefined);
+    });
+  });
+
+  describe('metaPropertyValues', () => {
+    it('delegates to the service, forwarding property, event, and limit query params', async () => {
+      const { controller, analytics } = makeController();
+      analytics.listPropertyValues.mockResolvedValue({ values: ['free', 'pro'] });
+
+      const result = await controller.metaPropertyValues(
+        fakeRequest(),
+        'p1',
+        'plan',
+        'checkout',
+        '25',
+      );
+
+      expect(analytics.listPropertyValues).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        'plan',
+        'checkout',
+        '25',
+      );
+      expect(result).toEqual({ values: ['free', 'pro'] });
+    });
+
+    it('works with only `property` given (event and limit undefined)', async () => {
+      const { controller, analytics } = makeController();
+      analytics.listPropertyValues.mockResolvedValue({ values: [] });
+
+      await controller.metaPropertyValues(fakeRequest(), 'p1', 'plan', undefined, undefined);
+
+      expect(analytics.listPropertyValues).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        'plan',
+        undefined,
+        undefined,
+      );
     });
   });
 

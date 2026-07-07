@@ -369,4 +369,57 @@ describe('Core analytics query engine (e2e, contracts §14)', () => {
         .expect('Content-Type', /application\/problem\+json/);
     });
   });
+
+  describe('GET /meta/property-values', () => {
+    it('returns distinct values of a custom JSON property, frequency-ranked (tie -> value ASC)', async () => {
+      const res = await request(stack.app.getHttpServer())
+        .get(`/api/v1/projects/${projectId}/meta/property-values`)
+        .query({ property: 'plan' })
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      // Seed has 3×`pro` and 3×`free` -> tie broken by value ASC.
+      expect(res.body.values).toEqual(['free', 'pro']);
+    });
+
+    it('returns distinct values of a whitelisted column (os) without interpolating the key', async () => {
+      const res = await request(stack.app.getHttpServer())
+        .get(`/api/v1/projects/${projectId}/meta/property-values`)
+        .query({ property: 'os' })
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      expect([...res.body.values].sort()).toEqual(['android', 'ios']);
+    });
+
+    it('narrows values to one event: product_viewed has no `plan` values', async () => {
+      const res = await request(stack.app.getHttpServer())
+        .get(`/api/v1/projects/${projectId}/meta/property-values`)
+        .query({ property: 'plan', event: 'product_viewed' })
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      expect(res.body.values).toEqual([]);
+    });
+
+    it('400 when `property` is missing', async () => {
+      await request(stack.app.getHttpServer())
+        .get(`/api/v1/projects/${projectId}/meta/property-values`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(400)
+        .expect('Content-Type', /application\/problem\+json/);
+    });
+
+    it('403 for a user who is not a member of the project', async () => {
+      const outsiderSignup = await signup(stack, uniqueEmail());
+      const outsiderToken = outsiderSignup.body.access_token;
+
+      await request(stack.app.getHttpServer())
+        .get(`/api/v1/projects/${projectId}/meta/property-values`)
+        .query({ property: 'plan' })
+        .set('Authorization', `Bearer ${outsiderToken}`)
+        .expect(403)
+        .expect('Content-Type', /application\/problem\+json/);
+    });
+  });
 });

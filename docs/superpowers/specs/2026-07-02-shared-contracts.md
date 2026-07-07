@@ -305,6 +305,7 @@ From `$session_end` events (`$duration_ms` property): `{ "sessions": N, "avg_dur
 ### Metadata (autocomplete for the builder)
 - `GET /meta/events` → `{ "events": ["checkout_completed", …] }` (distinct event names, last 30 days).
 - `GET /meta/properties?event=<name?>` → `{ "properties": [ { "name", "type": "string|number|column" } ] }` (known columns + distinct top-level `properties` keys seen, last 30 days).
+- `GET /meta/property-values?property=<key>&event=<name?>&limit=<n?>` → `{ "values": ["free", "pro", …] }` (distinct values of one property, last 30 days, frequency-ranked, empties excluded, `limit` clamped — default 50, max 200). `property` is resolved via `resolveProperty` (whitelisted column or JSON key bound as a param — never interpolated); missing `property` → 400.
 
 ### Rollup materialized views (ClickHouse)
 Add to `infra/clickhouse/init.sql` (idempotent) three Aggregating/SummingMergeTree rollups fed by MVs on `events`: **daily active users** (`project_id, day, uniqState(distinct_id)`), **daily event counts** (`project_id, day, event, count`), **daily sessions** (`project_id, day, sessions, sum($duration_ms)`). Correctness note: the insights/summary endpoints query **raw events** for exact results (dedup via `DISTINCT insert_id`); the rollups exist for future dashboard-speed optimization and the DAU/session cards may read them. Keep raw-event queries authoritative in Phase 3.

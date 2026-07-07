@@ -255,6 +255,76 @@ describe('AnalyticsService', () => {
     });
   });
 
+  describe('listPropertyValues', () => {
+    it('binds a custom property key as {propKey:String} and never interpolates it', async () => {
+      const clickhouse = makeClickhouse([[{ value: 'free' }, { value: 'pro' }]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.listPropertyValues(USER_ID, PROJECT_ID, 'plan');
+
+      expect(result).toEqual({ values: ['free', 'pro'] });
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('JSONExtractString(toJSONString(properties), {propKey:String})');
+      expect(sql).not.toContain('plan');
+      expect(params).toMatchObject({ propKey: 'plan' });
+      // Frequency-ranked, empties excluded, capped by the bound limit param.
+      expect(sql).toContain("!= ''");
+      expect(sql).toContain('ORDER BY cnt DESC, value ASC');
+      expect(sql).toContain('LIMIT {limit:UInt64}');
+      expect(params.limit).toBe(50);
+      // No event filter -> no eventName param.
+      expect(params.eventName).toBeUndefined();
+    });
+
+    it('emits a whitelisted column as a bare literal WITHOUT a propKey param', async () => {
+      const clickhouse = makeClickhouse([[{ value: 'ios' }, { value: 'android' }]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listPropertyValues(USER_ID, PROJECT_ID, 'os');
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('SELECT os AS value');
+      expect(params.propKey).toBeUndefined();
+    });
+
+    it('narrows to one event and clamps the limit, both bound as params', async () => {
+      const clickhouse = makeClickhouse([[{ value: 'free' }]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listPropertyValues(USER_ID, PROJECT_ID, 'plan', 'checkout_completed', '1000');
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('AND event = {eventName:String}');
+      expect(params).toMatchObject({ eventName: 'checkout_completed', limit: 200 });
+    });
+
+    it('rejects an absent or blank property with a 400 without querying ClickHouse', async () => {
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, makeProjects());
+
+      await expect(service.listPropertyValues(USER_ID, PROJECT_ID, undefined)).rejects.toMatchObject(
+        { problem: { status: 400 } },
+      );
+      await expect(service.listPropertyValues(USER_ID, PROJECT_ID, '')).rejects.toMatchObject({
+        problem: { status: 400 },
+      });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+
+    it('propagates a membership rejection without querying ClickHouse', async () => {
+      const clickhouse = makeClickhouse();
+      const projects = makeProjects(() =>
+        Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
+      );
+      const service = makeService(clickhouse, projects);
+
+      await expect(
+        service.listPropertyValues(USER_ID, PROJECT_ID, 'plan'),
+      ).rejects.toMatchObject({ problem: { status: 403 } });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getLiveEvents', () => {
     function row(overrides: Record<string, unknown> = {}) {
       return {

@@ -1,8 +1,11 @@
 import {
   clampLimit,
+  clampPropertyValuesLimit,
   DEFAULT_LIMIT,
   MAX_LIMIT,
   parseIsoInstantParam,
+  PROPERTY_VALUES_DEFAULT_LIMIT,
+  PROPERTY_VALUES_MAX_LIMIT,
   resolveDateOnlyRange,
 } from './read-query.util';
 
@@ -34,6 +37,33 @@ describe('clampLimit', () => {
 
   it('floors a fractional value', () => {
     expect(clampLimit('10.9')).toBe(10);
+  });
+});
+
+describe('clampPropertyValuesLimit', () => {
+  it('defaults to PROPERTY_VALUES_DEFAULT_LIMIT when absent', () => {
+    expect(clampPropertyValuesLimit(undefined)).toBe(PROPERTY_VALUES_DEFAULT_LIMIT);
+  });
+
+  it('passes through an in-range value', () => {
+    expect(clampPropertyValuesLimit('75')).toBe(75);
+  });
+
+  it('clamps a value above PROPERTY_VALUES_MAX_LIMIT down to the max', () => {
+    expect(clampPropertyValuesLimit('1000')).toBe(PROPERTY_VALUES_MAX_LIMIT);
+  });
+
+  it('defaults on a zero or negative value rather than clamping to 1', () => {
+    expect(clampPropertyValuesLimit('0')).toBe(PROPERTY_VALUES_DEFAULT_LIMIT);
+    expect(clampPropertyValuesLimit('-5')).toBe(PROPERTY_VALUES_DEFAULT_LIMIT);
+  });
+
+  it('defaults on non-numeric garbage', () => {
+    expect(clampPropertyValuesLimit('not-a-number')).toBe(PROPERTY_VALUES_DEFAULT_LIMIT);
+  });
+
+  it('floors a fractional value', () => {
+    expect(clampPropertyValuesLimit('75.9')).toBe(75);
   });
 });
 
