@@ -56,11 +56,46 @@ describe('compileScreenPathQuery (contracts §19)', () => {
     expect(params.anchorScreen).toBeUndefined();
   });
 
+  describe('§17 identity-correct per-user filter (distinct_ids)', () => {
+    it('adds a bound Array(String) IN filter on e.distinct_id when distinct_ids is present', () => {
+      const { sql, params } = compileScreenPathQuery(
+        baseQuery({ distinct_ids: ['u1', 'anon1'] }),
+        PROJECT_ID,
+      );
+      expect(sql).toContain('e.distinct_id IN {distinctIds:Array(String)}');
+      expect(params.distinctIds).toEqual(['u1', 'anon1']);
+    });
+
+    it('omits the identity filter entirely when distinct_ids is absent', () => {
+      const { sql, params } = compileScreenPathQuery(baseQuery(), PROJECT_ID);
+      expect(sql).not.toContain('distinct_id IN');
+      expect(params.distinctIds).toBeUndefined();
+    });
+
+    it('omits the identity filter when distinct_ids is an empty array', () => {
+      const { sql, params } = compileScreenPathQuery(baseQuery({ distinct_ids: [] }), PROJECT_ID);
+      expect(sql).not.toContain('distinct_id IN');
+      expect(params.distinctIds).toBeUndefined();
+    });
+  });
+
   describe('INJECTION', () => {
     it('a malicious anchor_screen is bound, never inlined', () => {
       const attack = "'; DROP TABLE events; --";
       const { sql, params } = compileScreenPathQuery(baseQuery({ anchor_screen: attack }), PROJECT_ID);
       expect(params.anchorScreen).toBe(attack);
+      expect(sql).not.toContain(attack);
+      expect(sql).not.toContain('DROP TABLE');
+    });
+
+    it('a distinct_id containing SQL metacharacters stays only in params, never in the SQL', () => {
+      const attack = "'; DROP TABLE events; --";
+      const { sql, params } = compileScreenPathQuery(
+        baseQuery({ distinct_ids: ['u1', attack] }),
+        PROJECT_ID,
+      );
+      expect(params.distinctIds).toEqual(['u1', attack]);
+      expect(sql).toContain('e.distinct_id IN {distinctIds:Array(String)}');
       expect(sql).not.toContain(attack);
       expect(sql).not.toContain('DROP TABLE');
     });

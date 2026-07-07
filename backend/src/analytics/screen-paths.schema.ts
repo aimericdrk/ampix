@@ -13,6 +13,7 @@ const MIN_STEPS = 1;
 const MAX_STEPS = 5;
 const MIN_NODES_PER_STEP = 1;
 const MAX_NODES_PER_STEP = 20;
+const MAX_DISTINCT_IDS = 1000;
 
 export const screenPathsQuerySchema = z.object({
   anchor_screen: z.string().trim().min(1).max(255).optional(),
@@ -29,5 +30,11 @@ export const screenPathsQuerySchema = z.object({
     .min(MIN_NODES_PER_STEP, 'max_nodes_per_step must be >= 1')
     .max(MAX_NODES_PER_STEP, 'max_nodes_per_step must be <= 20'),
   unit: z.enum(FLOW_UNITS).default('session'),
+  /**
+   * Optional §17 per-user identity set — the canonical id plus every anon_id aliasing to it. When
+   * present the compiler adds a raw-`e.distinct_id` IN filter so a per-user path map is
+   * identity-correct (see screen-paths.compiler.ts). Bounded so the generated IN list can't blow up.
+   */
+  distinct_ids: z.array(z.string().min(1)).max(MAX_DISTINCT_IDS).optional(),
 });
 export type ScreenPathsQuery = z.infer<typeof screenPathsQuerySchema>;

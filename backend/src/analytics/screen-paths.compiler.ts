@@ -64,6 +64,25 @@ export function compileScreenPathQuery(
     having = '\nHAVING max(is_anchor) = 1';
   }
 
+  const whereClauses = [
+    'e.project_id = {projectId:UUID}',
+    `e.event = '${SCREEN_VIEW_EVENT}'`,
+    'e.timestamp >= {from:DateTime64}',
+    'e.timestamp < {toExclusive:DateTime64}',
+    `${SCREEN_NAME_EXPR} != ''`,
+  ];
+
+  // §17 identity-correct per-user filter: the caller passes the canonical id + its aliased anon_ids
+  // and we restrict to those exact RAW `e.distinct_id` values. The raw column is deliberately NOT
+  // canonicalized here (mirrors the click-heatmap `distinct_ids` filter, contracts §17/§19), so a
+  // user tracked anonymously then identified — whose screen views live under BOTH ids — is fully
+  // captured. The list is bound as an Array(String) query_param, so it is injection-safe regardless
+  // of the ids' contents.
+  if (query.distinct_ids && query.distinct_ids.length > 0) {
+    whereClauses.push('e.distinct_id IN {distinctIds:Array(String)}');
+    params.distinctIds = query.distinct_ids;
+  }
+
   const sql = [
     `WITH ${canon.cte}`,
     'SELECT',
@@ -79,11 +98,7 @@ export function compileScreenPathQuery(
     `    toUInt8(${isAnchorExpr}) AS is_anchor`,
     '  FROM events AS e',
     `  ${canon.join}`,
-    '  WHERE e.project_id = {projectId:UUID}',
-    `    AND e.event = '${SCREEN_VIEW_EVENT}'`,
-    '    AND e.timestamp >= {from:DateTime64}',
-    '    AND e.timestamp < {toExclusive:DateTime64}',
-    `    AND ${SCREEN_NAME_EXPR} != ''`,
+    `  WHERE ${whereClauses.join('\n    AND ')}`,
     ')',
     `GROUP BY unit_id${having}`,
   ].join('\n');
