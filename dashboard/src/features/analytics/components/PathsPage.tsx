@@ -1,5 +1,5 @@
 import { useParams } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { PageShell } from '../../../components/layout/PageShell';
@@ -45,6 +45,9 @@ export function PathsPage() {
   const [unit, setUnit] = useState<FlowsUnit>('session');
   const [view, setView] = useState<PathView>('map');
   const [result, setResult] = useState<ScreenPathsResponse | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fullscreenTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeFullscreenRef = useRef<HTMLButtonElement>(null);
 
   const screenOptions = screens.data?.screens.map((s) => s.screen_name) ?? [];
   // screen_name → latest image_hash, so each map node's screenshot is content-addressed (retake-safe).
@@ -78,6 +81,30 @@ export function PathsPage() {
     () => (result ? buildScreenPathsMermaid(result.nodes, result.links) : ''),
     [result],
   );
+
+  const closeFullscreen = () => setIsFullscreen(false);
+
+  // While the fullscreen map is open: focus into the dialog, close on Esc, restore focus on close,
+  // and lock body scroll — all torn down together when the overlay unmounts.
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const trigger = fullscreenTriggerRef.current;
+    closeFullscreenRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      trigger?.focus();
+    };
+  }, [isFullscreen]);
 
   return (
     <PageShell
@@ -200,13 +227,25 @@ export function PathsPage() {
 
       {hasResult && result && (
         <div className="flex flex-col gap-4">
-          <div
-            role="group"
-            aria-label="Path view"
-            className="inline-flex w-fit rounded-md border border-border p-0.5"
-          >
-            <ViewToggle current={view} value="map" label="Map" onSelect={setView} />
-            <ViewToggle current={view} value="diagram" label="Diagram" onSelect={setView} />
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label="Path view"
+              className="inline-flex w-fit rounded-md border border-border p-0.5"
+            >
+              <ViewToggle current={view} value="map" label="Map" onSelect={setView} />
+              <ViewToggle current={view} value="diagram" label="Diagram" onSelect={setView} />
+            </div>
+            {view === 'map' && (
+              <Button
+                ref={fullscreenTriggerRef}
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsFullscreen(true)}
+              >
+                Fullscreen
+              </Button>
+            )}
           </div>
 
           {view === 'map' ? (
@@ -221,6 +260,37 @@ export function PathsPage() {
           )}
 
           <TransitionsTable result={result} />
+
+          {isFullscreen && view === 'map' && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="User path map (fullscreen)"
+              className="fixed inset-0 z-50 flex flex-col gap-3 bg-surface p-4"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">User path map</h2>
+                <Button
+                  ref={closeFullscreenRef}
+                  variant="secondary"
+                  size="sm"
+                  onClick={closeFullscreen}
+                  aria-label="Exit fullscreen"
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <PathMap
+                  projectId={projectId}
+                  nodes={result.nodes}
+                  links={result.links}
+                  screenHashes={screenHashes}
+                  fullHeight
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </PageShell>

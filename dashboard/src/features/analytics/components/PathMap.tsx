@@ -39,12 +39,15 @@ export function PathMap({
   nodes,
   links,
   screenHashes,
+  fullHeight = false,
 }: {
   projectId: string;
   nodes: FlowNode[];
   links: FlowLink[];
   /** screen_name → latest `image_hash`, so each node's screenshot is content-addressed (retake-safe). */
   screenHashes?: Map<string, string>;
+  /** Fill the parent (fullscreen overlay) instead of the default fixed 560px height. */
+  fullHeight?: boolean;
 }) {
   const layout = useMemo(() => computePathLayout(nodes, links), [nodes, links]);
   const [transform, setTransform] = useState<Transform>({ x: 24, y: 24, scale: 1 });
@@ -87,7 +90,7 @@ export function PathMap({
   const resetView = () => setTransform({ x: 24, y: 24, scale: 1 });
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn('flex flex-col gap-2', fullHeight && 'h-full')}>
       <div className="flex items-center gap-2">
         <span className="text-sm text-text-muted">Drag to pan, scroll to zoom.</span>
         <div className="ml-auto flex items-center gap-1">
@@ -107,7 +110,10 @@ export function PathMap({
         data-testid="path-map"
         role="group"
         aria-label="Interactive user path map"
-        className="relative h-[560px] w-full cursor-grab touch-none overflow-hidden rounded-lg border border-border bg-chart-surface active:cursor-grabbing"
+        className={cn(
+          'relative w-full cursor-grab touch-none overflow-hidden rounded-lg border border-border bg-chart-surface active:cursor-grabbing',
+          fullHeight ? 'h-full flex-1' : 'h-[560px]',
+        )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

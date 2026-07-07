@@ -129,6 +129,47 @@ describe('PathsPage — user-path map', () => {
     expect(capturedBody).not.toHaveProperty('anchor_screen');
   });
 
+  it('opens the map in a fullscreen dialog and closes via Escape or the Close button (focus managed)', async () => {
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/screen-paths', () =>
+        HttpResponse.json(RESPONSE),
+      ),
+    );
+    trackScreenImages();
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/paths`);
+    await screen.findByRole('heading', { name: 'Paths' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await screen.findByTestId('path-map');
+
+    const trigger = screen.getByRole('button', { name: 'Fullscreen' });
+    await userEvent.click(trigger);
+
+    // The fullscreen dialog appears and renders its own interactive map.
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(within(dialog).getByTestId('path-map')).toBeInTheDocument();
+
+    // Focus moved into the dialog (onto the Close button).
+    const closeButton = within(dialog).getByRole('button', { name: 'Exit fullscreen' });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    expect(document.activeElement).toBe(closeButton);
+
+    // Escape closes the dialog and returns focus to the Fullscreen trigger.
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(trigger);
+
+    // Re-open, then verify the Close button also dismisses it.
+    await userEvent.click(trigger);
+    const reopened = await screen.findByRole('dialog');
+    await userEvent.click(within(reopened).getByRole('button', { name: 'Exit fullscreen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('renders an empty state when there is no screen-path data', async () => {
     server.use(
       http.post('/api/v1/projects/:projectId/query/screen-paths', () =>
