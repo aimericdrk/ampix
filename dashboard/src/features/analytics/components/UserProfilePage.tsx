@@ -92,47 +92,90 @@ export function UserProfilePage() {
             </Card>
           </div>
 
-          <Card className="max-w-lg">
-            <CardHeader>
-              <CardTitle>Profile properties</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {Object.keys(data.profile).length === 0 ? (
-                <p className="text-text-muted">No profile properties.</p>
-              ) : (
-                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                  {Object.entries(data.profile).map(([key, value]) => (
-                    <div key={key} className="contents">
-                      <dt className="font-medium text-text-muted">{key}</dt>
-                      <dd>{String(value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Screen path — a lightweight per-user chain of the screens this person moved through. */}
-          <Card className="max-w-lg">
-            <CardContent>
-              <CollapsibleSection title="Screen path" defaultOpen>
-                {screenPath.length === 0 ? (
-                  <p className="text-text-muted">No screen views recorded.</p>
-                ) : (
-                  <ol className="flex flex-wrap items-center gap-2 text-sm">
-                    {screenPath.map((name, i) => (
-                      <li key={`${name}-${i}`} className="flex items-center gap-2">
-                        {i > 0 && (
-                          <span aria-hidden className="text-text-muted">
-                            →
+          {/* Screen path (left) + Profile properties (right) side by side. */}
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            {/* Screen path — a lightweight per-user chain of the screens this person moved through. */}
+            <Card>
+              <CardContent>
+                <CollapsibleSection title="Screen path" defaultOpen>
+                  {screenPath.length === 0 ? (
+                    <p className="text-text-muted">No screen views recorded.</p>
+                  ) : (
+                    <ol className="flex flex-wrap items-center gap-2 text-sm">
+                      {screenPath.map((name, i) => (
+                        <li key={`${name}-${i}`} className="flex items-center gap-2">
+                          {i > 0 && (
+                            <span aria-hidden className="text-text-muted">
+                              →
+                            </span>
+                          )}
+                          <span className="rounded-full border border-border bg-chart-surface px-2.5 py-1 font-medium">
+                            {name}
                           </span>
-                        )}
-                        <span className="rounded-full border border-border bg-chart-surface px-2.5 py-1 font-medium">
-                          {name}
-                        </span>
-                      </li>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </CollapsibleSection>
+              </CardContent>
+            </Card>
+
+            {/* Profile properties — right of the screen path. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Profile properties</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {Object.keys(data.profile).length === 0 ? (
+                  <p className="text-text-muted">No profile properties.</p>
+                ) : (
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                    {Object.entries(data.profile).map(([key, value]) => (
+                      <div key={key} className="contents">
+                        <dt className="font-medium text-text-muted">{key}</dt>
+                        <dd>{String(value)}</dd>
+                      </div>
                     ))}
-                  </ol>
+                  </dl>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/*
+           * Activity timeline — the recent event feed (up to 50 events) rendered in a fixed-height,
+           * scrollable panel so ~10 rows are visible at once and the rest are reachable by scrolling.
+           * (The backend caps `recent_events` at 50; paging beyond that would need a backend change.)
+           */}
+          <Card className="max-w-lg">
+            <CardContent>
+              <CollapsibleSection title="Activity timeline" defaultOpen>
+                {data.recent_events.length === 0 ? (
+                  <p className="text-text-muted">No recent events.</p>
+                ) : (
+                  <div className="max-h-[26rem] overflow-y-auto pr-2" data-testid="activity-timeline-scroll">
+                    <ol className="flex flex-col gap-3 border-l border-border pl-6 text-sm">
+                      {data.recent_events.map((event) => (
+                        <li key={event.insert_id} className="relative">
+                          <span
+                            aria-hidden
+                            className="absolute -left-[1.6875rem] top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-accent"
+                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{event.event}</span>
+                            {event.screen_name && (
+                              <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
+                                {event.screen_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-text-muted">
+                            {new Date(event.timestamp).toLocaleString()}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                 )}
               </CollapsibleSection>
             </CardContent>
@@ -154,40 +197,7 @@ export function UserProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Activity timeline — a visual vertical timeline of the recent event feed. */}
-          <Card className="max-w-lg">
-            <CardContent>
-              <CollapsibleSection title="Activity timeline" defaultOpen>
-                {data.recent_events.length === 0 ? (
-                  <p className="text-text-muted">No recent events.</p>
-                ) : (
-                  <ol className="flex flex-col gap-4 border-l border-border pl-6 text-sm">
-                    {data.recent_events.map((event) => (
-                      <li key={event.insert_id} className="relative">
-                        <span
-                          aria-hidden
-                          className="absolute -left-[1.6875rem] top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-accent"
-                        />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{event.event}</span>
-                          {event.screen_name && (
-                            <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
-                              {event.screen_name}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-text-muted">
-                          {new Date(event.timestamp).toLocaleString()}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </CollapsibleSection>
-            </CardContent>
-          </Card>
-
-          {/* Tap heatmap — identity-correct per-user, driven by the §17 identity set. */}
+          {/* Tap heatmap — sits under the path map; identity-correct via the §17 identity set. */}
           <Card>
             <CardContent>
               <CollapsibleSection title="Tap heatmap" defaultOpen>
