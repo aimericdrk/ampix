@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { CreateReportRequest } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
-import { TEST_REPORT_INSIGHTS_ID } from '../../../test/msw/phase5-handlers';
+import { TEST_REPORT_FUNNEL_ID, TEST_REPORT_INSIGHTS_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 
@@ -63,7 +63,35 @@ describe('Saved reports', () => {
     );
   });
 
-  it('lists saved reports grouped by kind', async () => {
+  it('lists saved reports grouped by kind, each with a live preview thumbnail', async () => {
+    // Spy on the per-card preview runs while still serving each report's kind-correct result.
+    const runCalls = new Set<string>();
+    server.use(
+      http.post('/api/v1/projects/:projectId/reports/:id/run', ({ params }) => {
+        const id = params.id as string;
+        runCalls.add(id);
+        const result =
+          id === TEST_REPORT_INSIGHTS_ID
+            ? {
+                series: [
+                  {
+                    name: 'checkout_completed',
+                    breakdown_value: null,
+                    data: [{ t: '2026-07-01', value: 17 }],
+                  },
+                ],
+              }
+            : {
+                steps: [
+                  { event: 'app_open', count: 900, conversion_from_prev: 1, conversion_from_top: 1 },
+                  { event: 'checkout', count: 270, conversion_from_prev: 0.3, conversion_from_top: 0.3 },
+                ],
+                overall_conversion: 0.3,
+              };
+        return HttpResponse.json(result);
+      }),
+    );
+
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/reports`);
     await screen.findByRole('heading', { name: 'Reports' });
@@ -73,6 +101,12 @@ describe('Saved reports', () => {
     // Group headers, one per non-empty kind.
     expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Funnels' })).toBeInTheDocument();
+
+    // One decorative thumbnail per report card, each fed by its own auto-run preview.
+    expect(screen.getAllByTestId('chart-thumbnail')).toHaveLength(2);
+    await waitFor(() =>
+      expect(runCalls).toEqual(new Set([TEST_REPORT_INSIGHTS_ID, TEST_REPORT_FUNNEL_ID])),
+    );
   });
 
   it('runs a report and renders its chart via /reports/:id/run', async () => {

@@ -418,6 +418,24 @@ export function useDeleteReport(projectId: string) {
   });
 }
 
+/**
+ * Auto-running report preview for list thumbnails (`POST /reports/:id/run` with no overrides).
+ * A query (not the `useRunReport` mutation) so each card's thumbnail loads + caches on mount without
+ * an explicit trigger. Cached 5 min; never retried so a failing preview settles to `isError` fast.
+ */
+export function useReportPreview(projectId: string, reportId: string) {
+  return useQuery({
+    queryKey: [...reportsKey(projectId), reportId, 'preview'],
+    queryFn: () =>
+      apiFetch<AnalysisResult>(`${base(projectId)}/reports/${reportId}/run`, {
+        method: 'POST',
+        body: {},
+      }),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
 /** Executes a stored report's definition (`POST /reports/:id/run`) with optional overrides. */
 export function useRunReport(projectId: string, reportId: string) {
   return useMutation({

@@ -16,12 +16,44 @@ function signIn() {
 const dashboardUrl = `/projects/${TEST_PROJECT.id}/dashboards/${TEST_DASHBOARD_ID}`;
 
 describe('DashboardsPage list', () => {
-  it('lists dashboards and creates one via POST /dashboards', async () => {
+  it('lists dashboards, each with a preview thumbnail, and shows the tile count', async () => {
+    // Two boards: the seeded 2-tile board (real preview) and a zero-tile draft (empty thumbnail).
+    server.use(
+      http.get('/api/v1/projects/:projectId/dashboards', () =>
+        HttpResponse.json({
+          dashboards: [
+            { id: TEST_DASHBOARD_ID, name: 'Growth overview', tile_count: 2, updated_at: '2026-07-04T00:00:00.000Z' },
+            { id: 'dashboard-empty', name: 'Draft board', tile_count: 0, updated_at: '2026-07-04T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/dashboards`);
+    await screen.findByRole('heading', { name: 'Dashboards' });
+    expect(await screen.findByText('Growth overview')).toBeInTheDocument();
+    expect(screen.getByText('Draft board')).toBeInTheDocument();
+    expect(screen.getByText('2 tiles')).toBeInTheDocument();
+
+    // One thumbnail per card; the zero-tile board short-circuits to the "Empty board" thumbnail.
+    expect(screen.getAllByTestId('chart-thumbnail')).toHaveLength(2);
+    expect(await screen.findByText('Empty board')).toBeInTheDocument();
+  });
+
+  it('creates a dashboard via POST /dashboards', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/dashboards`);
     await screen.findByRole('heading', { name: 'Dashboards' });
     expect(await screen.findByText('Growth overview')).toBeInTheDocument();
     expect(screen.getByText('2 tiles')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'New dashboard' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Dashboard name'), 'Launch metrics');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create dashboard' }));
+
+    expect(await screen.findByText('Launch metrics')).toBeInTheDocument();
   });
 });
 

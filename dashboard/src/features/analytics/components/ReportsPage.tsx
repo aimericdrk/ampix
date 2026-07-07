@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { ApiError } from '../../../lib/api/problem';
 import type { ReportKind, SavedReportSummary } from '../../../lib/api/types';
 import { REPORT_KINDS } from '../../../lib/api/types';
-import { useDeleteReport, useReports } from '../api';
+import { useDeleteReport, useReportPreview, useReports } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { analysisResultIsEmpty } from './ReportChart';
+import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
 
 const KIND_LABELS: Record<ReportKind, string> = {
   insights: 'Insights',
@@ -53,29 +55,14 @@ export function ReportsPage() {
                   <CardTitle>{KIND_LABELS[kind]}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ul className="flex flex-col gap-2">
+                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
                     {group.map((report) => (
-                      <li
+                      <ReportCard
                         key={report.id}
-                        className="flex items-center gap-2 rounded-md border border-border p-2"
-                      >
-                        <Link
-                          to="/projects/$projectId/reports/$reportId"
-                          params={{ projectId, reportId: report.id }}
-                          className="flex-1 text-sm font-medium text-accent underline"
-                        >
-                          {report.name}
-                        </Link>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Delete ${report.name}`}
-                          onClick={() => deleteReport.mutate(report.id)}
-                        >
-                          Delete
-                        </Button>
-                      </li>
+                        projectId={projectId}
+                        report={report}
+                        onDelete={() => deleteReport.mutate(report.id)}
+                      />
                     ))}
                   </ul>
                 </CardContent>
@@ -85,5 +72,52 @@ export function ReportsPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+/**
+ * One report as a small card: a decorative `ChartThumbnail` (its live preview via
+ * `useReportPreview`) over the name link + Delete. The preview query's state maps directly to the
+ * thumbnail: pending → loading, error → error, empty result → empty, otherwise ready.
+ */
+function ReportCard({
+  projectId,
+  report,
+  onDelete,
+}: {
+  projectId: string;
+  report: SavedReportSummary;
+  onDelete: () => void;
+}) {
+  const preview = useReportPreview(projectId, report.id);
+
+  let state: ChartThumbnailState;
+  if (preview.isPending) state = 'loading';
+  else if (preview.isError || !preview.data) state = 'error';
+  else if (analysisResultIsEmpty(report.kind, preview.data)) state = 'empty';
+  else state = 'ready';
+
+  return (
+    <li className="flex flex-col gap-2 rounded-md border border-border p-2">
+      <ChartThumbnail kind={report.kind} result={preview.data} state={state} />
+      <div className="flex items-center gap-2">
+        <Link
+          to="/projects/$projectId/reports/$reportId"
+          params={{ projectId, reportId: report.id }}
+          className="flex-1 truncate text-sm font-medium text-accent underline"
+        >
+          {report.name}
+        </Link>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={`Delete ${report.name}`}
+          onClick={onDelete}
+        >
+          Delete
+        </Button>
+      </div>
+    </li>
   );
 }
