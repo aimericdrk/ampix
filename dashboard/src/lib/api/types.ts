@@ -373,6 +373,9 @@ export interface UserListItem {
   distinct_id: string;
   last_seen: string;
   event_count: number;
+  /** From the user's profile (whitelisted keys); null when not set — search also matches these. */
+  name: string | null;
+  email: string | null;
 }
 
 /** `GET /users` — search matches `distinct_id` prefix; `next_cursor` is the last `distinct_id`. */
@@ -611,6 +614,11 @@ export interface ScreenPathsQuery {
   steps: number;
   max_nodes_per_step: number;
   unit: FlowsUnit;
+  /**
+   * Optional §17 per-user identity set (canonical id + aliased anon_ids). When set, the path map is
+   * restricted to `distinct_id IN (…)` for an identity-correct per-user screen-path map.
+   */
+  distinct_ids?: string[];
 }
 
 /**

@@ -16,32 +16,64 @@ function signIn() {
 }
 
 describe('UsersPage', () => {
-  it('lists users and paginates via next_cursor', async () => {
+  it('lists users as a sortable DataTable and paginates via next_cursor', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users`);
 
     const table = await screen.findByRole('table', { name: 'Users' });
     // header row + the first 20-user page.
     await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(21));
+    expect(within(table).getByRole('columnheader', { name: /Name/ })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: /ID \/ email/ })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: /Last seen/ })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: /Events/ })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
 
     // header row + all 22 fixture users, once the next page has loaded.
     await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(23));
-    expect(screen.getByRole('link', { name: 'user-022' })).toBeInTheDocument();
+    expect(screen.getByText('User 22')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 
-  it('searches by distinct_id prefix', async () => {
+  it('searches by distinct_id, name, or email', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users`);
     await screen.findByRole('table', { name: 'Users' });
 
-    await userEvent.type(screen.getByLabelText('Search by distinct ID'), 'user-021');
+    await userEvent.type(screen.getByLabelText('Search by name, email, or ID'), 'user-021');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    expect(await screen.findByRole('link', { name: 'user-021' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'user-001' })).not.toBeInTheDocument();
+    expect(await screen.findByText('User 21')).toBeInTheDocument();
+    expect(screen.queryByText('Alex Chen')).not.toBeInTheDocument();
+  });
+
+  it('renders a disambiguation table for a name/email search matching multiple users', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users`);
+    await screen.findByRole('table', { name: 'Users' });
+
+    await userEvent.type(screen.getByLabelText('Search by name, email, or ID'), 'alex');
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(await screen.findByText('Alex Chen')).toBeInTheDocument();
+    expect(screen.getByText('Alex Wong')).toBeInTheDocument();
+    expect(screen.getByText('alex.chen@example.com')).toBeInTheDocument();
+    expect(screen.getByText('alex.wong@example.com')).toBeInTheDocument();
+    // Not part of this "alex" match.
+    expect(screen.queryByText('Priya Singh')).not.toBeInTheDocument();
+  });
+
+  it('falls back to distinct_id / "—" when a user has no profile name or email', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users`);
+    const table = await screen.findByRole('table', { name: 'Users' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(21));
+
+    expect(screen.getByText('user-005')).toBeInTheDocument();
+    const row = screen.getByText('user-005').closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row!).getByText('—')).toBeInTheDocument();
   });
 
   it("opens a user's profile with properties, seen dates, event count, and a recent-activity timeline", async () => {
@@ -49,7 +81,7 @@ describe('UsersPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/users`);
     await screen.findByRole('table', { name: 'Users' });
 
-    await userEvent.click(await screen.findByRole('link', { name: 'user-001' }));
+    await userEvent.click(await screen.findByText('Alex Chen'));
 
     expect(await screen.findByRole('heading', { name: 'user-001' })).toBeInTheDocument();
     expect(screen.getByText(USER_PROFILE_FIXTURE.profile.email as string)).toBeInTheDocument();

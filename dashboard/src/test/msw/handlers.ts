@@ -9,6 +9,8 @@ import type {
   CreatedToken,
   CreateInvitationResponse,
   CreateOrgResponse,
+  CohortDefinition,
+  CohortPreviewResponse,
   EngagementResponse,
   EventSummaryResponse,
   ClickHeatmapQuery,
@@ -147,20 +149,54 @@ export const LIVE_EVENTS_FIXTURE: LiveEvent[] = Array.from({ length: 30 }, (_, i
  * Deterministic fixture for GET /users, GET /users/:distinctId — ordered by distinct_id. 22 users
  * (> the UI's 20-per-page request) so tests exercise real "load more" pagination via
  * `next_cursor`. `user-001` carries the detailed values GET /users/:distinctId (below) responds
- * with.
+ * with. `user-001`/`user-002` share a "alex" name substring so a name search surfaces a real
+ * disambiguation table (P4-T3); `user-005` has no profile name/email to exercise the `'—'` /
+ * distinct_id fallbacks.
  */
 export const USERS_FIXTURE: UserListItem[] = [
-  { distinct_id: 'user-001', last_seen: '2026-07-01T10:00:00.000Z', event_count: 42 },
-  { distinct_id: 'user-002', last_seen: '2026-06-30T09:30:00.000Z', event_count: 17 },
-  { distinct_id: 'user-003', last_seen: '2026-06-29T08:15:00.000Z', event_count: 5 },
-  { distinct_id: 'user-004', last_seen: '2026-06-28T07:00:00.000Z', event_count: 63 },
-  { distinct_id: 'user-005', last_seen: '2026-06-27T06:45:00.000Z', event_count: 9 },
+  {
+    distinct_id: 'user-001',
+    last_seen: '2026-07-01T10:00:00.000Z',
+    event_count: 42,
+    name: 'Alex Chen',
+    email: 'alex.chen@example.com',
+  },
+  {
+    distinct_id: 'user-002',
+    last_seen: '2026-06-30T09:30:00.000Z',
+    event_count: 17,
+    name: 'Alex Wong',
+    email: 'alex.wong@example.com',
+  },
+  {
+    distinct_id: 'user-003',
+    last_seen: '2026-06-29T08:15:00.000Z',
+    event_count: 5,
+    name: 'Priya Singh',
+    email: 'priya@example.com',
+  },
+  {
+    distinct_id: 'user-004',
+    last_seen: '2026-06-28T07:00:00.000Z',
+    event_count: 63,
+    name: 'Jordan Lee',
+    email: 'jordan@example.com',
+  },
+  {
+    distinct_id: 'user-005',
+    last_seen: '2026-06-27T06:45:00.000Z',
+    event_count: 9,
+    name: null,
+    email: null,
+  },
   ...Array.from({ length: 17 }, (_, i) => {
     const n = i + 6;
     return {
       distinct_id: `user-${String(n).padStart(3, '0')}`,
       last_seen: `2026-06-${String(26 - i).padStart(2, '0')}T06:00:00.000Z`,
       event_count: n,
+      name: `User ${n}`,
+      email: `user${n}@example.com`,
     };
   }),
 ];
@@ -1279,7 +1315,15 @@ export const handlers = [
     const limitParam = Number(url.searchParams.get('limit') ?? '50');
     const limit = Math.min(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 100);
     const cursor = url.searchParams.get('cursor');
-    let pool = USERS_FIXTURE.filter((u) => u.distinct_id.startsWith(search));
+    // Mirrors the backend (P4-T1): a case-insensitive substring of `search` against the canonical
+    // id or the profile's name/email — so multiple people can share a match (disambiguation table).
+    const needle = search.toLowerCase();
+    let pool = USERS_FIXTURE.filter(
+      (u) =>
+        u.distinct_id.toLowerCase().includes(needle) ||
+        (u.name?.toLowerCase().includes(needle) ?? false) ||
+        (u.email?.toLowerCase().includes(needle) ?? false),
+    );
     if (cursor) {
       const cursorIndex = pool.findIndex((u) => u.distinct_id === cursor);
       pool = cursorIndex >= 0 ? pool.slice(cursorIndex + 1) : pool;
