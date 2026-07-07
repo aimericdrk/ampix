@@ -1,71 +1,18 @@
 import { Link, Outlet, useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { DateRangeProvider } from '../../features/analytics/date-range';
+import { CommandPalette } from '../../features/command-palette/CommandPalette';
 import { logout } from '../../features/auth/api';
 import { authStore, useAuth } from '../../features/auth/store';
 import { currentOrgStore, useCurrentOrgId } from '../../features/orgs/store';
 import { useProjects } from '../../features/projects/api';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/button';
-import { NavIcon, type IconName } from './NavIcon';
+import { projectGroups, type NavItem } from './nav-model';
+import { NavIcon } from './NavIcon';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { ThemeToggle } from './ThemeToggle';
-
-interface NavItem {
-  label: string;
-  to: string;
-  icon: IconName;
-  /** Match only the exact path (so a parent link isn't active on its children). */
-  exact?: boolean;
-}
-
-interface NavGroup {
-  heading?: string;
-  items: NavItem[];
-}
-
-/** The grouped project information architecture — one calm, scannable list instead of a tab strip. */
-function projectGroups(): NavGroup[] {
-  const p = (path: string) => `/projects/$projectId${path}`;
-  return [
-    {
-      items: [{ label: 'Home', to: p('/home'), icon: 'home' }],
-    },
-    {
-      heading: 'Explore',
-      items: [
-        { label: 'Insights', to: p('/insights'), icon: 'insights' },
-        { label: 'Funnels', to: p('/funnels'), icon: 'funnel' },
-        { label: 'Retention', to: p('/retention'), icon: 'retention' },
-        // "Paths" is the interactive user-path map + Mermaid view (screen-paths, §19).
-        { label: 'Paths', to: p('/paths'), icon: 'paths' },
-        { label: 'Heatmap', to: p('/heatmap'), icon: 'heatmap' },
-        { label: 'Revenue', to: p('/revenue'), icon: 'revenue' },
-      ],
-    },
-    {
-      heading: 'Audience',
-      items: [
-        { label: 'Cohorts', to: p('/cohorts'), icon: 'cohorts' },
-        { label: 'Users', to: p('/users'), icon: 'users' },
-        { label: 'Sessions', to: p('/sessions'), icon: 'sessions' },
-        { label: 'Live', to: p('/live'), icon: 'live' },
-      ],
-    },
-    {
-      heading: 'Saved',
-      items: [
-        { label: 'Dashboards', to: p('/dashboards'), icon: 'dashboards' },
-        { label: 'Reports', to: p('/reports'), icon: 'reports' },
-        { label: 'Templates', to: p('/templates'), icon: 'templates' },
-      ],
-    },
-    {
-      items: [{ label: 'Project settings', to: p(''), icon: 'settings', exact: true }],
-    },
-  ];
-}
 
 const NAV_LINK_BASE =
   'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text-muted transition-colors hover:bg-border/40 hover:text-text';
