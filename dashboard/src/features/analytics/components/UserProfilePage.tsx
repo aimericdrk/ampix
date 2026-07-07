@@ -143,9 +143,35 @@ export function UserProfilePage() {
           </div>
 
           {/*
-           * Activity timeline — the recent event feed (up to 50 events) rendered in a fixed-height,
-           * scrollable panel so ~10 rows are visible at once and the rest are reachable by scrolling.
-           * (The backend caps `recent_events` at 50; paging beyond that would need a backend change.)
+           * Full interactive per-user path map — identity-correct because `distinct_ids` (the
+           * profile's §17 identity set: canonical id + aliased anon_ids) is passed through to
+           * `useRunScreenPaths`, so the backend restricts the path query to this one person's
+           * events (both pre- and post-login). This is distinct from the lightweight mini-diagram
+           * above: that one is a quick chronological summary of THIS session's recent events, while
+           * this section runs the full multi-step Sankey path query over a 90-day window.
+           */}
+          <Card>
+            <CardContent>
+              <CollapsibleSection title="Path map" defaultOpen>
+                <UserPathMap projectId={projectId} distinctIds={data.distinct_ids} />
+              </CollapsibleSection>
+            </CardContent>
+          </Card>
+
+          {/* Tap heatmap — sits under the path map; identity-correct via the §17 identity set. */}
+          <Card>
+            <CardContent>
+              <CollapsibleSection title="Tap heatmap" defaultOpen>
+                <UserTapHeatmap projectId={projectId} distinctIds={data.distinct_ids} />
+              </CollapsibleSection>
+            </CardContent>
+          </Card>
+
+          {/*
+           * Activity timeline — pinned to the BOTTOM of the page: the recent event feed (up to 50
+           * events) in a fixed-height, scrollable panel so ~10 rows are visible at once and the rest
+           * are reachable by scrolling. (The backend caps `recent_events` at 50; paging beyond that
+           * would need a backend change.)
            */}
           <Card className="max-w-lg">
             <CardContent>
@@ -177,31 +203,6 @@ export function UserProfilePage() {
                     </ol>
                   </div>
                 )}
-              </CollapsibleSection>
-            </CardContent>
-          </Card>
-
-          {/*
-           * Full interactive per-user path map — identity-correct because `distinct_ids` (the
-           * profile's §17 identity set: canonical id + aliased anon_ids) is passed through to
-           * `useRunScreenPaths`, so the backend restricts the path query to this one person's
-           * events (both pre- and post-login). This is distinct from the lightweight mini-diagram
-           * above: that one is a quick chronological summary of THIS session's recent events, while
-           * this section runs the full multi-step Sankey path query over a 90-day window.
-           */}
-          <Card>
-            <CardContent>
-              <CollapsibleSection title="Path map" defaultOpen>
-                <UserPathMap projectId={projectId} distinctIds={data.distinct_ids} />
-              </CollapsibleSection>
-            </CardContent>
-          </Card>
-
-          {/* Tap heatmap — sits under the path map; identity-correct via the §17 identity set. */}
-          <Card>
-            <CardContent>
-              <CollapsibleSection title="Tap heatmap" defaultOpen>
-                <UserTapHeatmap projectId={projectId} distinctIds={data.distinct_ids} />
               </CollapsibleSection>
             </CardContent>
           </Card>
