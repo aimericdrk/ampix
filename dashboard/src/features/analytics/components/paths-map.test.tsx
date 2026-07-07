@@ -1,12 +1,14 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ScreenPathsQuery, ScreenPathsResponse } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import { SCREEN_IMAGE_BYTES, TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { decodeAnalysisState, encodeAnalysisState } from '../share-state';
+import type { PathsAnalysisState } from './PathsPage';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -196,5 +198,105 @@ describe('PathsPage — user-path map', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     expect(await screen.findByText('No screen-path data for this query yet.')).toBeInTheDocument();
+  });
+
+  describe('shareable analysis URLs (feat-01)', () => {
+    it('hydrates the builder from an `s` link and auto-runs the exact encoded query', async () => {
+      let capturedBody: ScreenPathsQuery | undefined;
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/screen-paths', async ({ request }) => {
+          capturedBody = (await request.json()) as ScreenPathsQuery;
+          return HttpResponse.json(RESPONSE);
+        }),
+      );
+      trackScreenImages();
+
+      const encoded = encodeAnalysisState<PathsAnalysisState>({
+        v: 1,
+        anchorScreen: 'home',
+        direction: 'forward',
+        steps: 2,
+        maxNodesPerStep: 5,
+        unit: 'user',
+        from: '2026-06-01',
+        to: '2026-07-01',
+      });
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/paths?s=${encoded}`);
+      await screen.findByRole('heading', { name: 'Paths' });
+
+      // Hydrated builder: the shared anchor screen replaces the usual blank "Any entry screen".
+      expect(await screen.findByRole('button', { name: 'Anchor screen' })).toHaveTextContent('home');
+      expect(screen.getByLabelText('Unit')).toHaveValue('user');
+      expect(screen.getByLabelText('Steps (hops)')).toHaveValue(2);
+      expect(screen.getByLabelText('Max screens per step')).toHaveValue(5);
+
+      // Auto-ran with no interaction — the map appears without clicking Run.
+      await screen.findByTestId('path-map', {}, { timeout: 3000 });
+
+      await waitFor(() =>
+        expect(capturedBody).toEqual({
+          anchor_screen: 'home',
+          direction: 'forward',
+          date_range: { from: '2026-06-01', to: '2026-07-01' },
+          steps: 2,
+          max_nodes_per_step: 5,
+          unit: 'user',
+        }),
+      );
+    });
+
+    it('falls back to defaults (no error) for a malformed `s` param', async () => {
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/paths?s=not-a-real-encoded-value!!!`);
+      await screen.findByRole('heading', { name: 'Paths' });
+
+      // Same default-empty-builder behavior as no param at all — no crash, no visible error, and
+      // no auto-run (the map only appears after an explicit Run).
+      expect(await screen.findByRole('button', { name: 'Anchor screen' })).toBeInTheDocument();
+      expect(screen.queryByTestId('path-map')).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('writes builder edits back to the `s` search param (debounced, via replace)', async () => {
+      trackScreenImages();
+      signIn();
+      const { router } = renderApp(`/projects/${TEST_PROJECT.id}/paths`);
+      await screen.findByRole('heading', { name: 'Paths' });
+
+      expect(router.state.location.search).not.toHaveProperty('s');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Anchor screen' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'home' }));
+
+      await waitFor(
+        () => expect((router.state.location.search as { s?: string }).s).toBeTruthy(),
+        { timeout: 2000 },
+      );
+
+      const pushed = decodeAnalysisState<PathsAnalysisState>(
+        (router.state.location.search as { s?: string }).s,
+      );
+      expect(pushed?.anchorScreen).toBe('home');
+      expect(pushed?.direction).toBe('forward');
+    });
+
+    it('copies the current URL to the clipboard and shows a "Link copied" toast', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/paths`);
+      await screen.findByRole('heading', { name: 'Paths' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
+      expect(await screen.findByText('Link copied')).toBeInTheDocument();
+    });
   });
 });

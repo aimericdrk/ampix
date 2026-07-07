@@ -1,7 +1,7 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { FunnelQueryDefinition, FunnelResponse } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import {
@@ -13,6 +13,8 @@ import {
 import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { decodeAnalysisState, encodeAnalysisState } from '../share-state';
+import type { FunnelsAnalysisState } from './FunnelsPage';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -258,5 +260,114 @@ describe('FunnelsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     expect(await screen.findByText('No data for this funnel yet.')).toBeInTheDocument();
+  });
+
+  describe('shareable analysis URLs (feat-01)', () => {
+    it('hydrates the builder from an `s` link and auto-runs the exact encoded query', async () => {
+      let capturedBody: FunnelQueryDefinition | undefined;
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/funnels', async ({ request }) => {
+          capturedBody = (await request.json()) as FunnelQueryDefinition;
+          return HttpResponse.json(THREE_STEP_RESPONSE);
+        }),
+      );
+
+      const encoded = encodeAnalysisState<FunnelsAnalysisState>({
+        v: 1,
+        steps: [
+          { event: 'app_opened', filters: [{ property: 'os', op: 'eq', value: 'android' }] },
+          { event: 'signup_completed', filters: [] },
+          { event: 'checkout_completed', filters: [] },
+        ],
+        windowDays: 14,
+        order: 'strict_order',
+        breakdownProperty: '',
+        segmentId: null,
+        from: '2026-06-01',
+        to: '2026-07-01',
+      });
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/funnels?s=${encoded}`);
+      await screen.findByRole('heading', { name: 'Funnels' });
+      await waitForMetaLoaded();
+
+      // Hydrated builder: the three shared steps replace the usual empty builder (scoped via the
+      // step-removal buttons, which are unique to the builder rows — the funnel chart legend also
+      // renders the step names).
+      expect(await screen.findByRole('button', { name: 'Remove step 1' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove step 2' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove step 3' })).toBeInTheDocument();
+
+      // Auto-ran with no interaction — the chart appears without clicking Run.
+      await screen.findByRole('img', { name: 'Funnel chart' }, { timeout: 3000 });
+
+      await waitFor(() =>
+        expect(capturedBody).toEqual({
+          steps: [
+            { event: 'app_opened', filters: [{ property: 'os', op: 'eq', value: 'android' }] },
+            { event: 'signup_completed', filters: [] },
+            { event: 'checkout_completed', filters: [] },
+          ],
+          date_range: { from: '2026-06-01', to: '2026-07-01' },
+          window_days: 14,
+          order: 'strict_order',
+        }),
+      );
+    });
+
+    it('falls back to defaults (no error) for a malformed `s` param', async () => {
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/funnels?s=not-a-real-encoded-value!!!`);
+      await screen.findByRole('heading', { name: 'Funnels' });
+      await waitForMetaLoaded();
+
+      expect(screen.getByText('Add at least two steps to run a funnel.')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('writes builder edits back to the `s` search param (debounced, via replace)', async () => {
+      signIn();
+      const { router } = renderApp(`/projects/${TEST_PROJECT.id}/funnels`);
+      await screen.findByRole('heading', { name: 'Funnels' });
+      await waitForMetaLoaded();
+
+      expect(router.state.location.search).not.toHaveProperty('s');
+
+      await addStep('app_opened');
+      await addStep('checkout_completed');
+
+      await waitFor(
+        () => expect((router.state.location.search as { s?: string }).s).toBeTruthy(),
+        { timeout: 2000 },
+      );
+
+      const pushed = decodeAnalysisState<FunnelsAnalysisState>(
+        (router.state.location.search as { s?: string }).s,
+      );
+      expect(pushed?.steps).toEqual([
+        { event: 'app_opened', filters: [] },
+        { event: 'checkout_completed', filters: [] },
+      ]);
+      expect(pushed?.order).toBe('any');
+    });
+
+    it('copies the current URL to the clipboard and shows a "Link copied" toast', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/funnels`);
+      await screen.findByRole('heading', { name: 'Funnels' });
+      await waitForMetaLoaded();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
+      expect(await screen.findByText('Link copied')).toBeInTheDocument();
+    });
   });
 });

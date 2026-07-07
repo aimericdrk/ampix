@@ -153,21 +153,31 @@ const insightsRoute = createRoute({
 
 // --- Advanced analysis, Phase 4 (contracts §15) ---
 
+// The shareable-analysis-URL `s` param (feat-01 §6 T2): same codec/hook as `/insights`, extended
+// to the other builder pages. Same explicit-`undefined` pattern as `/login`'s `redirect` param, so
+// an omitted `s` never leaks through from a parent match.
+function validateShareSearch(search: Record<string, unknown>): { s?: string } {
+  return { s: typeof search.s === 'string' ? search.s : undefined };
+}
+
 const funnelsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/funnels',
+  validateSearch: validateShareSearch,
   component: FunnelsPage,
 });
 
 const retentionRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/retention',
+  validateSearch: validateShareSearch,
   component: RetentionPage,
 });
 
 const flowsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/flows',
+  validateSearch: validateShareSearch,
   component: FlowsPage,
 });
 
@@ -176,6 +186,7 @@ const flowsRoute = createRoute({
 const pathsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/paths',
+  validateSearch: validateShareSearch,
   component: PathsPage,
 });
 

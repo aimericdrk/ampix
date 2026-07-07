@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
-import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import {
   INSIGHTS_FILTER_OPS,
@@ -22,6 +21,7 @@ import { colorForIndex } from '../palette';
 import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
 import { ChartCard } from './charts/ChartCard';
+import { CopyLinkButton } from './CopyLinkButton';
 import { KpiTile } from './charts/KpiTile';
 import { INSIGHTS_CHART_TYPES, InsightsChart, type InsightsChartType } from './InsightsChart';
 import { PageShell } from '../../../components/layout/PageShell';
@@ -167,7 +167,6 @@ export function InsightsPage() {
   // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
   // in the header, so Insights shares the same window as every other analytics page.
   const { from: dateFrom, to: dateTo, setRange } = useDateRange();
-  const { toast } = useToast();
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).
@@ -349,16 +348,6 @@ export function InsightsPage() {
     pushState(next);
   }, [events, interval, filters, breakdownProperty, segmentId, chartType, dateFrom, dateTo, pushState]);
 
-  const copyLink = () => {
-    if (!navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(window.location.href)
-      .then(() => toast({ title: 'Link copied' }))
-      .catch(() => {
-        // Best-effort only — clipboard access can be denied/unavailable; no error surfaced.
-      });
-  };
-
   // Auto-run: the result tracks the builder without a "Run" click. The previous chart stays on
   // screen while a new one loads, so the result area never flickers back to empty.
   const canRun = events.length > 0 && Boolean(dateFrom) && Boolean(dateTo);
@@ -396,22 +385,7 @@ export function InsightsPage() {
       dateRangeControl={<DateRangeControl />}
       actions={
         <>
-          <Button type="button" variant="secondary" onClick={copyLink} className="gap-1.5">
-            <svg
-              aria-hidden="true"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.5-1.5" />
-            </svg>
-            Copy link
-          </Button>
+          <CopyLinkButton />
           <SaveAsReportButton
             projectId={projectId}
             kind="insights"
