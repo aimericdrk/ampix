@@ -1,5 +1,7 @@
+import { z } from 'zod';
 import { ProblemException } from '../common/problem-details';
 import { toChDateTime64 } from '../clickhouse/clickhouse.service';
+import { insightsFilterSchema, type InsightsFilter } from './insights-query.schema';
 
 /**
  * Pure query-string parsing/validation helpers shared by the §14 "read" endpoints (live feed,
@@ -120,4 +122,45 @@ export function resolveDateOnlyRange(fromRaw?: string, toRaw?: string): DateOnly
     throw badRequest('from must be <= to');
   }
   return { from, to };
+}
+
+/** feat-02 §3.4/T2: caps the decoded `filters` query param the same as the §14 insights body (`MAX_FILTERS`). */
+const MAX_FILTERS_PARAM = 20;
+const filtersParamSchema = z.array(insightsFilterSchema).max(MAX_FILTERS_PARAM);
+
+/**
+ * Decodes+validates the `filters` query param shared by the metric endpoints (`/sessions/summary`,
+ * `/metrics/revenue`, `/metrics/engagement` — feat-02 §3.4/T2): a base64url-encoded
+ * `JSON.stringify(InsightsFilter[])`, mirroring how the dashboard's `encodeFiltersParam` produces
+ * it. Absent/blank -> `[]` (no clause, behavior unchanged — the whole point of making this
+ * optional). A present-but-malformed value (bad base64, invalid JSON, or a shape that fails the
+ * shared §14 `insightsFilterSchema`) is always a 400, same "malformed input -> 400" rule as every
+ * other param in this module — there's no sensible default filter set to silently fall back to.
+ * Validated filters are compiled via `compileFilterClauses` exactly like `/query/insights`, so
+ * every value lands as a bound param, never interpolated.
+ */
+export function parseFiltersParam(raw?: string): InsightsFilter[] {
+  if (raw === undefined || raw.trim() === '') return [];
+
+  let decoded: string;
+  try {
+    decoded = Buffer.from(raw, 'base64url').toString('utf8');
+  } catch {
+    throw badRequest('filters: must be valid base64url-encoded JSON');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoded);
+  } catch {
+    throw badRequest('filters: must be valid base64url-encoded JSON');
+  }
+
+  const result = filtersParamSchema.safeParse(parsed);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const path = issue.path.join('.') || 'filters';
+    throw badRequest(`${path}: ${issue.message}`);
+  }
+  return result.data;
 }

@@ -28,9 +28,11 @@ import { EVENT_COLUMN_WHITELIST, resolveProperty } from './property-resolver';
 import {
   clampLimit,
   clampPropertyValuesLimit,
+  parseFiltersParam,
   parseIsoInstantParam,
   resolveDateOnlyRange,
 } from './read-query.util';
+import { compileFilterClauses } from './filter-compiler';
 import { ProblemException } from '../common/problem-details';
 
 /** contracts §14: metadata endpoints scan "distinct event names / property keys, last 30 days". */
@@ -578,25 +580,34 @@ export class AnalyticsService {
    * `buildBucketGrid(..., 'day')` grid the query engine uses, so days with no sessions read as
    * `{ sessions: 0, avg_duration_ms: 0 }` rather than being omitted. `if(count(...) = 0, 0, avg(...))`
    * sidesteps `avg()` over zero rows, which ClickHouse evaluates to NaN — not valid JSON.
+   * `filtersRaw` (feat-02 §3.4/T2) is the optional base64url-encoded §14 filters array, decoded +
+   * validated by `parseFiltersParam` and AND-joined (bound, via `compileFilterClauses`) into BOTH the
+   * totals and `by_day` queries below; absent -> unchanged behavior.
    */
   async getSessionsSummary(
     userId: string,
     projectId: string,
     fromRaw?: string,
     toRaw?: string,
+    filtersRaw?: string,
   ): Promise<SessionsSummaryResponse> {
     await this.projects.assertMembership(userId, projectId);
     const { from, to } = resolveDateOnlyRange(fromRaw, toRaw);
+    const filters = parseFiltersParam(filtersRaw);
 
-    const params = {
+    const params: Record<string, unknown> = {
       projectId,
       from: toChDateTime64(parseDateOnlyUTC(from)),
       toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
     };
-    const whereClause = `project_id = {projectId:UUID}
-         AND event = '${SESSION_END_EVENT}'
-         AND timestamp >= {from:DateTime64}
-         AND timestamp < {toExclusive:DateTime64}`;
+    const filterClauses = compileFilterClauses(filters, params);
+    const whereClause = [
+      'project_id = {projectId:UUID}',
+      `event = '${SESSION_END_EVENT}'`,
+      'timestamp >= {from:DateTime64}',
+      'timestamp < {toExclusive:DateTime64}',
+      ...filterClauses,
+    ].join('\n         AND ');
 
     const [totalsRows, dayRows] = await Promise.all([
       this.clickhouse.query<SessionsTotalsRow>(
@@ -646,26 +657,37 @@ export class AnalyticsService {
    * helper (contracts §17) so an anonymous->identified purchaser is counted once; the day/product
    * breakdowns don't need canonical ids (they're not counting users), so those two queries scan
    * `events` directly, matching the sessions-summary precedent. `arppu`/`avg_purchase_value` guard
-   * their divisors to avoid NaN (not valid JSON) on zero purchases/payers.
+   * their divisors to avoid NaN (not valid JSON) on zero purchases/payers. `filtersRaw` (feat-02
+   * §3.4/T2) is the optional base64url-encoded §14 filters array, decoded + validated by
+   * `parseFiltersParam` and AND-joined (bound, via `compileFilterClauses`) into the totals, `by_day`,
+   * AND `by_product` queries below so the whole response stays consistently scoped; absent ->
+   * unchanged behavior.
    */
   async getRevenueSummary(
     userId: string,
     projectId: string,
     fromRaw?: string,
     toRaw?: string,
+    filtersRaw?: string,
   ): Promise<RevenueSummaryResponse> {
     await this.projects.assertMembership(userId, projectId);
     const { from, to } = resolveDateOnlyRange(fromRaw, toRaw);
+    const filters = parseFiltersParam(filtersRaw);
 
-    const params = {
+    const params: Record<string, unknown> = {
       projectId,
       from: toChDateTime64(parseDateOnlyUTC(from)),
       toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
     };
-    const whereClause = `project_id = {projectId:UUID}
-         AND event = '${IN_APP_PURCHASE_EVENT}'
-         AND timestamp >= {from:DateTime64}
-         AND timestamp < {toExclusive:DateTime64}`;
+    const filterClauses = compileFilterClauses(filters, params);
+    const filterAndClause = filterClauses.map((clause) => `           AND ${clause}`).join('\n');
+    const whereClause = [
+      'project_id = {projectId:UUID}',
+      `event = '${IN_APP_PURCHASE_EVENT}'`,
+      'timestamp >= {from:DateTime64}',
+      'timestamp < {toExclusive:DateTime64}',
+      ...filterClauses,
+    ].join('\n         AND ');
 
     const canon = canonicalization();
 
@@ -681,7 +703,8 @@ export class AnalyticsService {
          WHERE e.project_id = {projectId:UUID}
            AND e.event = '${IN_APP_PURCHASE_EVENT}'
            AND e.timestamp >= {from:DateTime64}
-           AND e.timestamp < {toExclusive:DateTime64}`,
+           AND e.timestamp < {toExclusive:DateTime64}
+${filterAndClause}`,
         params,
         canon.settings,
       ),

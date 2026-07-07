@@ -44,4 +44,40 @@ describe('compileEngagement (contracts §19)', () => {
     expect(ENGAGEMENT_METRIC.week).toBe('wau');
     expect(ENGAGEMENT_METRIC.month).toBe('mau');
   });
+
+  // feat-02 §3.4/T2: optional global filters AND-join onto both queries, bound (shared filter-compiler).
+  describe('optional filters (feat-02 §3.4/T2)', () => {
+    it('compiles a filter into both the active AND range-MAU queries, sharing one bound param object', () => {
+      const { newReturningQuery, rangeActiveQuery } = compileEngagement(PROJECT_ID, FROM, TO, 'day', [
+        { property: 'os', op: 'eq', value: 'ios' },
+      ]);
+
+      expect(newReturningQuery.sql).toContain('AND os = {filterVal0:String}');
+      expect(rangeActiveQuery.sql).toContain('AND os = {filterVal0:String}');
+      // Both queries reference the SAME params object (existing compiler precedent).
+      expect(newReturningQuery.params).toBe(rangeActiveQuery.params);
+      expect(newReturningQuery.params).toMatchObject({ filterVal0: 'ios' });
+    });
+
+    it('an absent/empty filters list leaves the queries unchanged (no filter clause/param)', () => {
+      const { newReturningQuery, rangeActiveQuery } = compileEngagement(PROJECT_ID, FROM, TO, 'day');
+      expect(newReturningQuery.sql).not.toContain('filterVal0');
+      expect(rangeActiveQuery.sql).not.toContain('filterVal0');
+      expect(newReturningQuery.params).not.toHaveProperty('filterVal0');
+    });
+
+    it('INJECTION: a malicious property/value is only ever bound, never inlined', () => {
+      const attack = "'; DROP TABLE events; --";
+      const { newReturningQuery, rangeActiveQuery } = compileEngagement(PROJECT_ID, FROM, TO, 'day', [
+        { property: attack, op: 'eq', value: attack },
+      ]);
+
+      for (const sql of [newReturningQuery.sql, rangeActiveQuery.sql]) {
+        expect(sql).not.toContain(attack);
+        expect(sql).not.toContain('DROP TABLE');
+      }
+      expect(newReturningQuery.params.filterKey0).toBe(attack);
+      expect(newReturningQuery.params.filterVal0).toBe(attack);
+    });
+  });
 });

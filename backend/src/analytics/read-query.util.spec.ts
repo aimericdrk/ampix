@@ -3,11 +3,16 @@ import {
   clampPropertyValuesLimit,
   DEFAULT_LIMIT,
   MAX_LIMIT,
+  parseFiltersParam,
   parseIsoInstantParam,
   PROPERTY_VALUES_DEFAULT_LIMIT,
   PROPERTY_VALUES_MAX_LIMIT,
   resolveDateOnlyRange,
 } from './read-query.util';
+
+function encodeFilters(filters: unknown): string {
+  return Buffer.from(JSON.stringify(filters)).toString('base64url');
+}
 
 describe('clampLimit', () => {
   it('defaults to DEFAULT_LIMIT when absent', () => {
@@ -122,6 +127,53 @@ describe('resolveDateOnlyRange', () => {
 
   it('rejects from > to', () => {
     expect(() => resolveDateOnlyRange('2026-06-20', '2026-06-10')).toThrow(
+      expect.objectContaining({ problem: expect.objectContaining({ status: 400 }) }),
+    );
+  });
+});
+
+describe('parseFiltersParam (feat-02 §3.4/T2)', () => {
+  it('returns [] when the param is absent', () => {
+    expect(parseFiltersParam(undefined)).toEqual([]);
+  });
+
+  it('returns [] when the param is blank', () => {
+    expect(parseFiltersParam('')).toEqual([]);
+  });
+
+  it('decodes a valid base64url-encoded filters array', () => {
+    const filters = [
+      { property: 'os', op: 'eq', value: 'ios' },
+      { property: 'app_version', op: 'is_set' },
+    ];
+    expect(parseFiltersParam(encodeFilters(filters))).toEqual(filters);
+  });
+
+  it('rejects malformed base64url/JSON with a 400', () => {
+    expect(() => parseFiltersParam('not-valid-base64url-json')).toThrow(
+      expect.objectContaining({ problem: expect.objectContaining({ status: 400 }) }),
+    );
+  });
+
+  it('rejects a schema violation (e.g. missing `property`) with a 400', () => {
+    expect(() => parseFiltersParam(encodeFilters([{ op: 'eq', value: 'ios' }]))).toThrow(
+      expect.objectContaining({ problem: expect.objectContaining({ status: 400 }) }),
+    );
+  });
+
+  it('rejects more than 20 filters with a 400', () => {
+    const tooMany = Array.from({ length: 21 }, (_, i) => ({
+      property: `p${i}`,
+      op: 'eq' as const,
+      value: 'v',
+    }));
+    expect(() => parseFiltersParam(encodeFilters(tooMany))).toThrow(
+      expect.objectContaining({ problem: expect.objectContaining({ status: 400 }) }),
+    );
+  });
+
+  it('rejects a non-array JSON value with a 400', () => {
+    expect(() => parseFiltersParam(encodeFilters({ property: 'os', op: 'eq', value: 'ios' }))).toThrow(
       expect.objectContaining({ problem: expect.objectContaining({ status: 400 }) }),
     );
   });

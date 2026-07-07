@@ -2,12 +2,25 @@ import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../auth/store';
-import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
+import {
+  ENGAGEMENT_FIXTURE,
+  SESSIONS_SUMMARY_FIXTURE,
+  TEST_PROJECT,
+  TEST_USER,
+  VALID_ACCESS_TOKEN,
+} from '../../../test/msw/handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+}
+
+/** Decodes the metric endpoints' base64url `filters` query param (mirrors `encodeFiltersParam`). */
+function decodeFiltersParam(raw: string): unknown {
+  const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return JSON.parse(atob(padded));
 }
 
 describe('HomePage', () => {
@@ -109,5 +122,45 @@ describe('HomePage', () => {
     expect(within(firstItem as HTMLElement).getByText('Sessions up 24% vs previous period')).toHaveClass(
       'text-accent',
     );
+  });
+
+  it('feat-02 §3.4/T2: sends the active global filter to the engagement/sessions KPIs, with no "unfiltered" note', async () => {
+    localStorage.setItem(
+      `myampix:globalfilters:${TEST_PROJECT.id}`,
+      JSON.stringify([{ property: 'os', op: 'eq', value: 'ios' }]),
+    );
+
+    let engagementUrl: string | null = null;
+    let sessionsUrl: string | null = null;
+    server.use(
+      http.get('/api/v1/projects/:projectId/metrics/engagement', ({ request }) => {
+        engagementUrl = request.url;
+        return HttpResponse.json(ENGAGEMENT_FIXTURE);
+      }),
+      http.get('/api/v1/projects/:projectId/sessions/summary', ({ request }) => {
+        sessionsUrl = request.url;
+        return HttpResponse.json(SESSIONS_SUMMARY_FIXTURE);
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+    await main.findByText('DAU');
+
+    expect(engagementUrl).not.toBeNull();
+    const engagementFilters = new URL(engagementUrl!).searchParams.get('filters');
+    expect(engagementFilters).not.toBeNull();
+    expect(decodeFiltersParam(engagementFilters!)).toEqual([{ property: 'os', op: 'eq', value: 'ios' }]);
+
+    expect(sessionsUrl).not.toBeNull();
+    const sessionsFilters = new URL(sessionsUrl!).searchParams.get('filters');
+    expect(sessionsFilters).not.toBeNull();
+    expect(decodeFiltersParam(sessionsFilters!)).toEqual([{ property: 'os', op: 'eq', value: 'ios' }]);
+
+    // T1's muted "unfiltered" note is gone now that the KPIs honor the global filter (T2).
+    expect(main.queryByText(/aren.t filtered yet/i)).not.toBeInTheDocument();
   });
 });

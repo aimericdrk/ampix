@@ -3,7 +3,9 @@ import { toChDateTime64 } from '../clickhouse/clickhouse.service';
 import { parseDateOnlyUTC } from './bucket-grid';
 import type { EngagementMetric } from './analytics.types';
 import type { EngagementInterval } from './engagement.schema';
+import { compileFilterClauses } from './filter-compiler';
 import { canonicalization } from './identity';
+import type { InsightsFilter } from './insights-query.schema';
 
 /**
  * Engagement metrics compiler (contracts §19): DAU/WAU/MAU (per interval), stickiness (DAU/MAU) and
@@ -60,6 +62,7 @@ export function compileEngagement(
   from: string,
   to: string,
   interval: EngagementInterval,
+  filters: InsightsFilter[] = [],
 ): CompiledEngagement {
   const canon = canonicalization('e.distinct_id');
   const bucketFn = ENGAGEMENT_BUCKET_FN[interval];
@@ -68,6 +71,12 @@ export function compileEngagement(
     from: toChDateTime64(parseDateOnlyUTC(from)),
     toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
   };
+  // feat-02 §3.4/T2: the optional global filters AND-join onto the "active in bucket"/range-MAU
+  // event sets (below), never onto `per_user`'s all-time first-seen computation — a user's true
+  // first-ever event still decides new-vs-returning; the filter only narrows WHICH active users are
+  // counted. `params` is shared by both queries below (same object), matching this compiler's
+  // existing precedent (`newReturningQuery`/`rangeActiveQuery` already share one `params`).
+  const filterClauses = compileFilterClauses(filters, params);
 
   // `per_user`: each canonical user's first-ever event (over ALL project history) → decides "new"
   // (first-seen bucket == this bucket) vs "returning" (first-seen before). Every active user is one
@@ -98,6 +107,7 @@ export function compileEngagement(
     '    WHERE e.project_id = {projectId:UUID}',
     '      AND e.timestamp >= {from:DateTime64}',
     '      AND e.timestamp < {toExclusive:DateTime64}',
+    ...filterClauses.map((clause) => `      AND ${clause}`),
     '  ) AS ev',
     '  INNER JOIN per_user AS pu ON pu.uid = ev.uid',
     ')',
@@ -114,6 +124,7 @@ export function compileEngagement(
     'WHERE e.project_id = {projectId:UUID}',
     '  AND e.timestamp >= {from:DateTime64}',
     '  AND e.timestamp < {toExclusive:DateTime64}',
+    ...filterClauses.map((clause) => `  AND ${clause}`),
   ].join('\n');
 
   return {

@@ -192,6 +192,7 @@ describe('AnalyticsController', () => {
         'p1',
         '2026-06-01',
         '2026-06-02',
+        undefined,
       );
 
       expect(analytics.getSessionsSummary).toHaveBeenCalledWith(
@@ -199,6 +200,7 @@ describe('AnalyticsController', () => {
         'p1',
         '2026-06-01',
         '2026-06-02',
+        undefined,
       );
       expect(result).toEqual(response);
     });
@@ -211,13 +213,40 @@ describe('AnalyticsController', () => {
         by_day: [],
       });
 
-      await controller.sessionsSummary(fakeRequest(), 'p1', undefined, undefined);
+      await controller.sessionsSummary(fakeRequest(), 'p1', undefined, undefined, undefined);
 
       expect(analytics.getSessionsSummary).toHaveBeenCalledWith(
         USER.id,
         'p1',
         undefined,
         undefined,
+        undefined,
+      );
+    });
+
+    it('passes an encoded filters param through to the service (feat-02 §3.4/T2)', async () => {
+      const { controller, analytics } = makeController();
+      analytics.getSessionsSummary.mockResolvedValue({
+        sessions: 0,
+        avg_duration_ms: 0,
+        by_day: [],
+      });
+      const encoded = 'eyJwcm9wZXJ0eSI6Im9zIn0';
+
+      await controller.sessionsSummary(
+        fakeRequest(),
+        'p1',
+        '2026-06-01',
+        '2026-06-02',
+        encoded,
+      );
+
+      expect(analytics.getSessionsSummary).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        '2026-06-01',
+        '2026-06-02',
+        encoded,
       );
     });
   });
@@ -241,6 +270,7 @@ describe('AnalyticsController', () => {
         'p1',
         '2026-06-01',
         '2026-06-02',
+        undefined,
       );
 
       expect(analytics.getRevenueSummary).toHaveBeenCalledWith(
@@ -248,6 +278,7 @@ describe('AnalyticsController', () => {
         'p1',
         '2026-06-01',
         '2026-06-02',
+        undefined,
       );
       expect(result).toEqual(response);
     });
@@ -264,13 +295,38 @@ describe('AnalyticsController', () => {
         by_product: [],
       });
 
-      await controller.revenueSummary(fakeRequest(), 'p1', undefined, undefined);
+      await controller.revenueSummary(fakeRequest(), 'p1', undefined, undefined, undefined);
 
       expect(analytics.getRevenueSummary).toHaveBeenCalledWith(
         USER.id,
         'p1',
         undefined,
         undefined,
+        undefined,
+      );
+    });
+
+    it('passes an encoded filters param through to the service (feat-02 §3.4/T2)', async () => {
+      const { controller, analytics } = makeController();
+      analytics.getRevenueSummary.mockResolvedValue({
+        total_revenue: 0,
+        purchases: 0,
+        paying_users: 0,
+        arppu: 0,
+        avg_purchase_value: 0,
+        by_day: [],
+        by_product: [],
+      });
+      const encoded = 'eyJwcm9wZXJ0eSI6Im9zIn0';
+
+      await controller.revenueSummary(fakeRequest(), 'p1', '2026-06-01', '2026-06-02', encoded);
+
+      expect(analytics.getRevenueSummary).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        '2026-06-01',
+        '2026-06-02',
+        encoded,
       );
     });
   });

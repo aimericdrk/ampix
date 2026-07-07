@@ -61,26 +61,25 @@ export function HomePage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/home' });
   const { from, to } = useDateRange();
   const prev = previousRange(from, to);
-  // Global Filters Bar (feat-02): AND-joins onto every insights-based chart below; the
-  // engagement/sessions-driven KPIs aren't filter-aware yet (T2), so they show a muted note
-  // instead of silently ignoring an active global filter.
+  // Global Filters Bar (feat-02): AND-joins onto every insights-based chart below, AND (T2) onto
+  // the engagement/sessions-driven KPIs via the metric endpoints' optional `filters` param.
   const { filters: globalFilters } = useGlobalFilters();
-  const hasGlobalFilters = globalFilters.length > 0;
+  const kpiFilters = mergeGlobalFilters([], globalFilters);
 
   const summary = useEventSummary(projectId);
   const totalEvents = summary.data?.total ?? 0;
   const byEvent = summary.data?.by_event ?? [];
 
-  const sessionsCurrent = useSessionsSummary(projectId, from, to);
-  const sessionsPrevious = useSessionsSummary(projectId, prev.from, prev.to);
+  const sessionsCurrent = useSessionsSummary(projectId, from, to, kpiFilters);
+  const sessionsPrevious = useSessionsSummary(projectId, prev.from, prev.to, kpiFilters);
 
   // DAU/WAU/MAU mapping: the endpoint tags `active` points by `metric`, chosen by the requested
   // `interval` (day → dau, week → wau, month → mau) — see `EngagementActivePoint` in types.ts. So
   // each metric needs its own call at the matching interval; a single call can't surface all three.
-  const dayEngagement = useEngagement(projectId, from, to, 'day');
-  const dayEngagementPrevious = useEngagement(projectId, prev.from, prev.to, 'day');
-  const weekEngagement = useEngagement(projectId, from, to, 'week');
-  const monthEngagement = useEngagement(projectId, from, to, 'month');
+  const dayEngagement = useEngagement(projectId, from, to, 'day', kpiFilters);
+  const dayEngagementPrevious = useEngagement(projectId, prev.from, prev.to, 'day', kpiFilters);
+  const weekEngagement = useEngagement(projectId, from, to, 'week', kpiFilters);
+  const monthEngagement = useEngagement(projectId, from, to, 'month', kpiFilters);
 
   // The top (by all-time count) event names drive every range-scoped insights query below — the
   // insights engine has no "all events" wildcard, only named events.
@@ -272,21 +271,18 @@ export function HomePage() {
               hint="Daily active users"
               delta={dauDelta !== undefined ? { pct: dauDelta } : undefined}
               loading={dayEngagement.isPending}
-              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="WAU"
               value={wauLatest ?? 0}
               hint="Weekly active users"
               loading={weekEngagement.isPending}
-              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="MAU"
               value={mauLatest ?? 0}
               hint="Monthly active users"
               loading={monthEngagement.isPending}
-              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="Sessions"
@@ -295,7 +291,6 @@ export function HomePage() {
               spark={sessionsSpark}
               delta={sessionsDelta !== undefined ? { pct: sessionsDelta } : undefined}
               loading={sessionsCurrent.isPending}
-              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="Avg. session"
@@ -303,7 +298,6 @@ export function HomePage() {
               spark={avgSessionSpark}
               delta={avgSessionDelta !== undefined ? { pct: avgSessionDelta } : undefined}
               loading={sessionsCurrent.isPending}
-              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="Stickiness"
@@ -311,7 +305,6 @@ export function HomePage() {
               hint="DAU ÷ active-range ratio"
               delta={stickinessDelta !== undefined ? { pct: stickinessDelta } : undefined}
               loading={dayEngagement.isPending}
-              unfiltered={hasGlobalFilters}
             />
           </SectionGrid>
 

@@ -110,8 +110,9 @@ export class AnalyticsController {
     @Param('projectId') projectId: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('filters') filters?: string,
   ): Promise<SessionsSummaryResponse> {
-    return this.analytics.getSessionsSummary(req.user!.id, projectId, from, to);
+    return this.analytics.getSessionsSummary(req.user!.id, projectId, from, to, filters);
   }
 
   @Get('metrics/revenue')
@@ -120,7 +121,8 @@ export class AnalyticsController {
     @Param('projectId') projectId: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('filters') filters?: string,
   ): Promise<RevenueSummaryResponse> {
-    return this.analytics.getRevenueSummary(req.user!.id, projectId, from, to);
+    return this.analytics.getRevenueSummary(req.user!.id, projectId, from, to, filters);
   }
 }

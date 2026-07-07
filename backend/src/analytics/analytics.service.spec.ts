@@ -33,6 +33,11 @@ function validInsightsBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** feat-02 §3.4/T2: the `filters` query param is base64url(JSON.stringify(InsightsFilter[])). */
+function encodeFilters(filters: unknown): string {
+  return Buffer.from(JSON.stringify(filters)).toString('base64url');
+}
+
 describe('AnalyticsService', () => {
   describe('runInsightsQuery', () => {
     it('checks membership before doing anything else, and propagates a membership rejection without querying ClickHouse', async () => {
@@ -774,6 +779,80 @@ describe('AnalyticsService', () => {
       ).rejects.toMatchObject({ problem: { status: 403 } });
       expect(clickhouse.query).not.toHaveBeenCalled();
     });
+
+    // feat-02 §3.4/T2: an optional `filters` param AND-joins onto BOTH the totals and `by_day`
+    // queries — bound, injection-safe (reuses the shared filter-compiler).
+    it('compiles a provided `filters` param into the totals AND by_day queries, bound', async () => {
+      const clickhouse = makeClickhouse([
+        [{ sessions: 0, avg_duration_ms: 0 }],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+      const filters = encodeFilters([{ property: 'os', op: 'eq', value: 'ios' }]);
+
+      await service.getSessionsSummary(
+        USER_ID,
+        PROJECT_ID,
+        '2026-06-01',
+        '2026-06-02',
+        filters,
+      );
+
+      expect(clickhouse.query).toHaveBeenCalledTimes(2);
+      for (const [sql, params] of clickhouse.query.mock.calls) {
+        expect(sql).toContain('os = {filterVal0:String}');
+        expect(params).toMatchObject({ filterVal0: 'ios' });
+      }
+    });
+
+    it('an absent `filters` param leaves the query unchanged (no filter clause/param)', async () => {
+      const clickhouse = makeClickhouse([[{ sessions: 0, avg_duration_ms: 0 }], []]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getSessionsSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-02');
+
+      for (const [sql, params] of clickhouse.query.mock.calls) {
+        expect(sql).not.toContain('filterVal0');
+        expect(params).not.toHaveProperty('filterVal0');
+      }
+    });
+
+    it('INJECTION: a malicious filter value is only ever bound, never inlined', async () => {
+      const clickhouse = makeClickhouse([[{ sessions: 0, avg_duration_ms: 0 }], []]);
+      const service = makeService(clickhouse, makeProjects());
+      const attack = "'; DROP TABLE events; --";
+      const filters = encodeFilters([{ property: 'os', op: 'eq', value: attack }]);
+
+      await service.getSessionsSummary(
+        USER_ID,
+        PROJECT_ID,
+        '2026-06-01',
+        '2026-06-02',
+        filters,
+      );
+
+      for (const [sql, params] of clickhouse.query.mock.calls) {
+        expect(sql).not.toContain(attack);
+        expect(sql).not.toContain('DROP TABLE');
+        expect(params).toMatchObject({ filterVal0: attack });
+      }
+    });
+
+    it('a malformed `filters` param is a 400 before touching ClickHouse', async () => {
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, makeProjects());
+
+      await expect(
+        service.getSessionsSummary(
+          USER_ID,
+          PROJECT_ID,
+          '2026-06-01',
+          '2026-06-02',
+          'not-valid-base64url-json',
+        ),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
   });
 
   describe('getRevenueSummary', () => {
@@ -906,6 +985,77 @@ describe('AnalyticsService', () => {
       await expect(
         service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-02'),
       ).rejects.toMatchObject({ problem: { status: 403 } });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+
+    // feat-02 §3.4/T2: an optional `filters` param AND-joins onto the totals, `by_day`, AND
+    // `by_product` queries — bound, injection-safe (reuses the shared filter-compiler).
+    it('compiles a provided `filters` param into the totals, by_day, AND by_product queries, bound', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: 0, paying_users: 0 }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+      const filters = encodeFilters([{ property: 'os', op: 'eq', value: 'ios' }]);
+
+      await service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-01', filters);
+
+      expect(clickhouse.query).toHaveBeenCalledTimes(3);
+      for (const [sql, params] of clickhouse.query.mock.calls) {
+        expect(sql).toContain('os = {filterVal0:String}');
+        expect(params).toMatchObject({ filterVal0: 'ios' });
+      }
+    });
+
+    it('an absent `filters` param leaves the query unchanged (no filter clause/param)', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: 0, paying_users: 0 }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-01');
+
+      for (const [sql, params] of clickhouse.query.mock.calls) {
+        expect(sql).not.toContain('filterVal0');
+        expect(params).not.toHaveProperty('filterVal0');
+      }
+    });
+
+    it('INJECTION: a malicious filter value is only ever bound, never inlined', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: 0, paying_users: 0 }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+      const attack = "'; DROP TABLE events; --";
+      const filters = encodeFilters([{ property: 'os', op: 'eq', value: attack }]);
+
+      await service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-01', filters);
+
+      for (const [sql, params] of clickhouse.query.mock.calls) {
+        expect(sql).not.toContain(attack);
+        expect(sql).not.toContain('DROP TABLE');
+        expect(params).toMatchObject({ filterVal0: attack });
+      }
+    });
+
+    it('a malformed `filters` param is a 400 before touching ClickHouse', async () => {
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, makeProjects());
+
+      await expect(
+        service.getRevenueSummary(
+          USER_ID,
+          PROJECT_ID,
+          '2026-06-01',
+          '2026-06-01',
+          'not-valid-base64url-json',
+        ),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
       expect(clickhouse.query).not.toHaveBeenCalled();
     });
   });

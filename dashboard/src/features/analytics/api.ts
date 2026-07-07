@@ -22,6 +22,7 @@ import type {
   FlowsResponse,
   FunnelQueryDefinition,
   FunnelResponse,
+  InsightsFilter,
   InsightsQueryDefinition,
   InsightsResponse,
   ListCohortsResponse,
@@ -51,6 +52,26 @@ import type {
 } from '../../lib/api/types';
 
 const base = (projectId: string) => `/api/v1/projects/${projectId}`;
+
+// --- Shared `filters` query-param encoding (feat-02 §3.4/T2) ---
+
+function toBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Encodes §14 filters for the metric endpoints' optional `filters` query param — mirrors the
+ * backend's `parseFiltersParam` decode exactly: `base64url(JSON.stringify(filters))`. Callers gate
+ * on `filters.length > 0` before appending it (an empty array is simply omitted, matching "absent
+ * -> unchanged behavior").
+ */
+export function encodeFiltersParam(filters: InsightsFilter[]): string {
+  return toBase64Url(new TextEncoder().encode(JSON.stringify(filters)));
+}
 
 // --- Metadata (autocomplete for the insights builder) ---
 
@@ -296,37 +317,69 @@ export function useUserProfile(projectId: string, distinctId: string) {
 
 // --- Sessions ---
 
-export function useSessionsSummary(projectId: string, from: string, to: string) {
+/**
+ * `GET /sessions/summary`. `filters` (feat-02 §3.4/T2 — pass the merged global + local filters,
+ * e.g. `mergeGlobalFilters([], globalFilters)`) is optional; when non-empty it's appended as an
+ * encoded `filters` query param and folded into the cache key so a filter change re-fetches.
+ */
+export function useSessionsSummary(
+  projectId: string,
+  from: string,
+  to: string,
+  filters: InsightsFilter[] = [],
+) {
+  const filtersParam = filters.length > 0 ? `&filters=${encodeFiltersParam(filters)}` : '';
   return useQuery({
-    queryKey: ['analytics', projectId, 'sessions-summary', from, to],
+    queryKey: ['analytics', projectId, 'sessions-summary', from, to, JSON.stringify(filters)],
     queryFn: () =>
       apiFetch<SessionsSummaryResponse>(
-        `${base(projectId)}/sessions/summary?from=${from}&to=${to}`,
+        `${base(projectId)}/sessions/summary?from=${from}&to=${to}${filtersParam}`,
       ),
   });
 }
 
 // --- Revenue (contracts §19: in-app purchase revenue, ARPPU, by-product) ---
 
-/** `GET /metrics/revenue` — auto-loads once both bounds of the range are set (mirrors `useEngagement`). */
-export function useRevenue(projectId: string, from: string, to: string) {
+/**
+ * `GET /metrics/revenue` — auto-loads once both bounds of the range are set (mirrors
+ * `useEngagement`). `filters` (feat-02 §3.4/T2) is optional; see {@link useSessionsSummary}.
+ */
+export function useRevenue(
+  projectId: string,
+  from: string,
+  to: string,
+  filters: InsightsFilter[] = [],
+) {
+  const filtersParam = filters.length > 0 ? `&filters=${encodeFiltersParam(filters)}` : '';
   return useQuery({
-    queryKey: ['analytics', projectId, 'revenue', from, to],
+    queryKey: ['analytics', projectId, 'revenue', from, to, JSON.stringify(filters)],
     queryFn: () =>
-      apiFetch<RevenueSummaryResponse>(`${base(projectId)}/metrics/revenue?from=${from}&to=${to}`),
+      apiFetch<RevenueSummaryResponse>(
+        `${base(projectId)}/metrics/revenue?from=${from}&to=${to}${filtersParam}`,
+      ),
     enabled: from.length > 0 && to.length > 0,
   });
 }
 
 // --- Engagement (contracts §19: DAU/WAU/MAU, stickiness, new-vs-returning) ---
 
-/** `GET /metrics/engagement` — auto-loads once both bounds of the range are set. */
-export function useEngagement(projectId: string, from: string, to: string, interval: string) {
+/**
+ * `GET /metrics/engagement` — auto-loads once both bounds of the range are set. `filters` (feat-02
+ * §3.4/T2) is optional; see {@link useSessionsSummary}.
+ */
+export function useEngagement(
+  projectId: string,
+  from: string,
+  to: string,
+  interval: string,
+  filters: InsightsFilter[] = [],
+) {
+  const filtersParam = filters.length > 0 ? `&filters=${encodeFiltersParam(filters)}` : '';
   return useQuery({
-    queryKey: ['analytics', projectId, 'engagement', from, to, interval],
+    queryKey: ['analytics', projectId, 'engagement', from, to, interval, JSON.stringify(filters)],
     queryFn: () =>
       apiFetch<EngagementResponse>(
-        `${base(projectId)}/metrics/engagement?from=${from}&to=${to}&interval=${interval}`,
+        `${base(projectId)}/metrics/engagement?from=${from}&to=${to}&interval=${interval}${filtersParam}`,
       ),
     enabled: from.length > 0 && to.length > 0,
   });

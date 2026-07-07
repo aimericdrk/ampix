@@ -148,10 +148,16 @@ export function RetentionPage() {
   // Time-scoped by the global range (Phase 2): seeds the builder's query and is also the window
   // for the always-on stickiness surface below; surfaced via `<DateRangeControl/>` in the header.
   const { from: dateFrom, to: dateTo, setRange } = useDateRange();
-  const engagement = useEngagement(projectId, dateFrom, dateTo, 'day');
   // Global Filters Bar (feat-02): AND-joins onto the born/return event filters right before
-  // sending. The stickiness surface below is engagement-driven and not yet filter-aware (T2).
+  // sending, AND (T2) onto the stickiness surface below via `useEngagement`'s optional filters arg.
   const { filters: globalFilters } = useGlobalFilters();
+  const engagement = useEngagement(
+    projectId,
+    dateFrom,
+    dateTo,
+    'day',
+    mergeGlobalFilters([], globalFilters),
+  );
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).

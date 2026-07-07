@@ -46,7 +46,8 @@ export class V2AnalyticsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('interval') interval?: string,
+    @Query('filters') filters?: string,
   ): Promise<EngagementResponse> {
-    return this.v2.getEngagement(req.user!.id, projectId, from, to, interval);
+    return this.v2.getEngagement(req.user!.id, projectId, from, to, interval, filters);
   }
 }

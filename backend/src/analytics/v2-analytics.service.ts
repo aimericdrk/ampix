@@ -14,7 +14,7 @@ import { compileClickHeatmapQuery } from './click-heatmap.compiler';
 import { ENGAGEMENT_METRIC, compileEngagement } from './engagement.compiler';
 import { engagementIntervalSchema } from './engagement.schema';
 import { buildFlowGraph, FlowUnitRow } from './flows.compiler';
-import { resolveDateOnlyRange } from './read-query.util';
+import { parseFiltersParam, resolveDateOnlyRange } from './read-query.util';
 import { compileScreenPathQuery, markEntryAnchors } from './screen-paths.compiler';
 import { screenPathsQuerySchema } from './screen-paths.schema';
 
@@ -103,7 +103,10 @@ export class V2AnalyticsService {
   /**
    * GET /metrics/engagement — DAU/WAU/MAU (per interval), stickiness (active/MAU) and
    * new-vs-returning, all by canonical `uid`. Buckets are zero-filled onto the same grid the query
-   * engine uses so an idle bucket reads as `{ value: 0 }` rather than being omitted.
+   * engine uses so an idle bucket reads as `{ value: 0 }` rather than being omitted. `filtersRaw`
+   * (feat-02 §3.4/T2) is the optional base64url-encoded §14 filters array, decoded + validated by
+   * `parseFiltersParam` and AND-joined into the engine's queries via `compileEngagement`; absent ->
+   * unchanged behavior.
    */
   async getEngagement(
     userId: string,
@@ -111,12 +114,14 @@ export class V2AnalyticsService {
     fromRaw?: string,
     toRaw?: string,
     intervalRaw?: string,
+    filtersRaw?: string,
   ): Promise<EngagementResponse> {
     await this.projects.assertMembership(userId, projectId);
     const interval = parseOrThrow(engagementIntervalSchema, intervalRaw ?? 'day');
     const { from, to } = resolveDateOnlyRange(fromRaw, toRaw);
+    const filters = parseFiltersParam(filtersRaw);
 
-    const compiled = compileEngagement(projectId, from, to, interval);
+    const compiled = compileEngagement(projectId, from, to, interval, filters);
     const [nrRows, activeRows] = await Promise.all([
       this.clickhouse.query<NewReturningRow>(
         compiled.newReturningQuery.sql,

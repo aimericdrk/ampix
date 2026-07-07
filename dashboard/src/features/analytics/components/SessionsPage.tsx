@@ -14,6 +14,7 @@ import { Input } from '../../../components/ui/input';
 import { ApiError } from '../../../lib/api/problem';
 import { formatDurationMs, formatExactNumber } from '../format';
 import { useSessionsSummary } from '../api';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { PageShell } from '../../../components/layout/PageShell';
 
 function defaultDate(daysAgo: number): string {
@@ -34,7 +35,14 @@ export function SessionsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/sessions' });
   const [from, setFrom] = useState(() => defaultDate(30));
   const [to, setTo] = useState(() => defaultDate(0));
-  const { data, isPending, isError, error } = useSessionsSummary(projectId, from, to);
+  // Global Filters Bar (feat-02 §3.4/T2): the sessions KPIs now honor the app-wide global filter.
+  const { filters: globalFilters } = useGlobalFilters();
+  const { data, isPending, isError, error } = useSessionsSummary(
+    projectId,
+    from,
+    to,
+    mergeGlobalFilters([], globalFilters),
+  );
 
   return (
     <PageShell

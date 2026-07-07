@@ -48,6 +48,36 @@ describe('RevenuePage', () => {
     }
   });
 
+  it('feat-02 §3.4/T2: sends the active global filter to `metrics/revenue`', async () => {
+    localStorage.setItem(
+      `myampix:globalfilters:${TEST_PROJECT.id}`,
+      JSON.stringify([{ property: 'plan', op: 'eq', value: 'pro' }]),
+    );
+
+    let revenueUrl: string | null = null;
+    server.use(
+      http.get('/api/v1/projects/:projectId/metrics/revenue', ({ request }) => {
+        revenueUrl = request.url;
+        return HttpResponse.json(REVENUE_SUMMARY_FIXTURE);
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/revenue`);
+
+    await screen.findByRole('heading', { name: 'Revenue' });
+    const main = within(screen.getByRole('main'));
+    await main.findByText('Total revenue');
+
+    expect(revenueUrl).not.toBeNull();
+    const url = new URL(revenueUrl!);
+    const filtersParam = url.searchParams.get('filters');
+    expect(filtersParam).not.toBeNull();
+    const base64 = filtersParam!.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    expect(JSON.parse(atob(padded))).toEqual([{ property: 'plan', op: 'eq', value: 'pro' }]);
+  });
+
   it('shows an empty state when there are no purchases in range', async () => {
     server.use(
       http.get('/api/v1/projects/:projectId/metrics/revenue', () =>

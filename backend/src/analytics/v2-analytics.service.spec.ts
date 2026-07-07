@@ -7,11 +7,18 @@ const PROJECT = '018f6b2e-0000-7000-8000-0000000000a1';
 
 /** `queryImpl` dispatches on the SQL text so multi-query methods get the right rows per call. */
 function makeService(queryImpl: (sql: string) => unknown[]) {
-  const query = jest.fn(async (sql: string) => queryImpl(sql));
+  const query = jest.fn(
+    async (sql: string, _params?: Record<string, unknown>) => queryImpl(sql),
+  );
   const clickhouse = { query } as unknown as ClickHouseService;
   const assertMembership = jest.fn().mockResolvedValue(undefined);
   const projects = { assertMembership } as unknown as ProjectsService;
   return { service: new V2AnalyticsService(clickhouse, projects), query, assertMembership };
+}
+
+/** feat-02 §3.4/T2: the `filters` query param is base64url(JSON.stringify(InsightsFilter[])). */
+function encodeFilters(filters: unknown): string {
+  return Buffer.from(JSON.stringify(filters)).toString('base64url');
 }
 
 describe('V2AnalyticsService', () => {
@@ -91,6 +98,54 @@ describe('V2AnalyticsService', () => {
         { t: '2026-06-02', metric: 'dau', value: 0 },
       ]);
       expect(res.stickiness.every((p) => p.value === 0)).toBe(true);
+    });
+
+    // feat-02 §3.4/T2: an optional `filters` param AND-joins onto both the active/new-vs-returning
+    // and the range-MAU queries — bound, injection-safe (reuses the shared filter-compiler).
+    it('compiles a provided `filters` param into the active AND range-MAU queries, bound', async () => {
+      const { service, query } = makeService((sql) => (sql.includes('mau') ? [{ mau: 0 }] : []));
+      const filters = encodeFilters([{ property: 'os', op: 'eq', value: 'ios' }]);
+
+      await service.getEngagement(USER, PROJECT, from, to, 'day', filters);
+
+      expect(query.mock.calls).toHaveLength(2);
+      for (const [sql, params] of query.mock.calls) {
+        expect(sql).toContain('os = {filterVal0:String}');
+        expect(params).toMatchObject({ filterVal0: 'ios' });
+      }
+    });
+
+    it('an absent `filters` param leaves the query unchanged (no filter clause/param)', async () => {
+      const { service, query } = makeService((sql) => (sql.includes('mau') ? [{ mau: 0 }] : []));
+
+      await service.getEngagement(USER, PROJECT, from, to, 'day');
+
+      for (const [sql, params] of query.mock.calls) {
+        expect(sql).not.toContain('filterVal0');
+        expect(params).not.toHaveProperty('filterVal0');
+      }
+    });
+
+    it('INJECTION: a malicious filter value is only ever bound, never inlined', async () => {
+      const { service, query } = makeService((sql) => (sql.includes('mau') ? [{ mau: 0 }] : []));
+      const attack = "'; DROP TABLE events; --";
+      const filters = encodeFilters([{ property: 'os', op: 'eq', value: attack }]);
+
+      await service.getEngagement(USER, PROJECT, from, to, 'day', filters);
+
+      for (const [sql, params] of query.mock.calls) {
+        expect(sql).not.toContain(attack);
+        expect(sql).not.toContain('DROP TABLE');
+        expect(params).toMatchObject({ filterVal0: attack });
+      }
+    });
+
+    it('a malformed `filters` param is a 400', async () => {
+      const { service } = makeService(() => []);
+
+      await expect(
+        service.getEngagement(USER, PROJECT, from, to, 'day', 'not-valid-base64url-json'),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
     });
   });
 });

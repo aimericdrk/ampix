@@ -7,6 +7,7 @@ import type { RevenueByProduct } from '../../../lib/api/types';
 import { useRevenue } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { formatCurrency } from '../format';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { BreakdownChart, type BreakdownDatum } from './charts/BreakdownChart';
 import { ChartCard } from './charts/ChartCard';
 import { ComparisonTrend } from './charts/ComparisonTrend';
@@ -45,7 +46,9 @@ const BY_PRODUCT_COLUMNS: Array<DataTableColumn<RevenueByProduct>> = [
 export function RevenuePage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/revenue' });
   const { from, to } = useDateRange();
-  const revenue = useRevenue(projectId, from, to);
+  // Global Filters Bar (feat-02 §3.4/T2): the revenue KPIs now honor the app-wide global filter.
+  const { filters: globalFilters } = useGlobalFilters();
+  const revenue = useRevenue(projectId, from, to, mergeGlobalFilters([], globalFilters));
 
   const data = revenue.data;
   const hasPurchases = (data?.purchases ?? 0) > 0;
