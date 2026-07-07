@@ -63,8 +63,14 @@ export function HomePage() {
   const prev = previousRange(from, to);
   // Global Filters Bar (feat-02): AND-joins onto every insights-based chart below, AND (T2) onto
   // the engagement/sessions-driven KPIs via the metric endpoints' optional `filters` param.
-  const { filters: globalFilters } = useGlobalFilters();
+  const { filters: globalFilters, toggleGlobalFilter } = useGlobalFilters();
   const kpiFilters = mergeGlobalFilters([], globalFilters);
+  // feat-03 §3.2: the currently-active global filter value (if any) for each drillable breakdown,
+  // so the matching bar/table-row can render its selected treatment.
+  const activeOsFilter = globalFilters.find((f) => f.property === 'os' && f.op === 'eq')?.value;
+  const activeVersionFilter = globalFilters.find(
+    (f) => f.property === 'app_version' && f.op === 'eq',
+  )?.value;
 
   const summary = useEventSummary(projectId);
   const totalEvents = summary.data?.total ?? 0;
@@ -353,7 +359,12 @@ export function HomePage() {
               state={chartState(osInsights.isPending, osInsights.isError, osBars.length === 0)}
               exportImageName="events-by-os"
             >
-              <BreakdownChart data={osBars} ariaLabel="Events by OS" />
+              <BreakdownChart
+                data={osBars}
+                ariaLabel="Events by OS"
+                onSelectValue={(value) => toggleGlobalFilter({ property: 'os', op: 'eq', value })}
+                selectedValue={activeOsFilter}
+              />
             </ChartCard>
             <ChartCard
               title="By app version"
@@ -363,7 +374,14 @@ export function HomePage() {
                 versionBars.length === 0,
               )}
             >
-              <BreakdownChart data={versionBars} ariaLabel="Events by app version" />
+              <BreakdownChart
+                data={versionBars}
+                ariaLabel="Events by app version"
+                onSelectValue={(value) =>
+                  toggleGlobalFilter({ property: 'app_version', op: 'eq', value })
+                }
+                selectedValue={activeVersionFilter}
+              />
             </ChartCard>
           </div>
 

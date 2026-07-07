@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../auth/store';
@@ -162,5 +163,45 @@ describe('HomePage', () => {
 
     // T1's muted "unfiltered" note is gone now that the KPIs honor the global filter (T2).
     expect(main.queryByText(/aren.t filtered yet/i)).not.toBeInTheDocument();
+  });
+
+  it('feat-03 §3.2: clicking an OS breakdown value adds the matching global filter, and clicking it again clears it', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+
+    // Re-looked-up fresh each time (rather than cached) — toggling the filter changes the
+    // by-OS insights query's key, so the chart's table element itself gets swapped for a new
+    // node when the refetched data lands.
+    const findOsTable = async () => {
+      const osFigure = await main.findByRole('img', { name: 'Events by OS' });
+      return within(osFigure.parentElement as HTMLElement).getByRole('table');
+    };
+
+    const osTableBefore = await findOsTable();
+    await userEvent.click(within(osTableBefore).getByRole('button', { name: 'android' }));
+
+    // The Global Filter Bar chip is the visible feedback that the drill-down landed.
+    expect(
+      await main.findByRole('button', { name: 'Remove filter os equals android' }),
+    ).toBeInTheDocument();
+    const osTableSelected = await findOsTable();
+    expect(within(osTableSelected).getByRole('button', { name: 'android' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    // Clicking the now-active value again clears it (toggle) rather than leaving it stuck on.
+    await userEvent.click(within(osTableSelected).getByRole('button', { name: 'android' }));
+    expect(
+      main.queryByRole('button', { name: 'Remove filter os equals android' }),
+    ).not.toBeInTheDocument();
+    const osTableCleared = await findOsTable();
+    expect(within(osTableCleared).getByRole('button', { name: 'android' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
   });
 });

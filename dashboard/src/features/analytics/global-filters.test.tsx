@@ -7,7 +7,8 @@ import { GlobalFiltersProvider, mergeGlobalFilters, useGlobalFilters } from './g
 const PROJECT_ID = 'proj-1';
 
 function Probe() {
-  const { filters, addFilter, removeFilter, clearAll, setFilters } = useGlobalFilters();
+  const { filters, addFilter, removeFilter, clearAll, setFilters, toggleGlobalFilter } =
+    useGlobalFilters();
   return (
     <div>
       <span data-testid="count">{filters.length}</span>
@@ -28,6 +29,12 @@ function Probe() {
       <button onClick={() => clearAll()}>Clear all</button>
       <button onClick={() => setFilters([{ property: 'plan', op: 'eq', value: 'pro' }])}>
         Set to plan filter
+      </button>
+      <button onClick={() => toggleGlobalFilter({ property: 'os', op: 'eq', value: 'ios' })}>
+        Toggle OS ios
+      </button>
+      <button onClick={() => toggleGlobalFilter({ property: 'os', op: 'eq', value: 'android' })}>
+        Toggle OS android
       </button>
     </div>
   );
@@ -175,6 +182,66 @@ describe('GlobalFiltersProvider / useGlobalFilters', () => {
     expect(() => render(<Bare />)).toThrow(
       'useGlobalFilters must be used within a GlobalFiltersProvider',
     );
+  });
+});
+
+describe('toggleGlobalFilter (feat-03 §3.2/§4)', () => {
+  it('adds a filter that is not currently active', async () => {
+    render(
+      <GlobalFiltersProvider projectId={PROJECT_ID}>
+        <Probe />
+      </GlobalFiltersProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle OS ios' }));
+
+    expect(screen.getByTestId('count')).toHaveTextContent('1');
+    expect(screen.getByTestId('filter-0')).toHaveTextContent('os eq ios');
+  });
+
+  it('removes the filter when the identical {property,op,value} is toggled again', async () => {
+    render(
+      <GlobalFiltersProvider projectId={PROJECT_ID}>
+        <Probe />
+      </GlobalFiltersProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle OS ios' }));
+    expect(screen.getByTestId('count')).toHaveTextContent('1');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle OS ios' }));
+    expect(screen.getByTestId('count')).toHaveTextContent('0');
+  });
+
+  it('replaces the value in place when a same-property eq filter is already active with a different value', async () => {
+    render(
+      <GlobalFiltersProvider projectId={PROJECT_ID}>
+        <Probe />
+      </GlobalFiltersProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle OS ios' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle OS android' }));
+
+    // Never a contradictory os=ios AND os=android — replaced in place, still a single filter.
+    expect(screen.getByTestId('count')).toHaveTextContent('1');
+    expect(screen.getByTestId('filter-0')).toHaveTextContent('os eq android');
+  });
+
+  it('leaves an unrelated filter untouched while toggling a same-property one', async () => {
+    render(
+      <GlobalFiltersProvider projectId={PROJECT_ID}>
+        <Probe />
+      </GlobalFiltersProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add version filter' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle OS ios' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Toggle OS android' }));
+
+    expect(screen.getByTestId('count')).toHaveTextContent('2');
+    expect(screen.getByTestId('filter-0')).toHaveTextContent('app_version is_set');
+    expect(screen.getByTestId('filter-1')).toHaveTextContent('os eq android');
   });
 });
 

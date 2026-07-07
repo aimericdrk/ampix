@@ -1,5 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { BreakdownChart, type BreakdownChartProps } from './BreakdownChart';
 
 // A wrong data shape for a given `stacked` value must fail to compile, not crash at runtime — the
@@ -141,5 +142,93 @@ describe('BreakdownChart', () => {
     const table = screen.getByRole('table');
     const rows = within(table).getAllByRole('row');
     expect(within(rows[1]!).getByText('—')).toBeInTheDocument();
+  });
+
+  describe('onSelectValue (feat-03 §3.1)', () => {
+    it('calls onSelectValue with the label when a bar is clicked', () => {
+      const onSelectValue = vi.fn();
+      const { container } = render(
+        <BreakdownChart
+          data={[
+            { label: 'iOS', value: 40 },
+            { label: 'Android', value: 120 },
+          ]}
+          ariaLabel="OS breakdown"
+          onSelectValue={onSelectValue}
+        />,
+      );
+      // Sorted desc by value: Android (120) is the first rendered bar.
+      const bars = container.querySelectorAll('.recharts-bar-rectangle path');
+      expect(bars.length).toBeGreaterThan(0);
+      fireEvent.click(bars[0]!);
+      expect(onSelectValue).toHaveBeenCalledWith('Android');
+    });
+
+    it('calls onSelectValue with the label when its table-row button is clicked', async () => {
+      const onSelectValue = vi.fn();
+      render(
+        <BreakdownChart
+          data={[
+            { label: 'iOS', value: 40 },
+            { label: 'Android', value: 120 },
+          ]}
+          ariaLabel="OS breakdown"
+          onSelectValue={onSelectValue}
+        />,
+      );
+      const table = screen.getByRole('table');
+      await userEvent.click(within(table).getByRole('button', { name: 'Android' }));
+      expect(onSelectValue).toHaveBeenCalledWith('Android');
+    });
+
+    it('does not make a synthetic $other/Other rollup bucket selectable', () => {
+      const onSelectValue = vi.fn();
+      render(
+        <BreakdownChart
+          data={[
+            { label: 'iOS', value: 40 },
+            { label: '$other', value: 5 },
+            { label: 'Other', value: 3 },
+          ]}
+          ariaLabel="OS breakdown"
+          onSelectValue={onSelectValue}
+        />,
+      );
+      const table = screen.getByRole('table');
+      expect(within(table).queryByRole('button', { name: '$other' })).not.toBeInTheDocument();
+      expect(within(table).queryByRole('button', { name: 'Other' })).not.toBeInTheDocument();
+      expect(within(table).getByText('$other')).toBeInTheDocument();
+      expect(within(table).getByText('Other')).toBeInTheDocument();
+    });
+
+    it('marks the active selection with aria-pressed on its table-row button', () => {
+      render(
+        <BreakdownChart
+          data={[
+            { label: 'iOS', value: 40 },
+            { label: 'Android', value: 120 },
+          ]}
+          ariaLabel="OS breakdown"
+          onSelectValue={() => {}}
+          selectedValue="Android"
+        />,
+      );
+      const table = screen.getByRole('table');
+      expect(within(table).getByRole('button', { name: 'Android' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(within(table).getByRole('button', { name: 'iOS' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    });
+
+    it('renders plain label text with no click handler when onSelectValue is absent', () => {
+      render(<BreakdownChart data={[{ label: 'iOS', value: 40 }]} ariaLabel="OS breakdown" />);
+      const table = screen.getByRole('table');
+      expect(within(table).queryByRole('button')).not.toBeInTheDocument();
+      expect(within(table).getByText('iOS')).toBeInTheDocument();
+    });
   });
 });

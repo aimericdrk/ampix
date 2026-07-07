@@ -3,6 +3,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   LabelList,
   ResponsiveContainer,
@@ -39,6 +40,16 @@ export interface StackedBreakdownDatum {
 export type BreakdownChartProps = {
   ariaLabel: string;
   height?: number;
+  /**
+   * When provided, every bar (and its accessible-table label cell) becomes an activatable
+   * "drill into this value" control (feat-03 §3.1): bars get `cursor-pointer` + a hover emphasis
+   * and call `onSelectValue(label)` on click; the table's label cell becomes a `<button>` so
+   * keyboard/screen-reader users can drill too. Synthetic rollup buckets (label `$other`/`Other`)
+   * are never selectable. Omit entirely for the original, fully non-interactive chart.
+   */
+  onSelectValue?: (label: string) => void;
+  /** Marks the currently-active drill-down value (if any) with a selected treatment. */
+  selectedValue?: string;
 } & (
   | {
       /** Renders one stacked bar per label with a segment-key legend, instead of single bars. */
@@ -71,6 +82,25 @@ function formatValueLabel(value: string | number | boolean | null | undefined): 
   return typeof value === 'number' ? formatExactNumber(value) : String(value ?? '');
 }
 
+/** Synthetic top-N rollup buckets (feat-03 §4) — never selectable, no matter which chart renders them. */
+function isSyntheticLabel(label: string): boolean {
+  return label === '$other' || label === 'Other';
+}
+
+/** Whether a given row's label is currently drillable, and whether it's the active selection. */
+function selectableCellState(
+  label: string,
+  onSelectValue: ((label: string) => void) | undefined,
+  selectedValue: string | undefined,
+): { selectable: boolean; isSelected: boolean } {
+  const selectable = Boolean(onSelectValue) && !isSyntheticLabel(label);
+  return { selectable, isSelected: selectable && selectedValue === label };
+}
+
+const SELECTABLE_MARK_CLASS = 'cursor-pointer motion-safe:transition-opacity hover:opacity-75';
+const SELECTABLE_LABEL_CLASS =
+  'text-left underline-offset-2 motion-safe:transition-colors hover:underline focus-visible:underline';
+
 /**
  * "Metric by dimension" horizontal bars (OS, device, app version, network, UTM source, …).
  * Non-stacked: one bar per `label`, always re-sorted descending by value here — identity order is
@@ -82,21 +112,41 @@ function formatValueLabel(value: string | number | boolean | null | undefined): 
  * magnitude never rest on bar color/length alone.
  */
 export function BreakdownChart(props: BreakdownChartProps) {
-  const { ariaLabel, height = 320 } = props;
+  const { ariaLabel, height = 320, onSelectValue, selectedValue } = props;
   if (props.stacked) {
-    return <StackedBreakdownChart data={props.data} ariaLabel={ariaLabel} height={height} />;
+    return (
+      <StackedBreakdownChart
+        data={props.data}
+        ariaLabel={ariaLabel}
+        height={height}
+        onSelectValue={onSelectValue}
+        selectedValue={selectedValue}
+      />
+    );
   }
-  return <SingleBreakdownChart data={props.data} ariaLabel={ariaLabel} height={height} />;
+  return (
+    <SingleBreakdownChart
+      data={props.data}
+      ariaLabel={ariaLabel}
+      height={height}
+      onSelectValue={onSelectValue}
+      selectedValue={selectedValue}
+    />
+  );
 }
 
 function SingleBreakdownChart({
   data,
   ariaLabel,
   height,
+  onSelectValue,
+  selectedValue,
 }: {
   data: BreakdownDatum[];
   ariaLabel: string;
   height: number;
+  onSelectValue?: (label: string) => void;
+  selectedValue?: string;
 }) {
   const sorted = useMemo(() => [...data].sort((a, b) => b.value - a.value), [data]);
 
@@ -119,18 +169,51 @@ function SingleBreakdownChart({
               formatter={(value) => formatExactNumber(Number(value))}
             />
             <Bar dataKey="value" isAnimationActive={false} maxBarSize={28} fill={colorForIndex(0)}>
+              {onSelectValue &&
+                sorted.map((row) => {
+                  const { selectable, isSelected } = selectableCellState(
+                    row.label,
+                    onSelectValue,
+                    selectedValue,
+                  );
+                  return (
+                    <Cell
+                      key={row.label}
+                      fill={colorForIndex(0)}
+                      stroke={isSelected ? 'var(--text)' : 'none'}
+                      strokeWidth={isSelected ? 2 : 0}
+                      className={selectable ? SELECTABLE_MARK_CLASS : undefined}
+                      onClick={selectable ? () => onSelectValue(row.label) : undefined}
+                    />
+                  );
+                })}
               <LabelList dataKey="value" position="right" formatter={formatValueLabel} fill="var(--text)" fontSize={12} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <SingleBreakdownTable rows={sorted} ariaLabel={ariaLabel} />
+      <SingleBreakdownTable
+        rows={sorted}
+        ariaLabel={ariaLabel}
+        onSelectValue={onSelectValue}
+        selectedValue={selectedValue}
+      />
     </div>
   );
 }
 
-function SingleBreakdownTable({ rows, ariaLabel }: { rows: BreakdownDatum[]; ariaLabel: string }) {
+function SingleBreakdownTable({
+  rows,
+  ariaLabel,
+  onSelectValue,
+  selectedValue,
+}: {
+  rows: BreakdownDatum[];
+  ariaLabel: string;
+  onSelectValue?: (label: string) => void;
+  selectedValue?: string;
+}) {
   return (
     <table className="w-full border-collapse text-left text-sm">
       <caption className="sr-only">{`${ariaLabel} data table`}</caption>
@@ -145,12 +228,28 @@ function SingleBreakdownTable({ rows, ariaLabel }: { rows: BreakdownDatum[]; ari
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={row.label} className="border-b border-border">
-            <td className="py-2">{row.label}</td>
-            <td className="py-2 text-right tabular-nums">{formatExactNumber(row.value)}</td>
-          </tr>
-        ))}
+        {rows.map((row) => {
+          const { selectable, isSelected } = selectableCellState(row.label, onSelectValue, selectedValue);
+          return (
+            <tr key={row.label} className="border-b border-border">
+              <td className="py-2">
+                {selectable ? (
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectValue!(row.label)}
+                    className={SELECTABLE_LABEL_CLASS}
+                  >
+                    {row.label}
+                  </button>
+                ) : (
+                  row.label
+                )}
+              </td>
+              <td className="py-2 text-right tabular-nums">{formatExactNumber(row.value)}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -160,10 +259,14 @@ function StackedBreakdownChart({
   data,
   ariaLabel,
   height,
+  onSelectValue,
+  selectedValue,
 }: {
   data: StackedBreakdownDatum[];
   ariaLabel: string;
   height: number;
+  onSelectValue?: (label: string) => void;
+  selectedValue?: string;
 }) {
   const segmentKeys = useMemo(() => {
     const seen = new Set<string>();
@@ -221,6 +324,25 @@ function StackedBreakdownChart({
                 fill={colorForIndex(index)}
                 isAnimationActive={false}
               >
+                {onSelectValue &&
+                  rows.map((row) => {
+                    const label = String(row.label);
+                    const { selectable, isSelected } = selectableCellState(
+                      label,
+                      onSelectValue,
+                      selectedValue,
+                    );
+                    return (
+                      <Cell
+                        key={label}
+                        fill={colorForIndex(index)}
+                        stroke={isSelected ? 'var(--text)' : 'none'}
+                        strokeWidth={isSelected ? 2 : 0}
+                        className={selectable ? SELECTABLE_MARK_CLASS : undefined}
+                        onClick={selectable ? () => onSelectValue(label) : undefined}
+                      />
+                    );
+                  })}
                 {index === segmentKeys.length - 1 && (
                   <LabelList dataKey="total" position="right" formatter={formatValueLabel} fill="var(--text)" fontSize={12} />
                 )}
@@ -230,7 +352,13 @@ function StackedBreakdownChart({
         </ResponsiveContainer>
       </div>
 
-      <StackedBreakdownTable data={data} segmentKeys={segmentKeys} ariaLabel={ariaLabel} />
+      <StackedBreakdownTable
+        data={data}
+        segmentKeys={segmentKeys}
+        ariaLabel={ariaLabel}
+        onSelectValue={onSelectValue}
+        selectedValue={selectedValue}
+      />
     </div>
   );
 }
@@ -239,10 +367,14 @@ function StackedBreakdownTable({
   data,
   segmentKeys,
   ariaLabel,
+  onSelectValue,
+  selectedValue,
 }: {
   data: StackedBreakdownDatum[];
   segmentKeys: string[];
   ariaLabel: string;
+  onSelectValue?: (label: string) => void;
+  selectedValue?: string;
 }) {
   return (
     <table className="w-full border-collapse text-left text-sm">
@@ -266,9 +398,23 @@ function StackedBreakdownTable({
         {data.map((row) => {
           const valueByKey = new Map(row.segments.map((segment) => [segment.key, segment.value]));
           const total = row.segments.reduce((sum, segment) => sum + segment.value, 0);
+          const { selectable, isSelected } = selectableCellState(row.label, onSelectValue, selectedValue);
           return (
             <tr key={row.label} className="border-b border-border">
-              <td className="py-2">{row.label}</td>
+              <td className="py-2">
+                {selectable ? (
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectValue!(row.label)}
+                    className={SELECTABLE_LABEL_CLASS}
+                  >
+                    {row.label}
+                  </button>
+                ) : (
+                  row.label
+                )}
+              </td>
               {segmentKeys.map((key) => {
                 const value = valueByKey.get(key);
                 return (
