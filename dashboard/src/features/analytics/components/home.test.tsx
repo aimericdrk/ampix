@@ -23,7 +23,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('radio', { name: 'Last 30 days' })).toHaveAttribute('aria-checked', 'true');
 
     // KPI row: labels for every metric the plan calls for.
-    for (const label of ['Total events', 'DAU', 'WAU', 'MAU', 'Sessions', 'Avg. session', 'Stickiness']) {
+    for (const label of ['Top-5 events', 'DAU', 'WAU', 'MAU', 'Sessions', 'Avg. session', 'Stickiness']) {
       expect(await main.findByText(label)).toBeInTheDocument();
     }
     // At least one period-over-period delta chip renders (▲/▼ + a percent).

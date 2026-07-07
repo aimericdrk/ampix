@@ -16,6 +16,23 @@ describe('previousRange', () => {
       to: '2026-05-31',
     });
   });
+
+  it('returns the input unchanged (no throw) when either bound is empty', () => {
+    expect(previousRange('', '')).toEqual({ from: '', to: '' });
+    expect(previousRange('', '2026-06-30')).toEqual({ from: '', to: '2026-06-30' });
+    expect(previousRange('2026-06-01', '')).toEqual({ from: '2026-06-01', to: '' });
+  });
+
+  it('returns the input unchanged (no throw) when either bound is not a valid YYYY-MM-DD date', () => {
+    expect(previousRange('not-a-date', '2026-06-30')).toEqual({
+      from: 'not-a-date',
+      to: '2026-06-30',
+    });
+    expect(previousRange('2026-06-01', '2026/06/30')).toEqual({
+      from: '2026-06-01',
+      to: '2026/06/30',
+    });
+  });
 });
 
 describe('pctDelta', () => {

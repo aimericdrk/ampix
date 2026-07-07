@@ -93,8 +93,12 @@ export function HomePage() {
   const versionDef: InsightsQueryDefinition = { ...currentDef, breakdown: { property: 'app_version' } };
   const utmDef: InsightsQueryDefinition = { ...currentDef, breakdown: { property: 'utm_source' } };
 
+  // The previous-period query re-runs `previousDef`, which is only meaningful once both bounds of
+  // the (current) range are non-empty — a cleared custom "From" would otherwise fire a `from=''`
+  // request, consistent with how `useEngagement` gates itself.
+  const hasRange = from.length > 0 && to.length > 0;
   const totalsCurrent = useInsightsQuery(projectId, currentDef, hasEventNames);
-  const totalsPrevious = useInsightsQuery(projectId, previousDef, hasEventNames);
+  const totalsPrevious = useInsightsQuery(projectId, previousDef, hasEventNames && hasRange);
   const osInsights = useInsightsQuery(projectId, osDef, hasEventNames);
   const versionInsights = useInsightsQuery(projectId, versionDef, hasEventNames);
   const utmInsights = useInsightsQuery(projectId, utmDef, hasEventNames);
@@ -204,9 +208,9 @@ export function HomePage() {
         <>
           <SectionGrid>
             <KpiTile
-              label="Total events"
+              label="Top-5 events"
               value={totalEventsCurrent}
-              hint="Selected range"
+              hint="Sum of the 5 most-frequent event types, selected range"
               delta={totalEventsDelta !== undefined ? { pct: totalEventsDelta } : undefined}
               loading={totalsCurrent.isPending}
             />

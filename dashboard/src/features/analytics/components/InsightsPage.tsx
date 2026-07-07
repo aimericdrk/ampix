@@ -160,27 +160,15 @@ export function InsightsPage() {
   );
   const previousTotals = useInsightsQuery(projectId, previousDefinition, canRun);
 
+  // NOTE: there is deliberately no "Unique users" KPI here. `unique_users` series are per-interval
+  // distinct-user counts, so summing them across buckets (as `sumSeries` does for the additive
+  // "Total" count) would double-count returning users and wildly overstate the range total. There
+  // is no clean single-value source for a range-wide unique count from bucketed insights data, so
+  // the honest choice is to not show one rather than show a wrong number.
   const currentTotal = result ? sumSeries(result.series) : 0;
   const previousTotal = previousTotals.data ? sumSeries(previousTotals.data.series) : 0;
   const totalDelta =
     result && previousTotals.data ? pctDelta(currentTotal, previousTotal) : undefined;
-
-  // "Unique users" only means something for events actually measured that way — surface it
-  // alongside Total when at least one selected event uses that measure.
-  const uniqueUsersNames = new Set(
-    events.filter((e) => e.aggregation === 'unique_users').map((e) => e.name),
-  );
-  const hasUniqueUsersEvent = uniqueUsersNames.size > 0;
-  const currentUniqueUsers = result
-    ? sumSeries(result.series.filter((s) => uniqueUsersNames.has(s.name)))
-    : 0;
-  const previousUniqueUsers = previousTotals.data
-    ? sumSeries(previousTotals.data.series.filter((s) => uniqueUsersNames.has(s.name)))
-    : 0;
-  const uniqueUsersDelta =
-    result && previousTotals.data
-      ? pctDelta(currentUniqueUsers, previousUniqueUsers)
-      : undefined;
 
   return (
     <PageShell
@@ -392,15 +380,6 @@ export function InsightsPage() {
                 delta={totalDelta !== undefined ? { pct: totalDelta } : undefined}
                 loading={previousTotals.isPending}
               />
-              {hasUniqueUsersEvent && (
-                <KpiTile
-                  label="Unique users"
-                  value={currentUniqueUsers}
-                  hint="Selected range"
-                  delta={uniqueUsersDelta !== undefined ? { pct: uniqueUsersDelta } : undefined}
-                  loading={previousTotals.isPending}
-                />
-              )}
             </SectionGrid>
           )}
 
