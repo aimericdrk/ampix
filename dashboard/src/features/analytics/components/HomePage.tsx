@@ -26,8 +26,10 @@ import {
 import { DateRangeControl, useDateRange } from '../date-range';
 import { breakdownBars, pctDelta, previousRange, sumSeries } from '../derive';
 import { formatDurationMs, formatPercent } from '../format';
+import { computeHighlights, type HighlightMetricInput } from '../highlights';
 import { colorForIndex } from '../palette';
 import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
+import { HomeHighlights } from './HomeHighlights';
 import { analysisResultIsEmpty } from './ReportChart';
 import { BreakdownChart } from './charts/BreakdownChart';
 import { ChartCard } from './charts/ChartCard';
@@ -150,6 +152,48 @@ export function HomePage() {
   const sessionsSpark = sessionsCurrent.data?.by_day.map((d) => d.sessions);
   const avgSessionSpark = sessionsCurrent.data?.by_day.map((d) => d.avg_duration_ms);
 
+  // --- Highlights: plain-language call-outs, reusing the current/previous pairs derived above.
+  // Only a metric whose previous-period value is actually loaded gets a line — no extra queries.
+  const highlightMetrics: HighlightMetricInput[] = [];
+  if (totalsCurrent.data && totalsPrevious.data) {
+    highlightMetrics.push({
+      label: 'Top-5 events',
+      current: totalEventsCurrent,
+      previous: totalEventsPrevious,
+      unit: 'count',
+    });
+  }
+  if (dauLatest !== undefined && dauPreviousLatest !== undefined) {
+    highlightMetrics.push({ label: 'DAU', current: dauLatest, previous: dauPreviousLatest, unit: 'count' });
+  }
+  if (stickinessLatest !== undefined && stickinessPreviousLatest !== undefined) {
+    highlightMetrics.push({
+      label: 'Stickiness',
+      current: stickinessLatest,
+      previous: stickinessPreviousLatest,
+      unit: 'percent',
+    });
+  }
+  if (sessionsCurrent.data && sessionsPrevious.data) {
+    highlightMetrics.push({
+      label: 'Sessions',
+      current: sessionsCurrent.data.sessions,
+      previous: sessionsPrevious.data.sessions,
+      unit: 'count',
+    });
+    highlightMetrics.push({
+      label: 'Avg. session',
+      current: sessionsCurrent.data.avg_duration_ms,
+      previous: sessionsPrevious.data.avg_duration_ms,
+      unit: 'duration',
+    });
+  }
+  const topEventRow = byEvent[0];
+  const highlights = computeHighlights(
+    highlightMetrics,
+    topEventRow ? { topEvent: { event: topEventRow.event, count: topEventRow.count } } : undefined,
+  );
+
   // --- Chart data ---
 
   const activeTrendCurrent = dauActive.map((p) => ({ t: p.t, value: p.value }));
@@ -206,6 +250,8 @@ export function HomePage() {
         </Card>
       ) : (
         <>
+          <HomeHighlights highlights={highlights} />
+
           <SectionGrid>
             <KpiTile
               label="Top-5 events"

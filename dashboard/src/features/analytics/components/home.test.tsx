@@ -29,6 +29,10 @@ describe('HomePage', () => {
     // At least one period-over-period delta chip renders (▲/▼ + a percent).
     expect(main.getAllByText(/^[+-]\d+%$/).length).toBeGreaterThan(0);
 
+    // Highlights strip: at least one plain-language, period-over-period call-out up top.
+    const highlightsList = await main.findByRole('list', { name: 'Highlights' });
+    expect(within(highlightsList).getAllByText(/vs previous period$/).length).toBeGreaterThan(0);
+
     // Active-users trend, with the previous-period overlay.
     expect(await main.findByRole('img', { name: 'Active users trend' })).toBeInTheDocument();
 
@@ -69,5 +73,41 @@ describe('HomePage', () => {
     expect(main.queryByRole('img', { name: 'Events by type composition' })).not.toBeInTheDocument();
     expect(main.queryByRole('img', { name: 'Active users trend' })).not.toBeInTheDocument();
     expect(main.queryByText('DAU')).not.toBeInTheDocument();
+    // The Highlights strip has nothing to scan yet and renders nothing (doesn't crash).
+    expect(main.queryByRole('list', { name: 'Highlights' })).not.toBeInTheDocument();
+  });
+
+  it('ranks a real period-over-period move above flat metrics in the Highlights strip', async () => {
+    // The insights/engagement fixtures return identical values regardless of date range, so every
+    // metric they drive is flat here — override sessions (keyed off the "current" `to` date) to
+    // exercise a genuine move and prove it ranks first, in plain language, with the right tone.
+    const todayStr = new Date().toISOString().slice(0, 10);
+    server.use(
+      http.get('/api/v1/projects/:projectId/sessions/summary', ({ request }) => {
+        const isCurrent = new URL(request.url).searchParams.get('to') === todayStr;
+        return HttpResponse.json({
+          sessions: isCurrent ? 155 : 125, // +24%
+          avg_duration_ms: 245000, // unchanged -> flat
+          by_day: [
+            { t: '2026-06-29', sessions: 40, avg_duration_ms: 230000 },
+            { t: '2026-06-30', sessions: 44, avg_duration_ms: 250000 },
+            { t: '2026-07-01', sessions: 44, avg_duration_ms: 255000 },
+          ],
+        });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+    const highlightsList = await main.findByRole('list', { name: 'Highlights' });
+    const [firstItem] = within(highlightsList).getAllByRole('listitem');
+
+    expect(firstItem).toHaveTextContent('Sessions up 24% vs previous period');
+    expect(within(firstItem as HTMLElement).getByText('Sessions up 24% vs previous period')).toHaveClass(
+      'text-accent',
+    );
   });
 });
