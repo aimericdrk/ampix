@@ -27,7 +27,7 @@ import { ReportsPage } from './features/analytics/components/ReportsPage';
 import { ReportDetailPage } from './features/analytics/components/ReportDetailPage';
 import { DashboardsPage } from './features/analytics/components/DashboardsPage';
 import { DashboardViewPage } from './features/analytics/components/DashboardViewPage';
-import { LiveFeedPage } from './features/analytics/components/LiveFeedPage';
+import { LiveEventsPage } from './features/analytics/components/LiveEventsPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { RevenuePage } from './features/analytics/components/RevenuePage';
 import { UserProfilePage } from './features/analytics/components/UserProfilePage';
@@ -214,7 +214,7 @@ const dashboardViewRoute = createRoute({
 const liveEventsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/live',
-  component: LiveFeedPage,
+  component: LiveEventsPage,
 });
 
 const usersRoute = createRoute({
