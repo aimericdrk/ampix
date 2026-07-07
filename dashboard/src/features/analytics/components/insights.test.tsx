@@ -475,6 +475,68 @@ describe('InsightsPage', () => {
     });
   });
 
+  describe('Formula / Ratio Metrics (feat-05)', () => {
+    it('enabling Formula mode with two events posts a 2-event query and renders the derived line + KPI', async () => {
+      const capturedBodies: InsightsQueryDefinition[] = [];
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+          const body = (await request.json()) as InsightsQueryDefinition;
+          capturedBodies.push(body);
+          return HttpResponse.json({
+            series: [
+              {
+                name: 'checkout_completed',
+                breakdown_value: null,
+                data: [{ t: '2026-06-29', value: 25 }],
+              },
+              {
+                name: 'product_viewed',
+                breakdown_value: null,
+                data: [{ t: '2026-06-29', value: 100 }],
+              },
+            ],
+          });
+        }),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+
+      // Formula is a demoted control, like Filter/Group by/Segment/Compare segments.
+      expect(screen.queryByText('Metric A')).toBeNull();
+
+      capturedBodies.length = 0;
+      await userEvent.click(screen.getByRole('button', { name: 'Formula' }));
+
+      // Turning it on pre-selects the first two real events as metric A/B (no typing required),
+      // which is enough to run a single query carrying exactly those two events.
+      expect(await screen.findByLabelText('Metric A')).toBeInTheDocument();
+      expect(screen.getByLabelText('Metric B')).toBeInTheDocument();
+
+      await waitFor(() =>
+        expect(capturedBodies.some((body) => body.events.length === 2)).toBe(true),
+      );
+      const formulaBody = capturedBodies.find((body) => body.events.length === 2);
+      expect(formulaBody?.events).toEqual([
+        { name: 'checkout_completed', aggregation: 'total' },
+        { name: 'product_viewed', aggregation: 'total' },
+      ]);
+
+      // The single derived line renders instead of the normal multi-series trend...
+      await screen.findByRole('img', { name: 'Formula trend chart' });
+      expect(screen.queryByRole('img', { name: 'Insights line chart' })).not.toBeInTheDocument();
+
+      // ...alongside a headline KPI for the blended ratio (25 / 100 = 0.25), labelled with the
+      // metric names. "0.25" also appears in the always-visible A/B/formula table, and "Formula"
+      // also appears in the builder panel + table header, so scope to the KPI hint text (unique)
+      // and assert the value within that same card.
+      const hint = await screen.findByText('checkout_completed ÷ product_viewed');
+      expect(within(hint.parentElement!).getByText('0.25')).toBeInTheDocument();
+    });
+  });
+
   describe('Global Filters Bar (feat-02)', () => {
     it('merges an active global filter into the posted query body, and reverts once removed', async () => {
       const capturedBodies: InsightsQueryDefinition[] = [];

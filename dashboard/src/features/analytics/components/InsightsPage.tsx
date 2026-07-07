@@ -1,5 +1,14 @@
 import { useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
@@ -13,11 +22,13 @@ import {
   type InsightsInterval,
   type InsightsQueryDefinition,
   type InsightsResponse,
+  type InsightsSeries,
 } from '../../../lib/api/types';
 import { useCohorts, useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { pctDelta, previousRange, sumSeries } from '../derive';
 import { formatExactNumber } from '../format';
+import { computeFormulaSeries, type FormulaOperator } from '../formula';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { colorForIndex } from '../palette';
 import { combineSegmentSeries } from '../segment-compare';
@@ -25,6 +36,7 @@ import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
 import { ChartCard } from './charts/ChartCard';
 import { CopyLinkButton } from './CopyLinkButton';
+import { FormulaControl, FORMULA_OPERATOR_SYMBOLS } from './FormulaControl';
 import { KpiTile } from './charts/KpiTile';
 import { INSIGHTS_CHART_TYPES, InsightsChart, type InsightsChartType } from './InsightsChart';
 import { PageShell } from '../../../components/layout/PageShell';
@@ -163,6 +175,144 @@ function AddControlButton({ label, onClick }: { label: string; onClick: () => vo
   );
 }
 
+// --- Formula / Ratio Metrics (feat-05) -----------------------------------------------------
+
+/** `null` (ratio's divide-by-zero) reads as "—", never `Infinity`/`NaN`; a percent appends `%`. */
+function formatFormulaValue(value: number | null, asPercent: boolean): string {
+  if (value === null) return '—';
+  const rounded = Math.round(value * 100) / 100;
+  return asPercent ? `${rounded}%` : formatExactNumber(rounded);
+}
+
+interface FormulaTableRow {
+  t: string;
+  a: number;
+  b: number;
+  formula: number | null;
+}
+
+/** Re-derives the zero-filled A/B values alongside the already-computed formula points, for the
+ * accessible A/B/formula data table (feat-05 §3 "Accessible data table with the A, B, and formula
+ * columns"). Reuses the formula points' timestamp order/union rather than recomputing it. */
+function buildFormulaRows(
+  a: InsightsSeries | undefined,
+  b: InsightsSeries | undefined,
+  formulaData: Array<{ t: string; value: number | null }>,
+): FormulaTableRow[] {
+  const aPoints = new Map((a?.data ?? []).map((point) => [point.t, point.value]));
+  const bPoints = new Map((b?.data ?? []).map((point) => [point.t, point.value]));
+  return formulaData.map((row) => ({
+    t: row.t,
+    a: aPoints.get(row.t) ?? 0,
+    b: bPoints.get(row.t) ?? 0,
+    formula: row.value,
+  }));
+}
+
+const FORMULA_TOOLTIP_STYLE = {
+  backgroundColor: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  color: 'var(--text)',
+  fontSize: 13,
+};
+
+const FORMULA_AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
+
+/** The single derived line for Formula mode. Recharts' `Line` breaks (never interpolates through)
+ * a `null` point by default, so a ratio's divide-by-zero bucket renders as a genuine gap. */
+function FormulaTrendChart({
+  data,
+  asPercent,
+  ariaLabel,
+}: {
+  data: Array<{ t: string; value: number | null }>;
+  asPercent: boolean;
+  ariaLabel: string;
+}) {
+  const color = colorForIndex(0);
+  return (
+    <div role="img" aria-label={ariaLabel} style={{ width: '100%', height: 320, backgroundColor: 'var(--chart-surface)' }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+          <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
+          <XAxis dataKey="t" tick={FORMULA_AXIS_TICK} stroke="var(--border)" />
+          <YAxis
+            tick={FORMULA_AXIS_TICK}
+            stroke="var(--border)"
+            tickFormatter={(value: number) => (asPercent ? `${value}%` : formatExactNumber(value))}
+          />
+          <Tooltip
+            contentStyle={FORMULA_TOOLTIP_STYLE}
+            labelStyle={{ color: 'var(--text-muted)' }}
+            formatter={(value: unknown) => [
+              typeof value === 'number' ? formatFormulaValue(value, asPercent) : String(value ?? '—'),
+              'Formula',
+            ]}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            name="Formula"
+            stroke={color}
+            strokeWidth={2}
+            dot={{ r: 4, fill: color, stroke: 'var(--chart-surface)', strokeWidth: 2 }}
+            connectNulls={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** The accessible A/B/formula data table (feat-05 §3), always rendered alongside the chart. */
+function FormulaTable({
+  rows,
+  labelA,
+  labelB,
+  asPercent,
+}: {
+  rows: FormulaTableRow[];
+  labelA: string;
+  labelB: string;
+  asPercent: boolean;
+}) {
+  return (
+    <table className="w-full border-collapse text-left text-sm">
+      <caption className="sr-only">Formula trend data table</caption>
+      <thead>
+        <tr className="border-b border-border">
+          <th scope="col" className="py-2 font-medium">
+            Date
+          </th>
+          <th scope="col" className="py-2 text-right font-medium">
+            {labelA}
+          </th>
+          <th scope="col" className="py-2 text-right font-medium">
+            {labelB}
+          </th>
+          <th scope="col" className="py-2 text-right font-medium">
+            Formula
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.t} className="border-b border-border">
+            <td className="py-2">{row.t}</td>
+            <td className="py-2 text-right tabular-nums">{formatExactNumber(row.a)}</td>
+            <td className="py-2 text-right tabular-nums">{formatExactNumber(row.b)}</td>
+            <td className="py-2 text-right tabular-nums">
+              {formatFormulaValue(row.formula, asPercent)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export function InsightsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/insights' });
   const metaEvents = useMetaEvents(projectId);
@@ -205,6 +355,17 @@ export function InsightsPage() {
     [cohorts.data],
   );
   const compareModeActive = showCompare && compareSegments.length >= 2;
+
+  // Formula / Ratio Metrics (feat-05 §3): a separate 2-metric builder from the normal Events list
+  // above — a formula always needs exactly A and B, each with its own aggregation, independent of
+  // however many events the normal builder happens to have. Mutually exclusive with the normal
+  // trend AND with Segment Comparison (whichever query the page runs, only one result renders).
+  const [showFormula, setShowFormula] = useState(false);
+  const [formulaA, setFormulaA] = useState<InsightsEventQuery>({ name: '', aggregation: 'total' });
+  const [formulaB, setFormulaB] = useState<InsightsEventQuery>({ name: '', aggregation: 'total' });
+  const [formulaOp, setFormulaOp] = useState<FormulaOperator>('ratio');
+  const [formulaAsPercent, setFormulaAsPercent] = useState(false);
+  const formulaModeActive = showFormula && Boolean(formulaA.name) && Boolean(formulaB.name);
 
   const eventOptions = metaEvents.data?.events ?? [];
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
@@ -312,6 +473,25 @@ export function InsightsPage() {
     setCompareSegments([null]);
   };
 
+  // Formula mode isn't part of the shareable `?s=` state yet (feat-05 §4 notes this as a follow-up
+  // to coordinate with feat-01), so these don't flip `userInteractedRef` the way the other builder
+  // controls do.
+  const revealFormula = () => {
+    setShowFormula(true);
+    if (!formulaA.name) setFormulaA({ name: eventOptions[0] ?? '', aggregation: 'total' });
+    if (!formulaB.name) {
+      setFormulaB({ name: eventOptions[1] ?? eventOptions[0] ?? '', aggregation: 'total' });
+    }
+  };
+
+  const removeFormula = () => {
+    setShowFormula(false);
+    setFormulaA({ name: '', aggregation: 'total' });
+    setFormulaB({ name: '', aggregation: 'total' });
+    setFormulaOp('ratio');
+    setFormulaAsPercent(false);
+  };
+
   const setIntervalFromInput = (next: InsightsInterval) => {
     userInteractedRef.current = true;
     setInterval(next);
@@ -376,23 +556,86 @@ export function InsightsPage() {
   // Auto-run: the result tracks the builder without a "Run" click. The previous chart stays on
   // screen while a new one loads, so the result area never flickers back to empty. Suppressed in
   // compare mode — the per-segment queries below replace this single unfiltered/one-segment run so
-  // the two presentations never both fetch (feat-04 §3.3 "keep the state coherent").
+  // the two presentations never both fetch (feat-04 §3.3 "keep the state coherent"). Also
+  // suppressed in Formula mode (feat-05 §3), which runs its own 2-event query below instead.
   const canRun = events.length > 0 && Boolean(dateFrom) && Boolean(dateTo);
   useAutoRun({
     key: JSON.stringify(queryDefinition),
-    enabled: canRun && !compareModeActive,
+    enabled: canRun && !compareModeActive && !formulaModeActive,
     run: () => runInsights.mutate(queryDefinition, { onSuccess: setResult }),
   });
 
   // KPI summary row: the same query re-run over the immediately-preceding equal-length window, so
   // the headline numbers can show a period-over-period delta alongside the already-run result.
-  // Also suppressed in compare mode (superseded by the per-segment totals below).
+  // Also suppressed in compare mode (superseded by the per-segment totals below) and Formula mode.
   const prevRange = previousRange(dateFrom, dateTo);
   const previousDefinition: InsightsQueryDefinition = useMemo(
     () => ({ ...queryDefinition, date_range: { from: prevRange.from, to: prevRange.to } }),
     [queryDefinition, prevRange.from, prevRange.to],
   );
-  const previousTotals = useInsightsQuery(projectId, previousDefinition, canRun && !compareModeActive);
+  const previousTotals = useInsightsQuery(
+    projectId,
+    previousDefinition,
+    canRun && !compareModeActive && !formulaModeActive,
+  );
+
+  // Formula / Ratio Metrics (feat-05 §3): ONE query carrying both metrics [A, B] — respecting the
+  // same global filters + segment + date range as the normal query — plus the previous-period
+  // window for the KPI's period-over-period delta. No breakdown (a formula is exactly 2 metrics).
+  const formulaDefinition: InsightsQueryDefinition = useMemo(() => {
+    const def: InsightsQueryDefinition = {
+      events: [formulaA, formulaB],
+      date_range: { from: dateFrom, to: dateTo },
+      interval,
+      filters: mergeGlobalFilters(filters, globalFilters),
+    };
+    if (segmentId) def.cohort_id = segmentId;
+    return def;
+  }, [formulaA, formulaB, dateFrom, dateTo, interval, filters, globalFilters, segmentId]);
+
+  const canRunFormula = formulaModeActive && Boolean(dateFrom) && Boolean(dateTo);
+  const formulaResult = useInsightsQuery(projectId, formulaDefinition, canRunFormula);
+
+  const previousFormulaDefinition: InsightsQueryDefinition = useMemo(
+    () => ({ ...formulaDefinition, date_range: { from: prevRange.from, to: prevRange.to } }),
+    [formulaDefinition, prevRange.from, prevRange.to],
+  );
+  const previousFormulaResult = useInsightsQuery(
+    projectId,
+    previousFormulaDefinition,
+    canRunFormula,
+  );
+
+  /** Matches a requested metric's series in the response by name (falls back to array position so
+   * a same-event-for-A-and-B formula, feat-05 §4 "degenerate but valid", still resolves both). */
+  function pickFormulaSeries(
+    response: InsightsResponse | undefined,
+    name: string,
+    index: number,
+  ): InsightsSeries | undefined {
+    if (!response) return undefined;
+    return response.series.find((s) => s.name === name) ?? response.series[index];
+  }
+
+  const formulaSeriesA = pickFormulaSeries(formulaResult.data, formulaA.name, 0);
+  const formulaSeriesB = pickFormulaSeries(formulaResult.data, formulaB.name, 1);
+  const formulaComputed = computeFormulaSeries(formulaSeriesA, formulaSeriesB, formulaOp, formulaAsPercent);
+
+  const previousFormulaSeriesA = pickFormulaSeries(previousFormulaResult.data, formulaA.name, 0);
+  const previousFormulaSeriesB = pickFormulaSeries(previousFormulaResult.data, formulaB.name, 1);
+  const previousFormulaComputed = computeFormulaSeries(
+    previousFormulaSeriesA,
+    previousFormulaSeriesB,
+    formulaOp,
+    formulaAsPercent,
+  );
+
+  const formulaDelta =
+    formulaComputed.total !== null && previousFormulaComputed.total !== null
+      ? pctDelta(formulaComputed.total, previousFormulaComputed.total)
+      : undefined;
+
+  const formulaRows = buildFormulaRows(formulaSeriesA, formulaSeriesB, formulaComputed.data);
 
   // Segment Comparison (feat-04 §3.2): the SAME query definition (events/range/interval/filters/
   // breakdown, global filters already merged), run once per selected segment with that segment's
@@ -415,7 +658,7 @@ export function InsightsPage() {
 
   const COMPARE_SLOT_COUNT = 4;
   const slotEnabled = [0, 1, 2, 3].map(
-    (i) => compareModeActive && i < compareSegments.length && canRun,
+    (i) => compareModeActive && !formulaModeActive && i < compareSegments.length && canRun,
   );
   const compareSlot0 = useInsightsQuery(
     projectId,
@@ -593,6 +836,7 @@ export function InsightsPage() {
                   {!showCompare && (
                     <AddControlButton label="Compare segments" onClick={() => setShowCompare(true)} />
                   )}
+                  {!showFormula && <AddControlButton label="Formula" onClick={revealFormula} />}
                 </div>
 
                 {showFilters && (
@@ -681,6 +925,22 @@ export function InsightsPage() {
                     />
                   </div>
                 )}
+
+                {showFormula && (
+                  <FormulaControl
+                    eventOptions={eventOptions}
+                    isLoadingEvents={metaEvents.isPending}
+                    metricA={formulaA}
+                    metricB={formulaB}
+                    operator={formulaOp}
+                    asPercent={formulaAsPercent}
+                    onMetricAChange={setFormulaA}
+                    onMetricBChange={setFormulaB}
+                    onOperatorChange={setFormulaOp}
+                    onAsPercentChange={setFormulaAsPercent}
+                    onRemove={removeFormula}
+                  />
+                )}
               </div>
             </>
           )}
@@ -695,7 +955,7 @@ export function InsightsPage() {
         </p>
       )}
 
-      {!projectHasNoEvents && !compareModeActive && (
+      {!projectHasNoEvents && !compareModeActive && !formulaModeActive && (
         <div className="flex flex-col gap-6">
           {runInsights.isPending && (
             <p role="status" className="text-sm text-text-muted">
@@ -735,7 +995,7 @@ export function InsightsPage() {
 
       {/* Segment Comparison (feat-04 §3.2): the two presentations are mutually exclusive — this
           block only ever renders instead of, never alongside, the single-series result above. */}
-      {!projectHasNoEvents && compareModeActive && (
+      {!projectHasNoEvents && compareModeActive && !formulaModeActive && (
         <div className="flex flex-col gap-6">
           {compareLoading && (
             <p role="status" className="text-sm text-text-muted">
@@ -803,6 +1063,57 @@ export function InsightsPage() {
                 </table>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* Formula / Ratio Metrics (feat-05 §3): also mutually exclusive with the normal trend and
+          Segment Comparison above — only one of the three result presentations ever renders. */}
+      {!projectHasNoEvents && formulaModeActive && (
+        <div className="flex flex-col gap-6">
+          {formulaResult.isPending && (
+            <p role="status" className="text-sm text-text-muted">
+              Updating…
+            </p>
+          )}
+
+          {formulaResult.data && (
+            <SectionGrid min={200}>
+              <KpiTile
+                label="Formula"
+                value={formatFormulaValue(formulaComputed.total, formulaAsPercent)}
+                hint={`${formulaA.name} ${FORMULA_OPERATOR_SYMBOLS[formulaOp]} ${formulaB.name}`}
+                delta={formulaDelta !== undefined ? { pct: formulaDelta } : undefined}
+                loading={previousFormulaResult.isPending}
+              />
+            </SectionGrid>
+          )}
+
+          <ChartCard
+            title="Trend"
+            state={!formulaResult.data ? 'loading' : formulaComputed.data.length === 0 ? 'empty' : 'ready'}
+            emptyText="No data for this formula yet."
+            exportImageName="insights-formula-trend"
+          >
+            {formulaResult.data && formulaComputed.data.length > 0 && (
+              <FormulaTrendChart
+                data={formulaComputed.data}
+                asPercent={formulaAsPercent}
+                ariaLabel="Formula trend chart"
+              />
+            )}
+          </ChartCard>
+
+          {formulaResult.data && formulaRows.length > 0 && (
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-text-muted">Table</h3>
+              <FormulaTable
+                rows={formulaRows}
+                labelA={formulaA.name}
+                labelB={formulaB.name}
+                asPercent={formulaAsPercent}
+              />
+            </div>
           )}
         </div>
       )}
