@@ -53,6 +53,12 @@ describe('PathsPage — user-path map', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/paths`);
     await screen.findByRole('heading', { name: 'Paths' });
 
+    // The global date-range control renders in the header, defaulting to Last 30 days.
+    expect(screen.getByRole('radio', { name: 'Last 30 days' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
     await userEvent.click(screen.getByRole('button', { name: 'Anchor screen' }));
     await userEvent.click(await screen.findByRole('option', { name: 'home' }));
     await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
@@ -99,6 +105,10 @@ describe('PathsPage — user-path map', () => {
       (r) => within(r).queryByText('checkout') && within(r).queryByText('240'),
     );
     expect(toCheckout).toBeDefined();
+
+    // A KPI tile summarizes the path's total (step-0 node value), labeled by the chosen unit.
+    expect(screen.getByText('Total users')).toBeInTheDocument();
+    expect(screen.getByText('1,000')).toBeInTheDocument();
 
     // Toggle to the Mermaid flowchart view: the map is replaced by the diagram figure.
     await userEvent.click(screen.getByRole('button', { name: 'Diagram' }));

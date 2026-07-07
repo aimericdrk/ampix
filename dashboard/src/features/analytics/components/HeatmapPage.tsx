@@ -2,11 +2,14 @@ import { useParams } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { PageShell } from '../../../components/layout/PageShell';
 import { ApiError } from '../../../lib/api/problem';
 import type { ClickHeatmapQuery, ClickHeatmapResponse, HeatmapGrid } from '../../../lib/api/types';
 import { useRunClickHeatmap, useScreens } from '../api';
-import { DateRangeFields, defaultDate } from './builder-controls';
+import { DateRangeControl, useDateRange } from '../date-range';
+import { ChartCard } from './charts/ChartCard';
+import { KpiTile } from './charts/KpiTile';
 import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
 import { RetakeScreenButton } from './RetakeScreenButton';
 
@@ -16,10 +19,11 @@ export function HeatmapPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/heatmap' });
   const screens = useScreens(projectId);
   const runHeatmap = useRunClickHeatmap(projectId);
+  // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
+  // in the header, so Heatmap shares the same window as every other analytics page.
+  const { from: dateFrom, to: dateTo } = useDateRange();
 
   const [selectedScreen, setSelectedScreen] = useState('');
-  const [dateFrom, setDateFrom] = useState(() => defaultDate(30));
-  const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [opacity, setOpacity] = useState(0.85);
   const [result, setResult] = useState<ClickHeatmapResponse | null>(null);
   const [activeGrid, setActiveGrid] = useState<HeatmapGrid>(DEFAULT_GRID);
@@ -57,6 +61,7 @@ export function HeatmapPage() {
       title="Click heatmap"
       description="See where users tap on a screen — taps bucketed into a grid and overlaid on the real screenshot."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Heatmap' }]}
+      dateRangeControl={<DateRangeControl />}
     >
       <Card>
         <CardHeader>
@@ -84,14 +89,6 @@ export function HeatmapPage() {
               <p className="mt-2 text-sm text-text-muted">No screens captured yet.</p>
             )}
           </div>
-
-          <DateRangeFields
-            idPrefix="heatmap-date"
-            from={dateFrom}
-            to={dateTo}
-            onFrom={setDateFrom}
-            onTo={setDateTo}
-          />
 
           <div className="flex flex-wrap items-end gap-4">
             <Button onClick={() => run(selectedScreen)} disabled={!selectedScreen || runHeatmap.isPending}>
@@ -144,23 +141,31 @@ export function HeatmapPage() {
         </Card>
       )}
 
-      {selectedScreen && result && !hasTaps && (
-        <p className="text-text-muted">No taps recorded for this screen in the selected range.</p>
+      {selectedScreen && result && (
+        <SectionGrid min={220}>
+          <KpiTile label="Total taps" value={result.total} />
+        </SectionGrid>
       )}
 
       {selectedScreen && result && (
-        <div className="flex flex-col gap-4">
-          <HeatmapLegend total={result.total} maxCount={maxCount} />
-          <HeatmapCanvas
-            projectId={projectId}
-            screenName={selectedScreen}
-            summary={selectedSummary}
-            result={result}
-            grid={activeGrid}
-            maxCount={maxCount}
-            opacity={opacity}
-          />
-        </div>
+        <ChartCard
+          title="Heatmap"
+          state={hasTaps ? 'ready' : 'empty'}
+          emptyText="No taps recorded for this screen in the selected range."
+        >
+          <div className="flex flex-col gap-4">
+            <HeatmapLegend total={result.total} maxCount={maxCount} />
+            <HeatmapCanvas
+              projectId={projectId}
+              screenName={selectedScreen}
+              summary={selectedSummary}
+              result={result}
+              grid={activeGrid}
+              maxCount={maxCount}
+              opacity={opacity}
+            />
+          </div>
+        </ChartCard>
       )}
     </PageShell>
   );

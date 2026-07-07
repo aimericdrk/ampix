@@ -47,6 +47,12 @@ describe('HeatmapPage — click heatmap viewer', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
     await screen.findByRole('heading', { name: 'Click heatmap' });
 
+    // The global date-range control renders in the header, defaulting to Last 30 days.
+    expect(screen.getByRole('radio', { name: 'Last 30 days' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
     // The screen picker lists the captured screens.
     await screen.findByRole('option', { name: 'checkout' });
     await userEvent.selectOptions(screen.getByLabelText('Screen'), 'checkout');
@@ -57,9 +63,11 @@ describe('HeatmapPage — click heatmap viewer', () => {
     expect(screen.getByTitle('42 taps')).toBeInTheDocument();
     expect(screen.getByTitle('25 taps')).toBeInTheDocument();
 
-    // The "total taps" figure and its screenshot are present.
+    // The "total taps" figure and its screenshot are present — the KPI headline and the legend
+    // both surface the same total (result.total), so the exact value renders at least once.
+    expect(screen.getByText('Total taps')).toBeInTheDocument();
     expect(screen.getByText('total taps')).toBeInTheDocument();
-    expect(screen.getByText('87')).toBeInTheDocument();
+    expect(screen.getAllByText('87').length).toBeGreaterThanOrEqual(1);
     await screen.findByAltText('Screenshot of checkout');
 
     // The §19 body: exact screen + grid + filters; the date range is a valid YYYY-MM-DD pair.

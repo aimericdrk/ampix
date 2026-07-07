@@ -46,6 +46,12 @@ describe('FlowsPage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/flows`);
     await screen.findByRole('heading', { name: 'Flows' });
 
+    // The global date-range control renders in the header, defaulting to Last 30 days.
+    expect(screen.getByRole('radio', { name: 'Last 30 days' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
     await pickAnchor('app_opened');
     await userEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-06-01' } });
@@ -90,6 +96,14 @@ describe('FlowsPage', () => {
     expect(legend.getByText('browse')).toBeInTheDocument();
     expect(legend.queryByText('$other')).not.toBeInTheDocument();
     expect(legend.queryByText('$end')).not.toBeInTheDocument();
+
+    // A KPI tile summarizes the flow's total (step-0 node value), labeled by the chosen unit.
+    // Scoped to the tile itself since the same "1,000" also appears in the nodes table.
+    const kpiLabel = screen.getByText('Total users');
+    expect(kpiLabel).toBeInTheDocument();
+    expect(
+      within(kpiLabel.parentElement as HTMLElement).getByText('1,000'),
+    ).toBeInTheDocument();
   });
 
   it('shows the running state while the flow query is in flight', async () => {

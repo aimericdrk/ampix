@@ -2,6 +2,7 @@ import { useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { PageShell } from '../../../components/layout/PageShell';
 import { ApiError } from '../../../lib/api/problem';
 import type {
@@ -12,9 +13,11 @@ import type {
 } from '../../../lib/api/types';
 import { FLOWS_DIRECTIONS, FLOWS_UNITS } from '../../../lib/api/types';
 import { useRunScreenPaths, useScreens } from '../api';
+import { DateRangeControl, useDateRange } from '../date-range';
 import { formatExactNumber } from '../format';
-import { defaultDate } from './builder-controls';
-import { DateRangePresets, EventSelectField } from './explore-controls';
+import { EventSelectField } from './explore-controls';
+import { ChartCard } from './charts/ChartCard';
+import { KpiTile } from './charts/KpiTile';
 import { MermaidDiagram } from './charts/MermaidDiagram';
 import { PathMap } from './PathMap';
 import { buildScreenPathsMermaid, screenLabel } from './path-layout';
@@ -35,11 +38,12 @@ export function PathsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/paths' });
   const screens = useScreens(projectId);
   const runScreenPaths = useRunScreenPaths(projectId);
+  // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
+  // in the header, so Paths shares the same window as every other analytics page.
+  const { from: dateFrom, to: dateTo } = useDateRange();
 
   const [anchorScreen, setAnchorScreen] = useState('');
   const [direction, setDirection] = useState<FlowsDirection>('forward');
-  const [dateFrom, setDateFrom] = useState(() => defaultDate(30));
-  const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [steps, setSteps] = useState(3);
   const [maxNodesPerStep, setMaxNodesPerStep] = useState(6);
   const [unit, setUnit] = useState<FlowsUnit>('session');
@@ -112,6 +116,7 @@ export function PathsPage() {
       title="Paths"
       description="See how users move between app screens — an interactive map of real screenshots, or the same paths as a flowchart."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Paths' }]}
+      dateRangeControl={<DateRangeControl />}
     >
       <Card>
         <CardHeader>
@@ -128,16 +133,6 @@ export function PathsPage() {
             placeholder="Any entry screen"
             emptyLabel="No screens captured yet."
             allowClear
-          />
-
-          <DateRangePresets
-            idPrefix="paths-date"
-            from={dateFrom}
-            to={dateTo}
-            onChange={(from, to) => {
-              setDateFrom(from);
-              setDateTo(to);
-            }}
           />
 
           <div className="flex flex-wrap gap-4">
@@ -227,6 +222,15 @@ export function PathsPage() {
 
       {hasResult && result && (
         <div className="flex flex-col gap-4">
+          <SectionGrid min={220}>
+            <KpiTile
+              label={unit === 'user' ? 'Total users' : 'Total sessions'}
+              value={result.nodes
+                .filter((node) => node.step === 0)
+                .reduce((sum, node) => sum + node.value, 0)}
+            />
+          </SectionGrid>
+
           <div className="flex flex-wrap items-center gap-2">
             <div
               role="group"
@@ -248,16 +252,18 @@ export function PathsPage() {
             )}
           </div>
 
-          {view === 'map' ? (
-            <PathMap
-              projectId={projectId}
-              nodes={result.nodes}
-              links={result.links}
-              screenHashes={screenHashes}
-            />
-          ) : (
-            <MermaidDiagram chart={mermaidChart} ariaLabel="User path flowchart" />
-          )}
+          <ChartCard title="Screen paths">
+            {view === 'map' ? (
+              <PathMap
+                projectId={projectId}
+                nodes={result.nodes}
+                links={result.links}
+                screenHashes={screenHashes}
+              />
+            ) : (
+              <MermaidDiagram chart={mermaidChart} ariaLabel="User path flowchart" />
+            )}
+          </ChartCard>
 
           <TransitionsTable result={result} />
 

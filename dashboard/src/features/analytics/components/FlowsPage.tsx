@@ -2,6 +2,7 @@ import { useParams } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   FlowsDirection,
@@ -12,11 +13,14 @@ import type {
 } from '../../../lib/api/types';
 import { FLOWS_DIRECTIONS, FLOWS_UNITS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFlows } from '../api';
+import { DateRangeControl, useDateRange } from '../date-range';
+import { ChartCard } from './charts/ChartCard';
+import { KpiTile } from './charts/KpiTile';
 import { FlowsChart } from './FlowsChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { SaveAsReportButton } from './report-actions';
-import { cleanFilters, defaultDate, FilterRows } from './builder-controls';
-import { DateRangePresets, EventSelectField } from './explore-controls';
+import { cleanFilters, FilterRows } from './builder-controls';
+import { EventSelectField } from './explore-controls';
 
 const DIRECTION_LABELS: Record<FlowsDirection, string> = {
   forward: 'Forward (events after anchor)',
@@ -33,12 +37,13 @@ export function FlowsPage() {
   const metaEvents = useMetaEvents(projectId);
   const metaProperties = useMetaProperties(projectId);
   const runFlows = useRunFlows(projectId);
+  // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
+  // in the header, so Flows shares the same window as every other analytics page.
+  const { from: dateFrom, to: dateTo } = useDateRange();
 
   const [anchorEvent, setAnchorEvent] = useState('');
   const [anchorFilters, setAnchorFilters] = useState<InsightsFilter[]>([]);
   const [direction, setDirection] = useState<FlowsDirection>('forward');
-  const [dateFrom, setDateFrom] = useState(() => defaultDate(30));
-  const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [steps, setSteps] = useState(3);
   const [maxNodesPerStep, setMaxNodesPerStep] = useState(8);
   const [unit, setUnit] = useState<FlowsUnit>('session');
@@ -73,6 +78,7 @@ export function FlowsPage() {
       title="Flows"
       description="Explore the common paths users take before or after a key event."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Paths' }]}
+      dateRangeControl={<DateRangeControl />}
     >
       <Card>
         <CardHeader>
@@ -97,16 +103,6 @@ export function FlowsPage() {
               projectId={projectId}
             />
           </div>
-
-          <DateRangePresets
-            idPrefix="flows-date"
-            from={dateFrom}
-            to={dateTo}
-            onChange={(from, to) => {
-              setDateFrom(from);
-              setDateTo(to);
-            }}
-          />
 
           <div className="flex flex-wrap gap-4">
             <div>
@@ -195,12 +191,29 @@ export function FlowsPage() {
         </p>
       )}
 
-      {result && result.nodes.length === 0 && (
-        <p className="text-text-muted">No flow data for this query yet.</p>
-      )}
+      {result && (
+        <div className="flex flex-col gap-6">
+          {result.nodes.length > 0 && (
+            <SectionGrid min={220}>
+              <KpiTile
+                label={unit === 'user' ? 'Total users' : 'Total sessions'}
+                value={result.nodes
+                  .filter((node) => node.step === 0)
+                  .reduce((sum, node) => sum + node.value, 0)}
+              />
+            </SectionGrid>
+          )}
 
-      {result && result.nodes.length > 0 && (
-        <FlowsChart nodes={result.nodes} links={result.links} />
+          <ChartCard
+            title="Flow"
+            state={result.nodes.length === 0 ? 'empty' : 'ready'}
+            emptyText="No flow data for this query yet."
+          >
+            {result.nodes.length > 0 && (
+              <FlowsChart nodes={result.nodes} links={result.links} />
+            )}
+          </ChartCard>
+        </div>
       )}
     </PageShell>
   );
