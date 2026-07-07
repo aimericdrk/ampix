@@ -116,7 +116,9 @@ describe('PathsPage — user-path map', () => {
     expect(screen.queryByTestId('path-map')).not.toBeInTheDocument();
     // The generated diagram source is a flowchart LR — always present as the accessible text.
     expect(screen.getAllByText(/flowchart LR/).length).toBeGreaterThan(0);
-  });
+    // Heavy test (full app render + screenshot image loads + map + view toggle); give it headroom
+    // so it stays green under parallel-suite contention, where the default 5s can be exceeded.
+  }, 15000);
 
   it('omits anchor_screen when the anchor is left blank (start from top entry screens)', async () => {
     let capturedBody: ScreenPathsQuery | undefined;
