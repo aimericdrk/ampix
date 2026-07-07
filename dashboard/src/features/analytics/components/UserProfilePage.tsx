@@ -318,6 +318,8 @@ function UserPathMap({ projectId, distinctIds }: { projectId: string; distinctId
 
   useEffect(() => {
     if (distinctIds.length === 0) return;
+    // Clear the prior user's map first so navigating profile→profile doesn't flash a stale path.
+    setResult(null);
     runScreenPaths.mutate(
       {
         direction: 'forward',

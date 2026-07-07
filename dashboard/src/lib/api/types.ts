@@ -378,7 +378,8 @@ export interface UserListItem {
   email: string | null;
 }
 
-/** `GET /users` — search matches `distinct_id` prefix; `next_cursor` is the last `distinct_id`. */
+/** `GET /users` — `search` is a case-insensitive substring match across the canonical id, aliased
+ *  anon_ids, and whitelisted profile props (name/email/username); `next_cursor` is the last `distinct_id`. */
 export interface ListUsersResponse {
   users: UserListItem[];
   next_cursor: string | null;
