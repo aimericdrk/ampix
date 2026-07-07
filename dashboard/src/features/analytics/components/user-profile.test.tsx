@@ -2,10 +2,11 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
-import type { ClickHeatmapQuery } from '../../../lib/api/types';
+import type { ClickHeatmapQuery, ScreenPathsQuery } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import {
   CLICK_HEATMAP_FIXTURE,
+  SCREEN_PATHS_FIXTURE,
   TEST_PROJECT,
   TEST_USER,
   USER_PROFILE_FIXTURE,
@@ -93,5 +94,26 @@ describe('UserProfilePage', () => {
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]!.screen_name).toBe('home');
     expect(bodies[0]!.distinct_ids).toEqual(USER_PROFILE_FIXTURE.distinct_ids);
+  });
+
+  it('runs the per-user path map scoped to the profile identity set (distinct_ids) and renders it', async () => {
+    const bodies: ScreenPathsQuery[] = [];
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/screen-paths', async ({ request }) => {
+        const body = (await request.json()) as ScreenPathsQuery;
+        bodies.push(body);
+        return HttpResponse.json(SCREEN_PATHS_FIXTURE);
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+    await screen.findByRole('heading', { name: 'user-001' });
+
+    // The §17 identity-correct filter: the request carries the profile's exact distinct_ids set.
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]!.distinct_ids).toEqual(USER_PROFILE_FIXTURE.distinct_ids);
+
+    expect(await screen.findByTestId('path-map')).toBeInTheDocument();
   });
 });

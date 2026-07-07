@@ -1,18 +1,20 @@
 import { useParams } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   ClickHeatmapResponse,
   HeatmapGrid,
+  ScreenPathsResponse,
   UserRecentEvent,
 } from '../../../lib/api/types';
 import { formatExactNumber } from '../format';
-import { useRunClickHeatmap, useScreens, useUserProfile } from '../api';
+import { useRunClickHeatmap, useRunScreenPaths, useScreens, useUserProfile } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
 import { defaultDate } from './builder-controls';
 import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
+import { PathMap } from './PathMap';
 
 /** The screen-view autocapture event (contracts §4) — drives the per-user screen-path diagram. */
 const SCREEN_VIEW_EVENT = '$screen_view';
@@ -132,6 +134,22 @@ export function UserProfilePage() {
                     ))}
                   </ol>
                 )}
+              </CollapsibleSection>
+            </CardContent>
+          </Card>
+
+          {/*
+           * Full interactive per-user path map — identity-correct because `distinct_ids` (the
+           * profile's §17 identity set: canonical id + aliased anon_ids) is passed through to
+           * `useRunScreenPaths`, so the backend restricts the path query to this one person's
+           * events (both pre- and post-login). This is distinct from the lightweight mini-diagram
+           * above: that one is a quick chronological summary of THIS session's recent events, while
+           * this section runs the full multi-step Sankey path query over a 90-day window.
+           */}
+          <Card>
+            <CardContent>
+              <CollapsibleSection title="Path map" defaultOpen>
+                <UserPathMap projectId={projectId} distinctIds={data.distinct_ids} />
               </CollapsibleSection>
             </CardContent>
           </Card>
@@ -278,5 +296,64 @@ function UserTapHeatmap({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The full interactive per-user path map. `distinct_ids` (the profile's §17 identity set: canonical
+ * id + aliased anon_ids) is passed to `useRunScreenPaths`, so the backend restricts the screen-paths
+ * query to `distinct_id IN (…)` for this one person — identity-correct across pre- and post-login
+ * events, mirroring the tap-heatmap pattern above. Runs once, as soon as the identity set is known.
+ */
+function UserPathMap({ projectId, distinctIds }: { projectId: string; distinctIds: string[] }) {
+  const screens = useScreens(projectId);
+  const runScreenPaths = useRunScreenPaths(projectId);
+  const [result, setResult] = useState<ScreenPathsResponse | null>(null);
+
+  // screen_name → latest image_hash, so each map node's screenshot is content-addressed (retake-safe).
+  const screenHashes = useMemo(
+    () => new Map(screens.data?.screens.map((s) => [s.screen_name, s.latest_image_hash]) ?? []),
+    [screens.data],
+  );
+
+  useEffect(() => {
+    if (distinctIds.length === 0) return;
+    runScreenPaths.mutate(
+      {
+        direction: 'forward',
+        date_range: { from: defaultDate(90), to: defaultDate(0) },
+        steps: 3,
+        max_nodes_per_step: 6,
+        unit: 'user',
+        // §17: identity-correct — restrict the path map to this user's whole identity set.
+        distinct_ids: distinctIds,
+      },
+      { onSuccess: setResult },
+    );
+    // Only re-run when the identity set itself changes (e.g. navigating to another user's profile).
+    // `runScreenPaths` (a `useMutation` result) is a fresh object each render, so it is intentionally
+    // omitted from the dependency list — including it would refire the request every render.
+  }, [projectId, distinctIds.join(',')]);
+
+  if (runScreenPaths.isPending && !result) {
+    return <p role="status">Loading path map…</p>;
+  }
+
+  if (runScreenPaths.isError) {
+    return (
+      <p role="alert" className="text-danger">
+        {runScreenPaths.error instanceof ApiError
+          ? runScreenPaths.error.problem.title
+          : 'Failed to load the path map'}
+      </p>
+    );
+  }
+
+  if (!result || result.nodes.length === 0) {
+    return <p className="text-text-muted">No screen-path data for this user yet.</p>;
+  }
+
+  return (
+    <PathMap projectId={projectId} nodes={result.nodes} links={result.links} screenHashes={screenHashes} />
   );
 }
