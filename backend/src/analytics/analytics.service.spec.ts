@@ -775,4 +775,138 @@ describe('AnalyticsService', () => {
       expect(clickhouse.query).not.toHaveBeenCalled();
     });
   });
+
+  describe('getRevenueSummary', () => {
+    it('checks membership, sums $price over $in_app_purchase, and zero-fills by_day onto the date grid', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 30, purchases: '3', paying_users: '2' }],
+        [{ day: '2026-06-01', revenue: 20, purchases: '2' }],
+        [{ product_id: 'pro_monthly', revenue: 20, purchases: '2' }],
+      ]);
+      const projects = makeProjects();
+      const service = makeService(clickhouse, projects);
+
+      const result = await service.getRevenueSummary(
+        USER_ID,
+        PROJECT_ID,
+        '2026-06-01',
+        '2026-06-02',
+      );
+
+      expect(projects.assertMembership).toHaveBeenCalledWith(USER_ID, PROJECT_ID);
+      expect(result.total_revenue).toBe(30);
+      expect(result.purchases).toBe(3);
+      expect(result.paying_users).toBe(2);
+      expect(result.arppu).toBe(15);
+      expect(result.avg_purchase_value).toBe(10);
+      expect(result.by_day).toEqual([
+        { t: '2026-06-01', revenue: 20, purchases: 2 },
+        { t: '2026-06-02', revenue: 0, purchases: 0 }, // zero-filled: no matching row
+      ]);
+      expect(result.by_product).toEqual([
+        { product_id: 'pro_monthly', revenue: 20, purchases: 2 },
+      ]);
+    });
+
+    it('the $in_app_purchase / $price / $product_id references are fixed literals, not bound params', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: 0, paying_users: 0 }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-01');
+
+      const [totalsSql, totalsParams] = clickhouse.query.mock.calls[0];
+      expect(totalsSql).toContain("'$in_app_purchase'");
+      expect(totalsSql).toContain("JSONExtractFloat(toJSONString(properties), '$price')");
+      expect(totalsParams).not.toHaveProperty('event');
+      expect(totalsParams).not.toHaveProperty('priceKey');
+
+      const [productSql] = clickhouse.query.mock.calls[2];
+      expect(productSql).toContain("JSONExtractString(toJSONString(properties), '$product_id')");
+    });
+
+    it('counts paying_users via the canonicalized uid (aliases CTE + LEFT JOIN)', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: 0, paying_users: 0 }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-01');
+
+      const [totalsSql] = clickhouse.query.mock.calls[0];
+      expect(totalsSql).toContain('aliases AS (');
+      expect(totalsSql).toContain('LEFT JOIN aliases ON');
+      expect(totalsSql).toContain('uniqExact(coalesce(aliases.canonical_id, e.distinct_id))');
+    });
+
+    it('groups by_day and by_product, excluding empty product ids, top 10 by revenue', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: 0, paying_users: 0 }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-01');
+
+      const [daySql] = clickhouse.query.mock.calls[1];
+      expect(daySql).toContain('GROUP BY day');
+
+      const [productSql] = clickhouse.query.mock.calls[2];
+      expect(productSql).toContain('GROUP BY product_id');
+      expect(productSql).toContain('ORDER BY revenue DESC');
+      expect(productSql).toContain('LIMIT 10');
+      expect(productSql).toMatch(/product_id.*!=\s*''/s);
+    });
+
+    it('computes arppu and avg_purchase_value as 0 when the denominator is 0', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: '0', paying_users: '0' }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getRevenueSummary(
+        USER_ID,
+        PROJECT_ID,
+        '2026-06-01',
+        '2026-06-01',
+      );
+
+      expect(result.arppu).toBe(0);
+      expect(result.avg_purchase_value).toBe(0);
+    });
+
+    it('defaults to the trailing 30-day window when from/to are omitted', async () => {
+      const clickhouse = makeClickhouse([
+        [{ total_revenue: 0, purchases: 0, paying_users: 0 }],
+        [],
+        [],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getRevenueSummary(USER_ID, PROJECT_ID);
+
+      expect(clickhouse.query).toHaveBeenCalledTimes(3);
+    });
+
+    it('propagates a membership rejection without querying ClickHouse', async () => {
+      const projects = makeProjects(() =>
+        Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
+      );
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, projects);
+
+      await expect(
+        service.getRevenueSummary(USER_ID, PROJECT_ID, '2026-06-01', '2026-06-02'),
+      ).rejects.toMatchObject({ problem: { status: 403 } });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
 });

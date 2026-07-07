@@ -18,6 +18,7 @@ function makeController() {
     listUsers: jest.fn(),
     getUserProfile: jest.fn(),
     getSessionsSummary: jest.fn(),
+    getRevenueSummary: jest.fn(),
   };
   const controller = new AnalyticsController(analytics as unknown as AnalyticsService);
   return { controller, analytics };
@@ -213,6 +214,59 @@ describe('AnalyticsController', () => {
       await controller.sessionsSummary(fakeRequest(), 'p1', undefined, undefined);
 
       expect(analytics.getSessionsSummary).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        undefined,
+        undefined,
+      );
+    });
+  });
+
+  describe('revenueSummary', () => {
+    it('delegates to the service with the caller id, projectId, from, and to', async () => {
+      const { controller, analytics } = makeController();
+      const response = {
+        total_revenue: 0,
+        purchases: 0,
+        paying_users: 0,
+        arppu: 0,
+        avg_purchase_value: 0,
+        by_day: [],
+        by_product: [],
+      };
+      analytics.getRevenueSummary.mockResolvedValue(response);
+
+      const result = await controller.revenueSummary(
+        fakeRequest(),
+        'p1',
+        '2026-06-01',
+        '2026-06-02',
+      );
+
+      expect(analytics.getRevenueSummary).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        '2026-06-01',
+        '2026-06-02',
+      );
+      expect(result).toEqual(response);
+    });
+
+    it('works with no from/to query params at all', async () => {
+      const { controller, analytics } = makeController();
+      analytics.getRevenueSummary.mockResolvedValue({
+        total_revenue: 0,
+        purchases: 0,
+        paying_users: 0,
+        arppu: 0,
+        avg_purchase_value: 0,
+        by_day: [],
+        by_product: [],
+      });
+
+      await controller.revenueSummary(fakeRequest(), 'p1', undefined, undefined);
+
+      expect(analytics.getRevenueSummary).toHaveBeenCalledWith(
         USER.id,
         'p1',
         undefined,

@@ -18,6 +18,7 @@ import type {
   LiveEventsResponse,
   PropertiesMetaResponse,
   PropertyValuesResponse,
+  RevenueSummaryResponse,
   SessionsSummaryResponse,
   UserProfileResponse,
   UsersResponse,
@@ -111,5 +112,15 @@ export class AnalyticsController {
     @Query('to') to?: string,
   ): Promise<SessionsSummaryResponse> {
     return this.analytics.getSessionsSummary(req.user!.id, projectId, from, to);
+  }
+
+  @Get('metrics/revenue')
+  async revenueSummary(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ): Promise<RevenueSummaryResponse> {
+    return this.analytics.getRevenueSummary(req.user!.id, projectId, from, to);
   }
 }

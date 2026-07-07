@@ -101,6 +101,29 @@ export interface SessionsSummaryResponse {
   by_day: SessionsByDay[];
 }
 
+/** GET /metrics/revenue response (contracts §19) — derived from `$in_app_purchase` events. */
+export interface RevenueByDay {
+  t: string;
+  revenue: number;
+  purchases: number;
+}
+
+export interface RevenueByProduct {
+  product_id: string;
+  revenue: number;
+  purchases: number;
+}
+
+export interface RevenueSummaryResponse {
+  total_revenue: number;
+  purchases: number;
+  paying_users: number;
+  arppu: number;
+  avg_purchase_value: number;
+  by_day: RevenueByDay[];
+  by_product: RevenueByProduct[];
+}
+
 /** POST /query/funnels response (contracts §15). */
 export interface FunnelStepResult {
   event: string;

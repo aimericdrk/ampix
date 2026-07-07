@@ -15,6 +15,7 @@ import type {
   PropertiesMetaResponse,
   PropertyMeta,
   PropertyValuesResponse,
+  RevenueSummaryResponse,
   SessionsSummaryResponse,
   UserProfileResponse,
   UsersResponse,
@@ -103,12 +104,38 @@ interface SessionsDayRow {
   avg_duration_ms: string | number;
 }
 
+interface RevenueTotalsRow {
+  total_revenue: string | number;
+  purchases: string | number;
+  paying_users: string | number;
+}
+
+interface RevenueDayRow {
+  day: string;
+  revenue: string | number;
+  purchases: string | number;
+}
+
+interface RevenueProductRow {
+  product_id: string;
+  revenue: string | number;
+  purchases: string | number;
+}
+
 /** contracts §14: `/sessions/summary` reads `$session_end` events' `$duration_ms` property. Both
  *  are OUR OWN fixed reserved-name constants (contracts §4), never user input, so — matching how
  *  `infra/clickhouse/init.sql`'s `daily_sessions_mv` does it — they're embedded as SQL literals
  *  rather than bound params; only caller-supplied values ever need binding. */
 const SESSION_END_EVENT = '$session_end';
 const DURATION_MS_EXPR = "JSONExtractFloat(toJSONString(properties), '$duration_ms')";
+
+/** contracts §19: `/metrics/revenue` reads `$in_app_purchase` events' `$price`/`$product_id`
+ *  properties. Same doctrine as `SESSION_END_EVENT`/`DURATION_MS_EXPR` above — these are OUR OWN
+ *  fixed reserved-name constants (contracts §4), never user input, so embedded as SQL literals;
+ *  only caller-supplied values (projectId, date range) are ever bound as params. */
+const IN_APP_PURCHASE_EVENT = '$in_app_purchase';
+const PRICE_EXPR = "JSONExtractFloat(toJSONString(properties), '$price')";
+const PRODUCT_ID_EXPR = "JSONExtractString(toJSONString(properties), '$product_id')";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -607,5 +634,105 @@ export class AnalyticsService {
     });
 
     return { sessions, avg_duration_ms, by_day };
+  }
+
+  /**
+   * GET /metrics/revenue — `$in_app_purchase` is the SDK's reserved purchase-completed autocapture
+   * event (contracts §4); its `$price`/`$product_id` properties carry the purchase amount and the
+   * purchased SKU. Mirrors `getSessionsSummary`'s shape: an overall-totals query, a `by_day`
+   * breakdown (zero-filled onto `buildBucketGrid(..., 'day')`), and a `by_product` breakdown (top 10
+   * by revenue, empty product ids excluded — an event missing `$product_id` shouldn't pollute the
+   * per-SKU breakdown). `paying_users` is identity-resolved via the shared `canonicalization()`
+   * helper (contracts §17) so an anonymous->identified purchaser is counted once; the day/product
+   * breakdowns don't need canonical ids (they're not counting users), so those two queries scan
+   * `events` directly, matching the sessions-summary precedent. `arppu`/`avg_purchase_value` guard
+   * their divisors to avoid NaN (not valid JSON) on zero purchases/payers.
+   */
+  async getRevenueSummary(
+    userId: string,
+    projectId: string,
+    fromRaw?: string,
+    toRaw?: string,
+  ): Promise<RevenueSummaryResponse> {
+    await this.projects.assertMembership(userId, projectId);
+    const { from, to } = resolveDateOnlyRange(fromRaw, toRaw);
+
+    const params = {
+      projectId,
+      from: toChDateTime64(parseDateOnlyUTC(from)),
+      toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
+    };
+    const whereClause = `project_id = {projectId:UUID}
+         AND event = '${IN_APP_PURCHASE_EVENT}'
+         AND timestamp >= {from:DateTime64}
+         AND timestamp < {toExclusive:DateTime64}`;
+
+    const canon = canonicalization();
+
+    const [totalsRows, dayRows, productRows] = await Promise.all([
+      this.clickhouse.query<RevenueTotalsRow>(
+        `WITH ${canon.cte}
+         SELECT
+           sum(${PRICE_EXPR}) AS total_revenue,
+           count(DISTINCT e.insert_id) AS purchases,
+           uniqExact(${canon.uid}) AS paying_users
+         FROM events AS e
+         ${canon.join}
+         WHERE e.project_id = {projectId:UUID}
+           AND e.event = '${IN_APP_PURCHASE_EVENT}'
+           AND e.timestamp >= {from:DateTime64}
+           AND e.timestamp < {toExclusive:DateTime64}`,
+        params,
+        canon.settings,
+      ),
+      this.clickhouse.query<RevenueDayRow>(
+        `SELECT
+           toString(toDate(timestamp)) AS day,
+           sum(${PRICE_EXPR}) AS revenue,
+           count(DISTINCT insert_id) AS purchases
+         FROM events
+         WHERE ${whereClause}
+         GROUP BY day
+         ORDER BY day`,
+        params,
+      ),
+      this.clickhouse.query<RevenueProductRow>(
+        `SELECT
+           ${PRODUCT_ID_EXPR} AS product_id,
+           sum(${PRICE_EXPR}) AS revenue,
+           count(DISTINCT insert_id) AS purchases
+         FROM events
+         WHERE ${whereClause}
+           AND ${PRODUCT_ID_EXPR} != ''
+         GROUP BY product_id
+         ORDER BY revenue DESC
+         LIMIT 10`,
+        params,
+      ),
+    ]);
+
+    const total_revenue = Number(totalsRows[0]?.total_revenue ?? 0);
+    const purchases = Number(totalsRows[0]?.purchases ?? 0);
+    const paying_users = Number(totalsRows[0]?.paying_users ?? 0);
+    const arppu = paying_users === 0 ? 0 : total_revenue / paying_users;
+    const avg_purchase_value = purchases === 0 ? 0 : total_revenue / purchases;
+
+    const byDayMap = new Map(dayRows.map((row) => [row.day, row]));
+    const by_day = buildBucketGrid(from, to, 'day').map((bucket) => {
+      const row = byDayMap.get(bucket.t);
+      return {
+        t: bucket.t,
+        revenue: row ? Number(row.revenue) : 0,
+        purchases: row ? Number(row.purchases) : 0,
+      };
+    });
+
+    const by_product = productRows.map((row) => ({
+      product_id: row.product_id,
+      revenue: Number(row.revenue),
+      purchases: Number(row.purchases),
+    }));
+
+    return { total_revenue, purchases, paying_users, arppu, avg_purchase_value, by_day, by_product };
   }
 }
