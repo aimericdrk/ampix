@@ -21,12 +21,15 @@ export function CompositionPieChart({
   ariaLabel,
   donut = true,
   height = 260,
+  legendLabel = 'Composition legend',
 }: {
   slices: PieSlice[];
   colorFor: (key: string) => string;
   ariaLabel: string;
   donut?: boolean;
   height?: number;
+  /** Legend `aria-label`; override when a page renders more than one composition legend so each has a unique accessible name. */
+  legendLabel?: string;
 }) {
   const total = useMemo(() => slices.reduce((sum, s) => sum + s.value, 0), [slices]);
 
@@ -74,7 +77,7 @@ export function CompositionPieChart({
         </ResponsiveContainer>
       </div>
 
-      <CompositionLegend slices={slices} colorFor={colorFor} total={total} />
+      <CompositionLegend slices={slices} colorFor={colorFor} total={total} legendLabel={legendLabel} />
     </div>
   );
 }
@@ -83,18 +86,22 @@ export function CompositionPieChart({
  * The accessible label+value(+percent) listing shared by every composition chart
  * (`CompositionPieChart`, `DonutChart`) — the text alternative that keeps identity/magnitude off
  * color alone. Exported so donut-style variants can reuse it verbatim instead of duplicating markup.
+ * `legendLabel` should be unique per page when a pie and a donut render side by side, so their
+ * legends don't expose two identically-named lists to assistive tech.
  */
 export function CompositionLegend({
   slices,
   colorFor,
   total,
+  legendLabel = 'Composition legend',
 }: {
   slices: PieSlice[];
   colorFor: (key: string) => string;
   total: number;
+  legendLabel?: string;
 }) {
   return (
-    <ul aria-label="Composition legend" className="flex flex-1 flex-col gap-1.5 text-sm">
+    <ul aria-label={legendLabel} className="flex flex-1 flex-col gap-1.5 text-sm">
       {slices.map((slice) => (
         <li key={slice.key} className="flex items-center gap-2">
           <span

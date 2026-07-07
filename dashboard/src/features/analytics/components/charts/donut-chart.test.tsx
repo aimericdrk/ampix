@@ -15,13 +15,27 @@ describe('DonutChart', () => {
     expect(document.querySelector('svg')).not.toBeNull();
   });
 
-  it('lists each slice label + value in the accessible table', () => {
+  it('lists each slice label + value in the accessible table, under a donut-specific legend name', () => {
     render(<DonutChart slices={slices} colorFor={() => 'var(--series-1)'} ariaLabel="Share by group" />);
-    const legend = screen.getByRole('list', { name: 'Composition legend' });
+    // Defaults to a donut-specific accessible name so a page rendering both a pie and a donut never
+    // exposes two identically-named lists.
+    const legend = screen.getByRole('list', { name: 'Composition legend (donut)' });
     expect(within(legend).getByText('Alpha')).toBeInTheDocument();
     expect(within(legend).getByText('Beta')).toBeInTheDocument();
     expect(within(legend).getByText('30')).toBeInTheDocument();
     expect(within(legend).getByText('10')).toBeInTheDocument();
+  });
+
+  it('accepts a custom legendLabel override', () => {
+    render(
+      <DonutChart
+        slices={slices}
+        colorFor={() => 'var(--series-1)'}
+        ariaLabel="Share by group"
+        legendLabel="Share by group legend"
+      />,
+    );
+    expect(screen.getByRole('list', { name: 'Share by group legend' })).toBeInTheDocument();
   });
 
   it('shows the center total and label when provided', () => {

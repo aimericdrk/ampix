@@ -47,7 +47,9 @@ function compareValues(a: string | number, b: string | number): number {
  * A generic sortable, keyboard-accessible `<table>` used for top-events/top-screens/breakdown
  * tables (and the user-search disambiguation view). Sorting is local: clicking a `sortable`
  * header toggles asc/desc and reflects the active column via `aria-sort`. When `onRowClick` is
- * provided, rows become activatable by click and by Enter, in addition to the mouse.
+ * provided, rows become activatable by click, Enter, and Space (`tabIndex`/`onKeyDown` on the
+ * `<tr>`) in addition to the mouse — the row keeps its native `row` role rather than being
+ * overridden to `button`, so row/cell semantics (and screen-reader table navigation) stay intact.
  */
 export function DataTable<T>({
   columns,
@@ -135,7 +137,6 @@ export function DataTable<T>({
                 'border-b border-border',
                 onRowClick && 'cursor-pointer hover:bg-border/20',
               )}
-              role={onRowClick ? 'button' : undefined}
               tabIndex={onRowClick ? 0 : undefined}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               onKeyDown={onRowClick ? (event) => handleRowKeyDown(event, row) : undefined}

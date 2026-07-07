@@ -9,6 +9,8 @@ import { Sparkline } from './sparkline';
  * and an optional delta. The delta carries its meaning in TEXT (an arrow glyph + sign), never color
  * alone, so it stays legible in mono / forced-colors / CVD. An accessible summary sits in the
  * aria-label; the sparkline is decorative (aria-hidden) because its values back a nearby number.
+ * See `KpiTile` for the heavier-weight variant (full-precision value, coloured delta chip, and a
+ * `loading` skeleton state) used for Phase 1 headline KPIs.
  */
 export function StatTile({
   label,

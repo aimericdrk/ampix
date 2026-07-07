@@ -16,6 +16,7 @@ export function DonutChart({
   centerLabel,
   centerValue,
   height = 260,
+  legendLabel = 'Composition legend (donut)',
 }: {
   slices: PieSlice[];
   colorFor: (key: string) => string;
@@ -25,6 +26,8 @@ export function DonutChart({
   /** A pre-formatted string, or a number that gets exact-formatted (1,284). Omit to hide the overlay. */
   centerValue?: string | number;
   height?: number;
+  /** Legend `aria-label`; defaults to a donut-specific name so a page with both a pie and a donut never exposes two identically-named lists. */
+  legendLabel?: string;
 }) {
   const total = useMemo(() => slices.reduce((sum, s) => sum + s.value, 0), [slices]);
 
@@ -103,7 +106,7 @@ export function DonutChart({
         )}
       </div>
 
-      <CompositionLegend slices={slices} colorFor={colorFor} total={total} />
+      <CompositionLegend slices={slices} colorFor={colorFor} total={total} legendLabel={legendLabel} />
     </div>
   );
 }

@@ -191,11 +191,14 @@ export function FilterValueInput({
         className="h-9 w-40"
         role={hasSuggestions ? 'combobox' : undefined}
         aria-autocomplete={hasSuggestions ? 'list' : undefined}
-        aria-controls={hasSuggestions ? listId : undefined}
+        aria-controls={open && hasSuggestions ? listId : undefined}
         aria-expanded={hasSuggestions ? open : undefined}
         aria-activedescendant={activeOptionId}
         value={value}
         onFocus={() => setOpen(true)}
+        onClick={() => {
+          if (hasSuggestions) setOpen(true);
+        }}
         onChange={(e) => {
           onChange(e.target.value);
           setActiveIndex(0);

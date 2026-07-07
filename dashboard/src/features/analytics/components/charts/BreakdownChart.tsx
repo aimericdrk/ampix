@@ -3,7 +3,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Legend,
   LabelList,
   ResponsiveContainer,
@@ -32,13 +31,25 @@ export interface StackedBreakdownDatum {
   segments: BreakdownSegment[];
 }
 
-export interface BreakdownChartProps {
-  data: BreakdownDatum[] | StackedBreakdownDatum[];
+/**
+ * `stacked` and `data` are tied together in a discriminated union so passing single-shape rows
+ * with `stacked` (or segmented rows without it) fails to compile instead of crashing at render —
+ * see `breakdown-chart.test.tsx` for a `// @ts-expect-error` guard on the mismatched combination.
+ */
+export type BreakdownChartProps = {
   ariaLabel: string;
-  /** Renders one stacked bar per label with a segment-key legend, instead of single bars. */
-  stacked?: boolean;
   height?: number;
-}
+} & (
+  | {
+      /** Renders one stacked bar per label with a segment-key legend, instead of single bars. */
+      stacked?: false;
+      data: BreakdownDatum[];
+    }
+  | {
+      stacked: true;
+      data: StackedBreakdownDatum[];
+    }
+);
 
 const TOOLTIP_STYLE = {
   backgroundColor: 'var(--surface)',
@@ -70,13 +81,12 @@ function formatValueLabel(value: string | number | boolean | null | undefined): 
  * a plain column per value (or per segment key, plus a Total column when stacked) — so identity and
  * magnitude never rest on bar color/length alone.
  */
-export function BreakdownChart({ data, ariaLabel, stacked = false, height = 320 }: BreakdownChartProps) {
-  if (stacked) {
-    return (
-      <StackedBreakdownChart data={data as StackedBreakdownDatum[]} ariaLabel={ariaLabel} height={height} />
-    );
+export function BreakdownChart(props: BreakdownChartProps) {
+  const { ariaLabel, height = 320 } = props;
+  if (props.stacked) {
+    return <StackedBreakdownChart data={props.data} ariaLabel={ariaLabel} height={height} />;
   }
-  return <SingleBreakdownChart data={data as BreakdownDatum[]} ariaLabel={ariaLabel} height={height} />;
+  return <SingleBreakdownChart data={props.data} ariaLabel={ariaLabel} height={height} />;
 }
 
 function SingleBreakdownChart({
@@ -108,25 +118,22 @@ function SingleBreakdownChart({
               cursor={{ fill: 'var(--border)', opacity: 0.3 }}
               formatter={(value) => formatExactNumber(Number(value))}
             />
-            <Bar dataKey="value" isAnimationActive={false} maxBarSize={28}>
-              {sorted.map((item, index) => (
-                <Cell key={item.label} fill={colorForIndex(index)} />
-              ))}
+            <Bar dataKey="value" isAnimationActive={false} maxBarSize={28} fill={colorForIndex(0)}>
               <LabelList dataKey="value" position="right" formatter={formatValueLabel} fill="var(--text)" fontSize={12} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <SingleBreakdownTable rows={sorted} />
+      <SingleBreakdownTable rows={sorted} ariaLabel={ariaLabel} />
     </div>
   );
 }
 
-function SingleBreakdownTable({ rows }: { rows: BreakdownDatum[] }) {
+function SingleBreakdownTable({ rows, ariaLabel }: { rows: BreakdownDatum[]; ariaLabel: string }) {
   return (
     <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">Breakdown data table</caption>
+      <caption className="sr-only">{`${ariaLabel} data table`}</caption>
       <thead>
         <tr className="border-b border-border">
           <th scope="col" className="py-2 font-medium">
@@ -223,7 +230,7 @@ function StackedBreakdownChart({
         </ResponsiveContainer>
       </div>
 
-      <StackedBreakdownTable data={data} segmentKeys={segmentKeys} />
+      <StackedBreakdownTable data={data} segmentKeys={segmentKeys} ariaLabel={ariaLabel} />
     </div>
   );
 }
@@ -231,13 +238,15 @@ function StackedBreakdownChart({
 function StackedBreakdownTable({
   data,
   segmentKeys,
+  ariaLabel,
 }: {
   data: StackedBreakdownDatum[];
   segmentKeys: string[];
+  ariaLabel: string;
 }) {
   return (
     <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">Breakdown data table</caption>
+      <caption className="sr-only">{`${ariaLabel} data table`}</caption>
       <thead>
         <tr className="border-b border-border">
           <th scope="col" className="py-2 font-medium">

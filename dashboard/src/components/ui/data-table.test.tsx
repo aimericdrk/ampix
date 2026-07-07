@@ -92,6 +92,9 @@ describe('DataTable', () => {
     const bananaRow = screen.getByText('Banana').closest('tr');
     if (!bananaRow) throw new Error('expected a <tr> ancestor');
     expect(bananaRow).toHaveAttribute('tabIndex', '0');
+    // Row semantics must survive: no role override, so screen readers still get a real `row`.
+    expect(bananaRow).not.toHaveAttribute('role');
+    expect(screen.getAllByRole('row')).toHaveLength(3); // header + 2 data rows
 
     await userEvent.click(bananaRow);
     expect(onRowClick).toHaveBeenCalledWith(rows[0]);

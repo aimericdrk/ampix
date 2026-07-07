@@ -67,6 +67,19 @@ describe('chart components', () => {
     expect(within(legend).getByText('25%')).toBeInTheDocument();
   });
 
+  it('CompositionPieChart accepts a legendLabel override so a page with a pie and a donut can give each legend a unique name', () => {
+    const slices: PieSlice[] = [{ key: 'a', label: 'Alpha', value: 30 }];
+    render(
+      <CompositionPieChart
+        slices={slices}
+        colorFor={() => 'var(--series-1)'}
+        ariaLabel="Share by group"
+        legendLabel="Share by group legend"
+      />,
+    );
+    expect(screen.getByRole('list', { name: 'Share by group legend' })).toBeInTheDocument();
+  });
+
   it('AreaTrendChart and StackedBarChart render an accessible labelled figure', () => {
     const { unmount } = render(<AreaTrendChart {...seriesProps} ariaLabel="Area figure" />);
     expect(screen.getByRole('img', { name: 'Area figure' })).toBeInTheDocument();

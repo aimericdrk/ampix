@@ -1,6 +1,12 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { BreakdownChart } from './BreakdownChart';
+import { BreakdownChart, type BreakdownChartProps } from './BreakdownChart';
+
+// A wrong data shape for a given `stacked` value must fail to compile, not crash at runtime — the
+// discriminated union is the whole point of this prop type.
+// @ts-expect-error stacked: true requires StackedBreakdownDatum[] rows, not flat {label,value} rows.
+const _invalidStackedProps: BreakdownChartProps = { stacked: true, data: [{ label: 'iOS', value: 40 }], ariaLabel: 'invalid' };
+void _invalidStackedProps;
 
 describe('BreakdownChart', () => {
   it('renders an accessible labelled figure with a bar per label, sorted desc by value', () => {
@@ -24,6 +30,30 @@ describe('BreakdownChart', () => {
     expect(within(rows[1]!).getByText('Android')).toBeInTheDocument();
     expect(within(rows[2]!).getByText('Web')).toBeInTheDocument();
     expect(within(rows[3]!).getByText('iOS')).toBeInTheDocument();
+  });
+
+  it('captions the accessible table using the ariaLabel prop, not a hardcoded string', () => {
+    render(
+      <BreakdownChart data={[{ label: 'iOS', value: 40 }]} ariaLabel="OS breakdown" />,
+    );
+    expect(screen.getByText('OS breakdown data table')).toBeInTheDocument();
+  });
+
+  it('colors every bar with one series color rather than a per-bar rainbow', () => {
+    const { container } = render(
+      <BreakdownChart
+        data={[
+          { label: 'iOS', value: 40 },
+          { label: 'Android', value: 120 },
+          { label: 'Web', value: 80 },
+        ]}
+        ariaLabel="OS breakdown"
+      />,
+    );
+    const bars = container.querySelectorAll('.recharts-bar-rectangle path');
+    expect(bars.length).toBeGreaterThan(0);
+    const fills = new Set(Array.from(bars).map((bar) => bar.getAttribute('fill')));
+    expect(fills.size).toBe(1);
   });
 
   it('lists exact values in the accessible table', () => {
@@ -76,6 +106,7 @@ describe('BreakdownChart', () => {
     expect(within(figure).getByText('Returning')).toBeInTheDocument();
 
     const table = screen.getByRole('table');
+    expect(screen.getByText('OS breakdown by user type data table')).toBeInTheDocument();
     const headers = within(table).getAllByRole('columnheader').map((cell) => cell.textContent);
     expect(headers).toEqual(['Label', 'New', 'Returning', 'Total']);
 

@@ -9,6 +9,8 @@ import { Sparkline } from './sparkline';
  * sparkline for magnitude-over-time context, and a period-over-period delta chip. The delta
  * always pairs an arrow glyph with its colour (▲ accent / ▼ danger) so meaning survives
  * grayscale/CVD viewing. `loading` swaps the value and sparkline for `Skeleton` placeholders.
+ * See `StatTile` for the lighter-weight variant (compact-formatted value, text-only delta, no
+ * loading state) used where full precision and skeleton loading aren't needed.
  */
 export function KpiTile({
   label,

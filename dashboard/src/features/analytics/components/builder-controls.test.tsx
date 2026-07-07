@@ -48,9 +48,12 @@ describe('FilterRows value combobox', () => {
 
     // Once the async /meta/property-values query resolves, the field becomes a combobox.
     await waitFor(() => expect(input).toHaveAttribute('role', 'combobox'));
+    // Before the listbox is open, aria-controls must not reference a not-yet-rendered element.
+    expect(input).not.toHaveAttribute('aria-controls');
     await userEvent.click(input);
 
     const listbox = await screen.findByRole('listbox');
+    expect(input).toHaveAttribute('aria-controls', listbox.id);
     const options = within(listbox)
       .getAllByRole('option')
       .map((option) => option.textContent);
@@ -58,6 +61,28 @@ describe('FilterRows value combobox', () => {
 
     await userEvent.click(within(listbox).getByRole('option', { name: 'ios' }));
     expect(onChange).toHaveBeenCalledWith([{ property: 'os', op: 'eq', value: 'ios' }]);
+  });
+
+  it('reopens the listbox on a click after it was dismissed with Escape', async () => {
+    signIn();
+    const onChange = vi.fn();
+    renderFilterRows({
+      projectId: TEST_PROJECT.id,
+      filters: [{ property: 'os', op: 'eq', value: '' }],
+      onChange,
+    });
+
+    const input = screen.getByLabelText('Filter value 1');
+    await waitFor(() => expect(input).toHaveAttribute('role', 'combobox'));
+    await userEvent.click(input);
+    await screen.findByRole('listbox');
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(input).not.toHaveAttribute('aria-controls');
+
+    await userEvent.click(input);
+    expect(await screen.findByRole('listbox')).toBeInTheDocument();
   });
 
   it('lets the user type an arbitrary value even when suggestions exist', async () => {
