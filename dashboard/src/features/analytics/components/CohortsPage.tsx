@@ -1,8 +1,9 @@
 import { useParams } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   CohortBehaviorCondition,
@@ -11,6 +12,7 @@ import type {
   CohortCountOp,
   CohortDefinition,
   CohortMatch,
+  CohortPreviewResponse,
   CohortPropertyCondition,
   InsightsFilter,
   InsightsFilterOp,
@@ -22,16 +24,18 @@ import {
   INSIGHTS_FILTER_OPS,
 } from '../../../lib/api/types';
 import {
-  useCohortPreview,
+  useCohort,
   useCohorts,
   useCreateCohort,
   useDeleteCohort,
   useMetaEvents,
   useMetaProperties,
+  usePreviewCohortDefinition,
   useUpdateCohort,
 } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
-import { cleanFilters, EventNameInput, FilterRows, VALUELESS_OPS } from './builder-controls';
+import { cleanFilters, FilterRows, VALUELESS_OPS } from './builder-controls';
+import { EventSelectField, useAutoRun } from './explore-controls';
 
 const MATCH_LABELS: Record<CohortMatch, string> = {
   all: 'Match all conditions (AND)',
@@ -64,13 +68,21 @@ const FILTER_OP_LABELS: Record<InsightsFilterOp, string> = {
 
 const MAX_CONDITIONS = 10;
 
+/** The quick builder's "in the last N days" segmented presets — no raw typing. */
+const WITHIN_DAYS_PRESETS = [7, 30, 90];
+/** Predefined windows offered by the advanced within-days picker (replaces the raw number input). */
+const WITHIN_DAYS_OPTIONS = [1, 7, 14, 30, 60, 90];
+/** Common event counts offered by the advanced behavior picker (replaces the raw number input). */
+const COUNT_OPTIONS = [1, 2, 3, 5, 10];
+
+/** A fresh "did event ≥1 in the last 30 days" behavior — the quick builder's starting point. */
+function defaultBehavior(): CohortBehaviorCondition {
+  return { type: 'behavior', event: '', op: 'gte', count: 1, within_days: 30, filters: [] };
+}
+
 function defaultCondition(type: CohortConditionType, firstProperty: string): CohortCondition {
-  if (type === 'behavior') {
-    return { type: 'behavior', event: '', op: 'gte', count: 1, within_days: 30, filters: [] };
-  }
-  if (type === 'did_not') {
-    return { type: 'did_not', event: '', within_days: 7 };
-  }
+  if (type === 'behavior') return defaultBehavior();
+  if (type === 'did_not') return { type: 'did_not', event: '', within_days: 7 };
   return { type: 'property', property: firstProperty, op: 'eq', value: '' };
 }
 
@@ -89,6 +101,11 @@ function conditionIsComplete(condition: CohortCondition): boolean {
   return Boolean(condition.event.trim());
 }
 
+/** A single cohort whose primary condition is a plain behavior needs no advanced disclosure. */
+function definitionIsSimple(definition: CohortDefinition): boolean {
+  return definition.conditions.length === 1 && definition.conditions[0]?.type === 'behavior';
+}
+
 export function CohortsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/cohorts' });
   const cohorts = useCohorts(projectId);
@@ -98,6 +115,7 @@ export function CohortsPage() {
   const [currentCohortId, setCurrentCohortId] = useState<string | null>(null);
   const updateCohort = useUpdateCohort(projectId, currentCohortId ?? '');
   const deleteCohort = useDeleteCohort(projectId);
+  const previewCohort = usePreviewCohortDefinition(projectId);
 
   const eventOptions = metaEvents.data?.events ?? [];
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
@@ -105,31 +123,55 @@ export function CohortsPage() {
 
   const [name, setName] = useState('');
   const [match, setMatch] = useState<CohortMatch>('all');
-  const [conditions, setConditions] = useState<CohortCondition[]>([
-    { type: 'behavior', event: '', op: 'gte', count: 1, within_days: 30, filters: [] },
-  ]);
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [conditions, setConditions] = useState<CohortCondition[]>([defaultBehavior()]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [previewResult, setPreviewResult] = useState<CohortPreviewResponse | null>(null);
 
-  const preview = useCohortPreview(projectId, previewId);
+  // Edit loads the full definition (the list omits it) via GET /cohorts/:id, then hydrates the builder.
+  const [editId, setEditId] = useState<string | null>(null);
+  const cohortDetail = useCohort(projectId, editId ?? '');
 
   const definition: CohortDefinition = useMemo(
     () => ({ match, conditions: conditions.map(normalizeCondition) }),
     [match, conditions],
   );
 
+  const primary = conditions[0];
+
+  useEffect(() => {
+    const detail = cohortDetail.data;
+    if (!editId || !detail || detail.id !== editId) return;
+    setCurrentCohortId(detail.id);
+    setName(detail.name);
+    setMatch(detail.definition.match);
+    setConditions(detail.definition.conditions);
+    setShowAdvanced(!definitionIsSimple(detail.definition));
+    setPreviewResult(null);
+    setEditId(null); // consume so the effect doesn't re-hydrate over the analyst's edits
+  }, [editId, cohortDetail.data]);
+
+  // Live preview: POST the current definition (no save) whenever it changes and is runnable.
+  const runnable = conditions.length > 0 && conditions.every(conditionIsComplete);
+  useAutoRun({
+    key: JSON.stringify(definition),
+    enabled: runnable,
+    run: () => previewCohort.mutate(definition, { onSuccess: setPreviewResult }),
+  });
+
   const canSave =
     name.trim().length > 0 &&
-    conditions.length > 0 &&
-    conditions.every(conditionIsComplete) &&
+    runnable &&
     !createCohort.isPending &&
     !updateCohort.isPending;
 
   const resetBuilder = () => {
     setName('');
     setMatch('all');
-    setConditions([{ type: 'behavior', event: '', op: 'gte', count: 1, within_days: 30, filters: [] }]);
+    setConditions([defaultBehavior()]);
     setCurrentCohortId(null);
-    setPreviewId(null);
+    setEditId(null);
+    setShowAdvanced(false);
+    setPreviewResult(null);
   };
 
   const addCondition = () => {
@@ -146,37 +188,19 @@ export function CohortsPage() {
   };
 
   const removeCondition = (index: number) => {
-    setConditions((current) => current.filter((_, i) => i !== index));
+    setConditions((current) => (current.length <= 1 ? current : current.filter((_, i) => i !== index)));
   };
 
   const handleSave = () => {
     if (!canSave) return;
     if (currentCohortId) {
-      updateCohort.mutate(
-        { name: name.trim(), definition },
-        { onSuccess: (cohort) => setPreviewId(cohort.id) },
-      );
+      updateCohort.mutate({ name: name.trim(), definition });
       return;
     }
     createCohort.mutate(
       { name: name.trim(), definition },
-      {
-        onSuccess: (cohort) => {
-          setCurrentCohortId(cohort.id);
-          setPreviewId(cohort.id);
-        },
-      },
+      { onSuccess: (cohort) => setCurrentCohortId(cohort.id) },
     );
-  };
-
-  const loadForEdit = (id: string) => {
-    const found = cohorts.data?.cohorts.find((c) => c.id === id);
-    if (!found) return;
-    setCurrentCohortId(id);
-    setPreviewId(null);
-    setName(found.name);
-    // The list endpoint omits `definition`; fetch-on-edit is out of scope here — start from the
-    // current builder state and let the analyst re-express it, then Save (PATCH) to persist.
   };
 
   const saveError =
@@ -188,7 +212,7 @@ export function CohortsPage() {
     <PageShell
       projectId={projectId}
       title="Cohorts"
-      description="Define reusable audiences from behavior and properties."
+      description="Build an audience — pick an event, watch the size update live, then save."
       breadcrumbs={[{ label: 'Audience' }, { label: 'Cohorts' }]}
       actions={
         <Button type="button" variant="secondary" onClick={resetBuilder}>
@@ -222,17 +246,8 @@ export function CohortsPage() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label={`Preview ${cohort.name}`}
-                    onClick={() => setPreviewId(cohort.id)}
-                  >
-                    Preview
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
                     aria-label={`Edit ${cohort.name}`}
-                    onClick={() => loadForEdit(cohort.id)}
+                    onClick={() => setEditId(cohort.id)}
                   >
                     Edit
                   </Button>
@@ -244,7 +259,6 @@ export function CohortsPage() {
                     onClick={() =>
                       deleteCohort.mutate(cohort.id, {
                         onSuccess: () => {
-                          if (previewId === cohort.id) setPreviewId(null);
                           if (currentCohortId === cohort.id) resetBuilder();
                         },
                       })
@@ -264,63 +278,73 @@ export function CohortsPage() {
           <CardTitle>{currentCohortId ? 'Edit cohort' : 'New cohort'}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <label htmlFor="cohort-name" className="mb-1 block text-sm font-medium">
-                Cohort name
-              </label>
-              <Input
-                id="cohort-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Recent buyers"
-              />
-            </div>
-            <div>
-              <label htmlFor="cohort-match" className="mb-1 block text-sm font-medium">
-                Match
-              </label>
-              <select
-                id="cohort-match"
-                value={match}
-                onChange={(e) => setMatch(e.target.value as CohortMatch)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
-              >
-                {COHORT_MATCHES.map((value) => (
-                  <option key={value} value={value}>
-                    {MATCH_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label htmlFor="cohort-name" className="mb-1 block text-sm font-medium">
+              Cohort name
+            </label>
+            <Input
+              id="cohort-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Recent buyers"
+            />
           </div>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Conditions ({conditions.length}/{MAX_CONDITIONS})</span>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={addCondition}
-                disabled={conditions.length >= MAX_CONDITIONS}
-              >
-                Add condition
-              </Button>
-            </div>
-            {conditions.map((condition, index) => (
-              <ConditionRow
-                key={index}
-                index={index}
-                condition={condition}
-                eventOptions={eventOptions}
-                propertyNames={propertyNames}
-                projectId={projectId}
-                onType={(type) => changeConditionType(index, type)}
-                onChange={(next) => setConditionAt(index, next)}
-                onRemove={() => removeCondition(index)}
+          {/* Quick builder: "who did <event> in the last N days" — no raw typing. */}
+          {primary?.type === 'behavior' ? (
+            <div className="flex flex-wrap items-end gap-6">
+              <EventSelectField
+                label="Event"
+                value={primary.event}
+                onChange={(value) => setConditionAt(0, { ...primary, event: value })}
+                options={eventOptions}
+                isLoading={metaEvents.isPending}
+                noun="event"
+                placeholder="Select an event…"
+                emptyLabel="No events tracked yet."
               />
-            ))}
+              <WithinDaysPresets
+                value={primary.within_days}
+                onChange={(within_days) => setConditionAt(0, { ...primary, within_days })}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-text-muted">
+              Your first condition is configured in the advanced section below.
+            </p>
+          )}
+
+          {/* Live preview: updates on its own as the definition changes, before any save. */}
+          <div className="rounded-md border border-border p-4" aria-live="polite">
+            {!runnable && (
+              <p className="text-sm text-text-muted">
+                Pick an event to preview how many users match.
+              </p>
+            )}
+            {runnable && previewCohort.isError && (
+              <p role="alert" className="text-danger">
+                {previewCohort.error instanceof ApiError
+                  ? previewCohort.error.problem.title
+                  : 'Failed to preview the cohort'}
+              </p>
+            )}
+            {runnable && previewCohort.isPending && !previewResult && <p role="status">Computing…</p>}
+            {runnable && previewResult && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-text-muted">Cohort size</p>
+                  {previewCohort.isPending && (
+                    <span role="status" className="text-xs text-text-muted">
+                      Computing…
+                    </span>
+                  )}
+                </div>
+                <p className="text-3xl font-semibold tabular-nums">{previewResult.count}</p>
+                {previewResult.sample.length > 0 && (
+                  <p className="text-xs text-text-muted">Sample: {previewResult.sample.join(', ')}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {saveError && (
@@ -339,39 +363,66 @@ export function CohortsPage() {
             </Button>
             <Button
               type="button"
-              variant="secondary"
-              onClick={() => currentCohortId && setPreviewId(currentCohortId)}
-              disabled={!currentCohortId}
-              title={currentCohortId ? undefined : 'Save the cohort to preview its size'}
+              variant="ghost"
+              size="sm"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((value) => !value)}
+              className="border border-dashed border-border font-normal text-text-muted hover:text-text"
             >
-              Preview cohort
+              <span aria-hidden="true">+</span>{' '}
+              {showAdvanced ? 'Hide advanced' : 'Add conditions & filters'}
             </Button>
-            {!currentCohortId && (
-              <span className="text-xs text-text-muted">Save the cohort to preview its size.</span>
-            )}
           </div>
 
-          {previewId && (
-            <div className="rounded-md border border-border p-4" aria-live="polite">
-              {preview.isPending && <p role="status">Computing cohort size…</p>}
-              {preview.error && (
-                <p role="alert" className="text-danger">
-                  {preview.error instanceof ApiError
-                    ? preview.error.problem.title
-                    : 'Failed to preview the cohort'}
-                </p>
-              )}
-              {preview.data && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm text-text-muted">Cohort size</p>
-                  <p className="text-3xl font-semibold tabular-nums">{preview.data.count}</p>
-                  {preview.data.sample.length > 0 && (
-                    <p className="text-xs text-text-muted">
-                      Sample: {preview.data.sample.join(', ')}
-                    </p>
-                  )}
-                </div>
-              )}
+          {showAdvanced && (
+            <div className="flex flex-col gap-4 border-t border-border pt-5">
+              <div>
+                <label htmlFor="cohort-match" className="mb-1 block text-sm font-medium">
+                  Match
+                </label>
+                <select
+                  id="cohort-match"
+                  value={match}
+                  onChange={(e) => setMatch(e.target.value as CohortMatch)}
+                  className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                >
+                  {COHORT_MATCHES.map((value) => (
+                    <option key={value} value={value}>
+                      {MATCH_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  Conditions ({conditions.length}/{MAX_CONDITIONS})
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={addCondition}
+                  disabled={conditions.length >= MAX_CONDITIONS}
+                >
+                  Add condition
+                </Button>
+              </div>
+              {conditions.map((condition, index) => (
+                <ConditionRow
+                  key={index}
+                  index={index}
+                  condition={condition}
+                  eventOptions={eventOptions}
+                  eventsLoading={metaEvents.isPending}
+                  propertyNames={propertyNames}
+                  projectId={projectId}
+                  canRemove={conditions.length > 1}
+                  onType={(type) => changeConditionType(index, type)}
+                  onChange={(next) => setConditionAt(index, next)}
+                  onRemove={() => removeCondition(index)}
+                />
+              ))}
             </div>
           )}
         </CardContent>
@@ -380,12 +431,56 @@ export function CohortsPage() {
   );
 }
 
+/** A segmented "7 · 30 · 90 days" control (mirrors DateRangePresets) — the quick within-days picker. */
+function WithinDaysPresets({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div>
+      <span className="mb-1 block text-sm font-medium">In the last</span>
+      <div
+        role="radiogroup"
+        aria-label="In the last"
+        className="inline-flex w-fit flex-wrap gap-0.5 rounded-lg border border-border bg-surface p-0.5"
+      >
+        {WITHIN_DAYS_PRESETS.map((days) => {
+          const active = value === days;
+          return (
+            <button
+              key={days}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(days)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm transition-colors',
+                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                active
+                  ? 'bg-accent font-medium text-accent-fg'
+                  : 'text-text-muted hover:bg-border/40 hover:text-text',
+              )}
+            >
+              {days} days
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ConditionRow({
   index,
   condition,
   eventOptions,
+  eventsLoading,
   propertyNames,
   projectId,
+  canRemove,
   onType,
   onChange,
   onRemove,
@@ -393,8 +488,10 @@ function ConditionRow({
   index: number;
   condition: CohortCondition;
   eventOptions: string[];
+  eventsLoading: boolean;
   propertyNames: string[];
   projectId: string;
+  canRemove: boolean;
   onType: (type: CohortConditionType) => void;
   onChange: (next: CohortCondition) => void;
   onRemove: () => void;
@@ -419,15 +516,17 @@ function ConditionRow({
           ))}
         </select>
         <span className="flex-1" />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={`Remove condition ${n}`}
-          onClick={onRemove}
-        >
-          Remove
-        </Button>
+        {canRemove && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Remove condition ${n}`}
+            onClick={onRemove}
+          >
+            Remove
+          </Button>
+        )}
       </div>
 
       {condition.type === 'behavior' && (
@@ -435,6 +534,7 @@ function ConditionRow({
           index={index}
           condition={condition}
           eventOptions={eventOptions}
+          eventsLoading={eventsLoading}
           propertyNames={propertyNames}
           projectId={projectId}
           onChange={onChange}
@@ -443,16 +543,15 @@ function ConditionRow({
 
       {condition.type === 'did_not' && (
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[12rem]">
-            <EventNameInput
-              id={`condition-${index}-event`}
-              label={`Condition ${n} event`}
-              value={condition.event}
-              onChange={(value) => onChange({ ...condition, event: value })}
-              options={eventOptions}
-              placeholder="e.g. app_open"
-            />
-          </div>
+          <EventSelectField
+            label={`Condition ${n} event`}
+            value={condition.event}
+            onChange={(value) => onChange({ ...condition, event: value })}
+            options={eventOptions}
+            isLoading={eventsLoading}
+            noun="event"
+            placeholder="Select an event…"
+          />
           <WithinDaysField
             index={index}
             value={condition.within_days}
@@ -477,6 +576,7 @@ function BehaviorFields({
   index,
   condition,
   eventOptions,
+  eventsLoading,
   propertyNames,
   projectId,
   onChange,
@@ -484,6 +584,7 @@ function BehaviorFields({
   index: number;
   condition: CohortBehaviorCondition;
   eventOptions: string[];
+  eventsLoading: boolean;
   propertyNames: string[];
   projectId: string;
   onChange: (next: CohortBehaviorCondition) => void;
@@ -492,16 +593,15 @@ function BehaviorFields({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-[12rem]">
-          <EventNameInput
-            id={`condition-${index}-event`}
-            label={`Condition ${n} event`}
-            value={condition.event}
-            onChange={(value) => onChange({ ...condition, event: value })}
-            options={eventOptions}
-            placeholder="e.g. checkout_completed"
-          />
-        </div>
+        <EventSelectField
+          label={`Condition ${n} event`}
+          value={condition.event}
+          onChange={(value) => onChange({ ...condition, event: value })}
+          options={eventOptions}
+          isLoading={eventsLoading}
+          noun="event"
+          placeholder="Select an event…"
+        />
         <div>
           <label htmlFor={`condition-${index}-count-op`} className="mb-1 block text-sm font-medium">
             Count
@@ -524,14 +624,18 @@ function BehaviorFields({
           <label className="sr-only" htmlFor={`condition-${index}-count`}>
             Condition {n} count
           </label>
-          <input
+          <select
             id={`condition-${index}-count`}
-            type="number"
-            min={0}
             value={condition.count}
             onChange={(e) => onChange({ ...condition, count: Number(e.target.value) })}
-            className="h-10 w-20 rounded-md border border-border bg-surface px-2 text-sm"
-          />
+            className="h-10 rounded-md border border-border bg-surface px-2 text-sm"
+          >
+            {COUNT_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
           <span className="ml-1 text-sm text-text-muted">times</span>
         </div>
         <WithinDaysField
@@ -547,6 +651,7 @@ function BehaviorFields({
         onChange={(filters: InsightsFilter[]) => onChange({ ...condition, filters })}
         propertyNames={propertyNames}
         projectId={projectId}
+        event={condition.event || undefined}
       />
     </div>
   );
@@ -613,6 +718,7 @@ function PropertyFields({
   );
 }
 
+/** A predefined within-days window picker (replaces the old raw number input). */
 function WithinDaysField({
   index,
   value,
@@ -622,19 +728,26 @@ function WithinDaysField({
   value: number;
   onChange: (value: number) => void;
 }) {
+  const options = WITHIN_DAYS_OPTIONS.includes(value)
+    ? WITHIN_DAYS_OPTIONS
+    : [...WITHIN_DAYS_OPTIONS, value].sort((a, b) => a - b);
   return (
     <div>
       <label htmlFor={`condition-${index}-within-days`} className="mb-1 block text-sm font-medium">
-        Within days
+        Within
       </label>
-      <input
+      <select
         id={`condition-${index}-within-days`}
-        type="number"
-        min={1}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-10 w-24 rounded-md border border-border bg-surface px-2 text-sm"
-      />
+        className="h-10 rounded-md border border-border bg-surface px-2 text-sm"
+      >
+        {options.map((days) => (
+          <option key={days} value={days}>
+            {days} {days === 1 ? 'day' : 'days'}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

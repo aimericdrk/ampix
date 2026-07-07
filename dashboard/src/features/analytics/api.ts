@@ -8,6 +8,7 @@ import type {
   ScreensResponse,
   ApplyTemplateResponse,
   Cohort,
+  CohortDefinition,
   CohortPreviewResponse,
   CreateCohortRequest,
   CreateDashboardRequest,
@@ -293,10 +294,12 @@ export function useCohorts(projectId: string) {
   });
 }
 
+/** `GET /cohorts/:id` — the cohort incl. its stored `definition`; gated until a real id is passed. */
 export function useCohort(projectId: string, cohortId: string) {
   return useQuery({
     queryKey: [...cohortsKey(projectId), cohortId],
     queryFn: () => apiFetch<Cohort>(`${base(projectId)}/cohorts/${cohortId}`),
+    enabled: cohortId.length > 0,
   });
 }
 
@@ -307,6 +310,21 @@ export function useCohortPreview(projectId: string, cohortId: string | null) {
     queryFn: () =>
       apiFetch<CohortPreviewResponse>(`${base(projectId)}/cohorts/${cohortId}/preview`),
     enabled: cohortId !== null,
+  });
+}
+
+/**
+ * Live cohort preview from an in-progress definition (`POST /cohorts/preview`) — no save required.
+ * Mirrors the Explore run-mutations: the builder POSTs its current definition and gets back
+ * `{ count, sample }`, so the audience size updates as the analyst picks events / conditions.
+ */
+export function usePreviewCohortDefinition(projectId: string) {
+  return useMutation({
+    mutationFn: (definition: CohortDefinition) =>
+      apiFetch<CohortPreviewResponse>(`${base(projectId)}/cohorts/preview`, {
+        method: 'POST',
+        body: definition,
+      }),
   });
 }
 

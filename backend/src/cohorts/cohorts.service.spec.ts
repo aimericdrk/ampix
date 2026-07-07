@@ -82,6 +82,30 @@ describe('CohortsService (contracts §16)', () => {
     );
   });
 
+  it('previewDefinition validates + runs an unsaved definition without touching the database', async () => {
+    const { service, cohort, query } = make((sql) =>
+      sql.includes('uniqExact') ? [{ count: 7 }] : [{ distinct_id: 'x' }, { distinct_id: 'y' }],
+    );
+
+    const preview = await service.previewDefinition(PROJECT, DEFINITION);
+
+    expect(preview).toEqual({ count: 7, sample: ['x', 'y'] });
+    // No cohort is loaded — the definition comes straight from the request body.
+    expect(cohort.findUnique).not.toHaveBeenCalled();
+    expect(query.mock.calls.some(([sql]) => (sql as string).includes('uniqExact(distinct_id)'))).toBe(
+      true,
+    );
+  });
+
+  it('previewDefinition rejects a malformed definition with a 400 (never trust request JSON)', async () => {
+    const { service, query } = make();
+
+    await expect(
+      service.previewDefinition(PROJECT, { match: 'nonsense', conditions: [] }),
+    ).rejects.toMatchObject({ problem: { status: 400 } });
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('resolveCohortPredicate re-validates the stored definition and compiles a bound subquery', async () => {
     const { service, cohort } = make();
     cohort.findUnique.mockResolvedValue(row());

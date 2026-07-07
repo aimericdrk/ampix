@@ -1289,6 +1289,23 @@ export const handlers = [
     return HttpResponse.json({ templates: TEMPLATES_FIXTURE });
   }),
 
+  // Live cohort preview (§16) — runs an in-progress definition WITHOUT persisting. The count is
+  // derived from the definition (10 per condition + the primary event's length) so a test can assert
+  // the live preview reacts to the chosen event. Static path, so it doesn't collide with POST /cohorts.
+  http.post('/api/v1/projects/:projectId/cohorts/preview', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as CohortDefinition;
+    const first = body.conditions?.[0];
+    const eventLen = first && 'event' in first ? first.event.length : 0;
+    const count = (body.conditions?.length ?? 0) * 10 + eventLen;
+    return HttpResponse.json({
+      count,
+      sample: ['user-001', 'user-002'],
+    } satisfies CohortPreviewResponse);
+  }),
+
   // --- Cohorts, saved reports & custom dashboards (contracts §16) + templates apply (§19) ---
   ...phase5Handlers,
 ];

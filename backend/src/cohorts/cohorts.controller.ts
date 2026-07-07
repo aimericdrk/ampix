@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 import { Roles } from '../authz/roles.decorator';
 import { RolesGuard } from '../authz/roles.guard';
-import { createCohortSchema, updateCohortSchema } from './cohort.schema';
+import { cohortDefinitionSchema, createCohortSchema, updateCohortSchema } from './cohort.schema';
 import type { CohortDetail, CohortListItem, CohortPreview } from './cohort.types';
 import { CohortsService } from './cohorts.service';
 
@@ -46,6 +46,23 @@ export class CohortsController {
   ): Promise<CohortDetail> {
     const dto = parseOrThrow(createCohortSchema, body);
     return this.cohorts.create(projectId, req.user!.id, dto);
+  }
+
+  /**
+   * Previews a not-yet-saved definition (viewer+) → `{ count, sample }` WITHOUT persisting anything.
+   * Powers the live builder preview. Declared before `:id` routes and static-pathed (`preview`), so it
+   * never shadows / is shadowed by `@Post()` create (path `''`) or the `:id` param routes.
+   */
+  @Post('preview')
+  @UseGuards(RolesGuard)
+  @Roles('viewer')
+  @HttpCode(200) // a read (runs the definition), not a resource creation
+  async previewDefinition(
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ): Promise<CohortPreview> {
+    const definition = parseOrThrow(cohortDefinitionSchema, body);
+    return this.cohorts.previewDefinition(projectId, definition);
   }
 
   @Get(':id')

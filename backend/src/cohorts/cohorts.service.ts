@@ -73,10 +73,24 @@ export class CohortsService {
     await this.prisma.cohort.delete({ where: { id } });
   }
 
-  /** Runs the cohort and returns its size (`uniqExact`) plus a bounded, ordered id sample. */
+  /** Runs a SAVED cohort and returns its size (`uniqExact`) plus a bounded, ordered id sample. */
   async preview(projectId: string, id: string): Promise<CohortPreview> {
     const cohort = await this.load(projectId, id);
-    const { sql, params } = this.compile(projectId, cohort.definition);
+    return this.runPreview(projectId, cohort.definition);
+  }
+
+  /**
+   * Runs a not-yet-saved definition and returns its size + sample — powers the live builder preview,
+   * so an analyst sees the audience size before saving. The definition is re-validated (via
+   * {@link compile}) exactly like a stored one, so this is no less injection-safe than the by-id path.
+   */
+  async previewDefinition(projectId: string, definition: unknown): Promise<CohortPreview> {
+    return this.runPreview(projectId, definition);
+  }
+
+  /** Compiles a definition (re-validated) and runs the count + bounded id-sample queries. */
+  private async runPreview(projectId: string, definition: unknown): Promise<CohortPreview> {
+    const { sql, params } = this.compile(projectId, definition);
 
     const [countRows, sampleRows] = await Promise.all([
       this.clickhouse.query<CountRow>(`SELECT uniqExact(distinct_id) AS count FROM (\n${sql}\n)`, params),

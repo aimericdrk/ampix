@@ -440,6 +440,10 @@ AND-joins the `distinct_id IN (…)` predicate into the query (still fully param
   `DELETE /cohorts/:id` (analyst+) → `204`.
 - `GET /cohorts/:id/preview` → `{ "count": N, "sample": ["distinct_id", …up to 20] }` — runs the cohort
   and returns its size + a sample (viewer+). `uniqExact` for the count.
+- `POST /cohorts/preview` (viewer+) body = a cohort `definition` (the same shape validated by the cohort
+  zod schema) → `{ "count": N, "sample": [ …up to 20 ] }` — runs the definition through the SAME preview
+  engine and returns its size + sample WITHOUT persisting. Powers the live builder preview (no save
+  required). `400` if the definition fails the schema.
 
 ### Saved reports API (`/api/v1/projects/:projectId/reports`)
 - `GET /reports?kind=<kind?>` → `{ "reports": [ { "id","name","kind","created_by","updated_at" } ] }`.
