@@ -307,6 +307,7 @@ export function HomePage() {
             title="Active users"
             description="Daily active users vs. the previous period."
             state={chartState(dayEngagement.isPending, dayEngagement.isError, activeTrendCurrent.length === 0)}
+            exportImageName="active-users-trend"
           >
             <ComparisonTrend
               current={activeTrendCurrent}
@@ -345,6 +346,7 @@ export function HomePage() {
             <ChartCard
               title="By OS"
               state={chartState(osInsights.isPending, osInsights.isError, osBars.length === 0)}
+              exportImageName="events-by-os"
             >
               <BreakdownChart data={osBars} ariaLabel="Events by OS" />
             </ChartCard>

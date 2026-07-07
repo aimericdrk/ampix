@@ -1,7 +1,14 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { SectionGrid } from '../../../../components/ui/SectionGrid';
+import { downloadPng, svgToPngBlob } from '../../../../lib/chart-image';
 import { ChartCard } from './ChartCard';
+
+vi.mock('../../../../lib/chart-image', () => ({
+  svgToPngBlob: vi.fn(),
+  downloadPng: vi.fn(),
+}));
 
 describe('ChartCard', () => {
   it('renders the title and children when ready', () => {
@@ -78,6 +85,63 @@ describe('ChartCard', () => {
       </ChartCard>,
     );
     expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+  });
+
+  it('does not render an Export PNG button when exportImageName is omitted', () => {
+    render(
+      <ChartCard title="Sessions">
+        <p>Chart body</p>
+      </ChartCard>,
+    );
+    expect(screen.queryByRole('button', { name: 'Export PNG' })).not.toBeInTheDocument();
+  });
+
+  it('renders an Export PNG button when exportImageName is set and the chart is ready', () => {
+    render(
+      <ChartCard title="Sessions" exportImageName="sessions-trend">
+        <svg role="presentation" />
+      </ChartCard>,
+    );
+    expect(screen.getByRole('button', { name: 'Export PNG' })).toBeInTheDocument();
+  });
+
+  it('hides the Export PNG button while loading, empty, or errored', () => {
+    render(
+      <ChartCard title="Sessions" exportImageName="sessions-trend" state="loading">
+        <svg role="presentation" />
+      </ChartCard>,
+    );
+    expect(screen.queryByRole('button', { name: 'Export PNG' })).not.toBeInTheDocument();
+  });
+
+  it('rasterizes and downloads the chart SVG when Export PNG is clicked', async () => {
+    const user = userEvent.setup();
+    const fakeBlob = new Blob(['fake-png'], { type: 'image/png' });
+    vi.mocked(svgToPngBlob).mockResolvedValue(fakeBlob);
+
+    render(
+      <ChartCard title="Active users" exportImageName="active-users-trend">
+        <svg role="presentation" />
+      </ChartCard>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Export PNG' }));
+
+    await waitFor(() => {
+      expect(svgToPngBlob).toHaveBeenCalledTimes(1);
+    });
+    expect(svgToPngBlob).toHaveBeenCalledWith(expect.any(SVGSVGElement));
+    expect(downloadPng).toHaveBeenCalledWith('active-users-trend', fakeBlob);
+  });
+
+  it('renders both a custom action and the Export PNG button together', () => {
+    render(
+      <ChartCard title="Sessions" exportImageName="sessions-trend" action={<button>Breakdown</button>}>
+        <svg role="presentation" />
+      </ChartCard>,
+    );
+    expect(screen.getByRole('button', { name: 'Breakdown' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export PNG' })).toBeInTheDocument();
   });
 });
 

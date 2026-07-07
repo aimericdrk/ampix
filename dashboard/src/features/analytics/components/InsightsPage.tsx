@@ -388,6 +388,7 @@ export function InsightsPage() {
             title="Trend"
             state={!result ? 'loading' : result.series.length === 0 ? 'empty' : 'ready'}
             emptyText="No data for this query yet."
+            exportImageName="insights-trend"
           >
             {result && result.series.length > 0 && (
               <InsightsChart

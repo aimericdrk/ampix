@@ -98,6 +98,7 @@ export function RevenuePage() {
             title="Revenue"
             description="Daily revenue for the selected range."
             state={chartState(revenue.isPending, revenue.isError, trend.length === 0)}
+            exportImageName="revenue-trend"
           >
             <ComparisonTrend
               current={trend}
