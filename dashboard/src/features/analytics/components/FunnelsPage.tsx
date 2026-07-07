@@ -15,6 +15,7 @@ import { FUNNEL_ORDERS, INSIGHTS_FILTER_OPS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFunnels } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { formatExactNumber, formatPercent } from '../format';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { ChartCard } from './charts/ChartCard';
 import { CopyLinkButton } from './CopyLinkButton';
 import { KpiTile } from './charts/KpiTile';
@@ -138,6 +139,8 @@ export function FunnelsPage() {
   // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
   // in the header, so Funnels shares the same window as every other analytics page.
   const { from: dateFrom, to: dateTo, setRange } = useDateRange();
+  // Global Filters Bar (feat-02): AND-joins onto every step's own filters right before sending.
+  const { filters: globalFilters } = useGlobalFilters();
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).
@@ -237,7 +240,7 @@ export function FunnelsPage() {
     // the sanitized fields (not the not-yet-committed state) so this first run is exact.
     const cleanedSteps: FunnelStep[] = hydrated.steps.map((s) => ({
       event: s.event,
-      filters: cleanFilters(s.filters),
+      filters: mergeGlobalFilters(s.filters, globalFilters),
     }));
     const def: FunnelQueryDefinition = {
       steps: cleanedSteps,
@@ -256,6 +259,7 @@ export function FunnelsPage() {
     propertyNames,
     dateFrom,
     dateTo,
+    globalFilters,
     setRange,
     runFunnels,
   ]);
@@ -263,7 +267,7 @@ export function FunnelsPage() {
   const queryDefinition: FunnelQueryDefinition = useMemo(() => {
     const cleanedSteps: FunnelStep[] = steps.map((s) => ({
       event: s.event,
-      filters: cleanFilters(s.filters),
+      filters: mergeGlobalFilters(s.filters, globalFilters),
     }));
     const def: FunnelQueryDefinition = {
       steps: cleanedSteps,
@@ -274,7 +278,7 @@ export function FunnelsPage() {
     if (breakdownProperty) def.breakdown = { property: breakdownProperty };
     if (segmentId) def.cohort_id = segmentId;
     return def;
-  }, [steps, dateFrom, dateTo, windowDays, order, breakdownProperty, segmentId]);
+  }, [steps, dateFrom, dateTo, windowDays, order, breakdownProperty, segmentId, globalFilters]);
 
   // A real (non-hydration) change to the global date range also counts as "the user acted" — the
   // preset control lives outside this component, so there's no handler here to flag directly.

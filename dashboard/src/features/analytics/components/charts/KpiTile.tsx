@@ -20,6 +20,7 @@ export function KpiTile({
   spark,
   delta,
   loading,
+  unfiltered,
 }: {
   label: string;
   /** A pre-formatted string, or a number rendered with full-precision grouping (1,284). */
@@ -33,6 +34,13 @@ export function KpiTile({
   delta?: { pct: number };
   /** Shows a Skeleton in place of the value/sparkline while data is in flight. */
   loading?: boolean;
+  /**
+   * feat-02 §3.4/T1: this tile is driven by an engagement/revenue metric endpoint that doesn't
+   * accept the app-wide global filters yet (T2 follow-up). Pass only while a global filter is
+   * active, so a small muted note appears — the UI must never imply a scope this number doesn't
+   * actually honor.
+   */
+  unfiltered?: boolean;
 }) {
   const display = typeof value === 'number' ? formatExactNumber(value) : value;
   const hasSpark = !!spark && spark.length >= 2;
@@ -56,6 +64,9 @@ export function KpiTile({
       )}
       {!loading && delta && <DeltaChip pct={delta.pct} />}
       {!loading && hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
+      {!loading && unfiltered && (
+        <p className="mt-1 text-xs italic text-text-muted">Headline metrics aren&apos;t filtered yet</p>
+      )}
     </Card>
   );
 }

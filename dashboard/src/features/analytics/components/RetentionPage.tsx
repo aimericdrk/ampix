@@ -14,6 +14,7 @@ import { INSIGHTS_FILTER_OPS, RETENTION_INTERVALS } from '../../../lib/api/types
 import { useEngagement, useMetaEvents, useMetaProperties, useRunRetention } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { formatPercent } from '../format';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { ChartCard } from './charts/ChartCard';
 import { ComparisonTrend } from './charts/ComparisonTrend';
 import { CopyLinkButton } from './CopyLinkButton';
@@ -148,6 +149,9 @@ export function RetentionPage() {
   // for the always-on stickiness surface below; surfaced via `<DateRangeControl/>` in the header.
   const { from: dateFrom, to: dateTo, setRange } = useDateRange();
   const engagement = useEngagement(projectId, dateFrom, dateTo, 'day');
+  // Global Filters Bar (feat-02): AND-joins onto the born/return event filters right before
+  // sending. The stickiness surface below is engagement-driven and not yet filter-aware (T2).
+  const { filters: globalFilters } = useGlobalFilters();
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).
@@ -236,13 +240,16 @@ export function RetentionPage() {
     // Opening a shared link reproduces AND runs the exact view (feat-01 §2) — built directly from
     // the sanitized fields (not the not-yet-committed state) so this first run is exact.
     const def: RetentionQueryDefinition = {
-      born_event: { name: hydrated.bornEvent, filters: cleanFilters(hydrated.bornFilters) },
+      born_event: { name: hydrated.bornEvent, filters: mergeGlobalFilters(hydrated.bornFilters, globalFilters) },
       date_range: { from: hydrated.from ?? dateFrom, to: hydrated.to ?? dateTo },
       interval: hydrated.interval,
       periods: hydrated.periods,
     };
     if (hydrated.returnEvent) {
-      def.return_event = { name: hydrated.returnEvent, filters: cleanFilters(hydrated.returnFilters) };
+      def.return_event = {
+        name: hydrated.returnEvent,
+        filters: mergeGlobalFilters(hydrated.returnFilters, globalFilters),
+      };
     }
     if (hydrated.segmentId) def.cohort_id = hydrated.segmentId;
     runRetention.mutate(def, { onSuccess: setResult });
@@ -254,20 +261,24 @@ export function RetentionPage() {
     propertyNames,
     dateFrom,
     dateTo,
+    globalFilters,
     setRange,
     runRetention,
   ]);
 
   const queryDefinition: RetentionQueryDefinition = useMemo(() => {
     const def: RetentionQueryDefinition = {
-      born_event: { name: bornEvent, filters: cleanFilters(bornFilters) },
+      born_event: { name: bornEvent, filters: mergeGlobalFilters(bornFilters, globalFilters) },
       date_range: { from: dateFrom, to: dateTo },
       interval,
       periods,
     };
     // return_event is omitted when blank — §15: defaults to born_event server-side.
     if (returnEvent.trim()) {
-      def.return_event = { name: returnEvent.trim(), filters: cleanFilters(returnFilters) };
+      def.return_event = {
+        name: returnEvent.trim(),
+        filters: mergeGlobalFilters(returnFilters, globalFilters),
+      };
     }
     if (segmentId) def.cohort_id = segmentId;
     return def;
@@ -281,6 +292,7 @@ export function RetentionPage() {
     interval,
     periods,
     segmentId,
+    globalFilters,
   ]);
 
   // A real (non-hydration) change to the global date range also counts as "the user acted" — the

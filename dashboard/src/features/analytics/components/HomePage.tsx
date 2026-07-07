@@ -26,6 +26,7 @@ import {
 import { DateRangeControl, useDateRange } from '../date-range';
 import { breakdownBars, pctDelta, previousRange, sumSeries } from '../derive';
 import { formatDurationMs, formatPercent } from '../format';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { computeHighlights, type HighlightMetricInput } from '../highlights';
 import { colorForIndex } from '../palette';
 import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
@@ -60,6 +61,11 @@ export function HomePage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/home' });
   const { from, to } = useDateRange();
   const prev = previousRange(from, to);
+  // Global Filters Bar (feat-02): AND-joins onto every insights-based chart below; the
+  // engagement/sessions-driven KPIs aren't filter-aware yet (T2), so they show a muted note
+  // instead of silently ignoring an active global filter.
+  const { filters: globalFilters } = useGlobalFilters();
+  const hasGlobalFilters = globalFilters.length > 0;
 
   const summary = useEventSummary(projectId);
   const totalEvents = summary.data?.total ?? 0;
@@ -85,7 +91,7 @@ export function HomePage() {
     events: eventNames,
     date_range: { from, to },
     interval: 'day',
-    filters: [],
+    filters: mergeGlobalFilters([], globalFilters),
   };
   const previousDef: InsightsQueryDefinition = {
     ...currentDef,
@@ -266,18 +272,21 @@ export function HomePage() {
               hint="Daily active users"
               delta={dauDelta !== undefined ? { pct: dauDelta } : undefined}
               loading={dayEngagement.isPending}
+              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="WAU"
               value={wauLatest ?? 0}
               hint="Weekly active users"
               loading={weekEngagement.isPending}
+              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="MAU"
               value={mauLatest ?? 0}
               hint="Monthly active users"
               loading={monthEngagement.isPending}
+              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="Sessions"
@@ -286,6 +295,7 @@ export function HomePage() {
               spark={sessionsSpark}
               delta={sessionsDelta !== undefined ? { pct: sessionsDelta } : undefined}
               loading={sessionsCurrent.isPending}
+              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="Avg. session"
@@ -293,6 +303,7 @@ export function HomePage() {
               spark={avgSessionSpark}
               delta={avgSessionDelta !== undefined ? { pct: avgSessionDelta } : undefined}
               loading={sessionsCurrent.isPending}
+              unfiltered={hasGlobalFilters}
             />
             <KpiTile
               label="Stickiness"
@@ -300,6 +311,7 @@ export function HomePage() {
               hint="DAU ÷ active-range ratio"
               delta={stickinessDelta !== undefined ? { pct: stickinessDelta } : undefined}
               loading={dayEngagement.isPending}
+              unfiltered={hasGlobalFilters}
             />
           </SectionGrid>
 

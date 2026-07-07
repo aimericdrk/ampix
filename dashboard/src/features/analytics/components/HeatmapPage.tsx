@@ -8,6 +8,7 @@ import { ApiError } from '../../../lib/api/problem';
 import type { ClickHeatmapQuery, ClickHeatmapResponse, HeatmapGrid } from '../../../lib/api/types';
 import { useRunClickHeatmap, useScreens } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { ChartCard } from './charts/ChartCard';
 import { KpiTile } from './charts/KpiTile';
 import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
@@ -22,6 +23,8 @@ export function HeatmapPage() {
   // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
   // in the header, so Heatmap shares the same window as every other analytics page.
   const { from: dateFrom, to: dateTo } = useDateRange();
+  // Global Filters Bar (feat-02): AND-joins onto the heatmap query's filters right before sending.
+  const { filters: globalFilters } = useGlobalFilters();
 
   const [selectedScreen, setSelectedScreen] = useState('');
   const [opacity, setOpacity] = useState(0.85);
@@ -37,7 +40,7 @@ export function HeatmapPage() {
       screen_name: screenName,
       date_range: { from: dateFrom, to: dateTo },
       grid: DEFAULT_GRID,
-      filters: [],
+      filters: mergeGlobalFilters([], globalFilters),
     };
     setActiveGrid(DEFAULT_GRID);
     runHeatmap.mutate(query, { onSuccess: setResult });

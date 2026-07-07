@@ -1,6 +1,8 @@
 import { Link, Outlet, useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { DateRangeProvider } from '../../features/analytics/date-range';
+import { GlobalFilterBar } from '../../features/analytics/components/GlobalFilterBar';
+import { GlobalFiltersProvider } from '../../features/analytics/global-filters';
 import { CommandPalette } from '../../features/command-palette/CommandPalette';
 import { logout } from '../../features/auth/api';
 import { authStore, useAuth } from '../../features/auth/store';
@@ -178,11 +180,18 @@ export function AppLayout() {
         </div>
       </aside>
 
-      <main id="main-content" className="flex-1 p-6 pt-16 md:p-8 md:pt-8">
+      <main id="main-content" className="flex min-h-screen flex-1 flex-col p-6 pt-16 md:p-8 md:pt-8">
         {/* Made available app-wide now; pages migrate onto `useDateRange` in a later phase. Scoped
             to a stable key even off project routes, so the provider never needs to unmount. */}
         <DateRangeProvider projectId={projectId ?? 'no-project'}>
-          <Outlet />
+          {/* Global Filters Bar (feat-02): scoped the same way as the date range, so switching
+              projects loads that project's saved filters instead of leaking the previous one's. */}
+          <GlobalFiltersProvider projectId={projectId ?? 'no-project'}>
+            {projectId && <GlobalFilterBar projectId={projectId} />}
+            <div className="flex-1">
+              <Outlet />
+            </div>
+          </GlobalFiltersProvider>
         </DateRangeProvider>
       </main>
     </div>

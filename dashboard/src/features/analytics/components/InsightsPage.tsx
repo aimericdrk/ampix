@@ -17,6 +17,7 @@ import {
 import { useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { pctDelta, previousRange, sumSeries } from '../derive';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { colorForIndex } from '../palette';
 import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
@@ -167,6 +168,9 @@ export function InsightsPage() {
   // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
   // in the header, so Insights shares the same window as every other analytics page.
   const { from: dateFrom, to: dateTo, setRange } = useDateRange();
+  // Global Filters Bar (feat-02): AND-joins onto this page's own filters right before sending —
+  // never mutates the local filter rows, so the builder UI still reflects only what the user set.
+  const { filters: globalFilters } = useGlobalFilters();
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).
@@ -312,12 +316,12 @@ export function InsightsPage() {
       events,
       date_range: { from: dateFrom, to: dateTo },
       interval,
-      filters: cleanFilters(filters),
+      filters: mergeGlobalFilters(filters, globalFilters),
     };
     if (breakdownProperty) def.breakdown = { property: breakdownProperty };
     if (segmentId) def.cohort_id = segmentId;
     return def;
-  }, [events, dateFrom, dateTo, interval, filters, breakdownProperty, segmentId]);
+  }, [events, dateFrom, dateTo, interval, filters, globalFilters, breakdownProperty, segmentId]);
 
   // A real (non-hydration) change to the global date range also counts as "the user acted" — the
   // preset control lives outside this component, so there's no handler here to flag directly.

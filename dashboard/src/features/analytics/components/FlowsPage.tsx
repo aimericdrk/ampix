@@ -14,6 +14,7 @@ import type {
 import { FLOWS_DIRECTIONS, FLOWS_UNITS, INSIGHTS_FILTER_OPS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFlows } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
+import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { ChartCard } from './charts/ChartCard';
 import { CopyLinkButton } from './CopyLinkButton';
 import { KpiTile } from './charts/KpiTile';
@@ -140,6 +141,8 @@ export function FlowsPage() {
   // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
   // in the header, so Flows shares the same window as every other analytics page.
   const { from: dateFrom, to: dateTo, setRange } = useDateRange();
+  // Global Filters Bar (feat-02): AND-joins onto the anchor's own filters right before sending.
+  const { filters: globalFilters } = useGlobalFilters();
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).
@@ -219,7 +222,10 @@ export function FlowsPage() {
     // Opening a shared link reproduces AND runs the exact view (feat-01 §2) — built directly from
     // the sanitized fields (not the not-yet-committed state) so this first run is exact.
     const def: FlowsQueryDefinition = {
-      anchor: { event: hydrated.anchorEvent, filters: cleanFilters(hydrated.anchorFilters) },
+      anchor: {
+        event: hydrated.anchorEvent,
+        filters: mergeGlobalFilters(hydrated.anchorFilters, globalFilters),
+      },
       direction: hydrated.direction,
       date_range: { from: hydrated.from ?? dateFrom, to: hydrated.to ?? dateTo },
       steps: hydrated.steps,
@@ -235,20 +241,21 @@ export function FlowsPage() {
     propertyNames,
     dateFrom,
     dateTo,
+    globalFilters,
     setRange,
     runFlows,
   ]);
 
   const queryDefinition: FlowsQueryDefinition = useMemo(
     () => ({
-      anchor: { event: anchorEvent, filters: cleanFilters(anchorFilters) },
+      anchor: { event: anchorEvent, filters: mergeGlobalFilters(anchorFilters, globalFilters) },
       direction,
       date_range: { from: dateFrom, to: dateTo },
       steps,
       max_nodes_per_step: maxNodesPerStep,
       unit,
     }),
-    [anchorEvent, anchorFilters, direction, dateFrom, dateTo, steps, maxNodesPerStep, unit],
+    [anchorEvent, anchorFilters, globalFilters, direction, dateFrom, dateTo, steps, maxNodesPerStep, unit],
   );
 
   // A real (non-hydration) change to the global date range also counts as "the user acted" — the

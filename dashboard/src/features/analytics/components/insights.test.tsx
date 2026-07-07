@@ -403,4 +403,53 @@ describe('InsightsPage', () => {
       expect(await screen.findByText('Link copied')).toBeInTheDocument();
     });
   });
+
+  describe('Global Filters Bar (feat-02)', () => {
+    it('merges an active global filter into the posted query body, and reverts once removed', async () => {
+      const capturedBodies: InsightsQueryDefinition[] = [];
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+          const body = (await request.json()) as InsightsQueryDefinition;
+          capturedBodies.push(body);
+          return HttpResponse.json({
+            series: [
+              { name: 'checkout_completed', breakdown_value: null, data: [{ t: '2026-06-29', value: 5 }] },
+            ],
+          });
+        }),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
+      expect(capturedBodies.at(-1)?.filters).toEqual([]);
+
+      // The bar starts empty, collapsed to the single subtle add affordance.
+      const bar = screen.getByRole('region', { name: 'Global filters' });
+      await userEvent.click(
+        within(bar).getByRole('button', { name: 'Add a filter to scope the whole workspace' }),
+      );
+
+      const popover = await screen.findByRole('dialog', { name: 'Add global filter' });
+      // `os` is the first known property, pre-selected as soon as `/meta/properties` resolves.
+      await waitFor(() => expect(within(popover).getByLabelText('Filter property')).toHaveValue('os'));
+      await userEvent.type(within(popover).getByLabelText('Filter value'), 'ios');
+      await userEvent.click(within(popover).getByRole('button', { name: 'Add' }));
+
+      // The chip renders in the bar, and the next posted body carries the merged filter.
+      const chip = await within(bar).findByRole('button', { name: 'Remove filter os equals ios' });
+      await waitFor(() =>
+        expect(capturedBodies.at(-1)?.filters).toEqual([{ property: 'os', op: 'eq', value: 'ios' }]),
+      );
+
+      // Removing it reverts every filter-capable query back to no filters.
+      capturedBodies.length = 0;
+      await userEvent.click(chip);
+      expect(within(bar).queryByRole('button', { name: /Remove filter/ })).toBeNull();
+      await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
+      expect(capturedBodies.at(-1)?.filters).toEqual([]);
+    });
+  });
 });
