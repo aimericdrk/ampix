@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTable, type DataTableColumn } from './DataTable';
+import * as csv from '../../lib/csv';
 
 interface Row {
   id: string;
@@ -126,5 +127,74 @@ describe('DataTable', () => {
     expect(screen.getByText('Top events')).toBeInTheDocument();
     // header row + one empty-state row
     expect(screen.getAllByRole('row')).toHaveLength(2);
+  });
+
+  describe('exportFilename', () => {
+    it('renders no Export button when exportFilename is omitted', () => {
+      render(<DataTable columns={columns} rows={rows} caption="Top events" rowKey={(r) => r.id} />);
+      expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument();
+    });
+
+    it('renders an Export CSV button when exportFilename is set', () => {
+      render(
+        <DataTable
+          columns={columns}
+          rows={rows}
+          caption="Top events"
+          rowKey={(r) => r.id}
+          exportFilename="events"
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument();
+    });
+
+    it('clicking Export CSV downloads a CSV built from column headers + sortValue/row cells', async () => {
+      const downloadSpy = vi.spyOn(csv, 'downloadCsv').mockImplementation(() => {});
+      render(
+        <DataTable
+          columns={columns}
+          rows={rows}
+          caption="Top events"
+          rowKey={(r) => r.id}
+          exportFilename="events"
+        />,
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+      expect(downloadSpy).toHaveBeenCalledTimes(1);
+      const [filename, body] = downloadSpy.mock.calls[0]!;
+      expect(filename).toBe('events');
+      expect(body).toBe('Name,Count\r\nBanana,5\r\nApple,10');
+
+      downloadSpy.mockRestore();
+    });
+
+    it('exports rows in the current sort order, using render() output rather than raw values', async () => {
+      const downloadSpy = vi.spyOn(csv, 'downloadCsv').mockImplementation(() => {});
+      const customColumns: Array<DataTableColumn<Row>> = [
+        { key: 'name', header: 'Name', sortable: true, render: (row) => <strong>{row.name.toUpperCase()}</strong> },
+        { key: 'count', header: 'Count', align: 'right' },
+      ];
+      render(
+        <DataTable
+          columns={customColumns}
+          rows={rows}
+          caption="Top events"
+          rowKey={(r) => r.id}
+          exportFilename="events"
+        />,
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: 'Name' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+      // Sorted ascending by name (Apple, Banana) and cell text comes from the raw `name` value,
+      // not the uppercased render() output.
+      const [, body] = downloadSpy.mock.calls[0]!;
+      expect(body).toBe('Name,Count\r\nApple,10\r\nBanana,5');
+
+      downloadSpy.mockRestore();
+    });
   });
 });

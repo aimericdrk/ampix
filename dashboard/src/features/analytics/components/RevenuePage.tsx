@@ -122,6 +122,7 @@ export function RevenuePage() {
               caption="Revenue by product"
               initialSort={{ key: 'revenue', dir: 'desc' }}
               rowKey={(row) => row.product_id}
+              exportFilename="revenue-by-product"
             />
           </ChartCard>
         </>

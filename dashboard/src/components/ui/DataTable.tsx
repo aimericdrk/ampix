@@ -1,5 +1,7 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
+import { downloadCsv, toCsv } from '../../lib/csv';
+import { Button } from './button';
 
 export interface DataTableColumn<T> {
   /** Unique column key; also the property read off each row when `render`/`sortValue` are omitted. */
@@ -27,6 +29,11 @@ export interface DataTableProps<T> {
   initialSort?: DataTableSort;
   onRowClick?: (row: T) => void;
   rowKey: (row: T) => string;
+  /**
+   * When set, renders an "Export CSV" button that downloads the table's current columns/rows
+   * (post-sort) as `${exportFilename}.csv`. Omit to keep the table exactly as before.
+   */
+  exportFilename?: string;
 }
 
 function getCellValue<T>(row: T, key: string): unknown {
@@ -41,6 +48,20 @@ function getSortValue<T>(row: T, column: DataTableColumn<T>): string | number {
 function compareValues(a: string | number, b: string | number): number {
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   return String(a).localeCompare(String(b));
+}
+
+/** Cell text for CSV export: the column's `sortValue` when present, else `row[key]` — mirrors
+ * `getSortValue` but always coerced to a string, and deliberately ignores `render` (which may
+ * produce JSX unsuitable for a CSV cell). */
+function getCsvCellText<T>(row: T, column: DataTableColumn<T>): string {
+  if (column.sortValue) return String(column.sortValue(row));
+  return String(getCellValue(row, column.key));
+}
+
+function buildCsv<T>(columns: Array<DataTableColumn<T>>, rows: T[]): string {
+  const headers = columns.map((column) => column.header);
+  const body = rows.map((row) => columns.map((column) => getCsvCellText(row, column)));
+  return toCsv(headers, body);
 }
 
 /**
@@ -58,10 +79,16 @@ export function DataTable<T>({
   initialSort,
   onRowClick,
   rowKey,
+  exportFilename,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<DataTableSort | undefined>(initialSort);
 
   const sortedRows = sort ? sortRows(rows, columns, sort) : rows;
+
+  const handleExport = () => {
+    if (!exportFilename) return;
+    downloadCsv(exportFilename, buildCsv(columns, sortedRows));
+  };
 
   const toggleSort = (column: DataTableColumn<T>) => {
     if (!column.sortable) return;
@@ -81,82 +108,91 @@ export function DataTable<T>({
   };
 
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">{caption}</caption>
-      <thead>
-        <tr className="border-b border-border">
-          {columns.map((column) => {
-            const isSorted = sort?.key === column.key;
-            const ariaSort = column.sortable
-              ? isSorted
-                ? sort!.dir === 'asc'
-                  ? ('ascending' as const)
-                  : ('descending' as const)
-                : ('none' as const)
-              : undefined;
-            return (
-              <th
-                key={column.key}
-                scope="col"
-                aria-sort={ariaSort}
-                className={cn('py-2 font-medium', column.align === 'right' && 'text-right')}
-              >
-                {column.sortable ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleSort(column)}
-                    className="inline-flex items-center gap-1 font-medium"
-                  >
-                    {column.header}
-                    {isSorted && (
-                      <span aria-hidden className="text-text-muted">
-                        {sort!.dir === 'asc' ? '▲' : '▼'}
-                      </span>
-                    )}
-                  </button>
-                ) : (
-                  column.header
-                )}
-              </th>
-            );
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {sortedRows.length === 0 ? (
+    <div className="flex flex-col gap-2">
+      {exportFilename && (
+        <div className="flex justify-end">
+          <Button type="button" variant="secondary" size="sm" onClick={handleExport}>
+            Export CSV
+          </Button>
+        </div>
+      )}
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">{caption}</caption>
+        <thead>
           <tr className="border-b border-border">
-            <td colSpan={columns.length || 1} className="py-4 text-center text-text-muted">
-              No data
-            </td>
-          </tr>
-        ) : (
-          sortedRows.map((row) => (
-            <tr
-              key={rowKey(row)}
-              className={cn(
-                'border-b border-border',
-                onRowClick && 'cursor-pointer hover:bg-border/20',
-              )}
-              tabIndex={onRowClick ? 0 : undefined}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              onKeyDown={onRowClick ? (event) => handleRowKeyDown(event, row) : undefined}
-            >
-              {columns.map((column) => (
-                <td
+            {columns.map((column) => {
+              const isSorted = sort?.key === column.key;
+              const ariaSort = column.sortable
+                ? isSorted
+                  ? sort!.dir === 'asc'
+                    ? ('ascending' as const)
+                    : ('descending' as const)
+                  : ('none' as const)
+                : undefined;
+              return (
+                <th
                   key={column.key}
-                  className={cn(
-                    'py-2 pr-2',
-                    column.align === 'right' && 'text-right tabular-nums',
-                  )}
+                  scope="col"
+                  aria-sort={ariaSort}
+                  className={cn('py-2 font-medium', column.align === 'right' && 'text-right')}
                 >
-                  {column.render ? column.render(row) : (getCellValue(row, column.key) as ReactNode)}
-                </td>
-              ))}
+                  {column.sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(column)}
+                      className="inline-flex items-center gap-1 font-medium"
+                    >
+                      {column.header}
+                      {isSorted && (
+                        <span aria-hidden className="text-text-muted">
+                          {sort!.dir === 'asc' ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    column.header
+                  )}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedRows.length === 0 ? (
+            <tr className="border-b border-border">
+              <td colSpan={columns.length || 1} className="py-4 text-center text-text-muted">
+                No data
+              </td>
             </tr>
-          ))
-        )}
-      </tbody>
-    </table>
+          ) : (
+            sortedRows.map((row) => (
+              <tr
+                key={rowKey(row)}
+                className={cn(
+                  'border-b border-border',
+                  onRowClick && 'cursor-pointer hover:bg-border/20',
+                )}
+                tabIndex={onRowClick ? 0 : undefined}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={onRowClick ? (event) => handleRowKeyDown(event, row) : undefined}
+              >
+                {columns.map((column) => (
+                  <td
+                    key={column.key}
+                    className={cn(
+                      'py-2 pr-2',
+                      column.align === 'right' && 'text-right tabular-nums',
+                    )}
+                  >
+                    {column.render ? column.render(row) : (getCellValue(row, column.key) as ReactNode)}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

@@ -108,6 +108,7 @@ export function UsersPage() {
             caption="Users"
             rowKey={(user) => user.distinct_id}
             onRowClick={goToProfile}
+            exportFilename="users"
           />
 
           {hasNextPage && (

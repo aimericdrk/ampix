@@ -290,6 +290,7 @@ export function HomePage() {
                 caption="Top events by count"
                 initialSort={{ key: 'count', dir: 'desc' }}
                 rowKey={(row) => row.event}
+                exportFilename="top-events"
               />
             </ChartCard>
           </div>
