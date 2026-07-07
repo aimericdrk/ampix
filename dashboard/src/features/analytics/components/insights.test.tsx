@@ -204,6 +204,46 @@ describe('InsightsPage', () => {
     expect(screen.getByRole('list', { name: 'Composition legend' })).toBeInTheDocument();
   });
 
+  it('shows a KPI summary row with a period-over-period delta and wraps the chart in a titled card', async () => {
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+        const body = (await request.json()) as InsightsQueryDefinition;
+        // The previous-period request is the only one whose window ends before the current
+        // range's `from` — give it a lower value so the delta is deterministic.
+        const isPrevious = body.date_range.to < defaultDate(30);
+        return HttpResponse.json({
+          series: [
+            {
+              name: 'checkout_completed',
+              breakdown_value: null,
+              data: [{ t: body.date_range.from, value: isPrevious ? 50 : 100 }],
+            },
+          ],
+        });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+    await waitForDefaultEvent();
+
+    // The global date-range control seeds the builder and renders in the header.
+    expect(screen.getByRole('radio', { name: 'Last 30 days' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+
+    // KPI summary row: current total (100) vs. the previous period (50) → +100%.
+    expect(await screen.findByText('Total')).toBeInTheDocument();
+    expect(screen.getByText('+100%')).toBeInTheDocument();
+
+    // The primary chart lives inside a titled ChartCard.
+    expect(screen.getByRole('heading', { name: 'Trend' })).toBeInTheDocument();
+  });
+
   it('shows a friendly empty state when the project has no events yet', async () => {
     server.use(
       http.get('/api/v1/projects/:projectId/meta/events', () =>

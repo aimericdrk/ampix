@@ -2,6 +2,7 @@ import { useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   InsightsAggregation,
@@ -11,13 +12,17 @@ import type {
   InsightsQueryDefinition,
   InsightsResponse,
 } from '../../../lib/api/types';
-import { useMetaEvents, useMetaProperties, useRunInsights } from '../api';
+import { useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
+import { DateRangeControl, useDateRange } from '../date-range';
+import { pctDelta, previousRange, sumSeries } from '../derive';
 import { colorForIndex } from '../palette';
+import { ChartCard } from './charts/ChartCard';
+import { KpiTile } from './charts/KpiTile';
 import { InsightsChart, type InsightsChartType } from './InsightsChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
 import { cleanFilters, FilterRows } from './builder-controls';
-import { DateRangePresets, EventPicker, useAutoRun } from './explore-controls';
+import { EventPicker, useAutoRun } from './explore-controls';
 
 const MAX_EVENTS = 5;
 
@@ -34,12 +39,6 @@ const INTERVAL_OPTIONS: { value: InsightsInterval; label: string }[] = [
   { value: 'month', label: 'Monthly' },
   { value: 'hour', label: 'Hourly' },
 ];
-
-function defaultDate(daysAgo: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - daysAgo);
-  return d.toISOString().slice(0, 10);
-}
 
 /** A quiet, dashed "+ Label" affordance that reveals a demoted control on demand. */
 function AddControlButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -61,10 +60,11 @@ export function InsightsPage() {
   const metaEvents = useMetaEvents(projectId);
   const metaProperties = useMetaProperties(projectId);
   const runInsights = useRunInsights(projectId);
+  // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
+  // in the header, so Insights shares the same window as every other analytics page.
+  const { from: dateFrom, to: dateTo } = useDateRange();
 
   const [events, setEvents] = useState<InsightsEventQuery[]>([]);
-  const [dateFrom, setDateFrom] = useState(() => defaultDate(30));
-  const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [interval, setInterval] = useState<InsightsInterval>('day');
   const [filters, setFilters] = useState<InsightsFilter[]>([]);
   const [breakdownProperty, setBreakdownProperty] = useState('');
@@ -151,12 +151,44 @@ export function InsightsPage() {
     run: () => runInsights.mutate(queryDefinition, { onSuccess: setResult }),
   });
 
+  // KPI summary row: the same query re-run over the immediately-preceding equal-length window, so
+  // the headline numbers can show a period-over-period delta alongside the already-run result.
+  const prevRange = previousRange(dateFrom, dateTo);
+  const previousDefinition: InsightsQueryDefinition = useMemo(
+    () => ({ ...queryDefinition, date_range: { from: prevRange.from, to: prevRange.to } }),
+    [queryDefinition, prevRange.from, prevRange.to],
+  );
+  const previousTotals = useInsightsQuery(projectId, previousDefinition, canRun);
+
+  const currentTotal = result ? sumSeries(result.series) : 0;
+  const previousTotal = previousTotals.data ? sumSeries(previousTotals.data.series) : 0;
+  const totalDelta =
+    result && previousTotals.data ? pctDelta(currentTotal, previousTotal) : undefined;
+
+  // "Unique users" only means something for events actually measured that way — surface it
+  // alongside Total when at least one selected event uses that measure.
+  const uniqueUsersNames = new Set(
+    events.filter((e) => e.aggregation === 'unique_users').map((e) => e.name),
+  );
+  const hasUniqueUsersEvent = uniqueUsersNames.size > 0;
+  const currentUniqueUsers = result
+    ? sumSeries(result.series.filter((s) => uniqueUsersNames.has(s.name)))
+    : 0;
+  const previousUniqueUsers = previousTotals.data
+    ? sumSeries(previousTotals.data.series.filter((s) => uniqueUsersNames.has(s.name)))
+    : 0;
+  const uniqueUsersDelta =
+    result && previousTotals.data
+      ? pctDelta(currentUniqueUsers, previousUniqueUsers)
+      : undefined;
+
   return (
     <PageShell
       projectId={projectId}
       title="Insights"
       description="Pick an event to see its trend. Refine with a date range, grouping, or filters when you need to."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Insights' }]}
+      dateRangeControl={<DateRangeControl />}
       actions={
         <SaveAsReportButton
           projectId={projectId}
@@ -236,16 +268,6 @@ export function InsightsPage() {
                   <p className="mt-1 text-xs text-text-muted">Up to {MAX_EVENTS} events per query.</p>
                 )}
               </div>
-
-              <DateRangePresets
-                idPrefix="insights-date"
-                from={dateFrom}
-                to={dateTo}
-                onChange={(from, to) => {
-                  setDateFrom(from);
-                  setDateTo(to);
-                }}
-              />
 
               <div className="flex flex-col gap-4 border-t border-border pt-5">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -354,23 +376,48 @@ export function InsightsPage() {
       )}
 
       {!projectHasNoEvents && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-6">
           {runInsights.isPending && (
             <p role="status" className="text-sm text-text-muted">
               Updating…
             </p>
           )}
-          {result && result.series.length > 0 && (
-            <InsightsChart
-              series={result.series}
-              eventOrder={events.map((e) => e.name)}
-              chartType={chartType}
-              onChartTypeChange={setChartType}
-            />
+
+          {result && (
+            <SectionGrid min={200}>
+              <KpiTile
+                label="Total"
+                value={currentTotal}
+                hint="Selected range"
+                delta={totalDelta !== undefined ? { pct: totalDelta } : undefined}
+                loading={previousTotals.isPending}
+              />
+              {hasUniqueUsersEvent && (
+                <KpiTile
+                  label="Unique users"
+                  value={currentUniqueUsers}
+                  hint="Selected range"
+                  delta={uniqueUsersDelta !== undefined ? { pct: uniqueUsersDelta } : undefined}
+                  loading={previousTotals.isPending}
+                />
+              )}
+            </SectionGrid>
           )}
-          {result && result.series.length === 0 && (
-            <p className="text-text-muted">No data for this query yet.</p>
-          )}
+
+          <ChartCard
+            title="Trend"
+            state={!result ? 'loading' : result.series.length === 0 ? 'empty' : 'ready'}
+            emptyText="No data for this query yet."
+          >
+            {result && result.series.length > 0 && (
+              <InsightsChart
+                series={result.series}
+                eventOrder={events.map((e) => e.name)}
+                chartType={chartType}
+                onChartTypeChange={setChartType}
+              />
+            )}
+          </ChartCard>
         </div>
       )}
     </PageShell>
