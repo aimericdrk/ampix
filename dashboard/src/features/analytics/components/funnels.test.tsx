@@ -59,6 +59,12 @@ describe('FunnelsPage', () => {
     await screen.findByRole('heading', { name: 'Funnels' });
     await waitForMetaLoaded();
 
+    // The global date-range control seeds the builder and renders in the header.
+    expect(screen.getByRole('radio', { name: 'Last 30 days' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
     await addStep('app_opened');
     await addStep('signup_completed');
     await addStep('checkout_completed');
@@ -90,6 +96,17 @@ describe('FunnelsPage', () => {
 
     // Overall conversion headline.
     expect(screen.getByText('Overall conversion:').textContent).toContain('14.5%');
+
+    // KPI row: overall conversion / entered (step-1 count) / converted (last-step count).
+    expect(screen.getByText('Overall conversion')).toBeInTheDocument();
+    expect(screen.getAllByText('14.5%').length).toBeGreaterThan(0);
+    expect(screen.getByText('Entered')).toBeInTheDocument();
+    expect(screen.getByText('Converted')).toBeInTheDocument();
+    expect(screen.getAllByText('1,000').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('145').length).toBeGreaterThan(0);
+
+    // The funnel chart lives inside a titled ChartCard.
+    expect(screen.getByRole('heading', { name: 'Funnel' })).toBeInTheDocument();
 
     // The always-present data table: one row per step, scoped so the two conversion columns don't
     // clash.

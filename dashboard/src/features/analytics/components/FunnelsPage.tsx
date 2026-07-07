@@ -2,6 +2,7 @@ import { useParams } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   FunnelOrder,
@@ -12,11 +13,15 @@ import type {
 } from '../../../lib/api/types';
 import { FUNNEL_ORDERS } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties, useRunFunnels } from '../api';
+import { DateRangeControl, useDateRange } from '../date-range';
+import { formatExactNumber, formatPercent } from '../format';
+import { ChartCard } from './charts/ChartCard';
+import { KpiTile } from './charts/KpiTile';
 import { FunnelChart } from './FunnelChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
-import { cleanFilters, defaultDate, FilterRows } from './builder-controls';
-import { DateRangePresets, EventPicker } from './explore-controls';
+import { cleanFilters, FilterRows } from './builder-controls';
+import { EventPicker } from './explore-controls';
 
 const MAX_STEPS = 8;
 
@@ -35,10 +40,11 @@ export function FunnelsPage() {
   const metaEvents = useMetaEvents(projectId);
   const metaProperties = useMetaProperties(projectId);
   const runFunnels = useRunFunnels(projectId);
+  // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
+  // in the header, so Funnels shares the same window as every other analytics page.
+  const { from: dateFrom, to: dateTo } = useDateRange();
 
   const [steps, setSteps] = useState<StepDraft[]>([]);
-  const [dateFrom, setDateFrom] = useState(() => defaultDate(30));
-  const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [windowDays, setWindowDays] = useState(7);
   const [order, setOrder] = useState<FunnelOrder>('any');
   const [breakdownProperty, setBreakdownProperty] = useState('');
@@ -105,6 +111,7 @@ export function FunnelsPage() {
       title="Funnels"
       description="See how users move through an ordered sequence of steps, and where they drop off."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Funnels' }]}
+      dateRangeControl={<DateRangeControl />}
     >
       <Card>
         <CardHeader>
@@ -183,16 +190,6 @@ export function FunnelsPage() {
             )}
           </div>
 
-          <DateRangePresets
-            idPrefix="funnel-date"
-            from={dateFrom}
-            to={dateTo}
-            onChange={(from, to) => {
-              setDateFrom(from);
-              setDateTo(to);
-            }}
-          />
-
           <div className="flex flex-wrap gap-4">
             <div>
               <label htmlFor="funnel-window" className="mb-1 block text-sm font-medium">
@@ -269,16 +266,36 @@ export function FunnelsPage() {
         </p>
       )}
 
-      {result && result.steps.length === 0 && (
-        <p className="text-text-muted">No data for this funnel yet.</p>
-      )}
+      {result && (
+        <div className="flex flex-col gap-6">
+          {result.steps.length > 0 && (
+            <SectionGrid min={200}>
+              <KpiTile
+                label="Overall conversion"
+                value={formatPercent(result.overall_conversion)}
+              />
+              <KpiTile label="Entered" value={formatExactNumber(result.steps[0]?.count ?? 0)} />
+              <KpiTile
+                label="Converted"
+                value={formatExactNumber(result.steps[result.steps.length - 1]?.count ?? 0)}
+              />
+            </SectionGrid>
+          )}
 
-      {result && result.steps.length > 0 && (
-        <FunnelChart
-          steps={result.steps}
-          overallConversion={result.overall_conversion}
-          breakdowns={result.breakdowns}
-        />
+          <ChartCard
+            title="Funnel"
+            state={result.steps.length === 0 ? 'empty' : 'ready'}
+            emptyText="No data for this funnel yet."
+          >
+            {result.steps.length > 0 && (
+              <FunnelChart
+                steps={result.steps}
+                overallConversion={result.overall_conversion}
+                breakdowns={result.breakdowns}
+              />
+            )}
+          </ChartCard>
+        </div>
       )}
     </PageShell>
   );
