@@ -74,22 +74,41 @@ export function CompositionPieChart({
         </ResponsiveContainer>
       </div>
 
-      <ul aria-label="Composition legend" className="flex flex-1 flex-col gap-1.5 text-sm">
-        {slices.map((slice) => (
-          <li key={slice.key} className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="inline-block h-3 w-3 shrink-0 rounded-sm"
-              style={{ backgroundColor: colorFor(slice.key) }}
-            />
-            <span className="flex-1 truncate">{slice.label}</span>
-            <span className="tabular-nums text-text-muted">
-              <span className="font-medium text-text">{formatExactNumber(slice.value)}</span>{' '}
-              <span>{total > 0 ? formatPercent(slice.value / total) : '0%'}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
+      <CompositionLegend slices={slices} colorFor={colorFor} total={total} />
     </div>
+  );
+}
+
+/**
+ * The accessible label+value(+percent) listing shared by every composition chart
+ * (`CompositionPieChart`, `DonutChart`) — the text alternative that keeps identity/magnitude off
+ * color alone. Exported so donut-style variants can reuse it verbatim instead of duplicating markup.
+ */
+export function CompositionLegend({
+  slices,
+  colorFor,
+  total,
+}: {
+  slices: PieSlice[];
+  colorFor: (key: string) => string;
+  total: number;
+}) {
+  return (
+    <ul aria-label="Composition legend" className="flex flex-1 flex-col gap-1.5 text-sm">
+      {slices.map((slice) => (
+        <li key={slice.key} className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="inline-block h-3 w-3 shrink-0 rounded-sm"
+            style={{ backgroundColor: colorFor(slice.key) }}
+          />
+          <span className="flex-1 truncate">{slice.label}</span>
+          <span className="tabular-nums text-text-muted">
+            <span className="font-medium text-text">{formatExactNumber(slice.value)}</span>{' '}
+            <span>{total > 0 ? formatPercent(slice.value / total) : '0%'}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
