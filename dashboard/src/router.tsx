@@ -142,6 +142,12 @@ const templatesRoute = createRoute({
 const insightsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/insights',
+  // The shareable-analysis-URL `s` param (feat-01): a base64url-encoded builder state, decoded by
+  // `useUrlAnalysisState` (see `features/analytics/share-state.ts`). Same explicit-`undefined`
+  // pattern as `/login`'s `redirect` param, so an omitted `s` never leaks through from a parent match.
+  validateSearch: (search: Record<string, unknown>): { s?: string } => ({
+    s: typeof search.s === 'string' ? search.s : undefined,
+  }),
   component: InsightsPage,
 });
 

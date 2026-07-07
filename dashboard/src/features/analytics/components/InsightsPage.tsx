@@ -3,29 +3,132 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
+import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
-import type {
-  InsightsAggregation,
-  InsightsEventQuery,
-  InsightsFilter,
-  InsightsInterval,
-  InsightsQueryDefinition,
-  InsightsResponse,
+import {
+  INSIGHTS_FILTER_OPS,
+  INSIGHTS_INTERVALS,
+  type InsightsAggregation,
+  type InsightsEventQuery,
+  type InsightsFilter,
+  type InsightsInterval,
+  type InsightsQueryDefinition,
+  type InsightsResponse,
 } from '../../../lib/api/types';
 import { useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { pctDelta, previousRange, sumSeries } from '../derive';
 import { colorForIndex } from '../palette';
+import type { AnalysisStateEnvelope } from '../share-state';
+import { useUrlAnalysisState } from '../share-state';
 import { ChartCard } from './charts/ChartCard';
 import { KpiTile } from './charts/KpiTile';
-import { InsightsChart, type InsightsChartType } from './InsightsChart';
+import { INSIGHTS_CHART_TYPES, InsightsChart, type InsightsChartType } from './InsightsChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { SaveAsReportButton } from './report-actions';
 import { SegmentPicker } from './SegmentPicker';
 import { cleanFilters, FilterRows } from './builder-controls';
-import { EventPicker, useAutoRun } from './explore-controls';
+import { EventPicker, presetIdForRange, useAutoRun } from './explore-controls';
 
 const MAX_EVENTS = 5;
+
+const VALID_CHART_TYPES = new Set<InsightsChartType>(INSIGHTS_CHART_TYPES.map((c) => c.value));
+
+/**
+ * Insights' own shareable-URL shape (feat-01 §3.1) — every field mirrors a piece of the builder
+ * state above, plus the `from`/`to` range seed. Optional throughout: a link may carry any subset
+ * (or, if malformed, none of it) and {@link sanitizeUrlState} fills in sane defaults per field.
+ */
+export interface InsightsAnalysisState extends AnalysisStateEnvelope {
+  from?: string;
+  to?: string;
+  segmentId?: string | null;
+  events?: InsightsEventQuery[];
+  interval?: InsightsInterval;
+  filters?: InsightsFilter[];
+  breakdownProperty?: string;
+  chartType?: InsightsChartType;
+}
+
+const DEFAULT_URL_STATE: InsightsAnalysisState = { v: 1 };
+
+function isDateString(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+interface SanitizedInsightsState {
+  events: InsightsEventQuery[];
+  interval: InsightsInterval;
+  filters: InsightsFilter[];
+  breakdownProperty: string;
+  segmentId: string | null;
+  chartType: InsightsChartType;
+  from?: string;
+  to?: string;
+}
+
+/**
+ * Validates a decoded `s` param field-by-field, dropping anything that doesn't correspond to a
+ * real event/property, isn't a recognized enum value, or isn't the right JS type — a bad/stale
+ * link never throws, it just silently loses the offending piece. Returns `null` when there isn't
+ * even one usable event, since a query needs at least one to mean anything (the caller then falls
+ * back to the normal "pick the first event" default).
+ */
+function sanitizeUrlState(
+  urlState: InsightsAnalysisState,
+  { eventOptions, propertyNames }: { eventOptions: string[]; propertyNames: string[] },
+): SanitizedInsightsState | null {
+  const raw = urlState as unknown as Record<string, unknown>;
+
+  const rawEvents = Array.isArray(raw.events) ? raw.events : [];
+  const seenNames = new Set<string>();
+  const events: InsightsEventQuery[] = [];
+  for (const candidate of rawEvents) {
+    if (events.length >= MAX_EVENTS) break;
+    if (!candidate || typeof candidate !== 'object') continue;
+    const { name, aggregation } = candidate as Record<string, unknown>;
+    if (typeof name !== 'string' || !eventOptions.includes(name) || seenNames.has(name)) continue;
+    if (aggregation !== 'total' && aggregation !== 'unique_users') continue;
+    seenNames.add(name);
+    events.push({ name, aggregation });
+  }
+  if (events.length === 0) return null;
+
+  const interval =
+    typeof raw.interval === 'string' && INSIGHTS_INTERVALS.includes(raw.interval as InsightsInterval)
+      ? (raw.interval as InsightsInterval)
+      : 'day';
+
+  const rawFilters = Array.isArray(raw.filters) ? raw.filters : [];
+  const filters: InsightsFilter[] = [];
+  for (const candidate of rawFilters) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const { property, op, value } = candidate as Record<string, unknown>;
+    if (typeof property !== 'string' || !propertyNames.includes(property)) continue;
+    if (typeof op !== 'string' || !INSIGHTS_FILTER_OPS.includes(op as InsightsFilter['op'])) continue;
+    if (value !== undefined && typeof value !== 'string') continue;
+    filters.push({ property, op: op as InsightsFilter['op'], value: value as string | undefined });
+  }
+
+  const breakdownProperty =
+    typeof raw.breakdownProperty === 'string' && propertyNames.includes(raw.breakdownProperty)
+      ? raw.breakdownProperty
+      : '';
+
+  // A stale/deleted segment id can't be told apart from "not loaded yet" here (SegmentPicker owns
+  // the live cohort list) — only the shape is validated; an unknown id simply shows unselected.
+  const segmentId = typeof raw.segmentId === 'string' ? raw.segmentId : null;
+
+  const chartType =
+    typeof raw.chartType === 'string' && VALID_CHART_TYPES.has(raw.chartType as InsightsChartType)
+      ? (raw.chartType as InsightsChartType)
+      : 'line';
+
+  const from = isDateString(raw.from) ? raw.from : undefined;
+  const to = isDateString(raw.to) ? raw.to : undefined;
+
+  return { events, interval, filters, breakdownProperty, segmentId, chartType, from, to };
+}
 
 /** Plain-language measure labels — never "aggregation" (contracts §14 values are unchanged). */
 const MEASURE_LABELS: Record<InsightsAggregation, string> = {
@@ -63,7 +166,12 @@ export function InsightsPage() {
   const runInsights = useRunInsights(projectId);
   // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
   // in the header, so Insights shares the same window as every other analytics page.
-  const { from: dateFrom, to: dateTo } = useDateRange();
+  const { from: dateFrom, to: dateTo, setRange } = useDateRange();
+  const { toast } = useToast();
+
+  // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
+  // `urlState` only changes identity when the param itself changes (mount, or back/forward).
+  const { urlState, pushState } = useUrlAnalysisState<InsightsAnalysisState>(DEFAULT_URL_STATE);
 
   const [events, setEvents] = useState<InsightsEventQuery[]>([]);
   const [interval, setInterval] = useState<InsightsInterval>('day');
@@ -84,32 +192,78 @@ export function InsightsPage() {
   const selectedNames = events.map((e) => e.name);
   const projectHasNoEvents = metaEvents.isSuccess && eventOptions.length === 0;
 
-  // On first load, pre-select the project's first event with sensible defaults so a chart renders
-  // immediately — no empty form to stare at. Only ever fires once, so clearing events stays cleared.
+  // Flips true the moment the builder reflects something worth sharing — either a real user edit,
+  // or the state we just hydrated from a link — so `pushState` only ever fires once there's a
+  // meaningful view to write back (never on the bare "no param yet" initial render, per §4).
+  const userInteractedRef = useRef(false);
+
+  // On first load: hydrate from a shared `s` link (validating field-by-field, dropping anything
+  // that doesn't correspond to a real event/property — see `sanitizeUrlState`) once both metadata
+  // queries are in, so event/property names can actually be checked. Falls back to pre-selecting
+  // the project's first event (previous behavior) when there's no usable `s` state. Only ever runs
+  // once, so clearing the builder afterwards stays cleared.
   const didInit = useRef(false);
   useEffect(() => {
-    if (didInit.current || !metaEvents.isSuccess) return;
+    if (didInit.current || !metaEvents.isSuccess || !metaProperties.isSuccess) return;
     didInit.current = true;
+
+    const hydrated = sanitizeUrlState(urlState, { eventOptions, propertyNames });
+    if (hydrated) {
+      setEvents(hydrated.events);
+      setInterval(hydrated.interval);
+      setFilters(hydrated.filters);
+      if (hydrated.filters.length > 0) setShowFilters(true);
+      if (hydrated.breakdownProperty) {
+        setBreakdownProperty(hydrated.breakdownProperty);
+        setShowBreakdown(true);
+      }
+      if (hydrated.segmentId) {
+        setSegmentId(hydrated.segmentId);
+        setShowSegment(true);
+      }
+      setChartType(hydrated.chartType);
+      if (hydrated.from && hydrated.to) {
+        setRange(hydrated.from, hydrated.to, presetIdForRange(hydrated.from, hydrated.to));
+      }
+      // Self-healing (§4): immediately rewrite a clean `s` reflecting the sanitized state, so a
+      // partially-malformed link's dropped fields don't linger in the address bar forever.
+      userInteractedRef.current = true;
+      return;
+    }
+
     const first = metaEvents.data.events[0];
     if (first && events.length === 0) {
       setEvents([{ name: first, aggregation: 'total' }]);
     }
-  }, [metaEvents.isSuccess, metaEvents.data, events.length]);
+  }, [
+    metaEvents.isSuccess,
+    metaEvents.data,
+    metaProperties.isSuccess,
+    events.length,
+    urlState,
+    eventOptions,
+    propertyNames,
+    setRange,
+  ]);
 
   const addEvent = (name: string) => {
     if (events.length >= MAX_EVENTS || events.some((e) => e.name === name)) return;
+    userInteractedRef.current = true;
     setEvents((current) => [...current, { name, aggregation: 'total' }]);
   };
 
   const updateMeasure = (name: string, aggregation: InsightsAggregation) => {
+    userInteractedRef.current = true;
     setEvents((current) => current.map((e) => (e.name === name ? { ...e, aggregation } : e)));
   };
 
   const removeEvent = (name: string) => {
+    userInteractedRef.current = true;
     setEvents((current) => current.filter((e) => e.name !== name));
   };
 
   const revealFilters = () => {
+    userInteractedRef.current = true;
     setShowFilters(true);
     if (filters.length === 0) {
       setFilters([{ property: propertyNames[0] ?? '', op: 'eq', value: '' }]);
@@ -117,18 +271,41 @@ export function InsightsPage() {
   };
 
   const handleFiltersChange = (next: InsightsFilter[]) => {
+    userInteractedRef.current = true;
     setFilters(next);
     if (next.length === 0) setShowFilters(false);
   };
 
   const removeBreakdown = () => {
+    userInteractedRef.current = true;
     setShowBreakdown(false);
     setBreakdownProperty('');
   };
 
   const removeSegment = () => {
+    userInteractedRef.current = true;
     setShowSegment(false);
     setSegmentId(null);
+  };
+
+  const setIntervalFromInput = (next: InsightsInterval) => {
+    userInteractedRef.current = true;
+    setInterval(next);
+  };
+
+  const setBreakdownPropertyFromInput = (next: string) => {
+    userInteractedRef.current = true;
+    setBreakdownProperty(next);
+  };
+
+  const setSegmentIdFromInput = (next: string | null) => {
+    userInteractedRef.current = true;
+    setSegmentId(next);
+  };
+
+  const setChartTypeFromInput = (next: InsightsChartType) => {
+    userInteractedRef.current = true;
+    setChartType(next);
   };
 
   const queryDefinition: InsightsQueryDefinition = useMemo(() => {
@@ -142,6 +319,45 @@ export function InsightsPage() {
     if (segmentId) def.cohort_id = segmentId;
     return def;
   }, [events, dateFrom, dateTo, interval, filters, breakdownProperty, segmentId]);
+
+  // A real (non-hydration) change to the global date range also counts as "the user acted" — the
+  // preset control lives outside this component, so there's no handler here to flag directly.
+  const seenRangeRef = useRef({ from: dateFrom, to: dateTo });
+  useEffect(() => {
+    if (seenRangeRef.current.from !== dateFrom || seenRangeRef.current.to !== dateTo) {
+      seenRangeRef.current = { from: dateFrom, to: dateTo };
+      userInteractedRef.current = true;
+    }
+  }, [dateFrom, dateTo]);
+
+  // Write the current builder state back to the `s` param whenever it changes — but only once
+  // there's something worth sharing (see `userInteractedRef` above). Debounced + `replace: true`
+  // inside `pushState`, so rapid edits coalesce into a single history entry.
+  useEffect(() => {
+    if (!userInteractedRef.current) return;
+    const next: InsightsAnalysisState = {
+      v: 1,
+      from: dateFrom,
+      to: dateTo,
+      segmentId,
+      events,
+      interval,
+      filters: cleanFilters(filters),
+      breakdownProperty: breakdownProperty || undefined,
+      chartType,
+    };
+    pushState(next);
+  }, [events, interval, filters, breakdownProperty, segmentId, chartType, dateFrom, dateTo, pushState]);
+
+  const copyLink = () => {
+    if (!navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(window.location.href)
+      .then(() => toast({ title: 'Link copied' }))
+      .catch(() => {
+        // Best-effort only — clipboard access can be denied/unavailable; no error surfaced.
+      });
+  };
 
   // Auto-run: the result tracks the builder without a "Run" click. The previous chart stays on
   // screen while a new one loads, so the result area never flickers back to empty.
@@ -179,12 +395,30 @@ export function InsightsPage() {
       breadcrumbs={[{ label: 'Explore' }, { label: 'Insights' }]}
       dateRangeControl={<DateRangeControl />}
       actions={
-        <SaveAsReportButton
-          projectId={projectId}
-          kind="insights"
-          definition={queryDefinition}
-          disabled={events.length === 0}
-        />
+        <>
+          <Button type="button" variant="secondary" onClick={copyLink} className="gap-1.5">
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.5-1.5" />
+            </svg>
+            Copy link
+          </Button>
+          <SaveAsReportButton
+            projectId={projectId}
+            kind="insights"
+            definition={queryDefinition}
+            disabled={events.length === 0}
+          />
+        </>
       }
     >
       <Card>
@@ -267,7 +501,7 @@ export function InsightsPage() {
                     id="insights-interval"
                     aria-label="Show by"
                     value={interval}
-                    onChange={(e) => setInterval(e.target.value as InsightsInterval)}
+                    onChange={(e) => setIntervalFromInput(e.target.value as InsightsInterval)}
                     className="h-8 rounded-md border border-border bg-surface px-2 text-sm"
                   >
                     {INTERVAL_OPTIONS.map((option) => (
@@ -279,10 +513,22 @@ export function InsightsPage() {
                   <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
                   {!showFilters && <AddControlButton label="Filter" onClick={revealFilters} />}
                   {!showBreakdown && (
-                    <AddControlButton label="Group by" onClick={() => setShowBreakdown(true)} />
+                    <AddControlButton
+                      label="Group by"
+                      onClick={() => {
+                        userInteractedRef.current = true;
+                        setShowBreakdown(true);
+                      }}
+                    />
                   )}
                   {!showSegment && (
-                    <AddControlButton label="Segment" onClick={() => setShowSegment(true)} />
+                    <AddControlButton
+                      label="Segment"
+                      onClick={() => {
+                        userInteractedRef.current = true;
+                        setShowSegment(true);
+                      }}
+                    />
                   )}
                 </div>
 
@@ -317,7 +563,7 @@ export function InsightsPage() {
                       id="insights-breakdown"
                       aria-label="Group by"
                       value={breakdownProperty}
-                      onChange={(e) => setBreakdownProperty(e.target.value)}
+                      onChange={(e) => setBreakdownPropertyFromInput(e.target.value)}
                       className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
                     >
                       <option value="">No group</option>
@@ -335,7 +581,7 @@ export function InsightsPage() {
                     <SegmentPicker
                       projectId={projectId}
                       value={segmentId}
-                      onChange={setSegmentId}
+                      onChange={setSegmentIdFromInput}
                       id="insights-segment"
                       label="Segment"
                     />
@@ -395,7 +641,7 @@ export function InsightsPage() {
                 series={result.series}
                 eventOrder={events.map((e) => e.name)}
                 chartType={chartType}
-                onChartTypeChange={setChartType}
+                onChartTypeChange={setChartTypeFromInput}
               />
             )}
           </ChartCard>

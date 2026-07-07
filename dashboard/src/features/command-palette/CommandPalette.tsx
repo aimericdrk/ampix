@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
 import { IconSearch } from '../../components/ui/icons';
+import { useToast } from '../../components/ui/toast';
 import { projectGroups } from '../../components/layout/nav-model';
 import { NavIcon, type IconName } from '../../components/layout/NavIcon';
 import { cn } from '../../lib/cn';
@@ -14,9 +15,31 @@ const USER_SEARCH_DEBOUNCE_MS = 200;
 /** Cap the user-search section so a broad query doesn't flood the palette. */
 const MAX_USER_RESULTS = 5;
 
+/** A small stroked "link" glyph for palette actions that aren't a `NavIcon`-backed page/entity. */
+function IconLink() {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
+      <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.5-1.5" />
+    </svg>
+  );
+}
+
 interface PaletteItem {
   key: string;
-  icon: IconName;
+  /** Omitted for actions with no `NavIcon` entry (e.g. "Copy link") — renders {@link IconLink} instead. */
+  icon?: IconName;
   label: string;
   sublabel?: string;
   onSelect: () => void;
@@ -76,6 +99,7 @@ function UsersResultsLoader({
  */
 export function CommandPalette({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -203,8 +227,30 @@ export function CommandPalette({ projectId }: { projectId: string }) {
       onSelect: () => goTo('/projects/$projectId/home', { projectId: project.id }),
     }));
 
+  // Shareable Analysis URLs (feat-01 §3.3): discoverable alongside each page's own "Copy link"
+  // button. `window.location.href` already carries the current view's `?s=` state, so this needs
+  // no page-specific wiring — it works for any route the palette is opened from.
+  const actionItems: PaletteItem[] = [
+    {
+      key: 'action-copy-link',
+      label: 'Copy link to this view',
+      onSelect: () => {
+        if (navigator.clipboard) {
+          navigator.clipboard
+            .writeText(window.location.href)
+            .then(() => toast({ title: 'Link copied' }))
+            .catch(() => {
+              // Best-effort only — clipboard access can be denied/unavailable; no error surfaced.
+            });
+        }
+        close();
+      },
+    },
+  ].filter((item) => matchesQuery(item.label, query));
+
   const groups: PaletteGroup[] = [
     { heading: 'Pages', items: pageItems },
+    { heading: 'Actions', items: actionItems },
     { heading: 'Reports', items: reportItems },
     { heading: 'Dashboards', items: dashboardItems },
     { heading: 'Cohorts', items: cohortItems },
@@ -309,7 +355,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
                               : 'text-text hover:bg-border/40',
                           )}
                         >
-                          <NavIcon name={item.icon} />
+                          {item.icon ? <NavIcon name={item.icon} /> : <IconLink />}
                           <span className="truncate">{item.label}</span>
                           {item.sublabel && (
                             <span className="ml-auto shrink-0 truncate text-xs text-text-muted">

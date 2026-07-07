@@ -1,14 +1,16 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { InsightsQueryDefinition } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
 import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { decodeAnalysisState, encodeAnalysisState } from '../share-state';
 import { defaultDate } from './builder-controls';
+import type { InsightsAnalysisState } from './InsightsPage';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -294,5 +296,111 @@ describe('InsightsPage', () => {
 
     expect(await screen.findByText('No events tracked yet')).toBeInTheDocument();
     expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  describe('shareable analysis URLs (feat-01)', () => {
+    it('hydrates the builder from an `s` link and auto-runs the exact encoded query', async () => {
+      let capturedBody: InsightsQueryDefinition | undefined;
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+          capturedBody = (await request.json()) as InsightsQueryDefinition;
+          return HttpResponse.json({
+            series: [
+              { name: 'signup_completed', breakdown_value: 'ios', data: [{ t: '2026-06-01', value: 3 }] },
+            ],
+          });
+        }),
+      );
+
+      const encoded = encodeAnalysisState<InsightsAnalysisState>({
+        v: 1,
+        events: [{ name: 'signup_completed', aggregation: 'unique_users' }],
+        interval: 'week',
+        filters: [{ property: 'app_version', op: 'eq', value: 'ios' }],
+        breakdownProperty: 'utm_source',
+        segmentId: null,
+        chartType: 'bar',
+        from: '2026-06-01',
+        to: '2026-06-15',
+      });
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights?s=${encoded}`);
+      await screen.findByRole('heading', { name: 'Insights' });
+
+      // Hydrated builder: the shared event replaces the usual default-selected one.
+      expect(await screen.findByLabelText('Measure for signup_completed')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Measure for checkout_completed')).toBeNull();
+
+      // Auto-ran with no interaction — the chosen chart type (bar) renders straight away.
+      await screen.findByRole('img', { name: 'Insights bar chart' }, { timeout: 3000 });
+
+      await waitFor(() =>
+        expect(capturedBody).toEqual({
+          events: [{ name: 'signup_completed', aggregation: 'unique_users' }],
+          date_range: { from: '2026-06-01', to: '2026-06-15' },
+          interval: 'week',
+          filters: [{ property: 'app_version', op: 'eq', value: 'ios' }],
+          breakdown: { property: 'utm_source' },
+        }),
+      );
+    });
+
+    it('falls back to defaults (no error) for a malformed `s` param', async () => {
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights?s=not-a-real-encoded-value!!!`);
+      await screen.findByRole('heading', { name: 'Insights' });
+
+      // Same default-selection behavior as no param at all — no crash, no visible error.
+      expect(await waitForDefaultEvent()).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('writes builder edits back to the `s` search param (debounced, via replace)', async () => {
+      signIn();
+      const { router } = renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+
+      // No `s` param yet — nothing written to the URL until the user actually acts.
+      expect(router.state.location.search).not.toHaveProperty('s');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+      await userEvent.click(
+        await screen.findByRole('option', { name: 'signup_completed' }),
+      );
+
+      await waitFor(
+        () => expect((router.state.location.search as { s?: string }).s).toBeTruthy(),
+        { timeout: 2000 },
+      );
+
+      const pushed = decodeAnalysisState<InsightsAnalysisState>(
+        (router.state.location.search as { s?: string }).s,
+      );
+      expect(pushed?.events).toEqual([
+        { name: 'checkout_completed', aggregation: 'total' },
+        { name: 'signup_completed', aggregation: 'total' },
+      ]);
+      expect(pushed?.interval).toBe('day');
+    });
+
+    it('copies the current URL to the clipboard and shows a "Link copied" toast', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(window.location.href));
+      expect(await screen.findByText('Link copied')).toBeInTheDocument();
+    });
   });
 });
