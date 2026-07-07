@@ -71,6 +71,8 @@ interface UserRow {
   distinct_id: string;
   last_seen: string;
   event_count: string | number;
+  name: string;
+  email: string;
 }
 
 interface ProfilePropertiesRow {
@@ -109,6 +111,15 @@ const SESSION_END_EVENT = '$session_end';
 const DURATION_MS_EXPR = "JSONExtractFloat(toJSONString(properties), '$duration_ms')";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * `GET /users` search whitelist (contracts §14): profile string properties a `search` term may
+ * match, in addition to the canonical id and its aliased anon_ids. These are OUR OWN fixed
+ * constants embedded as SQL literals inside `JSONExtractString(toJSONString(up.properties), '<key>')`
+ * — never caller input — matching the injection-safety doctrine in `property-resolver.ts`. The
+ * search VALUE itself is always the bound `{search:String}` param.
+ */
+const USER_SEARCH_PROFILE_KEYS = ['name', 'email', 'username', '$name', '$email'] as const;
 
 function sinceParam(): string {
   return toChDateTime64(Date.now() - META_LOOKBACK_MS);
@@ -350,10 +361,21 @@ export class AnalyticsService {
    * table). Identity-resolved (contracts §17): rows are grouped/counted by the CANONICAL id
    * (`uid` = the identified user for an anon that logged in, else the raw id) via the shared
    * `canonicalization()` helper, so an anonymous→identified user appears ONCE. The shown
-   * `distinct_id` is that canonical `uid`; `search` is a canonical-id PREFIX match and `cursor`
-   * keyset-paginates over the canonical id — both bound as plain params (never concatenated) and
-   * evaluated over the canonical expression, not the raw column. Fetches one extra row to know
-   * whether a `next_cursor` exists without a second COUNT query.
+   * `distinct_id` is that canonical `uid`; `cursor` keyset-paginates over the canonical id, bound
+   * as a plain param (never concatenated) and evaluated over the canonical expression, not the raw
+   * column. Fetches one extra row to know whether a `next_cursor` exists without a second COUNT
+   * query.
+   *
+   * `search`, when present, is a case-insensitive SUBSTRING match (`positionCaseInsensitiveUTF8`)
+   * against any of: the canonical id, the raw `e.distinct_id` (so an aliased anon_id also matches),
+   * or a whitelisted profile string property (`USER_SEARCH_PROFILE_KEYS` — OUR OWN fixed constants,
+   * embedded as SQL literals; never caller input, matching `property-resolver.ts`'s doctrine). The
+   * search TERM itself is bound once as `{search:String}` and reused across every branch of the OR.
+   * Profile properties come from a LEFT JOIN of `user_profiles FINAL` keyed on the canonical `uid`
+   * (mirrors how `getUserProfile` reads `user_profiles`); `name`/`email` are read straight off that
+   * same join (`any(...)` — the subquery is already deduped 1:1 per canonical id via `FINAL`, so the
+   * aggregate simply satisfies ClickHouse's GROUP BY rule without changing the value) and mapped to
+   * `null` when absent/empty.
    */
   async listUsers(
     userId: string,
@@ -370,7 +392,18 @@ export class AnalyticsService {
     const whereClauses = ['e.project_id = {projectId:UUID}'];
     if (searchRaw) {
       params.search = searchRaw;
-      whereClauses.push(`startsWith(${canon.uid}, {search:String})`);
+      const searchExprs = [
+        canon.uid,
+        'e.distinct_id',
+        ...USER_SEARCH_PROFILE_KEYS.map(
+          (key) => `JSONExtractString(toJSONString(up.properties), '${key}')`,
+        ),
+      ];
+      whereClauses.push(
+        `(${searchExprs
+          .map((expr) => `positionCaseInsensitiveUTF8(${expr}, {search:String}) > 0`)
+          .join('\n           OR ')})`,
+      );
     }
     if (cursorRaw) {
       params.cursor = cursorRaw;
@@ -381,9 +414,14 @@ export class AnalyticsService {
       `WITH ${canon.cte}
        SELECT ${canon.uid} AS distinct_id,
               max(e.timestamp) AS last_seen,
-              count(DISTINCT e.insert_id) AS event_count
+              count(DISTINCT e.insert_id) AS event_count,
+              any(JSONExtractString(toJSONString(up.properties), 'name')) AS name,
+              any(JSONExtractString(toJSONString(up.properties), 'email')) AS email
        FROM events AS e
        ${canon.join}
+       LEFT JOIN (
+         SELECT distinct_id, properties FROM user_profiles FINAL WHERE project_id = {projectId:UUID}
+       ) AS up ON up.distinct_id = ${canon.uid}
        WHERE ${whereClauses.join('\n         AND ')}
        GROUP BY ${canon.uid}
        ORDER BY ${canon.uid}
@@ -398,6 +436,8 @@ export class AnalyticsService {
       distinct_id: row.distinct_id,
       last_seen: fromChDateTime64(row.last_seen),
       event_count: Number(row.event_count),
+      name: row.name || null,
+      email: row.email || null,
     }));
 
     return { users, next_cursor: hasMore ? page[page.length - 1].distinct_id : null };

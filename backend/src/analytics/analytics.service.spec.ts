@@ -421,33 +421,97 @@ describe('AnalyticsService', () => {
   });
 
   describe('listUsers', () => {
-    it('checks membership and maps rows to the users-list shape', async () => {
+    it('checks membership and maps rows to the users-list shape, including name/email', async () => {
       const clickhouse = makeClickhouse([
-        [{ distinct_id: 'u1', last_seen: '2026-06-01 12:00:00.000', event_count: '5' }],
+        [
+          {
+            distinct_id: 'u1',
+            last_seen: '2026-06-01 12:00:00.000',
+            event_count: '5',
+            name: 'Ada Lovelace',
+            email: 'ada@example.com',
+          },
+        ],
       ]);
       const service = makeService(clickhouse, makeProjects());
 
       const result = await service.listUsers(USER_ID, PROJECT_ID);
 
       expect(result.users).toEqual([
-        { distinct_id: 'u1', last_seen: '2026-06-01T12:00:00.000Z', event_count: 5 },
+        {
+          distinct_id: 'u1',
+          last_seen: '2026-06-01T12:00:00.000Z',
+          event_count: 5,
+          name: 'Ada Lovelace',
+          email: 'ada@example.com',
+        },
       ]);
       expect(result.next_cursor).toBeNull();
     });
 
-    it('binds `search` as a plain param value — the caller text is never concatenated into the SQL', async () => {
+    it('maps empty-string name/email to null', async () => {
+      const clickhouse = makeClickhouse([
+        [
+          {
+            distinct_id: 'u1',
+            last_seen: '2026-06-01 12:00:00.000',
+            event_count: '1',
+            name: '',
+            email: '',
+          },
+        ],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.listUsers(USER_ID, PROJECT_ID);
+
+      expect(result.users[0]).toMatchObject({ name: null, email: null });
+    });
+
+    it('binds `search` once as a plain param value — the caller text is never concatenated into the SQL', async () => {
       const clickhouse = makeClickhouse([[]]);
       const service = makeService(clickhouse, makeProjects());
 
       await service.listUsers(USER_ID, PROJECT_ID, "u1'; DROP TABLE events; --");
 
       const [sql, params] = clickhouse.query.mock.calls[0];
-      // §17: search matches the CANONICAL id prefix, still a bound param.
+      // §17/§14: search is a case-insensitive substring match, bound once, reused across every
+      // branch of the OR — never interpolated.
       expect(sql).toContain(
-        'startsWith(coalesce(aliases.canonical_id, e.distinct_id), {search:String})',
+        'positionCaseInsensitiveUTF8(coalesce(aliases.canonical_id, e.distinct_id), {search:String}) > 0',
       );
+      expect(sql).toContain('positionCaseInsensitiveUTF8(e.distinct_id, {search:String}) > 0');
       expect(sql).not.toContain('DROP TABLE');
       expect(params).toMatchObject({ search: "u1'; DROP TABLE events; --" });
+    });
+
+    it('references the fixed profile whitelist keys via JSONExtractString when searching', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID, 'ada');
+
+      const [sql] = clickhouse.query.mock.calls[0];
+      for (const key of ['name', 'email', 'username', '$name', '$email']) {
+        expect(sql).toContain(
+          `positionCaseInsensitiveUTF8(JSONExtractString(toJSONString(up.properties), '${key}'), {search:String}) > 0`,
+        );
+      }
+    });
+
+    it('LEFT JOINs `user_profiles FINAL` keyed on the canonical uid to search/return profile fields', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID, 'ada');
+
+      const [sql] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('user_profiles FINAL WHERE project_id = {projectId:UUID}');
+      expect(sql).toContain('ON up.distinct_id = coalesce(aliases.canonical_id, e.distinct_id)');
+      expect(sql).toContain("any(JSONExtractString(toJSONString(up.properties), 'name')) AS name");
+      expect(sql).toContain(
+        "any(JSONExtractString(toJSONString(up.properties), 'email')) AS email",
+      );
     });
 
     it('groups/counts by the canonical `uid` and runs under join_use_nulls=1 (contracts §17)', async () => {
@@ -471,7 +535,7 @@ describe('AnalyticsService', () => {
       await service.listUsers(USER_ID, PROJECT_ID);
 
       const [sql, params] = clickhouse.query.mock.calls[0];
-      expect(sql).not.toContain('startsWith');
+      expect(sql).not.toContain('positionCaseInsensitiveUTF8');
       expect(params.search).toBeUndefined();
     });
 

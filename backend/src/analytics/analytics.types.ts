@@ -54,6 +54,10 @@ export interface UserListItem {
   distinct_id: string;
   last_seen: string;
   event_count: number;
+  /** From the user's `user_profiles` row (§17 canonical id); null when absent/empty. */
+  name: string | null;
+  /** From the user's `user_profiles` row (§17 canonical id); null when absent/empty. */
+  email: string | null;
 }
 
 export interface UsersResponse {

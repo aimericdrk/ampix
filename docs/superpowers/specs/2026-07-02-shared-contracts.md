@@ -296,7 +296,7 @@ Body (typed query definition; also the saved-report shape in Phase 5):
 Recent events newest-first: `{ "events": [ { "insert_id", "event", "distinct_id", "timestamp", "os", "app_version" } ], "next_before": "<iso>|null" }`. `limit` ≤ 100.
 
 ### Users explorer
-- `GET /users?search=<q>&limit=50&cursor=<distinct_id>` → `{ "users": [ { "distinct_id", "last_seen", "event_count" } ], "next_cursor": "<id>|null" }` (search matches distinct_id prefix; derived from events).
+- `GET /users?search=<q>&limit=50&cursor=<distinct_id>` → `{ "users": [ { "distinct_id", "last_seen", "event_count", "name", "email" } ], "next_cursor": "<id>|null" }` (derived from events, grouped by the §17 canonical id). `search`, when present, is a case-insensitive SUBSTRING match against the canonical id, any aliased anon_id, or a whitelisted profile string property (`name`, `email`, `username`, `$name`, `$email`) — not just a distinct_id prefix. `name`/`email` come from the user's `user_profiles` row (null when absent/empty).
 - `GET /users/:distinctId` → `{ "distinct_id", "profile": {…}, "first_seen", "last_seen", "event_count", "recent_events": [ { "insert_id","event","timestamp","screen_name" } ], "distinct_ids": ["<canonical id + its aliased anon_ids>"] }` (profile from `user_profiles` FINAL, recent_events last 50). `recent_events[].screen_name` is the `$screen_name` of `$screen_view`/`$tap` events (null otherwise). `distinct_ids` is the §17 identity set — the canonical id plus every anon_id aliasing to it — ready to feed the §19 click-heatmap `distinct_ids` filter for identity-correct per-user results.
 
 ### GET /sessions/summary?from=<date>&to=<date>
