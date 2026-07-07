@@ -2,6 +2,7 @@ import { useParams } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   InsightsFilter,
@@ -10,30 +11,49 @@ import type {
   RetentionResponse,
 } from '../../../lib/api/types';
 import { RETENTION_INTERVALS } from '../../../lib/api/types';
-import { useMetaEvents, useMetaProperties, useRunRetention } from '../api';
+import { useEngagement, useMetaEvents, useMetaProperties, useRunRetention } from '../api';
+import { DateRangeControl, useDateRange } from '../date-range';
+import { formatPercent } from '../format';
+import { ChartCard } from './charts/ChartCard';
+import { ComparisonTrend } from './charts/ComparisonTrend';
+import { KpiTile } from './charts/KpiTile';
 import { RetentionChart } from './RetentionChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { CohortSelect, SaveAsReportButton } from './report-actions';
-import { cleanFilters, defaultDate, FilterRows } from './builder-controls';
-import { DateRangePresets, EventSelectField } from './explore-controls';
+import { cleanFilters, FilterRows } from './builder-controls';
+import { EventSelectField } from './explore-controls';
 
 const INTERVAL_LABELS: Record<RetentionInterval, string> = {
   day: 'Day',
   week: 'Week',
 };
 
+/** Maps loading/error/empty query state onto `ChartCard`'s `state` prop in one place. */
+function chartState(
+  isPending: boolean,
+  isError: boolean,
+  isEmpty: boolean,
+): 'loading' | 'error' | 'empty' | 'ready' {
+  if (isPending) return 'loading';
+  if (isError) return 'error';
+  if (isEmpty) return 'empty';
+  return 'ready';
+}
+
 export function RetentionPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/retention' });
   const metaEvents = useMetaEvents(projectId);
   const metaProperties = useMetaProperties(projectId);
   const runRetention = useRunRetention(projectId);
+  // Time-scoped by the global range (Phase 2): seeds the builder's query and is also the window
+  // for the always-on stickiness surface below; surfaced via `<DateRangeControl/>` in the header.
+  const { from: dateFrom, to: dateTo } = useDateRange();
+  const engagement = useEngagement(projectId, dateFrom, dateTo, 'day');
 
   const [bornEvent, setBornEvent] = useState('');
   const [bornFilters, setBornFilters] = useState<InsightsFilter[]>([]);
   const [returnEvent, setReturnEvent] = useState('');
   const [returnFilters, setReturnFilters] = useState<InsightsFilter[]>([]);
-  const [dateFrom, setDateFrom] = useState(() => defaultDate(30));
-  const [dateTo, setDateTo] = useState(() => defaultDate(0));
   const [interval, setInterval] = useState<RetentionInterval>('day');
   const [periods, setPeriods] = useState(14);
   const [cohortId, setCohortId] = useState('');
@@ -41,6 +61,8 @@ export function RetentionPage() {
 
   const eventOptions = metaEvents.data?.events ?? [];
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
+  const stickinessRows = (engagement.data?.stickiness ?? []).map((p) => ({ t: p.t, value: p.value }));
+  const averageRetention = result?.averages.find((a) => a.period === 1)?.rate;
 
   const queryDefinition: RetentionQueryDefinition = useMemo(() => {
     const def: RetentionQueryDefinition = {
@@ -81,6 +103,7 @@ export function RetentionPage() {
       title="Retention"
       description="Measure how many users come back over time after a first action."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Retention' }]}
+      dateRangeControl={<DateRangeControl />}
     >
       <Card>
         <CardHeader>
@@ -125,16 +148,6 @@ export function RetentionPage() {
               projectId={projectId}
             />
           </div>
-
-          <DateRangePresets
-            idPrefix="retention-date"
-            from={dateFrom}
-            to={dateTo}
-            onChange={(from, to) => {
-              setDateFrom(from);
-              setDateTo(to);
-            }}
-          />
 
           <div className="flex flex-wrap gap-4">
             <div>
@@ -199,12 +212,34 @@ export function RetentionPage() {
       )}
 
       {result && result.cohorts.length > 0 && (
-        <RetentionChart
-          cohorts={result.cohorts}
-          averages={result.averages}
-          interval={interval}
-        />
+        <div className="flex flex-col gap-6">
+          <SectionGrid min={220}>
+            <KpiTile
+              label="Average retention"
+              value={averageRetention !== undefined ? formatPercent(averageRetention) : '—'}
+              hint="Period 1, size-weighted across cohorts"
+            />
+          </SectionGrid>
+
+          <ChartCard title="Retention" description="Cohort retention heatmap by period.">
+            <RetentionChart cohorts={result.cohorts} averages={result.averages} interval={interval} />
+          </ChartCard>
+        </div>
       )}
+
+      <ChartCard
+        title="Stickiness (DAU/MAU)"
+        description="Daily active ÷ monthly active users over the selected range — how often users come back."
+        state={chartState(engagement.isPending, engagement.isError, stickinessRows.length === 0)}
+      >
+        <ComparisonTrend
+          current={stickinessRows}
+          xKey="t"
+          valueKey="value"
+          label="Stickiness"
+          ariaLabel="Stickiness trend"
+        />
+      </ChartCard>
     </PageShell>
   );
 }
