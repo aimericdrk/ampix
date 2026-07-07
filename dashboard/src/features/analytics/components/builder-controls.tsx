@@ -2,6 +2,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import type { InsightsFilter, InsightsFilterOp } from '../../../lib/api/types';
 import { INSIGHTS_FILTER_OPS } from '../../../lib/api/types';
+import { useMetaPropertyValues } from '../api';
 
 /** Shared builder primitives for the Phase-4 analysis pages, mirroring the Insights builder UX. */
 
@@ -106,6 +107,59 @@ export function EventNameInput({
   );
 }
 
+/**
+ * The value cell of a single filter row, backed by the `/meta/property-values` autosuggest datalist.
+ * It is its own component so each row's `useMetaPropertyValues` hook call stays at the top level of a
+ * component (React hooks rules forbid calling hooks inside the `.map` of `FilterRows`). When no
+ * suggestions come back it degrades to a plain free-text input plus a "Type any value" hint.
+ */
+export function FilterValueInput({
+  id,
+  ariaLabel,
+  projectId,
+  property,
+  event,
+  value,
+  onChange,
+}: {
+  id: string;
+  ariaLabel: string;
+  projectId?: string;
+  property: string;
+  event?: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  // Suggestions only when we have a project context AND a chosen property; the hook self-gates
+  // on an empty property, so passing '' keeps it disabled (no request) for the fallback case.
+  const query = useMetaPropertyValues(projectId ?? '', projectId ? property : '', event);
+  const values = query.data?.values ?? [];
+  const listId = `${id}-options`;
+  const showHint = projectId !== undefined && !query.isLoading && values.length === 0;
+  return (
+    <div className="flex flex-col">
+      <label className="sr-only" htmlFor={id}>
+        {ariaLabel}
+      </label>
+      <Input
+        id={id}
+        className="h-9 w-40"
+        list={values.length > 0 ? listId : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {values.length > 0 && (
+        <datalist id={listId}>
+          {values.map((v) => (
+            <option key={v} value={v} />
+          ))}
+        </datalist>
+      )}
+      {showHint && <span className="mt-1 text-xs text-text-muted">Type any value</span>}
+    </div>
+  );
+}
+
 /** An add/remove editor over an `InsightsFilter[]`, matching the Insights filter rows. */
 export function FilterRows({
   idPrefix,
@@ -113,12 +167,16 @@ export function FilterRows({
   filters,
   onChange,
   propertyNames,
+  projectId,
+  event,
 }: {
   idPrefix: string;
   ariaLabel: string;
   filters: InsightsFilter[];
   onChange: (filters: InsightsFilter[]) => void;
   propertyNames: string[];
+  projectId?: string;
+  event?: string;
 }) {
   const addFilter = () => {
     onChange([...filters, { property: propertyNames[0] ?? '', op: 'eq', value: '' }]);
@@ -172,17 +230,15 @@ export function FilterRows({
               ))}
             </select>
             {!VALUELESS_OPS.has(filter.op) && (
-              <>
-                <label className="sr-only" htmlFor={`${idPrefix}-value-${index}`}>
-                  {ariaLabel} value {index + 1}
-                </label>
-                <Input
-                  id={`${idPrefix}-value-${index}`}
-                  className="h-9 w-40"
-                  value={filter.value ?? ''}
-                  onChange={(e) => updateFilter(index, { value: e.target.value })}
-                />
-              </>
+              <FilterValueInput
+                id={`${idPrefix}-value-${index}`}
+                ariaLabel={`${ariaLabel} value ${index + 1}`}
+                projectId={projectId}
+                property={filter.property}
+                event={event}
+                value={filter.value ?? ''}
+                onChange={(v) => updateFilter(index, { value: v })}
+              />
             )}
             <Button
               type="button"

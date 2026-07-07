@@ -161,6 +161,7 @@ export function FunnelsPage() {
                       filters={step.filters}
                       onChange={(filters) => setStepFilters(index, filters)}
                       propertyNames={propertyNames}
+                      projectId={projectId}
                     />
                   </li>
                 ))}

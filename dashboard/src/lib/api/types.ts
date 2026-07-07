@@ -397,6 +397,11 @@ export interface MetaPropertiesResponse {
   properties: MetaProperty[];
 }
 
+/** `GET /meta/property-values` — distinct values of one property (autosuggest), frequency-ranked. */
+export interface MetaPropertyValuesResponse {
+  values: string[];
+}
+
 // --- Advanced analysis (contracts §15) ---
 // Request/response shapes mirror shared-contracts §15 byte-for-byte (the concurrent backend builds
 // against the same section). Filters/date-range/breakdown reuse the §14 primitives above.

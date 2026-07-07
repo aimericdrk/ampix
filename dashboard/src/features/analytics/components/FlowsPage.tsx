@@ -94,6 +94,7 @@ export function FlowsPage() {
               filters={anchorFilters}
               onChange={setAnchorFilters}
               propertyNames={propertyNames}
+              projectId={projectId}
             />
           </div>
 

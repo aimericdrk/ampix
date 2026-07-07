@@ -36,6 +36,7 @@ import type {
   MeResponse,
   MetaEventsResponse,
   MetaPropertiesResponse,
+  MetaPropertyValuesResponse,
   Org,
   OrgRole,
   Project,
@@ -107,6 +108,18 @@ export const META_PROPERTIES_FIXTURE: MetaPropertiesResponse = {
     { name: 'plan', type: 'string' },
   ],
 };
+
+/**
+ * Suggested values for the filter-value type-ahead (GET /meta/property-values). Any suggestable
+ * property returns this small frequency-ranked list; the handler returns `[]` for the designated
+ * free-form key (`email`) so the "Type any value" fallback can be exercised.
+ */
+export const META_PROPERTY_VALUES_FIXTURE: MetaPropertyValuesResponse = {
+  values: ['free', 'pro', 'enterprise'],
+};
+
+/** Property keys that have no useful autosuggest — the endpoint returns an empty list for them. */
+const FREE_FORM_PROPERTY_KEYS = new Set(['email']);
 
 /**
  * Deterministic newest-first fixture for GET /events/live — evt-30 is the newest. 30 (> the UI's
@@ -1050,6 +1063,17 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     return HttpResponse.json(META_PROPERTIES_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/meta/property-values', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const property = new URL(request.url).searchParams.get('property');
+    if (!property) return problem(400, 'A property is required');
+    // Designated free-form keys have no useful suggestions → empty list drives the free-text hint.
+    if (FREE_FORM_PROPERTY_KEYS.has(property)) return HttpResponse.json({ values: [] });
+    return HttpResponse.json(META_PROPERTY_VALUES_FIXTURE);
   }),
 
   http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {

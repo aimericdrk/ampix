@@ -30,6 +30,7 @@ import type {
   LiveEventsResponse,
   MetaEventsResponse,
   MetaPropertiesResponse,
+  MetaPropertyValuesResponse,
   AnalysisResult,
   RetentionQueryDefinition,
   RetentionResponse,
@@ -61,6 +62,26 @@ export function useMetaProperties(projectId: string) {
   return useQuery({
     queryKey: ['analytics', projectId, 'meta-properties'],
     queryFn: () => apiFetch<MetaPropertiesResponse>(`${base(projectId)}/meta/properties`),
+  });
+}
+
+/**
+ * `GET /meta/property-values` — suggested values for ONE property, feeding the filter-value
+ * type-ahead. Gated on a non-empty `property` (the endpoint 400s without one); an optional
+ * `event` narrows the suggestions. Cached 5 min to match the backend's Redis TTL.
+ */
+export function useMetaPropertyValues(projectId: string, property: string, event?: string) {
+  const trimmed = property.trim();
+  return useQuery({
+    queryKey: ['analytics', projectId, 'meta-property-values', trimmed, event ?? null],
+    queryFn: () => {
+      const eventParam = event ? `&event=${encodeURIComponent(event)}` : '';
+      return apiFetch<MetaPropertyValuesResponse>(
+        `${base(projectId)}/meta/property-values?property=${encodeURIComponent(trimmed)}${eventParam}`,
+      );
+    },
+    enabled: trimmed.length > 0,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

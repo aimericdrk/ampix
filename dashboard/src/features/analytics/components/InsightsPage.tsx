@@ -282,6 +282,7 @@ export function InsightsPage() {
                     filters={filters}
                     onChange={handleFiltersChange}
                     propertyNames={propertyNames}
+                    projectId={projectId}
                   />
                 )}
 

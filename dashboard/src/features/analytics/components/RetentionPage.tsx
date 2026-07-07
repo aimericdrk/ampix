@@ -102,6 +102,7 @@ export function RetentionPage() {
               filters={bornFilters}
               onChange={setBornFilters}
               propertyNames={propertyNames}
+              projectId={projectId}
             />
           </div>
 
@@ -121,6 +122,7 @@ export function RetentionPage() {
               filters={returnFilters}
               onChange={setReturnFilters}
               propertyNames={propertyNames}
+              projectId={projectId}
             />
           </div>
 

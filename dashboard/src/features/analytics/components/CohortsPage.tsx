@@ -315,6 +315,7 @@ export function CohortsPage() {
                 condition={condition}
                 eventOptions={eventOptions}
                 propertyNames={propertyNames}
+                projectId={projectId}
                 onType={(type) => changeConditionType(index, type)}
                 onChange={(next) => setConditionAt(index, next)}
                 onRemove={() => removeCondition(index)}
@@ -384,6 +385,7 @@ function ConditionRow({
   condition,
   eventOptions,
   propertyNames,
+  projectId,
   onType,
   onChange,
   onRemove,
@@ -392,6 +394,7 @@ function ConditionRow({
   condition: CohortCondition;
   eventOptions: string[];
   propertyNames: string[];
+  projectId: string;
   onType: (type: CohortConditionType) => void;
   onChange: (next: CohortCondition) => void;
   onRemove: () => void;
@@ -433,6 +436,7 @@ function ConditionRow({
           condition={condition}
           eventOptions={eventOptions}
           propertyNames={propertyNames}
+          projectId={projectId}
           onChange={onChange}
         />
       )}
@@ -474,12 +478,14 @@ function BehaviorFields({
   condition,
   eventOptions,
   propertyNames,
+  projectId,
   onChange,
 }: {
   index: number;
   condition: CohortBehaviorCondition;
   eventOptions: string[];
   propertyNames: string[];
+  projectId: string;
   onChange: (next: CohortBehaviorCondition) => void;
 }) {
   const n = index + 1;
@@ -540,6 +546,7 @@ function BehaviorFields({
         filters={condition.filters}
         onChange={(filters: InsightsFilter[]) => onChange({ ...condition, filters })}
         propertyNames={propertyNames}
+        projectId={projectId}
       />
     </div>
   );
