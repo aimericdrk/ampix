@@ -404,6 +404,77 @@ describe('InsightsPage', () => {
     });
   });
 
+  describe('Segment Comparison (feat-04)', () => {
+    it('selecting a 2nd segment issues one insights request per segment cohort_id and renders both segments in the chart + summary', async () => {
+      const capturedBodies: InsightsQueryDefinition[] = [];
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+          const body = (await request.json()) as InsightsQueryDefinition;
+          capturedBodies.push(body);
+          const value = body.cohort_id === TEST_COHORT_ID ? 4 : 10;
+          return HttpResponse.json({
+            series: [
+              { name: 'checkout_completed', breakdown_value: null, data: [{ t: '2026-06-29', value }] },
+            ],
+          });
+        }),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+      await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+
+      // Compare is a demoted control, like Filter/Group by/Segment; revealing it starts at just
+      // "All users" — still the ordinary single-series view until a 2nd segment joins.
+      await userEvent.click(screen.getByRole('button', { name: 'Compare segments' }));
+      expect(screen.getByRole('list', { name: 'Segments being compared' })).toBeInTheDocument();
+      expect(screen.queryByText('Segment summary')).toBeNull();
+
+      capturedBodies.length = 0;
+      await userEvent.click(screen.getByRole('button', { name: 'Add segment to compare' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'Recent buyers' }));
+
+      // Compare mode is now on: one query per selected segment, each carrying that segment's
+      // cohort_id ("All users" has none), and the single-series auto-run/KPI queries stop firing.
+      await waitFor(() => expect(capturedBodies.length).toBe(2));
+      expect(new Set(capturedBodies.map((b) => b.cohort_id ?? null))).toEqual(
+        new Set([null, TEST_COHORT_ID]),
+      );
+
+      await screen.findByRole('heading', { name: 'Segment summary' });
+      const tables = screen.getAllByRole('table');
+      const [dataTable, summaryTable] = [tables[0]!, tables[tables.length - 1]!];
+
+      // The always-visible data table under the chart doubles as the accessible legend: both
+      // segment names are legended, never dropped even though one line might read flat.
+      expect(within(dataTable).getByText('All users')).toBeInTheDocument();
+      expect(within(dataTable).getByText('Recent buyers')).toBeInTheDocument();
+
+      // Per-segment summary: each segment's total, keyed by name.
+      expect(within(summaryTable).getByText('All users')).toBeInTheDocument();
+      expect(within(summaryTable).getByText('Recent buyers')).toBeInTheDocument();
+      expect(within(summaryTable).getByText('10')).toBeInTheDocument();
+      expect(within(summaryTable).getByText('4')).toBeInTheDocument();
+    });
+
+    it('stays in normal single-series mode while only "All users" is selected', async () => {
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Compare segments' }));
+      expect(screen.getByText('All users')).toBeInTheDocument();
+
+      // Still just one segment selected — the single-series chart keeps rendering, no compare UI.
+      await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+      expect(screen.queryByText('Segment summary')).toBeNull();
+      expect(screen.getAllByRole('table')).toHaveLength(1);
+    });
+  });
+
   describe('Global Filters Bar (feat-02)', () => {
     it('merges an active global filter into the posted query body, and reverts once removed', async () => {
       const capturedBodies: InsightsQueryDefinition[] = [];

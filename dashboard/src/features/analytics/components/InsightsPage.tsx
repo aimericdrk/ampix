@@ -14,11 +14,13 @@ import {
   type InsightsQueryDefinition,
   type InsightsResponse,
 } from '../../../lib/api/types';
-import { useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
+import { useCohorts, useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { pctDelta, previousRange, sumSeries } from '../derive';
+import { formatExactNumber } from '../format';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { colorForIndex } from '../palette';
+import { combineSegmentSeries } from '../segment-compare';
 import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
 import { ChartCard } from './charts/ChartCard';
@@ -27,6 +29,7 @@ import { KpiTile } from './charts/KpiTile';
 import { INSIGHTS_CHART_TYPES, InsightsChart, type InsightsChartType } from './InsightsChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { SaveAsReportButton } from './report-actions';
+import { SegmentCompareControl, segmentLabel } from './SegmentCompareControl';
 import { SegmentPicker } from './SegmentPicker';
 import { cleanFilters, FilterRows } from './builder-controls';
 import { EventPicker, presetIdForRange, useAutoRun } from './explore-controls';
@@ -190,6 +193,19 @@ export function InsightsPage() {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showSegment, setShowSegment] = useState(false);
 
+  // Segment Comparison (feat-04 §3.1): a separate, additive control from the single-segment
+  // `SegmentPicker` above. Starts at just "All users" (id `null`) — one selection is still the
+  // ordinary single-series view; compare mode only turns on once a 2nd segment joins the list
+  // (§4 "0-1 segments selected -> normal single-series Insights").
+  const [showCompare, setShowCompare] = useState(false);
+  const [compareSegments, setCompareSegments] = useState<Array<string | null>>([null]);
+  const cohorts = useCohorts(projectId);
+  const cohortNameById = useMemo(
+    () => new Map((cohorts.data?.cohorts ?? []).map((c) => [c.id, c.name])),
+    [cohorts.data],
+  );
+  const compareModeActive = showCompare && compareSegments.length >= 2;
+
   const eventOptions = metaEvents.data?.events ?? [];
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
   const selectedNames = events.map((e) => e.name);
@@ -291,6 +307,11 @@ export function InsightsPage() {
     setSegmentId(null);
   };
 
+  const removeCompare = () => {
+    setShowCompare(false);
+    setCompareSegments([null]);
+  };
+
   const setIntervalFromInput = (next: InsightsInterval) => {
     userInteractedRef.current = true;
     setInterval(next);
@@ -353,22 +374,83 @@ export function InsightsPage() {
   }, [events, interval, filters, breakdownProperty, segmentId, chartType, dateFrom, dateTo, pushState]);
 
   // Auto-run: the result tracks the builder without a "Run" click. The previous chart stays on
-  // screen while a new one loads, so the result area never flickers back to empty.
+  // screen while a new one loads, so the result area never flickers back to empty. Suppressed in
+  // compare mode — the per-segment queries below replace this single unfiltered/one-segment run so
+  // the two presentations never both fetch (feat-04 §3.3 "keep the state coherent").
   const canRun = events.length > 0 && Boolean(dateFrom) && Boolean(dateTo);
   useAutoRun({
     key: JSON.stringify(queryDefinition),
-    enabled: canRun,
+    enabled: canRun && !compareModeActive,
     run: () => runInsights.mutate(queryDefinition, { onSuccess: setResult }),
   });
 
   // KPI summary row: the same query re-run over the immediately-preceding equal-length window, so
   // the headline numbers can show a period-over-period delta alongside the already-run result.
+  // Also suppressed in compare mode (superseded by the per-segment totals below).
   const prevRange = previousRange(dateFrom, dateTo);
   const previousDefinition: InsightsQueryDefinition = useMemo(
     () => ({ ...queryDefinition, date_range: { from: prevRange.from, to: prevRange.to } }),
     [queryDefinition, prevRange.from, prevRange.to],
   );
-  const previousTotals = useInsightsQuery(projectId, previousDefinition, canRun);
+  const previousTotals = useInsightsQuery(projectId, previousDefinition, canRun && !compareModeActive);
+
+  // Segment Comparison (feat-04 §3.2): the SAME query definition (events/range/interval/filters/
+  // breakdown, global filters already merged), run once per selected segment with that segment's
+  // own `cohort_id` (omitted for "All users"). A fixed number of hook calls (never a variable
+  // count) respects the Rules of Hooks — each slot is simply gated on whether compare mode has a
+  // segment at that position.
+  const compareBaseDefinition: InsightsQueryDefinition = useMemo(() => {
+    const def: InsightsQueryDefinition = {
+      events,
+      date_range: { from: dateFrom, to: dateTo },
+      interval,
+      filters: mergeGlobalFilters(filters, globalFilters),
+    };
+    if (breakdownProperty) def.breakdown = { property: breakdownProperty };
+    return def;
+  }, [events, dateFrom, dateTo, interval, filters, globalFilters, breakdownProperty]);
+
+  const definitionForSegment = (id: string | null): InsightsQueryDefinition =>
+    id ? { ...compareBaseDefinition, cohort_id: id } : compareBaseDefinition;
+
+  const COMPARE_SLOT_COUNT = 4;
+  const slotEnabled = [0, 1, 2, 3].map(
+    (i) => compareModeActive && i < compareSegments.length && canRun,
+  );
+  const compareSlot0 = useInsightsQuery(
+    projectId,
+    definitionForSegment(compareSegments[0] ?? null),
+    slotEnabled[0],
+  );
+  const compareSlot1 = useInsightsQuery(
+    projectId,
+    definitionForSegment(compareSegments[1] ?? null),
+    slotEnabled[1],
+  );
+  const compareSlot2 = useInsightsQuery(
+    projectId,
+    definitionForSegment(compareSegments[2] ?? null),
+    slotEnabled[2],
+  );
+  const compareSlot3 = useInsightsQuery(
+    projectId,
+    definitionForSegment(compareSegments[3] ?? null),
+    slotEnabled[3],
+  );
+  const compareSlots = [compareSlot0, compareSlot1, compareSlot2, compareSlot3];
+
+  // Block-until-all (§4): the comparison renders as one coherent view once every active segment has
+  // resolved, rather than trickling series in one at a time.
+  const compareLoading =
+    compareModeActive && slotEnabled.some((enabled, i) => enabled && compareSlots[i]?.isPending);
+
+  const compareInputs = compareModeActive
+    ? compareSegments
+        .slice(0, COMPARE_SLOT_COUNT)
+        .map((id, i) => ({ name: segmentLabel(id, cohortNameById), response: compareSlots[i]?.data }))
+    : [];
+  const combinedCompare = combineSegmentSeries(compareInputs);
+  const compareBaselineTotal = combinedCompare.totals[0]?.total ?? 0;
 
   // NOTE: there is deliberately no "Unique users" KPI here. `unique_users` series are per-interval
   // distinct-user counts, so summing them across buckets (as `sumSeries` does for the additive
@@ -508,6 +590,9 @@ export function InsightsPage() {
                       }}
                     />
                   )}
+                  {!showCompare && (
+                    <AddControlButton label="Compare segments" onClick={() => setShowCompare(true)} />
+                  )}
                 </div>
 
                 {showFilters && (
@@ -574,6 +659,28 @@ export function InsightsPage() {
                     </Button>
                   </div>
                 )}
+
+                {showCompare && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Compare segments</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Remove segment comparison"
+                        onClick={removeCompare}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                    <SegmentCompareControl
+                      projectId={projectId}
+                      selected={compareSegments}
+                      onChange={setCompareSegments}
+                    />
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -588,7 +695,7 @@ export function InsightsPage() {
         </p>
       )}
 
-      {!projectHasNoEvents && (
+      {!projectHasNoEvents && !compareModeActive && (
         <div className="flex flex-col gap-6">
           {runInsights.isPending && (
             <p role="status" className="text-sm text-text-muted">
@@ -623,6 +730,80 @@ export function InsightsPage() {
               />
             )}
           </ChartCard>
+        </div>
+      )}
+
+      {/* Segment Comparison (feat-04 §3.2): the two presentations are mutually exclusive — this
+          block only ever renders instead of, never alongside, the single-series result above. */}
+      {!projectHasNoEvents && compareModeActive && (
+        <div className="flex flex-col gap-6">
+          {compareLoading && (
+            <p role="status" className="text-sm text-text-muted">
+              Comparing {compareSegments.length} segments…
+            </p>
+          )}
+
+          {!compareLoading && (
+            <>
+              <ChartCard
+                title="Trend"
+                state={combinedCompare.series.length === 0 ? 'empty' : 'ready'}
+                emptyText="No data for this comparison yet."
+                exportImageName="insights-compare-trend"
+              >
+                <InsightsChart
+                  series={combinedCompare.series}
+                  eventOrder={compareSegments.map((id) => segmentLabel(id, cohortNameById))}
+                  chartType={chartType}
+                  onChartTypeChange={setChartTypeFromInput}
+                />
+              </ChartCard>
+
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-text-muted">Segment summary</h3>
+                <table className="w-full border-collapse text-left text-sm">
+                  <caption className="sr-only">Per-segment totals for the current comparison</caption>
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th scope="col" className="py-2 font-medium">
+                        Segment
+                      </th>
+                      <th scope="col" className="py-2 text-right font-medium">
+                        Total
+                      </th>
+                      <th scope="col" className="py-2 text-right font-medium">
+                        vs {combinedCompare.totals[0]?.name ?? 'first segment'}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {combinedCompare.totals.map((segmentTotal, index) => (
+                      <tr key={`${segmentTotal.name}-${index}`} className="border-b border-border">
+                        <td className="py-2">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span
+                              aria-hidden="true"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: colorForIndex(index) }}
+                            />
+                            {segmentTotal.name}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          {formatExactNumber(segmentTotal.total)}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          {index === 0
+                            ? '—'
+                            : `${pctDelta(segmentTotal.total, compareBaselineTotal) >= 0 ? '+' : ''}${pctDelta(segmentTotal.total, compareBaselineTotal)}%`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
     </PageShell>
