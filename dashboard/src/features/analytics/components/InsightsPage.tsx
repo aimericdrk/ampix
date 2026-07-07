@@ -20,7 +20,8 @@ import { ChartCard } from './charts/ChartCard';
 import { KpiTile } from './charts/KpiTile';
 import { InsightsChart, type InsightsChartType } from './InsightsChart';
 import { PageShell } from '../../../components/layout/PageShell';
-import { CohortSelect, SaveAsReportButton } from './report-actions';
+import { SaveAsReportButton } from './report-actions';
+import { SegmentPicker } from './SegmentPicker';
 import { cleanFilters, FilterRows } from './builder-controls';
 import { EventPicker, useAutoRun } from './explore-controls';
 
@@ -68,7 +69,7 @@ export function InsightsPage() {
   const [interval, setInterval] = useState<InsightsInterval>('day');
   const [filters, setFilters] = useState<InsightsFilter[]>([]);
   const [breakdownProperty, setBreakdownProperty] = useState('');
-  const [cohortId, setCohortId] = useState('');
+  const [segmentId, setSegmentId] = useState<string | null>(null);
   const [result, setResult] = useState<InsightsResponse | null>(null);
   // The selected visualization is part of the builder state, so it persists across re-runs.
   const [chartType, setChartType] = useState<InsightsChartType>('line');
@@ -76,7 +77,7 @@ export function InsightsPage() {
   // Advanced options stay tucked away until asked for (progressive disclosure).
   const [showFilters, setShowFilters] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
-  const [showCohort, setShowCohort] = useState(false);
+  const [showSegment, setShowSegment] = useState(false);
 
   const eventOptions = metaEvents.data?.events ?? [];
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
@@ -125,9 +126,9 @@ export function InsightsPage() {
     setBreakdownProperty('');
   };
 
-  const removeCohort = () => {
-    setShowCohort(false);
-    setCohortId('');
+  const removeSegment = () => {
+    setShowSegment(false);
+    setSegmentId(null);
   };
 
   const queryDefinition: InsightsQueryDefinition = useMemo(() => {
@@ -138,9 +139,9 @@ export function InsightsPage() {
       filters: cleanFilters(filters),
     };
     if (breakdownProperty) def.breakdown = { property: breakdownProperty };
-    if (cohortId) def.cohort_id = cohortId;
+    if (segmentId) def.cohort_id = segmentId;
     return def;
-  }, [events, dateFrom, dateTo, interval, filters, breakdownProperty, cohortId]);
+  }, [events, dateFrom, dateTo, interval, filters, breakdownProperty, segmentId]);
 
   // Auto-run: the result tracks the builder without a "Run" click. The previous chart stays on
   // screen while a new one loads, so the result area never flickers back to empty.
@@ -280,8 +281,8 @@ export function InsightsPage() {
                   {!showBreakdown && (
                     <AddControlButton label="Group by" onClick={() => setShowBreakdown(true)} />
                   )}
-                  {!showCohort && (
-                    <AddControlButton label="Cohort" onClick={() => setShowCohort(true)} />
+                  {!showSegment && (
+                    <AddControlButton label="Segment" onClick={() => setShowSegment(true)} />
                   )}
                 </div>
 
@@ -329,21 +330,21 @@ export function InsightsPage() {
                   </div>
                 )}
 
-                {showCohort && (
+                {showSegment && (
                   <div className="flex items-end gap-2">
-                    <CohortSelect
+                    <SegmentPicker
                       projectId={projectId}
-                      value={cohortId}
-                      onChange={setCohortId}
-                      id="insights-cohort"
-                      label="Cohort"
+                      value={segmentId}
+                      onChange={setSegmentId}
+                      id="insights-segment"
+                      label="Segment"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label="Remove cohort"
-                      onClick={removeCohort}
+                      aria-label="Remove segment"
+                      onClick={removeSegment}
                     >
                       Remove
                     </Button>

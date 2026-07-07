@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { InsightsQueryDefinition } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
+import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 import { defaultDate } from './builder-controls';
@@ -127,6 +128,42 @@ describe('InsightsPage', () => {
         }),
       { timeout: 3000 },
     );
+  });
+
+  it('scopes the query to a saved segment via the demoted Segment control, including cohort_id in every posted body', async () => {
+    const capturedBodies: InsightsQueryDefinition[] = [];
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+        const body = (await request.json()) as InsightsQueryDefinition;
+        capturedBodies.push(body);
+        return HttpResponse.json({
+          series: [
+            { name: 'checkout_completed', breakdown_value: null, data: [{ t: '2026-06-29', value: 5 }] },
+          ],
+        });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+    await waitForDefaultEvent();
+
+    // The segment picker is demoted behind "+ Segment", like Filter and Group by.
+    expect(screen.queryByLabelText('Segment')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Segment' }));
+    await screen.findByRole('option', { name: 'Recent buyers' });
+
+    // Selecting the segment re-runs both the current-range query and the previous-period KPI
+    // comparison — only bodies posted from here on should carry the segment scope.
+    capturedBodies.length = 0;
+    await userEvent.selectOptions(screen.getByLabelText('Segment'), 'Recent buyers');
+    expect(await screen.findByText('≈ 137 users')).toBeInTheDocument();
+
+    await waitFor(() => expect(capturedBodies.length).toBeGreaterThanOrEqual(2));
+    for (const body of capturedBodies) {
+      expect(body.cohort_id).toBe(TEST_COHORT_ID);
+    }
   });
 
   it('re-runs automatically when a date-range preset is chosen', async () => {

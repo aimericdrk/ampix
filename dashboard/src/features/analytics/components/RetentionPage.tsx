@@ -19,7 +19,8 @@ import { ComparisonTrend } from './charts/ComparisonTrend';
 import { KpiTile } from './charts/KpiTile';
 import { RetentionChart } from './RetentionChart';
 import { PageShell } from '../../../components/layout/PageShell';
-import { CohortSelect, SaveAsReportButton } from './report-actions';
+import { SaveAsReportButton } from './report-actions';
+import { SegmentPicker } from './SegmentPicker';
 import { cleanFilters, FilterRows } from './builder-controls';
 import { EventSelectField } from './explore-controls';
 
@@ -56,7 +57,7 @@ export function RetentionPage() {
   const [returnFilters, setReturnFilters] = useState<InsightsFilter[]>([]);
   const [interval, setInterval] = useState<RetentionInterval>('day');
   const [periods, setPeriods] = useState(14);
-  const [cohortId, setCohortId] = useState('');
+  const [segmentId, setSegmentId] = useState<string | null>(null);
   const [result, setResult] = useState<RetentionResponse | null>(null);
 
   const eventOptions = metaEvents.data?.events ?? [];
@@ -75,7 +76,7 @@ export function RetentionPage() {
     if (returnEvent.trim()) {
       def.return_event = { name: returnEvent.trim(), filters: cleanFilters(returnFilters) };
     }
-    if (cohortId) def.cohort_id = cohortId;
+    if (segmentId) def.cohort_id = segmentId;
     return def;
   }, [
     bornEvent,
@@ -86,7 +87,7 @@ export function RetentionPage() {
     dateTo,
     interval,
     periods,
-    cohortId,
+    segmentId,
   ]);
 
   const canRun =
@@ -183,7 +184,7 @@ export function RetentionPage() {
             </div>
           </div>
 
-          <CohortSelect projectId={projectId} value={cohortId} onChange={setCohortId} />
+          <SegmentPicker projectId={projectId} value={segmentId} onChange={setSegmentId} />
 
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleRun} disabled={!canRun}>

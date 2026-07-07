@@ -10,6 +10,7 @@ import {
   TEST_USER,
   VALID_ACCESS_TOKEN,
 } from '../../../test/msw/handlers';
+import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 
@@ -122,6 +123,33 @@ describe('FunnelsPage', () => {
     expect(checkout.getByText('145')).toBeInTheDocument();
     expect(checkout.getByText('23.4%')).toBeInTheDocument(); // from previous
     expect(checkout.getByText('14.5%')).toBeInTheDocument(); // from top
+  });
+
+  it('scopes the funnel to a saved segment via the Segment picker, including cohort_id in the body', async () => {
+    let capturedBody: FunnelQueryDefinition | undefined;
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/funnels', async ({ request }) => {
+        capturedBody = (await request.json()) as FunnelQueryDefinition;
+        return HttpResponse.json(THREE_STEP_RESPONSE);
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/funnels`);
+    await screen.findByRole('heading', { name: 'Funnels' });
+    await waitForMetaLoaded();
+
+    await addStep('app_opened');
+    await addStep('checkout_completed');
+
+    await screen.findByRole('option', { name: 'Recent buyers' });
+    await userEvent.selectOptions(screen.getByLabelText('Segment'), 'Recent buyers');
+    expect(await screen.findByText('≈ 137 users')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await screen.findByRole('img', { name: 'Funnel chart' });
+    expect(capturedBody?.cohort_id).toBe(TEST_COHORT_ID);
   });
 
   it('draws one funnel per breakdown value with a legend when a breakdown is set', async () => {

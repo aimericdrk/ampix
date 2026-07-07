@@ -19,7 +19,8 @@ import { ChartCard } from './charts/ChartCard';
 import { KpiTile } from './charts/KpiTile';
 import { FunnelChart } from './FunnelChart';
 import { PageShell } from '../../../components/layout/PageShell';
-import { CohortSelect, SaveAsReportButton } from './report-actions';
+import { SaveAsReportButton } from './report-actions';
+import { SegmentPicker } from './SegmentPicker';
 import { cleanFilters, FilterRows } from './builder-controls';
 import { EventPicker } from './explore-controls';
 
@@ -48,7 +49,7 @@ export function FunnelsPage() {
   const [windowDays, setWindowDays] = useState(7);
   const [order, setOrder] = useState<FunnelOrder>('any');
   const [breakdownProperty, setBreakdownProperty] = useState('');
-  const [cohortId, setCohortId] = useState('');
+  const [segmentId, setSegmentId] = useState<string | null>(null);
   const [result, setResult] = useState<FunnelResponse | null>(null);
 
   const eventOptions = metaEvents.data?.events ?? [];
@@ -93,9 +94,9 @@ export function FunnelsPage() {
       order,
     };
     if (breakdownProperty) def.breakdown = { property: breakdownProperty };
-    if (cohortId) def.cohort_id = cohortId;
+    if (segmentId) def.cohort_id = segmentId;
     return def;
-  }, [steps, dateFrom, dateTo, windowDays, order, breakdownProperty, cohortId]);
+  }, [steps, dateFrom, dateTo, windowDays, order, breakdownProperty, segmentId]);
 
   const canRun =
     steps.length >= 2 && Boolean(dateFrom) && Boolean(dateTo) && !runFunnels.isPending;
@@ -242,7 +243,7 @@ export function FunnelsPage() {
             </div>
           </div>
 
-          <CohortSelect projectId={projectId} value={cohortId} onChange={setCohortId} />
+          <SegmentPicker projectId={projectId} value={segmentId} onChange={setSegmentId} />
 
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleRun} disabled={!canRun}>

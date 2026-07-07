@@ -10,6 +10,7 @@ import {
   TEST_USER,
   VALID_ACCESS_TOKEN,
 } from '../../../test/msw/handlers';
+import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 
@@ -152,6 +153,31 @@ describe('RetentionPage', () => {
     await screen.findByRole('table', { name: 'Retention cohort heatmap' });
     expect(capturedBody).not.toHaveProperty('return_event');
     expect(capturedBody?.born_event).toEqual({ name: 'signup_completed', filters: [] });
+  });
+
+  it('scopes retention to a saved segment via the Segment picker, including cohort_id in the body', async () => {
+    let capturedBody: RetentionQueryDefinition | undefined;
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/retention', async ({ request }) => {
+        capturedBody = (await request.json()) as RetentionQueryDefinition;
+        return HttpResponse.json(RESPONSE);
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/retention`);
+    await screen.findByRole('heading', { name: 'Retention' });
+
+    await pickEvent('Born event', 'signup_completed');
+
+    await screen.findByRole('option', { name: 'Recent buyers' });
+    await userEvent.selectOptions(screen.getByLabelText('Segment'), 'Recent buyers');
+    expect(await screen.findByText('≈ 137 users')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await screen.findByRole('table', { name: 'Retention cohort heatmap' });
+    expect(capturedBody?.cohort_id).toBe(TEST_COHORT_ID);
   });
 
   it('shows the running state while the retention query is in flight', async () => {
