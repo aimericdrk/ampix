@@ -1,8 +1,29 @@
+import { useId, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
+import {
+  ComboboxListbox,
+  filterOptions,
+  useCloseComboboxOnOutsideClick,
+} from '../../../components/ui/combobox';
 import { Input } from '../../../components/ui/input';
 import type { InsightsFilter, InsightsFilterOp } from '../../../lib/api/types';
 import { INSIGHTS_FILTER_OPS } from '../../../lib/api/types';
 import { useMetaPropertyValues } from '../api';
+
+/**
+ * A short example value shown as `e.g. <example>` when a property has no suggested values, so a
+ * user typing a free-form value (email, a version string, …) knows the expected format.
+ */
+const PROPERTY_VALUE_EXAMPLES: Record<string, string> = {
+  locale: 'en_US',
+  app_version: '1.4.0',
+  os_version: '17.2',
+  timezone: 'Europe/Paris',
+};
+
+function exampleForProperty(property: string): string {
+  return PROPERTY_VALUE_EXAMPLES[property] ?? 'a value';
+}
 
 /** Shared builder primitives for the Phase-4 analysis pages, mirroring the Insights builder UX. */
 
@@ -108,10 +129,15 @@ export function EventNameInput({
 }
 
 /**
- * The value cell of a single filter row, backed by the `/meta/property-values` autosuggest datalist.
- * It is its own component so each row's `useMetaPropertyValues` hook call stays at the top level of a
- * component (React hooks rules forbid calling hooks inside the `.map` of `FilterRows`). When no
- * suggestions come back it degrades to a plain free-text input plus a "Type any value" hint.
+ * The value cell of a single filter row, backed by the `/meta/property-values` autosuggest. It is
+ * its own component so each row's `useMetaPropertyValues` hook call stays at the top level of a
+ * component (React hooks rules forbid calling hooks inside the `.map` of `FilterRows`).
+ *
+ * The input itself always carries the real, free-typed `value` (so an arbitrary value is always
+ * valid, even mid-suggestion), backed by a visible searchable listbox — built on the same
+ * `ComboboxListbox` primitive as {@link EventSelectField}'s combobox in `explore-controls.tsx` —
+ * that opens on focus/typing and lets a suggested value be picked. When the property has no
+ * suggestions (and the query isn't loading), a `e.g. <example>` format hint renders instead.
  */
 export function FilterValueInput({
   id,
@@ -134,28 +160,86 @@ export function FilterValueInput({
   // on an empty property, so passing '' keeps it disabled (no request) for the fallback case.
   const query = useMetaPropertyValues(projectId ?? '', projectId ? property : '', event);
   const values = query.data?.values ?? [];
-  const listId = `${id}-options`;
-  const showHint = projectId !== undefined && !query.isLoading && values.length === 0;
+  const hasSuggestions = values.length > 0;
+  const showHint = projectId !== undefined && !query.isLoading && !hasSuggestions;
+
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  useCloseComboboxOnOutsideClick(containerRef, open, () => setOpen(false));
+
+  const filtered = filterOptions(values, value);
+  const activeOptionId =
+    open && filtered.length > 0
+      ? `${listId}-opt-${Math.min(activeIndex, filtered.length - 1)}`
+      : undefined;
+
+  const choose = (picked: string) => {
+    onChange(picked);
+    setOpen(false);
+  };
+
   return (
-    <div className="flex flex-col">
+    <div ref={containerRef} className="relative flex flex-col">
       <label className="sr-only" htmlFor={id}>
         {ariaLabel}
       </label>
       <Input
         id={id}
         className="h-9 w-40"
-        list={values.length > 0 ? listId : undefined}
+        role={hasSuggestions ? 'combobox' : undefined}
+        aria-autocomplete={hasSuggestions ? 'list' : undefined}
+        aria-controls={hasSuggestions ? listId : undefined}
+        aria-expanded={hasSuggestions ? open : undefined}
+        aria-activedescendant={activeOptionId}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setActiveIndex(0);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (!hasSuggestions) return;
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setOpen(true);
+            setActiveIndex((index) => Math.min(index + 1, filtered.length - 1));
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActiveIndex((index) => Math.max(index - 1, 0));
+          } else if (e.key === 'Enter') {
+            const pick = open ? filtered[activeIndex] : undefined;
+            if (pick) {
+              e.preventDefault();
+              choose(pick);
+            }
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setOpen(false);
+          }
+        }}
       />
-      {values.length > 0 && (
-        <datalist id={listId}>
-          {values.map((v) => (
-            <option key={v} value={v} />
-          ))}
-        </datalist>
+      {open && hasSuggestions && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-48 rounded-lg border border-border bg-surface p-2 shadow-lg">
+          <ComboboxListbox
+            listId={listId}
+            comboLabel={ariaLabel}
+            options={filtered}
+            hasAnyOptions={hasSuggestions}
+            query={value}
+            activeIndex={activeIndex}
+            onHover={setActiveIndex}
+            onChoose={choose}
+            noun="value"
+          />
+        </div>
       )}
-      {showHint && <span className="mt-1 text-xs text-text-muted">Type any value</span>}
+      {showHint && (
+        <span className="mt-1 text-xs text-text-muted">e.g. {exampleForProperty(property)}</span>
+      )}
     </div>
   );
 }

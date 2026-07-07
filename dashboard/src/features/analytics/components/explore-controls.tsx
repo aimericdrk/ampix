@@ -1,5 +1,10 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../../../components/ui/button';
+import {
+  ComboboxListbox,
+  filterOptions,
+  useCloseComboboxOnOutsideClick,
+} from '../../../components/ui/combobox';
 import { Input } from '../../../components/ui/input';
 import { cn } from '../../../lib/cn';
 import { DateRangeFields, defaultDate } from './builder-controls';
@@ -58,19 +63,9 @@ export function EventPicker({
   const listId = useId();
 
   const available = options.filter((name) => !exclude.includes(name));
-  const needle = query.trim().toLowerCase();
-  const filtered = needle
-    ? available.filter((name) => name.toLowerCase().includes(needle))
-    : available;
+  const filtered = filterOptions(available, query);
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
+  useCloseComboboxOnOutsideClick(containerRef, open, () => setOpen(false));
 
   useEffect(() => {
     if (!open) return;
@@ -140,39 +135,19 @@ export function EventPicker({
               }
             }}
           />
-          <ul
-            id={listId}
-            role="listbox"
-            aria-label={comboLabel}
-            className="mt-2 max-h-56 overflow-auto"
-          >
-            {isLoading ? (
-              <li className="px-2 py-1.5 text-sm text-text-muted">Loading {noun}s…</li>
-            ) : available.length === 0 ? (
-              <li className="px-2 py-2 text-sm text-text-muted">
-                {emptyLabel ?? `No ${noun}s tracked yet.`}
-              </li>
-            ) : filtered.length === 0 ? (
-              <li className="px-2 py-1.5 text-sm text-text-muted">No matches for “{query.trim()}”.</li>
-            ) : (
-              filtered.map((name, index) => (
-                <li
-                  key={name}
-                  id={`${listId}-opt-${index}`}
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  onPointerEnter={() => setActiveIndex(index)}
-                  onClick={() => choose(name)}
-                  className={cn(
-                    'cursor-pointer truncate rounded px-2 py-1.5 text-sm',
-                    index === activeIndex ? 'bg-accent text-accent-fg' : 'text-text hover:bg-border/40',
-                  )}
-                >
-                  {name}
-                </li>
-              ))
-            )}
-          </ul>
+          <ComboboxListbox
+            listId={listId}
+            comboLabel={comboLabel}
+            options={filtered}
+            hasAnyOptions={available.length > 0}
+            query={query}
+            activeIndex={activeIndex}
+            onHover={setActiveIndex}
+            onChoose={choose}
+            isLoading={isLoading}
+            noun={noun}
+            emptyLabel={emptyLabel}
+          />
         </div>
       )}
     </div>

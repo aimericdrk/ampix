@@ -112,10 +112,15 @@ export const META_PROPERTIES_FIXTURE: MetaPropertiesResponse = {
 /**
  * Suggested values for the filter-value type-ahead (GET /meta/property-values). Any suggestable
  * property returns this small frequency-ranked list; the handler returns `[]` for the designated
- * free-form key (`email`) so the "Type any value" fallback can be exercised.
+ * free-form key (`email`) so the format-example hint fallback can be exercised.
  */
 export const META_PROPERTY_VALUES_FIXTURE: MetaPropertyValuesResponse = {
   values: ['free', 'pro', 'enterprise'],
+};
+
+/** Per-property overrides of the generic fixture above, for properties whose real values matter. */
+const PROPERTY_VALUES_BY_KEY: Record<string, string[]> = {
+  os: ['ios', 'android'],
 };
 
 /** Property keys that have no useful autosuggest — the endpoint returns an empty list for them. */
@@ -1081,6 +1086,8 @@ export const handlers = [
     if (!property) return problem(400, 'A property is required');
     // Designated free-form keys have no useful suggestions → empty list drives the free-text hint.
     if (FREE_FORM_PROPERTY_KEYS.has(property)) return HttpResponse.json({ values: [] });
+    const overrides = PROPERTY_VALUES_BY_KEY[property];
+    if (overrides) return HttpResponse.json({ values: overrides });
     return HttpResponse.json(META_PROPERTY_VALUES_FIXTURE);
   }),
 
