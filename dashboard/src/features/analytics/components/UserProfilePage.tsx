@@ -1,6 +1,7 @@
 import { useParams } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   ClickHeatmapResponse,
@@ -111,72 +112,69 @@ export function UserProfilePage() {
 
           {/* Screen path — a lightweight per-user chain of the screens this person moved through. */}
           <Card className="max-w-lg">
-            <CardHeader>
-              <CardTitle>Screen path</CardTitle>
-            </CardHeader>
             <CardContent>
-              {screenPath.length === 0 ? (
-                <p className="text-text-muted">No screen views recorded.</p>
-              ) : (
-                <ol className="flex flex-wrap items-center gap-2 text-sm">
-                  {screenPath.map((name, i) => (
-                    <li key={`${name}-${i}`} className="flex items-center gap-2">
-                      {i > 0 && (
-                        <span aria-hidden className="text-text-muted">
-                          →
+              <CollapsibleSection title="Screen path" defaultOpen>
+                {screenPath.length === 0 ? (
+                  <p className="text-text-muted">No screen views recorded.</p>
+                ) : (
+                  <ol className="flex flex-wrap items-center gap-2 text-sm">
+                    {screenPath.map((name, i) => (
+                      <li key={`${name}-${i}`} className="flex items-center gap-2">
+                        {i > 0 && (
+                          <span aria-hidden className="text-text-muted">
+                            →
+                          </span>
+                        )}
+                        <span className="rounded-full border border-border bg-chart-surface px-2.5 py-1 font-medium">
+                          {name}
                         </span>
-                      )}
-                      <span className="rounded-full border border-border bg-chart-surface px-2.5 py-1 font-medium">
-                        {name}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </CollapsibleSection>
             </CardContent>
           </Card>
 
           {/* Activity timeline — a visual vertical timeline of the recent event feed. */}
           <Card className="max-w-lg">
-            <CardHeader>
-              <CardTitle>Activity timeline</CardTitle>
-            </CardHeader>
             <CardContent>
-              {data.recent_events.length === 0 ? (
-                <p className="text-text-muted">No recent events.</p>
-              ) : (
-                <ol className="flex flex-col gap-4 border-l border-border pl-6 text-sm">
-                  {data.recent_events.map((event) => (
-                    <li key={event.insert_id} className="relative">
-                      <span
-                        aria-hidden
-                        className="absolute -left-[1.6875rem] top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-accent"
-                      />
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{event.event}</span>
-                        {event.screen_name && (
-                          <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
-                            {event.screen_name}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-text-muted">
-                        {new Date(event.timestamp).toLocaleString()}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <CollapsibleSection title="Activity timeline" defaultOpen>
+                {data.recent_events.length === 0 ? (
+                  <p className="text-text-muted">No recent events.</p>
+                ) : (
+                  <ol className="flex flex-col gap-4 border-l border-border pl-6 text-sm">
+                    {data.recent_events.map((event) => (
+                      <li key={event.insert_id} className="relative">
+                        <span
+                          aria-hidden
+                          className="absolute -left-[1.6875rem] top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-accent"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{event.event}</span>
+                          {event.screen_name && (
+                            <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
+                              {event.screen_name}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-text-muted">
+                          {new Date(event.timestamp).toLocaleString()}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </CollapsibleSection>
             </CardContent>
           </Card>
 
           {/* Tap heatmap — identity-correct per-user, driven by the §17 identity set. */}
           <Card>
-            <CardHeader>
-              <CardTitle>Tap heatmap</CardTitle>
-            </CardHeader>
             <CardContent>
-              <UserTapHeatmap projectId={projectId} distinctIds={data.distinct_ids} />
+              <CollapsibleSection title="Tap heatmap" defaultOpen>
+                <UserTapHeatmap projectId={projectId} distinctIds={data.distinct_ids} />
+              </CollapsibleSection>
             </CardContent>
           </Card>
         </>

@@ -23,9 +23,9 @@ describe('UserProfilePage', () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
 
-    const timeline = (await screen.findByRole('heading', { name: 'Activity timeline' })).closest(
-      '.rounded-lg',
-    )!;
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-lg')!;
     const items = within(timeline as HTMLElement).getAllByRole('listitem');
     // One timeline entry per recent event.
     expect(items).toHaveLength(USER_PROFILE_FIXTURE.recent_events.length);
@@ -36,11 +36,25 @@ describe('UserProfilePage', () => {
     expect(within(timeline as HTMLElement).getAllByText('$screen_view').length).toBe(screenViewCount);
   });
 
+  it('collapses the activity timeline when its toggle is clicked', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const toggle = await screen.findByRole('button', { name: 'Activity timeline' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('checkout_completed')).toBeVisible();
+
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('checkout_completed')).not.toBeVisible();
+  });
+
   it('derives the screen-path chain in chronological order with consecutive duplicates collapsed', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
 
-    const pathCard = (await screen.findByRole('heading', { name: 'Screen path' })).closest(
+    const pathCard = (await screen.findByRole('button', { name: 'Screen path' })).closest(
       '.rounded-lg',
     )!;
     const pills = within(pathCard as HTMLElement).getAllByRole('listitem');
