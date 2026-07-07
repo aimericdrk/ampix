@@ -29,6 +29,7 @@ import { DashboardsPage } from './features/analytics/components/DashboardsPage';
 import { DashboardViewPage } from './features/analytics/components/DashboardViewPage';
 import { LiveFeedPage } from './features/analytics/components/LiveFeedPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
+import { RevenuePage } from './features/analytics/components/RevenuePage';
 import { UserProfilePage } from './features/analytics/components/UserProfilePage';
 import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
@@ -234,6 +235,12 @@ const sessionsRoute = createRoute({
   component: SessionsPage,
 });
 
+const revenueRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/revenue',
+  component: RevenuePage,
+});
+
 const securitySettingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/settings/security',
@@ -277,6 +284,7 @@ export const routeTree = rootRoute.addChildren([
     usersRoute,
     userProfileRoute,
     sessionsRoute,
+    revenueRoute,
     securitySettingsRoute,
     accountRoute,
     orgSettingsRoute,

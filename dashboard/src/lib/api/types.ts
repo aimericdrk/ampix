@@ -421,6 +421,29 @@ export interface SessionsSummaryResponse {
   by_day: SessionsByDay[];
 }
 
+export interface RevenueByDay {
+  t: string;
+  revenue: number;
+  purchases: number;
+}
+
+export interface RevenueByProduct {
+  product_id: string;
+  revenue: number;
+  purchases: number;
+}
+
+/** `GET /metrics/revenue` — derived from `$in_app_purchase` events' `$price`/`$product_id`. */
+export interface RevenueSummaryResponse {
+  total_revenue: number;
+  purchases: number;
+  paying_users: number;
+  arppu: number;
+  avg_purchase_value: number;
+  by_day: RevenueByDay[];
+  by_product: RevenueByProduct[];
+}
+
 /** `GET /meta/events` — distinct event names seen in the last 30 days, for the builder's autocomplete. */
 export interface MetaEventsResponse {
   events: string[];

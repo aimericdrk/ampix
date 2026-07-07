@@ -41,6 +41,7 @@ function projectGroups(): NavGroup[] {
         // "Paths" is the interactive user-path map + Mermaid view (screen-paths, §19).
         { label: 'Paths', to: p('/paths'), icon: 'paths' },
         { label: 'Heatmap', to: p('/heatmap'), icon: 'heatmap' },
+        { label: 'Revenue', to: p('/revenue'), icon: 'revenue' },
       ],
     },
     {

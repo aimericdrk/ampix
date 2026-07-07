@@ -15,6 +15,11 @@ export function formatPercent(rate: number): string {
   return new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 1 }).format(rate);
 }
 
+/** A monetary amount, default USD (the Revenue page's `$price` sums aren't currency-tagged yet). */
+export function formatCurrency(value: number, currency = 'USD'): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value);
+}
+
 /** `245000` -> `4m 5s`; `900` -> `0.9s`; `0` -> `0s`. */
 export function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`;

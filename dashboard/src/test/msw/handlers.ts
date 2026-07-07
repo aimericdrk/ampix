@@ -29,6 +29,7 @@ import type {
   ListInvitationsResponse,
   RetentionQueryDefinition,
   RetentionResponse,
+  RevenueSummaryResponse,
   ListMembersResponse,
   ListOrgsResponse,
   ListProjectsResponse,
@@ -229,6 +230,25 @@ export const SESSIONS_SUMMARY_FIXTURE: SessionsSummaryResponse = {
     { t: '2026-06-29', sessions: 40, avg_duration_ms: 230000 },
     { t: '2026-06-30', sessions: 44, avg_duration_ms: 250000 },
     { t: '2026-07-01', sessions: 44, avg_duration_ms: 255000 },
+  ],
+};
+
+/** Deterministic sample for `GET /metrics/revenue` (contracts §19): $480 over 40 purchases, 30
+ *  paying users — arppu = 480/30 = $16, avg_purchase_value = 480/40 = $12, both exact. */
+export const REVENUE_SUMMARY_FIXTURE: RevenueSummaryResponse = {
+  total_revenue: 480,
+  purchases: 40,
+  paying_users: 30,
+  arppu: 16,
+  avg_purchase_value: 12,
+  by_day: [
+    { t: '2026-06-29', revenue: 150, purchases: 12 },
+    { t: '2026-06-30', revenue: 160, purchases: 14 },
+    { t: '2026-07-01', revenue: 170, purchases: 14 },
+  ],
+  by_product: [
+    { product_id: 'pro_monthly', revenue: 300, purchases: 25 },
+    { product_id: 'coins_pack', revenue: 180, purchases: 15 },
   ],
 };
 
@@ -1355,6 +1375,13 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     return HttpResponse.json(SESSIONS_SUMMARY_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/revenue', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(REVENUE_SUMMARY_FIXTURE);
   }),
 
   // --- Templates catalog (contracts §19) — auth-only, shared across projects ---

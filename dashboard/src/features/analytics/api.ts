@@ -36,6 +36,7 @@ import type {
   AnalysisResult,
   RetentionQueryDefinition,
   RetentionResponse,
+  RevenueSummaryResponse,
   RunReportRequest,
   SavedReport,
   SessionsSummaryResponse,
@@ -302,6 +303,18 @@ export function useSessionsSummary(projectId: string, from: string, to: string) 
       apiFetch<SessionsSummaryResponse>(
         `${base(projectId)}/sessions/summary?from=${from}&to=${to}`,
       ),
+  });
+}
+
+// --- Revenue (contracts §19: in-app purchase revenue, ARPPU, by-product) ---
+
+/** `GET /metrics/revenue` — auto-loads once both bounds of the range are set (mirrors `useEngagement`). */
+export function useRevenue(projectId: string, from: string, to: string) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'revenue', from, to],
+    queryFn: () =>
+      apiFetch<RevenueSummaryResponse>(`${base(projectId)}/metrics/revenue?from=${from}&to=${to}`),
+    enabled: from.length > 0 && to.length > 0,
   });
 }
 
