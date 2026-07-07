@@ -9,6 +9,7 @@ import type {
   CreatedToken,
   CreateInvitationResponse,
   CreateOrgResponse,
+  EngagementResponse,
   EventSummaryResponse,
   ClickHeatmapQuery,
   ClickHeatmapResponse,
@@ -247,6 +248,25 @@ export const FLOWS_FIXTURE: FlowsResponse = {
     { source: '0:app_open', target: '1:browse', value: 540 },
     { source: '0:app_open', target: '1:$other', value: 160 },
     { source: '0:app_open', target: '1:$end', value: 300 },
+  ],
+};
+
+/** Small deterministic engagement fixture: 3 daily buckets of DAU + stickiness + new/returning. */
+export const ENGAGEMENT_FIXTURE: EngagementResponse = {
+  active: [
+    { t: '2026-06-29', metric: 'dau', value: 120 },
+    { t: '2026-06-30', metric: 'dau', value: 135 },
+    { t: '2026-07-01', metric: 'dau', value: 150 },
+  ],
+  stickiness: [
+    { t: '2026-06-29', value: 0.24 },
+    { t: '2026-06-30', value: 0.27 },
+    { t: '2026-07-01', value: 0.3 },
+  ],
+  new_vs_returning: [
+    { t: '2026-06-29', new: 30, returning: 90 },
+    { t: '2026-06-30', new: 35, returning: 100 },
+    { t: '2026-07-01', new: 40, returning: 110 },
   ],
 };
 
@@ -1123,6 +1143,13 @@ export const handlers = [
       });
     });
     return HttpResponse.json({ series });
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/engagement', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(ENGAGEMENT_FIXTURE);
   }),
 
   // --- Advanced analysis (contracts §15) ---

@@ -17,6 +17,7 @@ import type {
   Dashboard,
   DashboardDataResponse,
   DashboardTile,
+  EngagementResponse,
   FlowsQueryDefinition,
   FlowsResponse,
   FunnelQueryDefinition,
@@ -95,6 +96,27 @@ export function useRunInsights(projectId: string) {
         method: 'POST',
         body: query,
       }),
+  });
+}
+
+/**
+ * Query-style counterpart of {@link useRunInsights} for pages that should auto-load a result on
+ * view (e.g. Home's KPI row) rather than wait for an explicit "Run" action. Same endpoint/body;
+ * `queryKey` includes the serialized `definition` so distinct queries cache independently.
+ */
+export function useInsightsQuery(
+  projectId: string,
+  definition: InsightsQueryDefinition,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'insights-query', JSON.stringify(definition)],
+    queryFn: () =>
+      apiFetch<InsightsResponse>(`${base(projectId)}/query/insights`, {
+        method: 'POST',
+        body: definition,
+      }),
+    enabled,
   });
 }
 
@@ -280,6 +302,20 @@ export function useSessionsSummary(projectId: string, from: string, to: string) 
       apiFetch<SessionsSummaryResponse>(
         `${base(projectId)}/sessions/summary?from=${from}&to=${to}`,
       ),
+  });
+}
+
+// --- Engagement (contracts §19: DAU/WAU/MAU, stickiness, new-vs-returning) ---
+
+/** `GET /metrics/engagement` — auto-loads once both bounds of the range are set. */
+export function useEngagement(projectId: string, from: string, to: string, interval: string) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'engagement', from, to, interval],
+    queryFn: () =>
+      apiFetch<EngagementResponse>(
+        `${base(projectId)}/metrics/engagement?from=${from}&to=${to}&interval=${interval}`,
+      ),
+    enabled: from.length > 0 && to.length > 0,
   });
 }
 
