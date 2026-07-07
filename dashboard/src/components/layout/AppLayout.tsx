@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate, useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
+import { DateRangeProvider } from '../../features/analytics/date-range';
 import { logout } from '../../features/auth/api';
 import { authStore, useAuth } from '../../features/auth/store';
 import { currentOrgStore, useCurrentOrgId } from '../../features/orgs/store';
@@ -230,7 +231,11 @@ export function AppLayout() {
       </aside>
 
       <main id="main-content" className="flex-1 p-6 pt-16 md:p-8 md:pt-8">
-        <Outlet />
+        {/* Made available app-wide now; pages migrate onto `useDateRange` in a later phase. Scoped
+            to a stable key even off project routes, so the provider never needs to unmount. */}
+        <DateRangeProvider projectId={projectId ?? 'no-project'}>
+          <Outlet />
+        </DateRangeProvider>
       </main>
     </div>
   );

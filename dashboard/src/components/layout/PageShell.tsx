@@ -19,6 +19,7 @@ export function PageShell({
   title,
   description,
   breadcrumbs,
+  dateRangeControl,
   actions,
   children,
 }: {
@@ -26,6 +27,9 @@ export function PageShell({
   title: string;
   description?: ReactNode;
   breadcrumbs?: Breadcrumb[];
+  /** An optional header-area control (e.g. the global `DateRangeControl`), rendered ahead of
+   * `actions`. Opt-in per page — omitting it changes nothing for existing pages. */
+  dateRangeControl?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -70,7 +74,12 @@ export function PageShell({
             <h1 className="text-2xl font-semibold">{title}</h1>
             {description && <p className="mt-1 max-w-2xl text-sm text-text-muted">{description}</p>}
           </div>
-          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+          {(dateRangeControl || actions) && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {dateRangeControl}
+              {actions}
+            </div>
+          )}
         </div>
       </div>
       {children}
