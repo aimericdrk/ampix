@@ -66,6 +66,8 @@ export interface RecentEvent {
   insert_id: string;
   event: string;
   timestamp: string;
+  /** The `$screen_name` of `$screen_view`/`$tap` events; null for events without one. */
+  screen_name: string | null;
 }
 
 export interface UserProfileResponse {
@@ -75,6 +77,11 @@ export interface UserProfileResponse {
   last_seen: string | null;
   event_count: number;
   recent_events: RecentEvent[];
+  /**
+   * §17 identity set — the canonical id plus every anon_id aliasing to it; feed to the click-heatmap
+   * `distinct_ids` for identity-correct per-user results.
+   */
+  distinct_ids: string[];
 }
 
 /** GET /sessions/summary response (contracts §14). */

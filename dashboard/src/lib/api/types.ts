@@ -355,6 +355,8 @@ export interface UserRecentEvent {
   insert_id: string;
   event: string;
   timestamp: string;
+  /** The `$screen_name` of `$screen_view`/`$tap` events; null for events without one. */
+  screen_name: string | null;
 }
 
 /** `GET /users/:distinctId` — `profile` is the raw `user_profiles` row (arbitrary keys). */
@@ -365,6 +367,11 @@ export interface UserProfileResponse {
   last_seen: string;
   event_count: number;
   recent_events: UserRecentEvent[];
+  /**
+   * §17 identity set — the canonical id plus every anon_id aliasing to it; feed to the click-heatmap
+   * `distinct_ids` for identity-correct per-user results.
+   */
+  distinct_ids: string[];
 }
 
 export interface SessionsByDay {
@@ -597,6 +604,11 @@ export interface ClickHeatmapQuery {
   date_range: InsightsDateRange;
   grid: HeatmapGrid;
   filters: InsightsFilter[];
+  /**
+   * Optional §17 per-user identity set (canonical id + aliased anon_ids). When set, the heatmap is
+   * filtered to `distinct_id IN (…)` on the RAW column so a single user's taps are identity-correct.
+   */
+  distinct_ids?: string[];
 }
 
 /** One populated grid cell: `cx`∈0..cols-1, `cy`∈0..rows-1; empty cells are omitted from the response. */

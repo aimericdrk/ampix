@@ -154,6 +154,13 @@ describe('Identity resolution (e2e, contracts §17)', () => {
       expect(res.body.event_count).toBe(MERGED_EVENT_COUNT);
       // recent_events span both id-spaces (they are all this one person's events).
       expect(res.body.recent_events).toHaveLength(MERGED_EVENT_COUNT);
+      // Each recent event carries a screen_name key (null here — none of the seeded events set one).
+      for (const ev of res.body.recent_events) {
+        expect(ev).toHaveProperty('screen_name');
+      }
+      // §17 identity set: the canonical id PLUS the pre-login anon_id that merged into it — this is
+      // what the per-user click-heatmap filters the raw distinct_id column on to stay identity-correct.
+      expect(res.body.distinct_ids.sort()).toEqual([USER, ANON].sort());
     });
 
     it('requesting the pre-login anon_id redirects to the canonical merged profile', async () => {
@@ -161,6 +168,9 @@ describe('Identity resolution (e2e, contracts §17)', () => {
       // Resolves the anon to its canonical user and returns THAT user's merged profile.
       expect(res.body.distinct_id).toBe(USER);
       expect(res.body.event_count).toBe(MERGED_EVENT_COUNT);
+      // The identity set is computed from the canonical id, so it is identical regardless of which
+      // id-space the caller queried by.
+      expect(res.body.distinct_ids.sort()).toEqual([USER, ANON].sort());
     });
   });
 

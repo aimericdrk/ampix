@@ -17,10 +17,18 @@ export const heatmapGridSchema = z.object({
 });
 export type HeatmapGrid = z.infer<typeof heatmapGridSchema>;
 
+const MAX_DISTINCT_IDS = 1000;
+
 export const clickHeatmapQuerySchema = z.object({
   screen_name: z.string().trim().min(1).max(255),
   date_range: dateRangeSchema,
   grid: heatmapGridSchema,
   filters: z.array(insightsFilterSchema).max(MAX_FILTERS).default([]),
+  /**
+   * Optional §17 per-user identity set — the canonical id plus every anon_id aliasing to it. When
+   * present the compiler adds a raw-`distinct_id` IN filter so a per-user heatmap is identity-correct
+   * (see click-heatmap.compiler.ts). Bounded so the generated IN list can't blow up.
+   */
+  distinct_ids: z.array(z.string().min(1)).max(MAX_DISTINCT_IDS).optional(),
 });
 export type ClickHeatmapQuery = z.infer<typeof clickHeatmapQuerySchema>;

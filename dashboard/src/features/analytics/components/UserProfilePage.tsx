@@ -1,15 +1,44 @@
 import { useParams } from '@tanstack/react-router';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { ApiError } from '../../../lib/api/problem';
+import type {
+  ClickHeatmapResponse,
+  HeatmapGrid,
+  UserRecentEvent,
+} from '../../../lib/api/types';
 import { formatExactNumber } from '../format';
-import { useUserProfile } from '../api';
+import { useRunClickHeatmap, useScreens, useUserProfile } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { defaultDate } from './builder-controls';
+import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
+
+/** The screen-view autocapture event (contracts §4) — drives the per-user screen-path diagram. */
+const SCREEN_VIEW_EVENT = '$screen_view';
+const HEATMAP_GRID: HeatmapGrid = { cols: 20, rows: 40 };
+
+/**
+ * The user's screen sequence, derived from `recent_events`: keep `$screen_view` events that carry a
+ * screen name, put them back into chronological order (the feed is newest-first), then collapse
+ * consecutive duplicate screens so "home → home → cart" reads as "home → cart".
+ */
+function deriveScreenPath(events: UserRecentEvent[]): string[] {
+  const screens = events
+    .filter((e) => e.event === SCREEN_VIEW_EVENT && e.screen_name)
+    .map((e) => e.screen_name as string)
+    .reverse();
+  return screens.filter((name, i) => i === 0 || name !== screens[i - 1]);
+}
 
 export function UserProfilePage() {
   const { projectId, distinctId } = useParams({
     from: '/private/projects/$projectId/users/$distinctId',
   });
   const { data, isPending, isError, error } = useUserProfile(projectId, distinctId);
+  const screenPath = useMemo(
+    () => (data ? deriveScreenPath(data.recent_events) : []),
+    [data],
+  );
 
   return (
     <PageShell
@@ -80,23 +109,25 @@ export function UserProfilePage() {
             </CardContent>
           </Card>
 
+          {/* Screen path — a lightweight per-user chain of the screens this person moved through. */}
           <Card className="max-w-lg">
             <CardHeader>
-              <CardTitle>Recent activity</CardTitle>
+              <CardTitle>Screen path</CardTitle>
             </CardHeader>
             <CardContent>
-              {data.recent_events.length === 0 ? (
-                <p className="text-text-muted">No recent events.</p>
+              {screenPath.length === 0 ? (
+                <p className="text-text-muted">No screen views recorded.</p>
               ) : (
-                <ol className="flex flex-col gap-2 text-sm">
-                  {data.recent_events.map((event) => (
-                    <li
-                      key={event.insert_id}
-                      className="flex justify-between gap-4 border-b border-border pb-2"
-                    >
-                      <span className="font-medium">{event.event}</span>
-                      <span className="text-text-muted">
-                        {new Date(event.timestamp).toLocaleString()}
+                <ol className="flex flex-wrap items-center gap-2 text-sm">
+                  {screenPath.map((name, i) => (
+                    <li key={`${name}-${i}`} className="flex items-center gap-2">
+                      {i > 0 && (
+                        <span aria-hidden className="text-text-muted">
+                          →
+                        </span>
+                      )}
+                      <span className="rounded-full border border-border bg-chart-surface px-2.5 py-1 font-medium">
+                        {name}
                       </span>
                     </li>
                   ))}
@@ -104,8 +135,150 @@ export function UserProfilePage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Activity timeline — a visual vertical timeline of the recent event feed. */}
+          <Card className="max-w-lg">
+            <CardHeader>
+              <CardTitle>Activity timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.recent_events.length === 0 ? (
+                <p className="text-text-muted">No recent events.</p>
+              ) : (
+                <ol className="flex flex-col gap-4 border-l border-border pl-6 text-sm">
+                  {data.recent_events.map((event) => (
+                    <li key={event.insert_id} className="relative">
+                      <span
+                        aria-hidden
+                        className="absolute -left-[1.6875rem] top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-accent"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{event.event}</span>
+                        {event.screen_name && (
+                          <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
+                            {event.screen_name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-text-muted">
+                        {new Date(event.timestamp).toLocaleString()}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tap heatmap — identity-correct per-user, driven by the §17 identity set. */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tap heatmap</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <UserTapHeatmap projectId={projectId} distinctIds={data.distinct_ids} />
+            </CardContent>
+          </Card>
         </>
       )}
     </PageShell>
+  );
+}
+
+/**
+ * A per-user tap heatmap: pick a captured screen and overlay this ONE user's taps on it. The
+ * `distinct_ids` (the profile's §17 identity set: canonical id + aliased anon_ids) is what makes it
+ * identity-correct — the backend filters the raw `distinct_id` column to that set, so taps recorded
+ * both before and after the person logged in are counted.
+ */
+function UserTapHeatmap({
+  projectId,
+  distinctIds,
+}: {
+  projectId: string;
+  distinctIds: string[];
+}) {
+  const screens = useScreens(projectId);
+  const runHeatmap = useRunClickHeatmap(projectId);
+  const [selectedScreen, setSelectedScreen] = useState('');
+  const [result, setResult] = useState<ClickHeatmapResponse | null>(null);
+
+  const screenList = screens.data?.screens ?? [];
+  const selectedSummary = screenList.find((s) => s.screen_name === selectedScreen);
+
+  const onSelectScreen = (screenName: string) => {
+    setSelectedScreen(screenName);
+    setResult(null);
+    if (!screenName) return;
+    runHeatmap.mutate(
+      {
+        screen_name: screenName,
+        date_range: { from: defaultDate(30), to: defaultDate(0) },
+        grid: HEATMAP_GRID,
+        filters: [],
+        // §17: scope the heatmap to this user's whole identity set (anon + identified ids).
+        distinct_ids: distinctIds,
+      },
+      { onSuccess: setResult },
+    );
+  };
+
+  const maxCount = useMemo(
+    () => (result ? result.cells.reduce((max, cell) => Math.max(max, cell.count), 0) : 0),
+    [result],
+  );
+  const hasTaps = result !== null && result.total > 0 && result.cells.length > 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="user-heatmap-screen" className="mb-1 block text-sm font-medium">
+          Screen
+        </label>
+        <select
+          id="user-heatmap-screen"
+          value={selectedScreen}
+          onChange={(e) => onSelectScreen(e.target.value)}
+          className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+        >
+          <option value="">Select a screen…</option>
+          {screenList.map((screen) => (
+            <option key={screen.screen_name} value={screen.screen_name}>
+              {screen.screen_name}
+            </option>
+          ))}
+        </select>
+        {screens.isSuccess && screenList.length === 0 && (
+          <p className="mt-2 text-sm text-text-muted">No screens captured yet.</p>
+        )}
+      </div>
+
+      {runHeatmap.isError && (
+        <p role="alert" className="text-danger">
+          {runHeatmap.error instanceof ApiError
+            ? runHeatmap.error.problem.title
+            : 'Failed to load the heatmap'}
+        </p>
+      )}
+
+      {selectedScreen && result && !hasTaps && (
+        <p className="text-text-muted">No taps recorded for this screen in the selected range.</p>
+      )}
+
+      {selectedScreen && result && (
+        <div className="flex flex-col gap-4">
+          <HeatmapLegend total={result.total} maxCount={maxCount} />
+          <HeatmapCanvas
+            projectId={projectId}
+            screenName={selectedScreen}
+            summary={selectedSummary}
+            result={result}
+            grid={HEATMAP_GRID}
+            maxCount={maxCount}
+            opacity={0.85}
+          />
+        </div>
+      )}
+    </div>
   );
 }

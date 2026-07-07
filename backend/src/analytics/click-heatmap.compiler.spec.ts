@@ -46,6 +46,29 @@ describe('compileClickHeatmapQuery (contracts §19)', () => {
     expect(params.filterVal0).toBe('pro');
   });
 
+  describe('§17 identity-correct per-user filter (distinct_ids)', () => {
+    it('adds a bound Array(String) IN filter on the raw distinct_id column when distinct_ids is present', () => {
+      const { sql, params } = compileClickHeatmapQuery(
+        baseQuery({ distinct_ids: ['u1', 'anon1'] }),
+        PROJECT_ID,
+      );
+      expect(sql).toContain('distinct_id IN {distinctIds:Array(String)}');
+      expect(params.distinctIds).toEqual(['u1', 'anon1']);
+    });
+
+    it('omits the identity filter entirely when distinct_ids is absent', () => {
+      const { sql, params } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID);
+      expect(sql).not.toContain('distinct_id IN');
+      expect(params.distinctIds).toBeUndefined();
+    });
+
+    it('omits the identity filter when distinct_ids is an empty array', () => {
+      const { sql, params } = compileClickHeatmapQuery(baseQuery({ distinct_ids: [] }), PROJECT_ID);
+      expect(sql).not.toContain('distinct_id IN');
+      expect(params.distinctIds).toBeUndefined();
+    });
+  });
+
   describe('INJECTION', () => {
     it('a malicious screen_name / filter value is bound, never inlined', () => {
       const attack = "'; DROP TABLE events; --";
@@ -58,6 +81,18 @@ describe('compileClickHeatmapQuery (contracts §19)', () => {
       );
       expect(params.screen).toBe(attack);
       expect(params.filterVal0).toBe(attack);
+      expect(sql).not.toContain(attack);
+      expect(sql).not.toContain('DROP TABLE');
+    });
+
+    it('a distinct_id containing SQL metacharacters stays only in params, never in the SQL', () => {
+      const attack = "'; DROP TABLE events; --";
+      const { sql, params } = compileClickHeatmapQuery(
+        baseQuery({ distinct_ids: ['u1', attack] }),
+        PROJECT_ID,
+      );
+      expect(params.distinctIds).toEqual(['u1', attack]);
+      expect(sql).toContain('distinct_id IN {distinctIds:Array(String)}');
       expect(sql).not.toContain(attack);
       expect(sql).not.toContain('DROP TABLE');
     });

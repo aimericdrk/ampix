@@ -62,6 +62,16 @@ export function compileClickHeatmapQuery(
     ...compileFilterClauses(query.filters, params),
   ];
 
+  // §17 identity-correct per-user filter: the caller passes the canonical id + its aliased anon_ids
+  // and we restrict to those exact RAW `distinct_id` values. The raw column is deliberately NOT
+  // canonicalized here (contracts §17: the heatmap filters the raw column), so a user tracked
+  // anonymously then identified — whose taps live under BOTH ids — is fully captured. The list is
+  // bound as an Array(String) query_param, so it is injection-safe regardless of the ids' contents.
+  if (query.distinct_ids && query.distinct_ids.length > 0) {
+    whereClauses.push('distinct_id IN {distinctIds:Array(String)}');
+    params.distinctIds = query.distinct_ids;
+  }
+
   const sql = [
     'SELECT cx, cy, count() AS cnt',
     'FROM (',

@@ -535,21 +535,23 @@ describe('AnalyticsService', () => {
           },
         ],
         [
-          { insert_id: 'i2', event: 'b', timestamp: '2026-06-02 09:00:00.000' },
-          { insert_id: 'i1', event: 'a', timestamp: '2026-06-01 09:00:00.000' },
+          { insert_id: 'i2', event: '$screen_view', timestamp: '2026-06-02 09:00:00.000', screen_name: 'home' },
+          { insert_id: 'i1', event: 'a', timestamp: '2026-06-01 09:00:00.000', screen_name: '' },
         ],
+        // 5) aliases lookup: one anon_id aliases to this canonical user.
+        [{ anon_id: 'anon-u1' }],
       ]);
       const service = makeService(clickhouse, makeProjects());
 
       const result = await service.getUserProfile(USER_ID, PROJECT_ID, DISTINCT_ID);
 
-      // 1 resolution query + 3 data queries.
-      expect(clickhouse.query).toHaveBeenCalledTimes(4);
+      // 1 resolution query + 4 data queries (profile, agg, recent, aliases).
+      expect(clickhouse.query).toHaveBeenCalledTimes(5);
       // The resolution query binds the requested id as {distinctId:String} (never interpolated).
       const [resolveSql, resolveParams] = clickhouse.query.mock.calls[0];
       expect(resolveSql).toContain('{distinctId:String}');
       expect(resolveParams).toMatchObject({ distinctId: DISTINCT_ID });
-      // The 3 data queries key off the resolved canonical id (here == u1) as {canonicalId:String}.
+      // The data queries key off the resolved canonical id (here == u1) as {canonicalId:String}.
       for (const [sql, params] of clickhouse.query.mock.calls.slice(1)) {
         expect(sql).toContain('{canonicalId:String}');
         expect(params).toMatchObject({ canonicalId: DISTINCT_ID });
@@ -561,9 +563,11 @@ describe('AnalyticsService', () => {
         last_seen: '2026-06-02T09:00:00.000Z',
         event_count: 3,
         recent_events: [
-          { insert_id: 'i2', event: 'b', timestamp: '2026-06-02T09:00:00.000Z' },
-          { insert_id: 'i1', event: 'a', timestamp: '2026-06-01T09:00:00.000Z' },
+          { insert_id: 'i2', event: '$screen_view', timestamp: '2026-06-02T09:00:00.000Z', screen_name: 'home' },
+          { insert_id: 'i1', event: 'a', timestamp: '2026-06-01T09:00:00.000Z', screen_name: null },
         ],
+        // §17 identity set: the canonical id plus its aliased anon_id.
+        distinct_ids: [DISTINCT_ID, 'anon-u1'],
       });
     });
 
@@ -580,6 +584,8 @@ describe('AnalyticsService', () => {
           },
         ],
         [],
+        // 5) aliases: `anon_x` is one of the anon_ids folding into canonical user_42.
+        [{ anon_id: 'anon_x' }],
       ]);
       const service = makeService(clickhouse, makeProjects());
 
@@ -588,6 +594,8 @@ describe('AnalyticsService', () => {
       // The response is keyed by the canonical id, and the data queries filter on it.
       expect(result.distinct_id).toBe('user_42');
       expect(result.event_count).toBe(6);
+      // §17 identity set: canonical id + its aliased anon_id, for the identity-correct per-user heatmap.
+      expect(result.distinct_ids).toEqual(['user_42', 'anon_x']);
       for (const [, params] of clickhouse.query.mock.calls.slice(1)) {
         expect(params).toMatchObject({ canonicalId: 'user_42' });
       }
@@ -612,6 +620,8 @@ describe('AnalyticsService', () => {
           },
         ],
         [],
+        // 5) aliases: an unknown user has no anon_ids folding into it.
+        [],
       ]);
       const service = makeService(clickhouse, makeProjects());
 
@@ -623,6 +633,8 @@ describe('AnalyticsService', () => {
       expect(result.last_seen).toBeNull();
       expect(result.event_count).toBe(0);
       expect(result.recent_events).toEqual([]);
+      // With no aliases, the identity set is just the (unknown) id itself.
+      expect(result.distinct_ids).toEqual(['ghost']);
     });
 
     it('propagates a membership rejection without querying ClickHouse', async () => {

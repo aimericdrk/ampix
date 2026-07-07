@@ -165,11 +165,19 @@ export const USER_PROFILE_FIXTURE: Omit<
 > = {
   profile: { plan: 'pro', email: 'user001@example.com', country: 'FR' },
   first_seen: '2026-05-01T08:00:00.000Z',
+  // Newest-first. The $screen_view rows drive the screen-path chain: chronologically
+  // home → catalog → catalog → cart, collapsing to home → catalog → cart. Non-screen events carry
+  // a null screen_name.
   recent_events: [
-    { insert_id: 'evt-101', event: 'checkout_completed', timestamp: '2026-07-01T10:00:00.000Z' },
-    { insert_id: 'evt-100', event: 'product_viewed', timestamp: '2026-07-01T09:55:00.000Z' },
-    { insert_id: 'evt-99', event: 'app_opened', timestamp: '2026-07-01T09:50:00.000Z' },
+    { insert_id: 'evt-106', event: 'checkout_completed', timestamp: '2026-07-01T10:00:00.000Z', screen_name: null },
+    { insert_id: 'evt-105', event: '$screen_view', timestamp: '2026-07-01T09:58:00.000Z', screen_name: 'cart' },
+    { insert_id: 'evt-104', event: '$screen_view', timestamp: '2026-07-01T09:56:00.000Z', screen_name: 'catalog' },
+    { insert_id: 'evt-103', event: '$screen_view', timestamp: '2026-07-01T09:54:00.000Z', screen_name: 'catalog' },
+    { insert_id: 'evt-102', event: '$screen_view', timestamp: '2026-07-01T09:52:00.000Z', screen_name: 'home' },
+    { insert_id: 'evt-101', event: 'app_opened', timestamp: '2026-07-01T09:50:00.000Z', screen_name: null },
   ],
+  // §17 identity set — canonical id + an aliased anon_id — for the identity-correct per-user heatmap.
+  distinct_ids: ['user-001', 'anon-001'],
 };
 
 export const SESSIONS_SUMMARY_FIXTURE: SessionsSummaryResponse = {

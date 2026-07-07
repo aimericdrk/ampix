@@ -1,0 +1,83 @@
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { describe, expect, it } from 'vitest';
+import type { ClickHeatmapQuery } from '../../../lib/api/types';
+import { authStore } from '../../auth/store';
+import {
+  CLICK_HEATMAP_FIXTURE,
+  TEST_PROJECT,
+  TEST_USER,
+  USER_PROFILE_FIXTURE,
+  VALID_ACCESS_TOKEN,
+} from '../../../test/msw/handlers';
+import { server } from '../../../test/msw/server';
+import { renderApp } from '../../../test/render-app';
+
+function signIn() {
+  authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+}
+
+describe('UserProfilePage', () => {
+  it('renders the activity timeline for every recent event', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (await screen.findByRole('heading', { name: 'Activity timeline' })).closest(
+      '.rounded-lg',
+    )!;
+    const items = within(timeline as HTMLElement).getAllByRole('listitem');
+    // One timeline entry per recent event.
+    expect(items).toHaveLength(USER_PROFILE_FIXTURE.recent_events.length);
+    expect(within(timeline as HTMLElement).getByText('checkout_completed')).toBeInTheDocument();
+    const screenViewCount = USER_PROFILE_FIXTURE.recent_events.filter(
+      (e) => e.event === '$screen_view',
+    ).length;
+    expect(within(timeline as HTMLElement).getAllByText('$screen_view').length).toBe(screenViewCount);
+  });
+
+  it('derives the screen-path chain in chronological order with consecutive duplicates collapsed', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const pathCard = (await screen.findByRole('heading', { name: 'Screen path' })).closest(
+      '.rounded-lg',
+    )!;
+    const pills = within(pathCard as HTMLElement).getAllByRole('listitem');
+    // recent_events (newest-first) has screen views cart, catalog, catalog, home → reversed to
+    // home, catalog, catalog, cart → consecutive dupes collapsed to home → catalog → cart.
+    expect(pills.map((li) => li.textContent?.replace('→', '').trim())).toEqual([
+      'home',
+      'catalog',
+      'cart',
+    ]);
+  });
+
+  it('posts a click-heatmap request scoped to the profile identity set (distinct_ids) on screen select', async () => {
+    const bodies: ClickHeatmapQuery[] = [];
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/click-heatmap', async ({ request }) => {
+        const body = (await request.json()) as ClickHeatmapQuery;
+        bodies.push(body);
+        return HttpResponse.json({ ...CLICK_HEATMAP_FIXTURE, screen_name: body.screen_name });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+    await screen.findByRole('heading', { name: 'user-001' });
+
+    await screen.findByRole('option', { name: 'home' });
+    await userEvent.selectOptions(screen.getByLabelText('Screen'), 'home');
+
+    // The heatmap overlays a cell per populated grid cell.
+    expect(await screen.findAllByTestId('heatmap-cell')).toHaveLength(
+      CLICK_HEATMAP_FIXTURE.cells.length,
+    );
+
+    // The §17 identity-correct filter: the request carries the profile's exact distinct_ids set.
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]!.screen_name).toBe('home');
+    expect(bodies[0]!.distinct_ids).toEqual(USER_PROFILE_FIXTURE.distinct_ids);
+  });
+});

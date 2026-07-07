@@ -56,8 +56,10 @@ describe('UsersPage', () => {
     expect(screen.getByText(USER_PROFILE_FIXTURE.profile.plan as string)).toBeInTheDocument();
     expect(screen.getByText(String(USERS_FIXTURE[0]!.event_count))).toBeInTheDocument();
 
-    for (const event of USER_PROFILE_FIXTURE.recent_events) {
-      expect(screen.getByText(event.event)).toBeInTheDocument();
+    // The timeline lists every recent event (some event names recur, e.g. repeated $screen_view).
+    const eventNames = [...new Set(USER_PROFILE_FIXTURE.recent_events.map((e) => e.event))];
+    for (const name of eventNames) {
+      expect(screen.getAllByText(name).length).toBeGreaterThan(0);
     }
   });
 });

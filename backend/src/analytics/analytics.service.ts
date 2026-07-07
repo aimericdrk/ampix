@@ -20,7 +20,7 @@ import type {
   UsersResponse,
 } from './analytics.types';
 import { Bucket, buildBucketGrid, parseDateOnlyUTC } from './bucket-grid';
-import { canonicalization, RESOLVE_CANONICAL_ID_SQL } from './identity';
+import { ALIASES_CTE, canonicalization, RESOLVE_CANONICAL_ID_SQL } from './identity';
 import { compileInsightsQuery } from './insights.compiler';
 import { insightsQuerySchema } from './insights-query.schema';
 import { EVENT_COLUMN_WHITELIST, resolveProperty } from './property-resolver';
@@ -87,6 +87,7 @@ interface RecentEventRow {
   insert_id: string;
   event: string;
   timestamp: string;
+  screen_name: string;
 }
 
 interface SessionsTotalsRow {
@@ -433,7 +434,7 @@ export class AnalyticsService {
     // Step 2: profile (canonical id) + merged events (canonical `uid`).
     const canon = canonicalization();
     const idParams = { projectId, canonicalId };
-    const [profileRows, aggRows, recentRows] = await Promise.all([
+    const [profileRows, aggRows, recentRows, aliasRows] = await Promise.all([
       this.clickhouse.query<ProfilePropertiesRow>(
         `SELECT properties
          FROM user_profiles FINAL
@@ -457,7 +458,8 @@ export class AnalyticsService {
       ),
       this.clickhouse.query<RecentEventRow>(
         `WITH ${canon.cte}
-         SELECT e.insert_id AS insert_id, e.event AS event, e.timestamp AS timestamp
+         SELECT e.insert_id AS insert_id, e.event AS event, e.timestamp AS timestamp,
+                JSONExtractString(toJSONString(e.properties), '$screen_name') AS screen_name
          FROM events AS e
          ${canon.join}
          WHERE e.project_id = {projectId:UUID}
@@ -467,6 +469,15 @@ export class AnalyticsService {
         idParams,
         canon.settings,
       ),
+      // §17 identity set: every anon_id whose canonical is this user. A plain aliases lookup (no
+      // LEFT JOIN, so `canon.settings` is not needed) keyed by the resolved canonical id. Fed to the
+      // response `distinct_ids` so the per-user click-heatmap can filter the raw `distinct_id` column
+      // across BOTH id-spaces (anonymous + identified) and stay identity-correct.
+      this.clickhouse.query<{ anon_id: string }>(
+        `WITH ${ALIASES_CTE}
+         SELECT anon_id FROM aliases WHERE canonical_id = {canonicalId:String}`,
+        idParams,
+      ),
     ]);
 
     const eventCount = Number(aggRows[0]?.event_count ?? 0);
@@ -474,6 +485,8 @@ export class AnalyticsService {
     // than SQL NULL for a non-Nullable DateTime64 column — gate on the count, not the value.
     const firstSeen = eventCount > 0 ? fromChDateTime64(aggRows[0].first_seen) : null;
     const lastSeen = eventCount > 0 ? fromChDateTime64(aggRows[0].last_seen) : null;
+
+    const distinctIds = Array.from(new Set([canonicalId, ...aliasRows.map((r) => r.anon_id)]));
 
     return {
       distinct_id: canonicalId,
@@ -485,7 +498,9 @@ export class AnalyticsService {
         insert_id: row.insert_id,
         event: row.event,
         timestamp: fromChDateTime64(row.timestamp),
+        screen_name: row.screen_name || null,
       })),
+      distinct_ids: distinctIds,
     };
   }
 
