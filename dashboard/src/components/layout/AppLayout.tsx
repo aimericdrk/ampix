@@ -8,6 +8,8 @@ import { logout } from '../../features/auth/api';
 import { authStore, useAuth } from '../../features/auth/store';
 import { currentOrgStore, useCurrentOrgId } from '../../features/orgs/store';
 import { useProjects } from '../../features/projects/api';
+import { useKeyboardShortcuts } from '../../features/shortcuts/keyboard-shortcuts';
+import { ShortcutsHelp } from '../../features/shortcuts/ShortcutsHelp';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/button';
 import { projectGroups, type NavItem } from './nav-model';
@@ -44,6 +46,15 @@ export function AppLayout() {
   // Merged params of the active match; present on every project-scoped route.
   const { projectId } = useParams({ strict: false }) as { projectId?: string };
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // Global `g <letter>` navigation + `?` help overlay (feat-12). Disabled while the overlay
+  // itself is open so a stray keypress behind it can't fire a surprise navigation.
+  useKeyboardShortcuts({
+    projectId,
+    onShowHelp: () => setHelpOpen(true),
+    disabled: helpOpen,
+  });
 
   // Switching the workspace must not strand you on another org's project. When
   // the active project provably belongs to a different org than the selected
@@ -177,8 +188,18 @@ export function AppLayout() {
           >
             Log out
           </Button>
+          {/* Subtle, always-available affordance for the shortcut system (feat-12). */}
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="w-full truncate px-3 pt-1 text-left text-xs text-text-muted/70 transition-colors hover:text-text-muted"
+          >
+            Press <kbd className="rounded border border-border px-1 py-0.5">?</kbd> for shortcuts
+          </button>
         </div>
       </aside>
+
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <main id="main-content" className="flex min-h-screen flex-1 flex-col p-6 pt-16 md:p-8 md:pt-8">
         {/* Made available app-wide now; pages migrate onto `useDateRange` in a later phase. Scoped
