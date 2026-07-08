@@ -13,12 +13,15 @@ import type {
 import { INSIGHTS_FILTER_OPS, RETENTION_INTERVALS } from '../../../lib/api/types';
 import { useEngagement, useMetaEvents, useMetaProperties, useRunRetention } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
-import { formatPercent } from '../format';
+import { pctDelta, previousRange } from '../derive';
+import { formatExactNumber, formatPercent } from '../format';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
+import { lifecycleSummary } from '../lifecycle';
 import { ChartCard } from './charts/ChartCard';
 import { ComparisonTrend } from './charts/ComparisonTrend';
 import { CopyLinkButton } from './CopyLinkButton';
 import { KpiTile } from './charts/KpiTile';
+import { LifecycleChart } from './charts/LifecycleChart';
 import { RetentionChart } from './RetentionChart';
 import { PageShell } from '../../../components/layout/PageShell';
 import { SaveAsReportButton } from './report-actions';
@@ -158,6 +161,16 @@ export function RetentionPage() {
     'day',
     mergeGlobalFilters([], globalFilters),
   );
+  // User lifecycle (feat-11 §3): the previous equal-length window, used only for the new-user
+  // delta chip below — the chart itself only ever shows the current range.
+  const previousDateRange = previousRange(dateFrom, dateTo);
+  const previousEngagement = useEngagement(
+    projectId,
+    previousDateRange.from,
+    previousDateRange.to,
+    'day',
+    mergeGlobalFilters([], globalFilters),
+  );
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).
@@ -176,6 +189,18 @@ export function RetentionPage() {
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
   const stickinessRows = (engagement.data?.stickiness ?? []).map((p) => ({ t: p.t, value: p.value }));
   const averageRetention = result?.averages.find((a) => a.period === 1)?.rate;
+
+  // User lifecycle (feat-11 §3): new-vs-returning composition over the selected range, plus a
+  // new-user delta vs the immediately-preceding equal-length window.
+  const newVsReturningPoints = engagement.data?.new_vs_returning ?? [];
+  const lifecycle = lifecycleSummary(newVsReturningPoints);
+  const previousLifecycle = previousEngagement.data
+    ? lifecycleSummary(previousEngagement.data.new_vs_returning)
+    : undefined;
+  const newUserDelta =
+    engagement.data && previousEngagement.data
+      ? pctDelta(lifecycle.totalNew, previousLifecycle!.totalNew)
+      : undefined;
 
   // Flips true the moment the builder reflects something worth sharing — either a real user edit,
   // or the state we just hydrated from a link — so `pushState` only ever fires once there's a
@@ -494,6 +519,38 @@ export function RetentionPage() {
           ariaLabel="Stickiness trend"
         />
       </ChartCard>
+
+      <div className="flex flex-col gap-6">
+        <SectionGrid min={200}>
+          <KpiTile
+            label="Total active users"
+            value={lifecycle.totalActive}
+            hint="New + returning over the selected range"
+            loading={engagement.isPending}
+          />
+          <KpiTile
+            label="New users"
+            value={formatPercent(lifecycle.pctNew)}
+            hint={`${formatExactNumber(lifecycle.totalNew)} new users`}
+            loading={engagement.isPending}
+            delta={newUserDelta !== undefined ? { pct: newUserDelta } : undefined}
+          />
+          <KpiTile
+            label="Returning users"
+            value={formatPercent(lifecycle.pctReturning)}
+            hint={`${formatExactNumber(lifecycle.totalReturning)} returning users`}
+            loading={engagement.isPending}
+          />
+        </SectionGrid>
+
+        <ChartCard
+          title="User lifecycle"
+          description="New vs. returning users over the selected range — is growth fresh acquisition or a retained base?"
+          state={chartState(engagement.isPending, engagement.isError, newVsReturningPoints.length === 0)}
+        >
+          <LifecycleChart points={newVsReturningPoints} ariaLabel="User lifecycle trend" />
+        </ChartCard>
+      </div>
     </PageShell>
   );
 }

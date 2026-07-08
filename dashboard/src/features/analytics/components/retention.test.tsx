@@ -134,6 +134,32 @@ describe('RetentionPage', () => {
     }
   });
 
+  it('renders the User lifecycle card from the engagement fixture, with the new/returning split', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/retention`);
+    await screen.findByRole('heading', { name: 'Retention' });
+
+    expect(screen.getByRole('heading', { name: 'User lifecycle' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: 'User lifecycle trend' })).toBeInTheDocument();
+
+    // Totals: new (30+35+40=105) + returning (90+100+110=300) = 405 active.
+    expect(screen.getByText('Total active users')).toBeInTheDocument();
+    expect(screen.getByText('405')).toBeInTheDocument();
+
+    // Percent split: 105/405 ≈ 25.9% new, 300/405 ≈ 74.1% returning.
+    expect(screen.getByText('New users')).toBeInTheDocument();
+    expect(screen.getByText('25.9%')).toBeInTheDocument();
+    expect(screen.getByText('Returning users')).toBeInTheDocument();
+    expect(screen.getByText('74.1%')).toBeInTheDocument();
+
+    // The chart's accessible data table lists every bucket's new/returning/total.
+    const lifecycleTable = within(screen.getByRole('table', { name: /User lifecycle trend/ }));
+    for (const point of ENGAGEMENT_FIXTURE.new_vs_returning) {
+      expect(lifecycleTable.getByText(String(point.new))).toBeInTheDocument();
+      expect(lifecycleTable.getByText(String(point.returning))).toBeInTheDocument();
+    }
+  });
+
   it('omits return_event from the body when it is left blank (defaults to born event server-side)', async () => {
     let capturedBody: RetentionQueryDefinition | undefined;
     server.use(
