@@ -34,6 +34,8 @@ import {
   useUpdateCohort,
 } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { FavoriteButton } from '../../favorites/FavoriteButton';
+import { useFavorites } from '../../favorites/favorites';
 import { cleanFilters, FilterRows, VALUELESS_OPS } from './builder-controls';
 import { EventSelectField, useAutoRun } from './explore-controls';
 
@@ -116,6 +118,7 @@ export function CohortsPage() {
   const updateCohort = useUpdateCohort(projectId, currentCohortId ?? '');
   const deleteCohort = useDeleteCohort(projectId);
   const previewCohort = usePreviewCohortDefinition(projectId);
+  const favorites = useFavorites(projectId);
 
   const eventOptions = metaEvents.data?.events ?? [];
   const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
@@ -242,6 +245,13 @@ export function CohortsPage() {
                   className="flex items-center gap-2 rounded-md border border-border p-2"
                 >
                   <span className="flex-1 text-sm font-medium">{cohort.name}</span>
+                  <FavoriteButton
+                    name={cohort.name}
+                    isFavorite={favorites.isFavorite('cohort', cohort.id)}
+                    onToggle={() =>
+                      favorites.toggle({ type: 'cohort', id: cohort.id, name: cohort.name })
+                    }
+                  />
                   <Button
                     type="button"
                     variant="ghost"

@@ -16,6 +16,8 @@ import type { AnalysisResult, DashboardSummary } from '../../../lib/api/types';
 import { isTileError } from '../../../lib/api/types';
 import { useCreateDashboard, useDashboard, useDashboardData, useDashboards } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { FavoriteButton } from '../../favorites/FavoriteButton';
+import { useFavorites } from '../../favorites/favorites';
 import { analysisResultIsEmpty } from './ReportChart';
 import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
 
@@ -23,6 +25,7 @@ export function DashboardsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/dashboards' });
   const dashboards = useDashboards(projectId);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const favorites = useFavorites(projectId);
 
   return (
     <PageShell
@@ -58,24 +61,36 @@ export function DashboardsPage() {
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
         {dashboards.data?.dashboards.map((dashboard) => (
-          <Link
-            key={dashboard.id}
-            to="/projects/$projectId/dashboards/$dashboardId"
-            params={{ projectId, dashboardId: dashboard.id }}
-            className="rounded-lg focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            <Card className="h-full transition-colors hover:border-accent">
-              <CardHeader>
-                <CardTitle>{dashboard.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <DashboardCardThumbnail projectId={projectId} dashboard={dashboard} />
-                <p className="text-sm text-text-muted">
-                  {dashboard.tile_count} {dashboard.tile_count === 1 ? 'tile' : 'tiles'}
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
+          // The star sits as a sibling overlay, not nested inside the card-wide `Link` (an <a>
+          // can't validly contain a <button>) — `relative`/`absolute` positions it top-right
+          // without shrinking the Link's clickable area.
+          <div key={dashboard.id} className="relative">
+            <Link
+              to="/projects/$projectId/dashboards/$dashboardId"
+              params={{ projectId, dashboardId: dashboard.id }}
+              className="block rounded-lg focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              <Card className="h-full transition-colors hover:border-accent">
+                <CardHeader>
+                  <CardTitle className="pr-8">{dashboard.name}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <DashboardCardThumbnail projectId={projectId} dashboard={dashboard} />
+                  <p className="text-sm text-text-muted">
+                    {dashboard.tile_count} {dashboard.tile_count === 1 ? 'tile' : 'tiles'}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+            <FavoriteButton
+              name={dashboard.name}
+              isFavorite={favorites.isFavorite('dashboard', dashboard.id)}
+              onToggle={() =>
+                favorites.toggle({ type: 'dashboard', id: dashboard.id, name: dashboard.name })
+              }
+              className="absolute right-2 top-2"
+            />
+          </div>
         ))}
       </div>
     </PageShell>

@@ -12,6 +12,9 @@ import type {
 import { formatExactNumber } from '../format';
 import { useRunClickHeatmap, useRunScreenPaths, useScreens, useUserProfile } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { FavoriteButton } from '../../favorites/FavoriteButton';
+import { useFavorites } from '../../favorites/favorites';
+import { useRecents } from '../../favorites/recents';
 import { defaultDate } from './builder-controls';
 import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
 import { PathMap } from './PathMap';
@@ -42,6 +45,15 @@ export function UserProfilePage() {
     () => (data ? deriveScreenPath(data.recent_events) : []),
     [data],
   );
+  const favorites = useFavorites(projectId);
+  const recents = useRecents(projectId);
+  const recordRecent = recents.record;
+
+  // Record this profile visit in Recents (feat-13 §3) as soon as it's known to exist — keyed on
+  // `distinctId` so navigating profile→profile records each one exactly once.
+  useEffect(() => {
+    recordRecent({ type: 'user', id: distinctId, name: distinctId });
+  }, [distinctId, recordRecent]);
 
   return (
     <PageShell
@@ -51,6 +63,13 @@ export function UserProfilePage() {
         { label: 'Users', to: '/projects/$projectId/users', params: { projectId } },
         { label: distinctId },
       ]}
+      actions={
+        <FavoriteButton
+          name={distinctId}
+          isFavorite={favorites.isFavorite('user', distinctId)}
+          onToggle={() => favorites.toggle({ type: 'user', id: distinctId, name: distinctId })}
+        />
+      }
     >
       {isPending && <p role="status">Loading user profile…</p>}
       {isError && (

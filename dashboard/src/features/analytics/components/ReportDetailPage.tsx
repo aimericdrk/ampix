@@ -7,6 +7,7 @@ import type { ReportKind, RetentionInterval } from '../../../lib/api/types';
 import { useReport, useRunReport } from '../api';
 import { CohortSelect } from './report-actions';
 import { PageShell } from '../../../components/layout/PageShell';
+import { useRecents } from '../../favorites/recents';
 import { analysisResultIsEmpty, ReportChart } from './ReportChart';
 
 const KIND_LABELS: Record<ReportKind, string> = {
@@ -23,14 +24,23 @@ export function ReportDetailPage() {
   const report = useReport(projectId, reportId);
   const runReport = useRunReport(projectId, reportId);
   const [cohortId, setCohortId] = useState('');
+  const recents = useRecents(projectId);
+  const recordRecent = recents.record;
 
   const runReportMutate = runReport.mutate;
   const reportLoadedId = report.data?.id;
+  const reportLoadedName = report.data?.name;
   // Run the stored definition once, as soon as the report loads (contracts §16: POST /reports/:id/run).
   useEffect(() => {
     if (!reportLoadedId) return;
     runReportMutate({});
   }, [reportLoadedId, runReportMutate]);
+
+  // Record this visit in Recents (feat-13 §3) once the report's name is known.
+  useEffect(() => {
+    if (!reportLoadedId || !reportLoadedName) return;
+    recordRecent({ type: 'report', id: reportLoadedId, name: reportLoadedName });
+  }, [reportLoadedId, reportLoadedName, recordRecent]);
 
   const handleRun = () => {
     runReportMutate(cohortId ? { cohort_id: cohortId } : {});

@@ -6,6 +6,8 @@ import type { ReportKind, SavedReportSummary } from '../../../lib/api/types';
 import { REPORT_KINDS } from '../../../lib/api/types';
 import { useDeleteReport, useReportPreview, useReports } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { FavoriteButton } from '../../favorites/FavoriteButton';
+import { useFavorites } from '../../favorites/favorites';
 import { analysisResultIsEmpty } from './ReportChart';
 import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
 
@@ -20,6 +22,7 @@ export function ReportsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/reports' });
   const reports = useReports(projectId);
   const deleteReport = useDeleteReport(projectId);
+  const favorites = useFavorites(projectId);
 
   const byKind = (kind: ReportKind): SavedReportSummary[] =>
     (reports.data?.reports ?? []).filter((report) => report.kind === kind);
@@ -62,6 +65,10 @@ export function ReportsPage() {
                         projectId={projectId}
                         report={report}
                         onDelete={() => deleteReport.mutate(report.id)}
+                        isFavorite={favorites.isFavorite('report', report.id)}
+                        onToggleFavorite={() =>
+                          favorites.toggle({ type: 'report', id: report.id, name: report.name })
+                        }
                       />
                     ))}
                   </ul>
@@ -84,10 +91,14 @@ function ReportCard({
   projectId,
   report,
   onDelete,
+  isFavorite,
+  onToggleFavorite,
 }: {
   projectId: string;
   report: SavedReportSummary;
   onDelete: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
 }) {
   const preview = useReportPreview(projectId, report.id);
 
@@ -108,6 +119,7 @@ function ReportCard({
         >
           {report.name}
         </Link>
+        <FavoriteButton name={report.name} isFavorite={isFavorite} onToggle={onToggleFavorite} />
         <Button
           type="button"
           variant="ghost"

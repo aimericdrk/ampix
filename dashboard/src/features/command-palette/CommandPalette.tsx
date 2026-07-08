@@ -9,6 +9,10 @@ import { cn } from '../../lib/cn';
 import type { UserListItem } from '../../lib/api/types';
 import { useCohorts, useDashboards, useReports, useUsersList } from '../analytics/api';
 import { useProjects } from '../projects/api';
+import { useFavorites } from '../favorites/favorites';
+import type { FavItemType } from '../favorites/favorites';
+import { useRecents } from '../favorites/recents';
+import { favItemRoute } from '../favorites/routes';
 
 /** Debounce delay (ms) before a typed query fires the `/users` search request. */
 const USER_SEARCH_DEBOUNCE_MS = 200;
@@ -55,6 +59,15 @@ function matchesQuery(text: string, query: string): boolean {
   const needle = query.trim().toLowerCase();
   return needle.length === 0 || text.toLowerCase().includes(needle);
 }
+
+/** Maps a `FavItem`'s entity type to its `NavIcon`, reusing the same glyphs as the Reports/
+ * Dashboards/Cohorts/Users palette sections below. */
+const ICON_FOR_FAV_TYPE: Record<FavItemType, IconName> = {
+  report: 'reports',
+  dashboard: 'dashboards',
+  user: 'users',
+  cohort: 'cohorts',
+};
 
 /** Settles `value` after `delayMs` of no changes — used to throttle the network-backed user search. */
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -114,6 +127,8 @@ export function CommandPalette({ projectId }: { projectId: string }) {
   const { data: dashboardsData } = useDashboards(projectId);
   const { data: cohortsData } = useCohorts(projectId);
   const { data: projectsData } = useProjects();
+  const favorites = useFavorites(projectId);
+  const recents = useRecents(projectId);
 
   // Dropping stale rows the instant the query empties keeps a since-cleared search from lingering.
   useEffect(() => {
@@ -167,6 +182,34 @@ export function CommandPalette({ projectId }: { projectId: string }) {
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => window.clearTimeout(id);
   }, [open]);
+
+  // Favorites & Recents (feat-13 §3): only shown on an empty query, ahead of Pages, so starred and
+  // last-visited entities are one keystroke (⌘K, Enter) away.
+  const isEmptyQuery = query.trim().length === 0;
+
+  const favoriteItems: PaletteItem[] = isEmptyQuery
+    ? favorites.list.map((item) => {
+        const route = favItemRoute(item, projectId);
+        return {
+          key: `favorite-${item.type}-${item.id}`,
+          icon: ICON_FOR_FAV_TYPE[item.type],
+          label: item.name,
+          onSelect: () => goTo(route.to, route.params),
+        };
+      })
+    : [];
+
+  const recentItems: PaletteItem[] = isEmptyQuery
+    ? recents.list.map((item) => {
+        const route = favItemRoute(item, projectId);
+        return {
+          key: `recent-${item.type}-${item.id}`,
+          icon: ICON_FOR_FAV_TYPE[item.type],
+          label: item.name,
+          onSelect: () => goTo(route.to, route.params),
+        };
+      })
+    : [];
 
   const pageItems: PaletteItem[] = projectGroups()
     .flatMap((group) => group.items)
@@ -249,6 +292,8 @@ export function CommandPalette({ projectId }: { projectId: string }) {
   ].filter((item) => matchesQuery(item.label, query));
 
   const groups: PaletteGroup[] = [
+    { heading: 'Favorites', items: favoriteItems },
+    { heading: 'Recents', items: recentItems },
     { heading: 'Pages', items: pageItems },
     { heading: 'Actions', items: actionItems },
     { heading: 'Reports', items: reportItems },

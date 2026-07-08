@@ -22,6 +22,7 @@ import {
 } from '../api';
 import { DashboardGrid, packLayout, type GridTile } from './DashboardGrid';
 import { PageShell } from '../../../components/layout/PageShell';
+import { useRecents } from '../../favorites/recents';
 
 const DEFAULT_TILE_W = 6;
 const DEFAULT_TILE_H = 2;
@@ -35,9 +36,18 @@ export function DashboardViewPage() {
   const data = useDashboardData(projectId, dashboardId);
   const saveLayout = useSaveLayout(projectId, dashboardId);
   const deleteTile = useDeleteTile(projectId, dashboardId);
+  const recents = useRecents(projectId);
+  const recordRecent = recents.record;
 
   const [layout, setLayout] = useState<GridTile[]>([]);
   const [dirty, setDirty] = useState(false);
+
+  const dashboardName = dashboard.data?.name;
+  // Record this visit in Recents (feat-13 §3) once the dashboard's name is known.
+  useEffect(() => {
+    if (!dashboardName) return;
+    recordRecent({ type: 'dashboard', id: dashboardId, name: dashboardName });
+  }, [dashboardId, dashboardName, recordRecent]);
 
   const serverTiles = dashboard.data?.tiles;
   // Re-sync the working layout from the server only when tile membership changes (initial load,

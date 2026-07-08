@@ -26,6 +26,11 @@ import {
 import { detectAnomalies } from '../anomaly';
 import { useAnnotations } from '../annotations';
 import { DateRangeControl, useDateRange } from '../date-range';
+import { FavoriteButton } from '../../favorites/FavoriteButton';
+import { useFavorites } from '../../favorites/favorites';
+import type { FavItem } from '../../favorites/favorites';
+import { useRecents } from '../../favorites/recents';
+import { favItemRoute } from '../../favorites/routes';
 import { breakdownBars, pctDelta, previousRange, sumSeries } from '../derive';
 import { formatDurationMs, formatPercent } from '../format';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
@@ -124,6 +129,10 @@ export function HomePage() {
 
   const reports = useReports(projectId);
   const dashboards = useDashboards(projectId);
+  // Favorites & Recents (feat-13 §3): a flat list of starred/recently-viewed entities, near the
+  // existing recent-work lists.
+  const favorites = useFavorites(projectId);
+  const recents = useRecents(projectId);
 
   // --- KPI derivations ---
 
@@ -415,6 +424,24 @@ export function HomePage() {
         </>
       )}
 
+      {/* Favorites & Recently viewed (feat-13 §3): quick access to starred and last-visited
+          entities, ahead of the per-kind recent-work lists below. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <FavItemList
+          title="Favorites"
+          emptyText="Star a report, dashboard, cohort, or user to pin it here."
+          items={favorites.list}
+          projectId={projectId}
+          onUnstar={(item) => favorites.toggle(item)}
+        />
+        <FavItemList
+          title="Recently viewed"
+          emptyText="Reports, dashboards, and user profiles you open will show up here."
+          items={recents.list}
+          projectId={projectId}
+        />
+      </div>
+
       {/* Recent work */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <RecentList
@@ -498,6 +525,61 @@ function HomeLoadedDashboardThumbnail({
   }
 
   return <ChartThumbnail kind={firstTile?.kind ?? 'insights'} result={result} state={state} />;
+}
+
+/**
+ * The Favorites / Recently-viewed section (feat-13 §5): a flat list of `FavItem` links, each
+ * routed via the shared `favItemRoute` map. When `onUnstar` is given (Favorites), each row also
+ * gets a `FavoriteButton` so it can be unstarred right from Home without visiting the entity.
+ */
+function FavItemList({
+  title,
+  emptyText,
+  items,
+  projectId,
+  onUnstar,
+}: {
+  title: string;
+  emptyText: string;
+  items: FavItem[];
+  projectId: string;
+  onUnstar?: (item: FavItem) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <p className="text-sm text-text-muted">{emptyText}</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-border">
+            {items.map((item) => {
+              const route = favItemRoute(item, projectId);
+              return (
+                <li
+                  key={`${item.type}-${item.id}`}
+                  className="flex items-center gap-2 py-2 first:pt-0 last:pb-0"
+                >
+                  <Link
+                    to={route.to}
+                    params={route.params}
+                    className="flex-1 truncate text-sm text-text hover:text-accent hover:underline"
+                  >
+                    {item.name}
+                  </Link>
+                  {onUnstar && (
+                    <FavoriteButton name={item.name} isFavorite onToggle={() => onUnstar(item)} />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 interface RecentItem {

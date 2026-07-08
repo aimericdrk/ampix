@@ -122,3 +122,12 @@ export function IconExpand(props: IconProps) {
     </svg>
   );
 }
+
+/** Star — favorite toggle. `filled` swaps the outline stroke for a solid fill (favorited state). */
+export function IconStar({ filled, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <svg {...iconProps(props)} fill={filled ? 'currentColor' : 'none'}>
+      <path d="M12 3.5l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6-4.5-4.1 6-.7z" />
+    </svg>
+  );
+}

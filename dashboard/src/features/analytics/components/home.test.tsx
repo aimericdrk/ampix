@@ -227,4 +227,39 @@ describe('HomePage', () => {
       within(trendFigure).getByRole('img', { name: 'v1.4 release — 2026-06-30' }),
     ).toBeInTheDocument();
   });
+
+  it('feat-13: a favorited report shows in the Favorites section, and unstarring removes it', async () => {
+    localStorage.setItem(
+      `myampix:favorites:${TEST_PROJECT.id}`,
+      JSON.stringify([{ type: 'report', id: 'report-fav-1', name: 'Starred report' }]),
+    );
+    localStorage.setItem(
+      `myampix:recents:${TEST_PROJECT.id}`,
+      JSON.stringify([{ type: 'dashboard', id: 'dash-recent-1', name: 'Recently opened board' }]),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+
+    const favoritesHeading = await main.findByRole('heading', { name: 'Favorites' });
+    const favoritesSection = favoritesHeading.closest('.rounded-lg') as HTMLElement;
+    expect(within(favoritesSection).getByRole('link', { name: 'Starred report' })).toBeInTheDocument();
+
+    const recentsHeading = main.getByRole('heading', { name: 'Recently viewed' });
+    const recentsSection = recentsHeading.closest('.rounded-lg') as HTMLElement;
+    expect(
+      within(recentsSection).getByRole('link', { name: 'Recently opened board' }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      within(favoritesSection).getByRole('button', { name: 'Favorite Starred report' }),
+    );
+    expect(
+      within(favoritesSection).queryByRole('link', { name: 'Starred report' }),
+    ).not.toBeInTheDocument();
+    expect(within(favoritesSection).getByText(/Star a report/)).toBeInTheDocument();
+  });
 });

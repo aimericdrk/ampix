@@ -66,4 +66,37 @@ describe('CommandPalette', () => {
 
     expect(await screen.findByText(/no matches/i)).toBeInTheDocument();
   });
+
+  it('feat-13: an empty query shows Favorites then Recents above Pages, and navigates on select', async () => {
+    localStorage.setItem(
+      `myampix:favorites:${TEST_PROJECT.id}`,
+      JSON.stringify([{ type: 'report', id: 'report-fav-1', name: 'Starred report' }]),
+    );
+    localStorage.setItem(
+      `myampix:recents:${TEST_PROJECT.id}`,
+      JSON.stringify([{ type: 'dashboard', id: 'dash-recent-1', name: 'Recently opened board' }]),
+    );
+
+    authState.refreshValid = true;
+    const { router } = renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+
+    await userEvent.keyboard('{Control>}k{/Control}');
+    await screen.findByRole('combobox', { name: /search pages, reports, dashboards/i });
+
+    // Both groups render on the empty query, ahead of "Pages".
+    const headings = screen.getAllByText(/^(Favorites|Recents|Pages)$/);
+    expect(headings.map((h) => h.textContent)).toEqual(['Favorites', 'Recents', 'Pages']);
+    expect(screen.getByRole('option', { name: 'Starred report' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Recently opened board' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('option', { name: 'Starred report' }));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/projects/${TEST_PROJECT.id}/reports/report-fav-1`,
+      ),
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 });
