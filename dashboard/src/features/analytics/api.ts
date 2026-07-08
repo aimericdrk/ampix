@@ -581,10 +581,16 @@ export function useDashboards(projectId: string) {
   });
 }
 
-export function useDashboard(projectId: string, dashboardId: string) {
+/**
+ * `enabled` (default `true`) additionally gates on a non-empty `dashboardId` — callers that only
+ * learn the target id once the user picks one (e.g. `AddToDashboardButton`) can pass `false` until
+ * a real id exists, avoiding a request for an empty path segment.
+ */
+export function useDashboard(projectId: string, dashboardId: string, enabled = true) {
   return useQuery({
     queryKey: [...dashboardsKey(projectId), dashboardId],
     queryFn: () => apiFetch<Dashboard>(`${base(projectId)}/dashboards/${dashboardId}`),
+    enabled: enabled && dashboardId.length > 0,
   });
 }
 

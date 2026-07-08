@@ -36,6 +36,7 @@ import { colorForIndex } from '../palette';
 import { combineSegmentSeries } from '../segment-compare';
 import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
+import { AddToDashboardButton } from './AddToDashboardButton';
 import { AnnotationsManager } from './AnnotationsManager';
 import { CompareControl, type CompareRange } from './CompareControl';
 import { AnomalyCallout } from './charts/AnomalyCallout';
@@ -763,6 +764,16 @@ export function InsightsPage() {
       actions={
         <>
           <CopyLinkButton />
+          <AddToDashboardButton
+            projectId={projectId}
+            draft={{
+              kind: 'insights',
+              title: events.map((e) => e.name).join(' + ') || 'Insights',
+              inlineDefinition: queryDefinition,
+            }}
+            disabled={!result || compareModeActive || formulaModeActive}
+            disabledHint="Run a query first to add it to a dashboard."
+          />
           <SaveAsReportButton
             projectId={projectId}
             kind="insights"

@@ -2,10 +2,10 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import type { InsightsQueryDefinition } from '../../../lib/api/types';
+import type { CreateTileRequest, InsightsQueryDefinition } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
-import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
+import { TEST_COHORT_ID, TEST_DASHBOARD_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 import { previousRange } from '../derive';
@@ -683,5 +683,69 @@ describe('InsightsPage', () => {
       expect(screen.queryByRole('img', { name: 'Insights trend vs. compare range' })).toBeNull();
       expect(screen.getByRole('img', { name: 'Insights line chart' })).toBeInTheDocument();
     });
+  });
+});
+
+describe('Add to dashboard (feat-14)', () => {
+  it('builds an insights inline_definition tile request from the current query', async () => {
+    let capturedBody: CreateTileRequest | undefined;
+    server.use(
+      http.post('/api/v1/projects/:projectId/dashboards/:id/tiles', async ({ request, params }) => {
+        capturedBody = (await request.json()) as CreateTileRequest;
+        expect(params.id).toBe(TEST_DASHBOARD_ID);
+        return HttpResponse.json(
+          {
+            id: 'tile-new',
+            title: capturedBody.title,
+            kind: capturedBody.kind,
+            saved_report_id: null,
+            inline_definition: capturedBody.inline_definition ?? null,
+            x: capturedBody.x,
+            y: capturedBody.y,
+            w: capturedBody.w,
+            h: capturedBody.h,
+            position: 2,
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+    await waitForDefaultEvent();
+    // The button only enables once the auto-run query has actually produced a result.
+    await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+
+    const addButton = screen.getByRole('button', { name: 'Add to dashboard' });
+    expect(addButton).not.toBeDisabled();
+    await userEvent.click(addButton);
+
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByRole('option', { name: 'Growth overview' });
+    expect(within(dialog).getByLabelText('Tile title')).toHaveValue('checkout_completed');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Dashboard'), 'Growth overview');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody?.kind).toBe('insights');
+    expect(capturedBody?.title).toBe('checkout_completed');
+    expect(capturedBody?.saved_report_id).toBeUndefined();
+    expect(capturedBody?.inline_definition).toEqual({
+      events: [{ name: 'checkout_completed', aggregation: 'total' }],
+      date_range: { from: defaultDate(30), to: defaultDate(0) },
+      interval: 'day',
+      filters: [],
+    });
+  });
+
+  it('stays disabled until a query has actually run', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+
+    // Before the auto-run resolves, the button is disabled with a hint.
+    expect(screen.getByRole('button', { name: 'Add to dashboard' })).toBeDisabled();
   });
 });

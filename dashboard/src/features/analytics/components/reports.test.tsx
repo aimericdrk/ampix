@@ -2,10 +2,14 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
-import type { CreateReportRequest } from '../../../lib/api/types';
+import type { CreateReportRequest, CreateTileRequest } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
-import { TEST_REPORT_FUNNEL_ID, TEST_REPORT_INSIGHTS_ID } from '../../../test/msw/phase5-handlers';
+import {
+  TEST_DASHBOARD_ID,
+  TEST_REPORT_FUNNEL_ID,
+  TEST_REPORT_INSIGHTS_ID,
+} from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 
@@ -118,6 +122,54 @@ describe('Saved reports', () => {
     await screen.findByRole('img', { name: 'Insights line chart' });
     const table = screen.getByRole('table', { name: 'Insights data table' });
     expect(within(table).getByText('17')).toBeInTheDocument();
+  });
+
+  it('adds a saved report to a dashboard from its detail page (feat-14, savedReportId variant)', async () => {
+    let capturedBody: CreateTileRequest | undefined;
+    server.use(
+      http.post('/api/v1/projects/:projectId/dashboards/:id/tiles', async ({ request, params }) => {
+        capturedBody = (await request.json()) as CreateTileRequest;
+        expect(params.id).toBe(TEST_DASHBOARD_ID);
+        return HttpResponse.json(
+          {
+            id: 'tile-new',
+            title: capturedBody.title,
+            kind: capturedBody.kind,
+            saved_report_id: capturedBody.saved_report_id ?? null,
+            inline_definition: null,
+            x: capturedBody.x,
+            y: capturedBody.y,
+            w: capturedBody.w,
+            h: capturedBody.h,
+            position: 2,
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/reports/${TEST_REPORT_INSIGHTS_ID}`);
+    await screen.findByRole('heading', { name: 'Weekly checkouts' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add to dashboard' }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByRole('option', { name: 'Growth overview' });
+    expect(within(dialog).getByLabelText('Tile title')).toHaveValue('Weekly checkouts');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Dashboard'), 'Growth overview');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    await waitFor(() =>
+      expect(capturedBody).toEqual({
+        title: 'Weekly checkouts',
+        kind: 'insights',
+        saved_report_id: TEST_REPORT_INSIGHTS_ID,
+        x: 0,
+        y: 2,
+        w: 6,
+        h: 4,
+      }),
+    );
   });
 
   it('shows an empty state when there are no reports', async () => {

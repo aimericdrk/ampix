@@ -8,6 +8,7 @@ import { useReport, useRunReport } from '../api';
 import { CohortSelect } from './report-actions';
 import { PageShell } from '../../../components/layout/PageShell';
 import { useRecents } from '../../favorites/recents';
+import { AddToDashboardButton } from './AddToDashboardButton';
 import { analysisResultIsEmpty, ReportChart } from './ReportChart';
 
 const KIND_LABELS: Record<ReportKind, string> = {
@@ -68,6 +69,18 @@ export function ReportDetailPage() {
         { label: 'Reports', to: '/projects/$projectId/reports', params: { projectId } },
         { label: report.data?.name ?? 'Report' },
       ]}
+      actions={
+        report.data && (
+          <AddToDashboardButton
+            projectId={projectId}
+            draft={{
+              kind: report.data.kind,
+              title: report.data.name,
+              savedReportId: report.data.id,
+            }}
+          />
+        )
+      }
     >
       {report.isPending && <p role="status">Loading report…</p>}
       {report.error && (
