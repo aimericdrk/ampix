@@ -23,6 +23,7 @@ import {
   useReports,
   useSessionsSummary,
 } from '../api';
+import { detectAnomalies } from '../anomaly';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { breakdownBars, pctDelta, previousRange, sumSeries } from '../derive';
 import { formatDurationMs, formatPercent } from '../format';
@@ -32,6 +33,7 @@ import { colorForIndex } from '../palette';
 import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
 import { HomeHighlights } from './HomeHighlights';
 import { analysisResultIsEmpty } from './ReportChart';
+import { AnomalyCallout } from './charts/AnomalyCallout';
 import { BreakdownChart } from './charts/BreakdownChart';
 import { ChartCard } from './charts/ChartCard';
 import { ComparisonTrend } from './charts/ComparisonTrend';
@@ -209,6 +211,7 @@ export function HomePage() {
 
   const activeTrendCurrent = dauActive.map((p) => ({ t: p.t, value: p.value }));
   const activeTrendPrevious = dauPreviousActive.map((p) => ({ t: p.t, value: p.value }));
+  const activeTrendAnomalies = detectAnomalies(activeTrendCurrent);
 
   const eventSlices = byEvent
     .slice(0, 8)
@@ -327,7 +330,9 @@ export function HomePage() {
               valueKey="value"
               label="Active users"
               ariaLabel="Active users trend"
+              anomalies={activeTrendAnomalies}
             />
+            <AnomalyCallout anomalies={activeTrendAnomalies} />
           </ChartCard>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

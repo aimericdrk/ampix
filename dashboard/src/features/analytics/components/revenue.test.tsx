@@ -78,6 +78,45 @@ describe('RevenuePage', () => {
     expect(JSON.parse(atob(padded))).toEqual([{ property: 'plan', op: 'eq', value: 'pro' }]);
   });
 
+  it('feat-07: a planted revenue spike renders an anomaly marker on the trend and lists it in the callout', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/metrics/revenue', () =>
+        HttpResponse.json({
+          total_revenue: 910,
+          purchases: 72,
+          paying_users: 50,
+          arppu: 18.2,
+          avg_purchase_value: 12.6,
+          by_day: [
+            { t: '2026-06-25', revenue: 100, purchases: 8 },
+            { t: '2026-06-26', revenue: 110, purchases: 9 },
+            { t: '2026-06-27', revenue: 95, purchases: 7 },
+            { t: '2026-06-28', revenue: 105, purchases: 8 },
+            // A planted, unmistakable spike — 5x the surrounding days.
+            { t: '2026-06-29', revenue: 500, purchases: 40 },
+          ],
+          by_product: REVENUE_SUMMARY_FIXTURE.by_product,
+        }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/revenue`);
+
+    await screen.findByRole('heading', { name: 'Revenue' });
+    const main = within(screen.getByRole('main'));
+
+    const trend = await main.findByRole('img', { name: 'Revenue trend' });
+    expect(
+      within(trend).getByRole('img', { name: 'Spike anomaly at 2026-06-29: 500' }),
+    ).toBeInTheDocument();
+    expect(main.getByText('△ anomaly')).toBeInTheDocument();
+
+    const callout = within(main.getByRole('status'));
+    expect(callout.getByText('1 anomalies detected')).toBeInTheDocument();
+    expect(callout.getByText('2026-06-29')).toBeInTheDocument();
+    expect(callout.getByText('spike')).toBeInTheDocument();
+  });
+
   it('shows an empty state when there are no purchases in range', async () => {
     server.use(
       http.get('/api/v1/projects/:projectId/metrics/revenue', () =>

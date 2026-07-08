@@ -4,11 +4,13 @@ import {
   ComposedChart,
   Legend,
   Line,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import type { Anomaly } from '../../anomaly';
 import { colorForIndex, SERIES_OTHER_COLOR_VAR } from '../../palette';
 import { formatExactNumber } from '../../format';
 
@@ -29,6 +31,10 @@ export interface ComparisonTrendProps {
   label: string;
   ariaLabel: string;
   height?: number;
+  /** Points flagged by `detectAnomalies` (feat-07) — renders a ringed, shaped marker at each
+   * anomalous index plus a "△ anomaly" legend note. Omit (or pass an empty array) to keep the
+   * chart exactly as before — fully backward compatible. */
+  anomalies?: Anomaly[];
 }
 
 const TOOLTIP_STYLE = {
@@ -43,6 +49,37 @@ const AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * A ringed anomaly marker rendered as `ReferenceDot`'s custom `shape`. Spike vs. dip differ by
+ * both shape (triangle pointing up vs. down) AND color (`--accent` vs. `--danger`) — dataviz rule:
+ * identity/meaning never rests on color alone. `role="img"` + `aria-label` make each marker
+ * independently announced, on top of the chart's own figure-level label and the data table.
+ */
+function AnomalyMarker({
+  cx,
+  cy,
+  direction,
+  ariaLabel,
+}: {
+  cx?: number;
+  cy?: number;
+  direction: Anomaly['direction'];
+  ariaLabel: string;
+}) {
+  if (cx === undefined || cy === undefined) return <g />;
+  const color = direction === 'spike' ? 'var(--accent)' : 'var(--danger)';
+  const trianglePoints =
+    direction === 'spike'
+      ? `${cx},${cy - 5} ${cx - 5},${cy + 4} ${cx + 5},${cy + 4}`
+      : `${cx - 5},${cy - 4} ${cx + 5},${cy - 4} ${cx},${cy + 5}`;
+  return (
+    <g role="img" aria-label={ariaLabel} data-anomaly-direction={direction}>
+      <circle cx={cx} cy={cy} r={8} fill="none" stroke={color} strokeWidth={2} />
+      <polygon points={trianglePoints} fill={color} />
+    </g>
+  );
 }
 
 /**
@@ -62,8 +99,10 @@ export function ComparisonTrend({
   label,
   ariaLabel,
   height = 320,
+  anomalies,
 }: ComparisonTrendProps) {
   const hasPrevious = !!previous && previous.length > 0;
+  const hasAnomalies = !!anomalies && anomalies.length > 0;
   const currentColor = colorForIndex(0);
 
   const rows = current.map((row, index) => ({
@@ -110,9 +149,35 @@ export function ComparisonTrend({
                 isAnimationActive={false}
               />
             )}
+            {hasAnomalies &&
+              anomalies!.map((anomaly) => {
+                const row = rows[anomaly.index];
+                if (!row || typeof row.current !== 'number') return null;
+                const directionLabel = anomaly.direction === 'spike' ? 'Spike' : 'Dip';
+                const markerAriaLabel = `${directionLabel} anomaly at ${String(row.x)}: ${formatExactNumber(row.current)}`;
+                return (
+                  <ReferenceDot
+                    key={`anomaly-${anomaly.index}`}
+                    x={row.x}
+                    y={row.current}
+                    r={8}
+                    ifOverflow="extendDomain"
+                    shape={(shapeProps: { cx?: number; cy?: number }) => (
+                      <AnomalyMarker
+                        cx={shapeProps.cx}
+                        cy={shapeProps.cy}
+                        direction={anomaly.direction}
+                        ariaLabel={markerAriaLabel}
+                      />
+                    )}
+                  />
+                );
+              })}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {hasAnomalies && <p className="text-xs text-text-muted">△ anomaly</p>}
 
       <ComparisonTrendTable
         rows={rows}

@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import type { Anomaly } from '../../anomaly';
 import { ComparisonTrend } from './ComparisonTrend';
 
 const current = [
@@ -84,5 +85,89 @@ describe('ComparisonTrend', () => {
     expect(within(firstDataRow).getByText('2026-06-29')).toBeInTheDocument();
     expect(within(firstDataRow).getByText('120')).toBeInTheDocument();
     expect(within(firstDataRow).getByText('100')).toBeInTheDocument();
+  });
+
+  describe('anomaly markers (feat-07)', () => {
+    const spikeAnomaly: Anomaly = {
+      index: 1,
+      t: '2026-06-30',
+      value: 150,
+      direction: 'spike',
+      score: 3.2,
+      baselineMean: 120,
+    };
+    const dipAnomaly: Anomaly = {
+      index: 2,
+      t: '2026-07-01',
+      value: 140,
+      direction: 'dip',
+      score: 2.8,
+      baselineMean: 200,
+    };
+
+    it('renders no markers and no legend note when the anomalies prop is absent', () => {
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+        />,
+      );
+      expect(document.querySelectorAll('[data-anomaly-direction]')).toHaveLength(0);
+      expect(screen.queryByText('△ anomaly')).not.toBeInTheDocument();
+    });
+
+    it('renders no markers and no legend note when the anomalies prop is an empty array', () => {
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+          anomalies={[]}
+        />,
+      );
+      expect(document.querySelectorAll('[data-anomaly-direction]')).toHaveLength(0);
+      expect(screen.queryByText('△ anomaly')).not.toBeInTheDocument();
+    });
+
+    it('renders a ringed marker at the anomalous index, with a distinct shape+color per direction, and a legend note', () => {
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+          anomalies={[spikeAnomaly, dipAnomaly]}
+        />,
+      );
+
+      const figure = screen.getByRole('img', { name: 'Sessions trend' });
+
+      const spikeMarker = within(figure).getByRole('img', {
+        name: 'Spike anomaly at 2026-06-30: 150',
+      });
+      expect(spikeMarker).toHaveAttribute('data-anomaly-direction', 'spike');
+      // A ring (circle) plus a filled shape (polygon) — never color alone.
+      expect(spikeMarker.querySelector('circle')).toBeInTheDocument();
+      const spikeShape = spikeMarker.querySelector('polygon');
+      expect(spikeShape).toBeInTheDocument();
+
+      const dipMarker = within(figure).getByRole('img', {
+        name: 'Dip anomaly at 2026-07-01: 140',
+      });
+      expect(dipMarker).toHaveAttribute('data-anomaly-direction', 'dip');
+      const dipShape = dipMarker.querySelector('polygon');
+      expect(dipShape).toBeInTheDocument();
+
+      // Shape differs between the two directions (triangle up vs. down), not just color.
+      expect(dipShape?.getAttribute('points')).not.toEqual(spikeShape?.getAttribute('points'));
+
+      expect(screen.getByText('△ anomaly')).toBeInTheDocument();
+    });
   });
 });

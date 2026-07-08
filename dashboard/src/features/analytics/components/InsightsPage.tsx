@@ -25,6 +25,7 @@ import {
   type InsightsSeries,
 } from '../../../lib/api/types';
 import { useCohorts, useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
+import { detectAnomalies } from '../anomaly';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { pctDelta, previousRange, seriesTrendRows, sumSeries } from '../derive';
 import { formatExactNumber } from '../format';
@@ -35,6 +36,7 @@ import { combineSegmentSeries } from '../segment-compare';
 import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
 import { CompareControl, type CompareRange } from './CompareControl';
+import { AnomalyCallout } from './charts/AnomalyCallout';
 import { ChartCard } from './charts/ChartCard';
 import { ComparisonTrend } from './charts/ComparisonTrend';
 import { CopyLinkButton } from './CopyLinkButton';
@@ -737,6 +739,11 @@ export function InsightsPage() {
       : undefined;
   const totalDeltaLoading = hasCompareRange ? compareResult.isPending : previousTotals.isPending;
 
+  // feat-07: only meaningful for the plain single-series trend below (the compare-range overlay,
+  // rendered when `compareRange` is set) — Segment Comparison and Formula mode have their own
+  // (multi-series / derived) presentations that anomaly markers aren't wired into.
+  const insightsTrendAnomalies = result ? detectAnomalies(seriesTrendRows(result.series)) : [];
+
   return (
     <PageShell
       projectId={projectId}
@@ -1030,7 +1037,9 @@ export function InsightsPage() {
                   valueKey="value"
                   label="Events"
                   ariaLabel="Insights trend vs. compare range"
+                  anomalies={insightsTrendAnomalies}
                 />
+                <AnomalyCallout anomalies={insightsTrendAnomalies} />
               </div>
             )}
             {result && result.series.length > 0 && !compareRange && (

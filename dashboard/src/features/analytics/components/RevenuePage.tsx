@@ -5,9 +5,11 @@ import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import type { RevenueByProduct } from '../../../lib/api/types';
 import { useRevenue } from '../api';
+import { detectAnomalies } from '../anomaly';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { formatCurrency } from '../format';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
+import { AnomalyCallout } from './charts/AnomalyCallout';
 import { BreakdownChart, type BreakdownDatum } from './charts/BreakdownChart';
 import { ChartCard } from './charts/ChartCard';
 import { ComparisonTrend } from './charts/ComparisonTrend';
@@ -54,6 +56,7 @@ export function RevenuePage() {
   const hasPurchases = (data?.purchases ?? 0) > 0;
 
   const trend = data?.by_day.map((day) => ({ t: day.t, value: day.revenue })) ?? [];
+  const trendAnomalies = detectAnomalies(trend);
   const byProductBars: BreakdownDatum[] =
     data?.by_product.map((p) => ({ label: p.product_id, value: p.revenue })) ?? [];
 
@@ -109,7 +112,9 @@ export function RevenuePage() {
               valueKey="value"
               label="Revenue"
               ariaLabel="Revenue trend"
+              anomalies={trendAnomalies}
             />
+            <AnomalyCallout anomalies={trendAnomalies} />
           </ChartCard>
 
           <ChartCard
