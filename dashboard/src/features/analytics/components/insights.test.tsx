@@ -8,6 +8,7 @@ import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/h
 import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { previousRange } from '../derive';
 import { decodeAnalysisState, encodeAnalysisState } from '../share-state';
 import { defaultDate } from './builder-controls';
 import type { InsightsAnalysisState } from './InsightsPage';
@@ -583,6 +584,104 @@ describe('InsightsPage', () => {
       expect(within(bar).queryByRole('button', { name: /Remove filter/ })).toBeNull();
       await waitFor(() => expect(capturedBodies.length).toBeGreaterThan(0));
       expect(capturedBodies.at(-1)?.filters).toEqual([]);
+    });
+  });
+
+  describe('Date-range Compare (feat-06)', () => {
+    it('enabling "Previous period" compare issues a 2nd query over the previous range and renders a previous overlay + KPI delta', async () => {
+      const capturedBodies: InsightsQueryDefinition[] = [];
+      const prevRange = previousRange(defaultDate(30), defaultDate(0));
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+          const body = (await request.json()) as InsightsQueryDefinition;
+          capturedBodies.push(body);
+          const isCompare = body.date_range.to === prevRange.to;
+          return HttpResponse.json({
+            series: [
+              {
+                name: 'checkout_completed',
+                breakdown_value: null,
+                data: [{ t: body.date_range.from, value: isCompare ? 40 : 100 }],
+              },
+            ],
+          });
+        }),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+      await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+
+      // Off by default: no compare overlay renders, and the plain trend chart is what's shown.
+      expect(screen.queryByRole('img', { name: 'Insights trend vs. compare range' })).toBeNull();
+
+      capturedBodies.length = 0;
+      await userEvent.selectOptions(screen.getByLabelText('Compare'), 'Previous period');
+
+      // A 2nd query fires over the previous-period window (in addition to the current-range one).
+      await waitFor(() =>
+        expect(capturedBodies.some((body) => body.date_range.to === prevRange.to)).toBe(true),
+      );
+
+      // The comparison overlay replaces the plain trend chart, with both series present and a
+      // legend caption naming both ranges.
+      await screen.findByRole('img', { name: 'Insights trend vs. compare range' }, { timeout: 3000 });
+      expect(screen.queryByRole('img', { name: 'Insights line chart' })).not.toBeInTheDocument();
+      expect(
+        screen.getByText(`${defaultDate(30)}–${defaultDate(0)} vs ${prevRange.from}–${prevRange.to}`),
+      ).toBeInTheDocument();
+
+      const table = screen.getByRole('table');
+      expect(within(table).getByText('Previous')).toBeInTheDocument();
+      await waitFor(() => expect(within(table).getByText('100')).toBeInTheDocument());
+      expect(within(table).getByText('40')).toBeInTheDocument();
+
+      // KPI: current (100) vs. compare (40) -> +150%, replacing the implicit previous-period delta.
+      expect(await screen.findByText('Total')).toBeInTheDocument();
+      expect(screen.getByText('+150%')).toBeInTheDocument();
+    });
+
+    it('does not run the compare query, and keeps the single-series view, while Off', async () => {
+      const capturedBodies: InsightsQueryDefinition[] = [];
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+          const body = (await request.json()) as InsightsQueryDefinition;
+          capturedBodies.push(body);
+          return HttpResponse.json({
+            series: [
+              { name: 'checkout_completed', breakdown_value: null, data: [{ t: '2026-06-29', value: 5 }] },
+            ],
+          });
+        }),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+      await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+
+      expect(screen.getByLabelText('Compare')).toHaveValue('off');
+      expect(screen.queryByRole('img', { name: 'Insights trend vs. compare range' })).toBeNull();
+    });
+
+    it('guards an invalid custom compare range (blank/from>to) by not running the compare query', async () => {
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+      await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
+
+      await userEvent.selectOptions(screen.getByLabelText('Compare'), 'Custom…');
+      fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-07-10' } });
+      fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-01' } });
+
+      // from > to: the hint appears and the plain trend chart keeps rendering (no compare run).
+      expect(await screen.findByText('Pick a valid range (From on or before To).')).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: 'Insights trend vs. compare range' })).toBeNull();
+      expect(screen.getByRole('img', { name: 'Insights line chart' })).toBeInTheDocument();
     });
   });
 });

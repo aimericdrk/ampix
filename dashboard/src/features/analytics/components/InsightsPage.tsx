@@ -26,7 +26,7 @@ import {
 } from '../../../lib/api/types';
 import { useCohorts, useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
-import { pctDelta, previousRange, sumSeries } from '../derive';
+import { pctDelta, previousRange, seriesTrendRows, sumSeries } from '../derive';
 import { formatExactNumber } from '../format';
 import { computeFormulaSeries, type FormulaOperator } from '../formula';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
@@ -34,7 +34,9 @@ import { colorForIndex } from '../palette';
 import { combineSegmentSeries } from '../segment-compare';
 import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
+import { CompareControl, type CompareRange } from './CompareControl';
 import { ChartCard } from './charts/ChartCard';
+import { ComparisonTrend } from './charts/ComparisonTrend';
 import { CopyLinkButton } from './CopyLinkButton';
 import { FormulaControl, FORMULA_OPERATOR_SYMBOLS } from './FormulaControl';
 import { KpiTile } from './charts/KpiTile';
@@ -356,6 +358,13 @@ export function InsightsPage() {
   );
   const compareModeActive = showCompare && compareSegments.length >= 2;
 
+  // Date-range Compare (feat-06 §3): a separate, additive control from Segment Comparison above —
+  // `compareRange` is `null` (Off) unless the user has chosen a preset or a valid custom range via
+  // `CompareControl`. Only meaningful for the single-series trend below (mutually exclusive, like
+  // Segment Comparison and Formula mode, with each other's result presentation).
+  const [compareRange, setCompareRange] = useState<CompareRange | null>(null);
+  const hasCompareRange = compareRange !== null;
+
   // Formula / Ratio Metrics (feat-05 §3): a separate 2-metric builder from the normal Events list
   // above — a formula always needs exactly A and B, each with its own aggregation, independent of
   // however many events the normal builder happens to have. Mutually exclusive with the normal
@@ -573,11 +582,25 @@ export function InsightsPage() {
     () => ({ ...queryDefinition, date_range: { from: prevRange.from, to: prevRange.to } }),
     [queryDefinition, prevRange.from, prevRange.to],
   );
+  // Off (no explicit compare range): the implicit previous-period KPI comparison runs, exactly as
+  // before feat-06. Once the user picks an explicit compare range, that supersedes this one below —
+  // no need to run both.
   const previousTotals = useInsightsQuery(
     projectId,
     previousDefinition,
-    canRun && !compareModeActive && !formulaModeActive,
+    canRun && !compareModeActive && !formulaModeActive && !hasCompareRange,
   );
+
+  // Date-range Compare (feat-06 §3): the SAME query definition (events/range/interval/filters/
+  // segment), re-run over the user-chosen compare range instead of the current one. Only runs in
+  // the plain single-series view (never alongside Segment Comparison or Formula mode), and only
+  // once a compare range is actually resolved (`CompareControl` emits `null` for Off/invalid).
+  const compareDefinition: InsightsQueryDefinition = useMemo(
+    () => ({ ...queryDefinition, date_range: compareRange ?? { from: '', to: '' } }),
+    [queryDefinition, compareRange],
+  );
+  const canRunCompare = canRun && !compareModeActive && !formulaModeActive && hasCompareRange;
+  const compareResult = useInsightsQuery(projectId, compareDefinition, canRunCompare);
 
   // Formula / Ratio Metrics (feat-05 §3): ONE query carrying both metrics [A, B] — respecting the
   // same global filters + segment + date range as the normal query — plus the previous-period
@@ -702,8 +725,17 @@ export function InsightsPage() {
   // the honest choice is to not show one rather than show a wrong number.
   const currentTotal = result ? sumSeries(result.series) : 0;
   const previousTotal = previousTotals.data ? sumSeries(previousTotals.data.series) : 0;
-  const totalDelta =
-    result && previousTotals.data ? pctDelta(currentTotal, previousTotal) : undefined;
+  const compareTotal = compareResult.data ? sumSeries(compareResult.data.series) : 0;
+  // With an explicit compare range active, the KPI delta is current vs. that chosen range instead
+  // of the implicit previous period (feat-06 §3 "KPIs show current value + delta vs compare").
+  const totalDelta = hasCompareRange
+    ? result && compareResult.data
+      ? pctDelta(currentTotal, compareTotal)
+      : undefined
+    : result && previousTotals.data
+      ? pctDelta(currentTotal, previousTotal)
+      : undefined;
+  const totalDeltaLoading = hasCompareRange ? compareResult.isPending : previousTotals.isPending;
 
   return (
     <PageShell
@@ -711,7 +743,12 @@ export function InsightsPage() {
       title="Insights"
       description="Pick an event to see its trend. Refine with a date range, grouping, or filters when you need to."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Insights' }]}
-      dateRangeControl={<DateRangeControl />}
+      dateRangeControl={
+        <>
+          <DateRangeControl />
+          <CompareControl from={dateFrom} to={dateTo} onChange={setCompareRange} />
+        </>
+      }
       actions={
         <>
           <CopyLinkButton />
@@ -968,9 +1005,9 @@ export function InsightsPage() {
               <KpiTile
                 label="Total"
                 value={currentTotal}
-                hint="Selected range"
+                hint={compareRange ? `vs ${compareRange.from}–${compareRange.to}` : 'Selected range'}
                 delta={totalDelta !== undefined ? { pct: totalDelta } : undefined}
-                loading={previousTotals.isPending}
+                loading={totalDeltaLoading}
               />
             </SectionGrid>
           )}
@@ -981,7 +1018,22 @@ export function InsightsPage() {
             emptyText="No data for this query yet."
             exportImageName="insights-trend"
           >
-            {result && result.series.length > 0 && (
+            {result && result.series.length > 0 && compareRange && (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs text-text-muted">
+                  {dateFrom}–{dateTo} vs {compareRange.from}–{compareRange.to}
+                </p>
+                <ComparisonTrend
+                  current={seriesTrendRows(result.series)}
+                  previous={compareResult.data ? seriesTrendRows(compareResult.data.series) : undefined}
+                  xKey="t"
+                  valueKey="value"
+                  label="Events"
+                  ariaLabel="Insights trend vs. compare range"
+                />
+              </div>
+            )}
+            {result && result.series.length > 0 && !compareRange && (
               <InsightsChart
                 series={result.series}
                 eventOrder={events.map((e) => e.name)}
