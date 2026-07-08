@@ -233,3 +233,22 @@ export interface EngagementResponse {
   stickiness: EngagementStickinessPoint[];
   new_vs_returning: EngagementNewReturningPoint[];
 }
+
+/** POST /query/histogram response (contracts §19). `buckets` is the adaptive ClickHouse
+ *  `histogram()` output (empty when no matching/finite-valued events); the summary stats are `0`
+ *  when there is no data. */
+export interface HistogramBucket {
+  lower: number;
+  upper: number;
+  count: number;
+}
+
+export interface HistogramResponse {
+  buckets: HistogramBucket[];
+  total: number;
+  min: number;
+  max: number;
+  mean: number;
+  p50: number;
+  p90: number;
+}

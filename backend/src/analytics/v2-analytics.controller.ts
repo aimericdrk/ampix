@@ -5,14 +5,15 @@ import type {
   ClickHeatmapResponse,
   EngagementResponse,
   FlowResponse,
+  HistogramResponse,
 } from './analytics.types';
 import { V2AnalyticsService } from './v2-analytics.service';
 
 /**
- * v2 analytics endpoints (contracts §19): click-heatmap, screen-paths, engagement. Same surface as
- * the §14/§15 controllers — mounted under `/api/v1/projects/:projectId`, JWT-guarded, with project
- * membership (viewer+) enforced inside the service (matching the §14 read pattern, not the RolesGuard
- * matrix which gates mutations).
+ * v2 analytics endpoints (contracts §19): click-heatmap, histogram, screen-paths, engagement. Same
+ * surface as the §14/§15 controllers — mounted under `/api/v1/projects/:projectId`, JWT-guarded,
+ * with project membership (viewer+) enforced inside the service (matching the §14 read pattern, not
+ * the RolesGuard matrix which gates mutations).
  */
 @Controller('api/v1/projects/:projectId')
 @UseGuards(JwtAuthGuard)
@@ -27,6 +28,16 @@ export class V2AnalyticsController {
     @Body() body: unknown,
   ): Promise<ClickHeatmapResponse> {
     return this.v2.runClickHeatmap(req.user!.id, projectId, body);
+  }
+
+  @Post('query/histogram')
+  @HttpCode(200) // a query, not a resource creation
+  async histogram(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ): Promise<HistogramResponse> {
+    return this.v2.runHistogram(req.user!.id, projectId, body);
   }
 
   @Post('query/screen-paths')

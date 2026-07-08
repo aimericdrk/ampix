@@ -54,6 +54,62 @@ describe('V2AnalyticsService', () => {
     });
   });
 
+  describe('runHistogram', () => {
+    const body = {
+      event: '$session_end',
+      property: '$duration_ms',
+      bins: 20,
+      date_range: { from: '2026-06-01', to: '2026-07-01' },
+    };
+
+    it('gates on membership and maps the aggregate row (buckets + summary stats)', async () => {
+      const { service, assertMembership } = makeService(() => [
+        {
+          buckets: [
+            [0, 10, 3],
+            [10, 20, 7.4],
+          ],
+          cnt: 10,
+          mn: 1,
+          mx: 19,
+          avgVal: 12.5,
+          p50: 11,
+          p90: 18,
+        },
+      ]);
+
+      const res = await service.runHistogram(USER, PROJECT, body);
+
+      expect(assertMembership).toHaveBeenCalledWith(USER, PROJECT);
+      expect(res).toEqual({
+        buckets: [
+          { lower: 0, upper: 10, count: 3 },
+          { lower: 10, upper: 20, count: 7 }, // height rounded to a count
+        ],
+        total: 10,
+        min: 1,
+        max: 19,
+        mean: 12.5,
+        p50: 11,
+        p90: 18,
+      });
+    });
+
+    it('empty result (cnt=0) -> zeros/[] even if ClickHouse returns NaN-ish aggregates', async () => {
+      const { service } = makeService(() => [
+        { buckets: [], cnt: 0, mn: null, mx: null, avgVal: null, p50: null, p90: null },
+      ]);
+      const res = await service.runHistogram(USER, PROJECT, body);
+      expect(res).toEqual({ buckets: [], total: 0, min: 0, max: 0, mean: 0, p50: 0, p90: 0 });
+    });
+
+    it('no rows at all -> zeros/[]', async () => {
+      const { service } = makeService(() => []);
+      const res = await service.runHistogram(USER, PROJECT, body);
+      expect(res).toEqual({ buckets: [], total: 0, min: 0, max: 0, mean: 0, p50: 0, p90: 0 });
+    });
+  });
+
   describe('getEngagement', () => {
     // Two-day window; interval=day. active = new + returning; stickiness = active / MAU_range.
     const from = '2026-06-01';

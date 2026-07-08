@@ -7,6 +7,8 @@ import type {
   EngagementResponse,
   FlowResponse,
   HeatmapCell,
+  HistogramBucket,
+  HistogramResponse,
 } from './analytics.types';
 import { buildBucketGrid } from './bucket-grid';
 import { clickHeatmapQuerySchema } from './click-heatmap.schema';
@@ -14,6 +16,8 @@ import { compileClickHeatmapQuery } from './click-heatmap.compiler';
 import { ENGAGEMENT_METRIC, compileEngagement } from './engagement.compiler';
 import { engagementIntervalSchema } from './engagement.schema';
 import { buildFlowGraph, FlowUnitRow } from './flows.compiler';
+import { compileHistogramQuery } from './histogram.compiler';
+import { histogramQuerySchema } from './histogram.schema';
 import { parseFiltersParam, resolveDateOnlyRange } from './read-query.util';
 import { compileScreenPathQuery, markEntryAnchors } from './screen-paths.compiler';
 import { screenPathsQuerySchema } from './screen-paths.schema';
@@ -39,8 +43,29 @@ interface RangeActiveRow {
   mau: string | number;
 }
 
+/** ClickHouse `histogram()` returns an array of `(lower, upper, height)` tuples; the JSONEachRow
+ *  wire format surfaces each tuple as a 3-element array. */
+type HistogramBucketTuple = [string | number, string | number, string | number];
+
+interface HistogramRow {
+  buckets: HistogramBucketTuple[];
+  cnt: string | number;
+  mn: string | number | null;
+  mx: string | number | null;
+  avgVal: string | number | null;
+  p50: string | number | null;
+  p90: string | number | null;
+}
+
+/** Coerces a possibly-null/NaN aggregate result (e.g. `avg()`/`quantile()` over zero rows) to a
+ *  finite number, defaulting to `0` — matching contracts §19's "empty -> zeros" rule. */
+function toFiniteNumber(value: string | number | null | undefined): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
- * v2 analytics query engine (contracts §19): click-heatmap, screen-paths, engagement. A sibling of
+ * v2 analytics query engine (contracts §19): click-heatmap, histogram, screen-paths, engagement. A sibling of
  * {@link AnalyticsService}/{@link AdvancedAnalyticsService} reusing the exact same machinery —
  * membership gate (`ProjectsService.assertMembership`, viewer+), `parseOrThrow`, the shared filter
  * compiler, `resolveProperty`, the §15 flow graph builder, the §17 canonicalization helper, and
@@ -75,6 +100,41 @@ export class V2AnalyticsService {
     }));
     const total = cells.reduce((sum, cell) => sum + cell.count, 0);
     return { screen_name: query.screen_name, total, cells };
+  }
+
+  /**
+   * POST /query/histogram — buckets a numeric event `property` (over a date range + §14 filters)
+   * into an adaptive ClickHouse `histogram(bins)(...)`, alongside count/min/max/mean/p50/p90 of the
+   * same value. Exactly one row always comes back from the aggregate query (even with zero matching
+   * events); `cnt === 0` is treated as the contracts §19 "empty -> zeros/[]" case.
+   */
+  async runHistogram(userId: string, projectId: string, body: unknown): Promise<HistogramResponse> {
+    await this.projects.assertMembership(userId, projectId);
+    const query = parseOrThrow(histogramQuerySchema, body);
+    const compiled = compileHistogramQuery(query, projectId);
+    const rows = await this.clickhouse.query<HistogramRow>(compiled.sql, compiled.params);
+    const row = rows[0];
+
+    const total = row ? Number(row.cnt) : 0;
+    if (!row || total === 0) {
+      return { buckets: [], total: 0, min: 0, max: 0, mean: 0, p50: 0, p90: 0 };
+    }
+
+    const buckets: HistogramBucket[] = (row.buckets ?? []).map(([lower, upper, height]) => ({
+      lower: Number(lower),
+      upper: Number(upper),
+      count: Math.round(Number(height)),
+    }));
+
+    return {
+      buckets,
+      total,
+      min: toFiniteNumber(row.mn),
+      max: toFiniteNumber(row.mx),
+      mean: toFiniteNumber(row.avgVal),
+      p50: toFiniteNumber(row.p50),
+      p90: toFiniteNumber(row.p90),
+    };
   }
 
   /**
