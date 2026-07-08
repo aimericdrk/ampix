@@ -35,6 +35,7 @@ export function projectGroups(): NavGroup[] {
         { label: 'Paths', to: p('/paths'), icon: 'paths' },
         { label: 'Heatmap', to: p('/heatmap'), icon: 'heatmap' },
         { label: 'Revenue', to: p('/revenue'), icon: 'revenue' },
+        { label: 'Distributions', to: p('/distributions'), icon: 'distributions' },
       ],
     },
     {

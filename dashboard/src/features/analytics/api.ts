@@ -22,6 +22,8 @@ import type {
   FlowsResponse,
   FunnelQueryDefinition,
   FunnelResponse,
+  HistogramQuery,
+  HistogramResponse,
   InsightsFilter,
   InsightsQueryDefinition,
   InsightsResponse,
@@ -171,6 +173,25 @@ export function useRunFlows(projectId: string) {
         method: 'POST',
         body: query,
       }),
+  });
+}
+
+// --- Distribution histograms (feat-09 §3.1) ---
+
+/**
+ * `POST /query/histogram` (feat-09) — buckets a numeric event property into an adaptive histogram
+ * plus summary stats. Query-style like {@link useInsightsQuery}: auto-loads whenever `query`
+ * changes and `enabled` (gate on a chosen event + property, e.g. the Distributions custom mode).
+ */
+export function useHistogram(projectId: string, query: HistogramQuery, enabled = true) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'histogram', JSON.stringify(query)],
+    queryFn: () =>
+      apiFetch<HistogramResponse>(`${base(projectId)}/query/histogram`, {
+        method: 'POST',
+        body: query,
+      }),
+    enabled,
   });
 }
 

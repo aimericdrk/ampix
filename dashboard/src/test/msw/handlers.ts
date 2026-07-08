@@ -19,6 +19,8 @@ import type {
   FlowsResponse,
   FunnelQueryDefinition,
   FunnelResponse,
+  HistogramQuery,
+  HistogramResponse,
   ScreenPathsQuery,
   ScreenPathsResponse,
   ScreensResponse,
@@ -250,6 +252,24 @@ export const REVENUE_SUMMARY_FIXTURE: RevenueSummaryResponse = {
     { product_id: 'pro_monthly', revenue: 300, purchases: 25 },
     { product_id: 'coins_pack', revenue: 180, purchases: 15 },
   ],
+};
+
+/**
+ * Deterministic sample for `POST /query/histogram` (feat-09 §3.1): 3 adaptive buckets summing to
+ * 75 (40 + 25 + 10), so a fixed 50/33.3/13.3-ish split is assertable in the table's `%` column.
+ */
+export const HISTOGRAM_FIXTURE: HistogramResponse = {
+  buckets: [
+    { lower: 0, upper: 5000, count: 40 },
+    { lower: 5000, upper: 10000, count: 25 },
+    { lower: 10000, upper: 15000, count: 10 },
+  ],
+  total: 75,
+  min: 500,
+  max: 14800,
+  mean: 6200,
+  p50: 5200,
+  p90: 12000,
 };
 
 // --- Advanced analysis fixtures (contracts §15) ---
@@ -1382,6 +1402,23 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     return HttpResponse.json(REVENUE_SUMMARY_FIXTURE);
+  }),
+
+  // --- Distribution histograms (feat-09 §3.1) ---
+
+  http.post('/api/v1/projects/:projectId/query/histogram', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as HistogramQuery;
+    if (!body.event?.trim() || !body.property?.trim()) {
+      return problem(400, 'Invalid histogram query: event and property are required');
+    }
+    const bins = body.bins ?? 20;
+    if (bins < 2 || bins > 50) {
+      return problem(400, 'Invalid histogram query: bins out of range');
+    }
+    return HttpResponse.json(HISTOGRAM_FIXTURE);
   }),
 
   // --- Templates catalog (contracts §19) — auth-only, shared across projects ---

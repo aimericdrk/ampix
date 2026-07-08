@@ -30,6 +30,7 @@ import { DashboardViewPage } from './features/analytics/components/DashboardView
 import { LiveEventsPage } from './features/analytics/components/LiveEventsPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { RevenuePage } from './features/analytics/components/RevenuePage';
+import { DistributionsPage } from './features/analytics/components/DistributionsPage';
 import { UserProfilePage } from './features/analytics/components/UserProfilePage';
 import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
@@ -258,6 +259,14 @@ const revenueRoute = createRoute({
   component: RevenuePage,
 });
 
+// --- Distribution histograms (feat-09) ---
+
+const distributionsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/distributions',
+  component: DistributionsPage,
+});
+
 const securitySettingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/settings/security',
@@ -302,6 +311,7 @@ export const routeTree = rootRoute.addChildren([
     userProfileRoute,
     sessionsRoute,
     revenueRoute,
+    distributionsRoute,
     securitySettingsRoute,
     accountRoute,
     orgSettingsRoute,

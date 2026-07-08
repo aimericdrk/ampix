@@ -686,6 +686,35 @@ export interface ClickHeatmapResponse {
   cells: ClickHeatmapCell[];
 }
 
+// --- Distribution histograms (feat-09 §3.1) ---
+
+/** One adaptive-width bucket of a `POST /query/histogram` response. */
+export interface HistogramBucket {
+  lower: number;
+  upper: number;
+  count: number;
+}
+
+/** `POST /query/histogram` body — `bins` optional (backend defaults to 20, clamped 2..50). */
+export interface HistogramQuery {
+  event: string;
+  property: string;
+  bins?: number;
+  date_range: InsightsDateRange;
+  filters?: InsightsFilter[];
+}
+
+/** `POST /query/histogram` response — `buckets` empty and summary stats `0` when no matching data. */
+export interface HistogramResponse {
+  buckets: HistogramBucket[];
+  total: number;
+  min: number;
+  max: number;
+  mean: number;
+  p50: number;
+  p90: number;
+}
+
 // --- Cohorts/reports/dashboards (contracts §16) ---
 // Request/response shapes mirror shared-contracts §16 exactly (the concurrent Phase-5 backend builds
 // against the same section, re-validating every stored definition with the §14/§15 zod schemas).
