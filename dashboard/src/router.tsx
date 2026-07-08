@@ -32,6 +32,7 @@ import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { RevenuePage } from './features/analytics/components/RevenuePage';
 import { DistributionsPage } from './features/analytics/components/DistributionsPage';
 import { PropertyExplorerPage } from './features/analytics/components/PropertyExplorerPage';
+import { EventCatalogPage } from './features/analytics/components/EventCatalogPage';
 import { UserProfilePage } from './features/analytics/components/UserProfilePage';
 import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
@@ -276,6 +277,14 @@ const propertiesRoute = createRoute({
   component: PropertyExplorerPage,
 });
 
+// --- Event Catalog / Data Dictionary (feat-15) ---
+
+const eventsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/events',
+  component: EventCatalogPage,
+});
+
 const securitySettingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/settings/security',
@@ -322,6 +331,7 @@ export const routeTree = rootRoute.addChildren([
     revenueRoute,
     distributionsRoute,
     propertiesRoute,
+    eventsRoute,
     securitySettingsRoute,
     accountRoute,
     orgSettingsRoute,

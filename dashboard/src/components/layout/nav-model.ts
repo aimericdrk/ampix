@@ -37,6 +37,7 @@ export function projectGroups(): NavGroup[] {
         { label: 'Revenue', to: p('/revenue'), icon: 'revenue' },
         { label: 'Distributions', to: p('/distributions'), icon: 'distributions' },
         { label: 'Properties', to: p('/properties'), icon: 'properties' },
+        { label: 'Events', to: p('/events'), icon: 'events' },
       ],
     },
     {

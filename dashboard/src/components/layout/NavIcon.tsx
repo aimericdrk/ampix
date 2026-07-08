@@ -8,6 +8,7 @@ export type IconName =
   | 'revenue'
   | 'distributions'
   | 'properties'
+  | 'events'
   | 'cohorts'
   | 'users'
   | 'sessions'
@@ -31,6 +32,7 @@ const PATHS: Record<IconName, string> = {
   revenue: 'M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5s-5 1.5-5 3.5 2.2 3 5 3.5 5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5',
   distributions: 'M4 20h16M6 20V13M10 20V6M14 20V10M18 20V16',
   properties: 'M3 3h8l10 10-8 8L3 11zM8 8h.01',
+  events: 'M6 3h12v18H6zM9 7h6M9 11h6M9 15h4',
   cohorts: 'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20a6 6 0 0 1 12 0M16 6a3 3 0 0 1 0 6M18 20a6 6 0 0 0-4-5.7',
   users: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20a8 8 0 0 1 16 0',
   sessions: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
