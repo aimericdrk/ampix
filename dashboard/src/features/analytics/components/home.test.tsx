@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -203,5 +203,28 @@ describe('HomePage', () => {
       'aria-pressed',
       'false',
     );
+  });
+
+  it('feat-08: adding a note via the Notes manager renders a labelled reference line on the active-users trend', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+    const trendFigure = await main.findByRole('img', { name: 'Active users trend' });
+
+    await userEvent.click(main.getByRole('button', { name: 'Notes' }));
+    const panel = main.getByRole('region', { name: 'Chart annotations' });
+    // The engagement fixture's DAU series includes 2026-06-30 — a note dated there falls within
+    // this chart's own bucket dates and so renders a marker (feat-08 §3/§4).
+    fireEvent.change(within(panel).getByLabelText('Note date'), {
+      target: { value: '2026-06-30' },
+    });
+    await userEvent.type(within(panel).getByPlaceholderText('e.g. v1.4 release'), 'v1.4 release');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Add note' }));
+
+    expect(
+      within(trendFigure).getByRole('img', { name: 'v1.4 release — 2026-06-30' }),
+    ).toBeInTheDocument();
   });
 });

@@ -26,6 +26,7 @@ import {
 } from '../../../lib/api/types';
 import { useCohorts, useInsightsQuery, useMetaEvents, useMetaProperties, useRunInsights } from '../api';
 import { detectAnomalies } from '../anomaly';
+import { useAnnotations } from '../annotations';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { pctDelta, previousRange, seriesTrendRows, sumSeries } from '../derive';
 import { formatExactNumber } from '../format';
@@ -35,6 +36,7 @@ import { colorForIndex } from '../palette';
 import { combineSegmentSeries } from '../segment-compare';
 import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
+import { AnnotationsManager } from './AnnotationsManager';
 import { CompareControl, type CompareRange } from './CompareControl';
 import { AnomalyCallout } from './charts/AnomalyCallout';
 import { ChartCard } from './charts/ChartCard';
@@ -328,6 +330,8 @@ export function InsightsPage() {
   // Global Filters Bar (feat-02): AND-joins onto this page's own filters right before sending —
   // never mutates the local filter rows, so the builder UI still reflects only what the user set.
   const { filters: globalFilters } = useGlobalFilters();
+  // Chart Annotations (feat-08): one shared per-project note set, shown on every trend chart.
+  const { annotations, add: addAnnotation, remove: removeAnnotation } = useAnnotations(projectId);
 
   // Shareable Analysis URLs (feat-01): the `?s=` param is this page's serialized builder state.
   // `urlState` only changes identity when the param itself changes (mount, or back/forward).
@@ -1024,6 +1028,13 @@ export function InsightsPage() {
             state={!result ? 'loading' : result.series.length === 0 ? 'empty' : 'ready'}
             emptyText="No data for this query yet."
             exportImageName="insights-trend"
+            action={
+              <AnnotationsManager
+                annotations={annotations}
+                onAdd={addAnnotation}
+                onRemove={removeAnnotation}
+              />
+            }
           >
             {result && result.series.length > 0 && compareRange && (
               <div className="flex flex-col gap-3">
@@ -1038,6 +1049,7 @@ export function InsightsPage() {
                   label="Events"
                   ariaLabel="Insights trend vs. compare range"
                   anomalies={insightsTrendAnomalies}
+                  annotations={annotations}
                 />
                 <AnomalyCallout anomalies={insightsTrendAnomalies} />
               </div>

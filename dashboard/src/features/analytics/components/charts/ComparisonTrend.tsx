@@ -5,12 +5,14 @@ import {
   Legend,
   Line,
   ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import type { Anomaly } from '../../anomaly';
+import type { Annotation } from '../../annotations';
 import { colorForIndex, SERIES_OTHER_COLOR_VAR } from '../../palette';
 import { formatExactNumber } from '../../format';
 
@@ -35,6 +37,12 @@ export interface ComparisonTrendProps {
    * anomalous index plus a "△ anomaly" legend note. Omit (or pass an empty array) to keep the
    * chart exactly as before — fully backward compatible. */
   anomalies?: Anomaly[];
+  /** Release markers / notes (feat-08) — renders a muted, dashed vertical `ReferenceLine` for
+   * each annotation whose `date` matches one of the chart's own x-axis bucket values (`xKey`);
+   * an annotation outside this chart's range is simply skipped here (still stored/listed
+   * elsewhere). Omit (or pass an empty array) to keep the chart exactly as before — fully
+   * backward compatible. */
+  annotations?: Annotation[];
 }
 
 const TOOLTIP_STYLE = {
@@ -82,6 +90,42 @@ function AnomalyMarker({
   );
 }
 
+const ANNOTATION_LABEL_MAX_CHARS = 14;
+
+function truncateLabel(label: string): string {
+  return label.length > ANNOTATION_LABEL_MAX_CHARS
+    ? `${label.slice(0, ANNOTATION_LABEL_MAX_CHARS - 1)}…`
+    : label;
+}
+
+/**
+ * The label rendered above an annotation's `ReferenceLine` (feat-08 §3): a small, truncated text
+ * tag plus an accessible `<title>` + `role="img"`/`aria-label` carrying the untruncated
+ * "label — date", mirroring `AnomalyMarker`'s accessible-marker pattern. Returned as a factory so
+ * each `ReferenceLine.label` closes over its own annotation; Recharts calls it with the line's
+ * computed `viewBox`, from which only the x position (and top y) is needed to place the tag.
+ */
+function annotationLabelRenderer(annotation: Annotation) {
+  return ({ viewBox }: { viewBox?: { x?: number; y?: number } }) => {
+    if (!viewBox || viewBox.x === undefined) return <g />;
+    const titleText = `${annotation.label} — ${annotation.date}`;
+    return (
+      <g role="img" aria-label={titleText}>
+        <title>{titleText}</title>
+        <text
+          x={viewBox.x}
+          y={(viewBox.y ?? 0) + 10}
+          textAnchor="middle"
+          fontSize={10}
+          fill="var(--text-muted)"
+        >
+          {truncateLabel(annotation.label)}
+        </text>
+      </g>
+    );
+  };
+}
+
 /**
  * A time-trend line/area with an optional dashed, muted "previous period" overlay (dataviz
  * period-over-period comparison). `previous` aligns to `current` by array index — the two periods
@@ -100,6 +144,7 @@ export function ComparisonTrend({
   ariaLabel,
   height = 320,
   anomalies,
+  annotations,
 }: ComparisonTrendProps) {
   const hasPrevious = !!previous && previous.length > 0;
   const hasAnomalies = !!anomalies && anomalies.length > 0;
@@ -110,6 +155,14 @@ export function ComparisonTrend({
     current: row[valueKey],
     previous: hasPrevious ? previous![index]?.[valueKey] : undefined,
   }));
+
+  // Only an annotation whose date matches one of this chart's own x-axis bucket values falls
+  // "within the x-domain" (feat-08 §3/§4) — everything else is skipped here (still stored/listed
+  // by the Notes manager), since buckets may be day/week/month and a naive date-range check would
+  // otherwise place a marker between ticks where it doesn't actually align with the data.
+  const xValues = new Set(rows.map((row) => String(row.x)));
+  const inRangeAnnotations = (annotations ?? []).filter((a) => xValues.has(a.date));
+  const hasAnnotations = inRangeAnnotations.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -173,6 +226,18 @@ export function ComparisonTrend({
                   />
                 );
               })}
+            {hasAnnotations &&
+              inRangeAnnotations.map((annotation) => (
+                <ReferenceLine
+                  key={`annotation-${annotation.id}`}
+                  x={annotation.date}
+                  stroke={annotation.color ?? 'var(--text-muted)'}
+                  strokeDasharray="4 4"
+                  strokeWidth={1}
+                  ifOverflow="extendDomain"
+                  label={annotationLabelRenderer(annotation)}
+                />
+              ))}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

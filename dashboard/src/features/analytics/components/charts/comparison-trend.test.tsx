@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { Anomaly } from '../../anomaly';
+import type { Annotation } from '../../annotations';
 import { ComparisonTrend } from './ComparisonTrend';
 
 const current = [
@@ -168,6 +169,96 @@ describe('ComparisonTrend', () => {
       expect(dipShape?.getAttribute('points')).not.toEqual(spikeShape?.getAttribute('points'));
 
       expect(screen.getByText('△ anomaly')).toBeInTheDocument();
+    });
+  });
+
+  describe('annotations / release markers (feat-08)', () => {
+    const inRangeAnnotation: Annotation = { id: 'a1', date: '2026-06-30', label: 'v1.4 release' };
+    const outOfRangeAnnotation: Annotation = { id: 'a2', date: '2026-05-01', label: 'Old note' };
+
+    it('renders nothing extra when the annotations prop is absent', () => {
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+        />,
+      );
+      const figure = screen.getByRole('img', { name: 'Sessions trend' });
+      expect(within(figure).queryByRole('img', { name: /v1\.4 release/ })).not.toBeInTheDocument();
+    });
+
+    it('renders nothing extra when the annotations prop is an empty array', () => {
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+          annotations={[]}
+        />,
+      );
+      const figure = screen.getByRole('img', { name: 'Sessions trend' });
+      expect(within(figure).queryByRole('img', { name: /v1\.4 release/ })).not.toBeInTheDocument();
+    });
+
+    it('renders a labelled reference line for an annotation whose date matches a bucket in range', () => {
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+          annotations={[inRangeAnnotation]}
+        />,
+      );
+      const figure = screen.getByRole('img', { name: 'Sessions trend' });
+      const marker = within(figure).getByRole('img', { name: 'v1.4 release — 2026-06-30' });
+      expect(marker.querySelector('title')).toHaveTextContent('v1.4 release — 2026-06-30');
+      expect(within(figure).getByText('v1.4 release')).toBeInTheDocument();
+    });
+
+    it('skips an annotation whose date falls outside the chart data (still doesn’t crash)', () => {
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+          annotations={[outOfRangeAnnotation]}
+        />,
+      );
+      const figure = screen.getByRole('img', { name: 'Sessions trend' });
+      expect(within(figure).queryByRole('img', { name: /Old note/ })).not.toBeInTheDocument();
+    });
+
+    it('truncates a long label in the visible tag, but keeps the full label in the accessible title', () => {
+      const longAnnotation: Annotation = {
+        id: 'a3',
+        date: '2026-06-29',
+        label: 'A much longer release note label',
+      };
+      render(
+        <ComparisonTrend
+          current={current}
+          xKey="day"
+          valueKey="sessions"
+          label="Sessions"
+          ariaLabel="Sessions trend"
+          annotations={[longAnnotation]}
+        />,
+      );
+      const figure = screen.getByRole('img', { name: 'Sessions trend' });
+      expect(
+        within(figure).getByRole('img', { name: 'A much longer release note label — 2026-06-29' }),
+      ).toBeInTheDocument();
+      expect(within(figure).queryByText('A much longer release note label')).not.toBeInTheDocument();
+      expect(within(figure).getByText(/…$/)).toBeInTheDocument();
     });
   });
 });

@@ -24,12 +24,14 @@ import {
   useSessionsSummary,
 } from '../api';
 import { detectAnomalies } from '../anomaly';
+import { useAnnotations } from '../annotations';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { breakdownBars, pctDelta, previousRange, sumSeries } from '../derive';
 import { formatDurationMs, formatPercent } from '../format';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { computeHighlights, type HighlightMetricInput } from '../highlights';
 import { colorForIndex } from '../palette';
+import { AnnotationsManager } from './AnnotationsManager';
 import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
 import { HomeHighlights } from './HomeHighlights';
 import { analysisResultIsEmpty } from './ReportChart';
@@ -63,6 +65,8 @@ export function HomePage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/home' });
   const { from, to } = useDateRange();
   const prev = previousRange(from, to);
+  // Chart Annotations (feat-08): one shared per-project note set, shown on every trend chart.
+  const { annotations, add: addAnnotation, remove: removeAnnotation } = useAnnotations(projectId);
   // Global Filters Bar (feat-02): AND-joins onto every insights-based chart below, AND (T2) onto
   // the engagement/sessions-driven KPIs via the metric endpoints' optional `filters` param.
   const { filters: globalFilters, toggleGlobalFilter } = useGlobalFilters();
@@ -322,6 +326,13 @@ export function HomePage() {
             description="Daily active users vs. the previous period."
             state={chartState(dayEngagement.isPending, dayEngagement.isError, activeTrendCurrent.length === 0)}
             exportImageName="active-users-trend"
+            action={
+              <AnnotationsManager
+                annotations={annotations}
+                onAdd={addAnnotation}
+                onRemove={removeAnnotation}
+              />
+            }
           >
             <ComparisonTrend
               current={activeTrendCurrent}
@@ -331,6 +342,7 @@ export function HomePage() {
               label="Active users"
               ariaLabel="Active users trend"
               anomalies={activeTrendAnomalies}
+              annotations={annotations}
             />
             <AnomalyCallout anomalies={activeTrendAnomalies} />
           </ChartCard>
