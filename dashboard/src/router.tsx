@@ -31,6 +31,7 @@ import { LiveEventsPage } from './features/analytics/components/LiveEventsPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { RevenuePage } from './features/analytics/components/RevenuePage';
 import { DistributionsPage } from './features/analytics/components/DistributionsPage';
+import { PropertyExplorerPage } from './features/analytics/components/PropertyExplorerPage';
 import { UserProfilePage } from './features/analytics/components/UserProfilePage';
 import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
@@ -267,6 +268,14 @@ const distributionsRoute = createRoute({
   component: DistributionsPage,
 });
 
+// --- Property Value Explorer (feat-10) ---
+
+const propertiesRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/properties',
+  component: PropertyExplorerPage,
+});
+
 const securitySettingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/settings/security',
@@ -312,6 +321,7 @@ export const routeTree = rootRoute.addChildren([
     sessionsRoute,
     revenueRoute,
     distributionsRoute,
+    propertiesRoute,
     securitySettingsRoute,
     accountRoute,
     orgSettingsRoute,
