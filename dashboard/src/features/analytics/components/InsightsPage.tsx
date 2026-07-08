@@ -1,4 +1,4 @@
-import { useParams } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
@@ -38,6 +38,7 @@ import type { AnalysisStateEnvelope } from '../share-state';
 import { useUrlAnalysisState } from '../share-state';
 import { AddToDashboardButton } from './AddToDashboardButton';
 import { AnnotationsManager } from './AnnotationsManager';
+import { AskBar } from './AskBar';
 import { CompareControl, type CompareRange } from './CompareControl';
 import { AnomalyCallout } from './charts/AnomalyCallout';
 import { ChartCard } from './charts/ChartCard';
@@ -151,6 +152,25 @@ function sanitizeUrlState(
   const to = isDateString(raw.to) ? raw.to : undefined;
 
   return { events, interval, filters, breakdownProperty, segmentId, chartType, from, to };
+}
+
+/**
+ * "Ask your data" (feat-17 §3.2): flattens a §14 {@link InsightsQueryDefinition} (the backend's Ask
+ * response shape) into the same envelope {@link sanitizeUrlState} already knows how to validate for
+ * the shareable `?s=` link — so hydrating from an Ask result reuses that exact field-by-field
+ * validation (dropping any invented event/property name the model produced) instead of duplicating it.
+ */
+function definitionToUrlState(definition: InsightsQueryDefinition): InsightsAnalysisState {
+  return {
+    v: 1,
+    events: definition.events,
+    interval: definition.interval,
+    filters: definition.filters,
+    breakdownProperty: definition.breakdown?.property,
+    segmentId: definition.cohort_id ?? null,
+    from: definition.date_range.from,
+    to: definition.date_range.to,
+  };
 }
 
 /** Plain-language measure labels — never "aggregation" (contracts §14 values are unchanged). */
@@ -322,6 +342,10 @@ function FormulaTable({
 
 export function InsightsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/insights' });
+  const navigate = useNavigate();
+  // "Ask your data" (feat-17 §3.2): the command palette navigates here with a one-shot `ask` flag
+  // so the AskBar can be focused on arrival; `strict: false` mirrors `useUrlAnalysisState` below.
+  const search = useSearch({ strict: false }) as { ask?: boolean };
   const metaEvents = useMetaEvents(projectId);
   const metaProperties = useMetaProperties(projectId);
   const runInsights = useRunInsights(projectId);
@@ -346,6 +370,10 @@ export function InsightsPage() {
   const [result, setResult] = useState<InsightsResponse | null>(null);
   // The selected visualization is part of the builder state, so it persists across re-runs.
   const [chartType, setChartType] = useState<InsightsChartType>('line');
+  // "Ask your data" (feat-17 §3.2): the last question a built query came from, for the "Built
+  // from: <question> — edit below" note; cleared as soon as the user edits the builder by hand.
+  const [askedQuestion, setAskedQuestion] = useState<string | null>(null);
+  const askInputRef = useRef<HTMLInputElement>(null);
 
   // Advanced options stay tucked away until asked for (progressive disclosure).
   const [showFilters, setShowFilters] = useState(false);
@@ -442,24 +470,72 @@ export function InsightsPage() {
     setRange,
   ]);
 
+  // "Ask your data" (feat-17 §3.2): a one-shot arrival from the command palette focuses the
+  // AskBar, then strips the `ask` flag so a reload/back-nav doesn't refocus it again.
+  useEffect(() => {
+    if (!search.ask) return;
+    askInputRef.current?.focus();
+    void navigate({
+      to: '.',
+      search: (prev: Record<string, unknown>) => ({ ...prev, ask: undefined }),
+      replace: true,
+    } as unknown as Parameters<typeof navigate>[0]);
+  }, [search.ask, navigate]);
+
+  /**
+   * "Ask your data" (feat-17 §3.2): hydrates the builder from the model-derived definition using
+   * the exact same field-by-field validation as the shareable `?s=` link (see
+   * {@link definitionToUrlState} + `sanitizeUrlState`) — never trusting an invented event/property
+   * name outright. `useAutoRun` below re-runs on its own once `queryDefinition` reflects the change.
+   */
+  const applyDefinition = (definition: InsightsQueryDefinition, question: string) => {
+    const hydrated = sanitizeUrlState(definitionToUrlState(definition), { eventOptions, propertyNames });
+    if (!hydrated) {
+      setAskedQuestion(null);
+      return;
+    }
+
+    userInteractedRef.current = true;
+    setEvents(hydrated.events);
+    setInterval(hydrated.interval);
+    setFilters(hydrated.filters);
+    setShowFilters(hydrated.filters.length > 0);
+    setBreakdownProperty(hydrated.breakdownProperty);
+    setShowBreakdown(Boolean(hydrated.breakdownProperty));
+    setSegmentId(hydrated.segmentId);
+    setShowSegment(Boolean(hydrated.segmentId));
+    if (hydrated.from && hydrated.to) {
+      setRange(hydrated.from, hydrated.to, presetIdForRange(hydrated.from, hydrated.to));
+    }
+    setAskedQuestion(question);
+  };
+
+  // Manual builder edits (feat-17 §3.2): dismiss the "Built from: <question>" note the moment the
+  // user takes the query back over — it only applies to the exact query the model just built.
+  const clearAskedQuestion = () => setAskedQuestion(null);
+
   const addEvent = (name: string) => {
     if (events.length >= MAX_EVENTS || events.some((e) => e.name === name)) return;
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setEvents((current) => [...current, { name, aggregation: 'total' }]);
   };
 
   const updateMeasure = (name: string, aggregation: InsightsAggregation) => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setEvents((current) => current.map((e) => (e.name === name ? { ...e, aggregation } : e)));
   };
 
   const removeEvent = (name: string) => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setEvents((current) => current.filter((e) => e.name !== name));
   };
 
   const revealFilters = () => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setShowFilters(true);
     if (filters.length === 0) {
       setFilters([{ property: propertyNames[0] ?? '', op: 'eq', value: '' }]);
@@ -468,18 +544,21 @@ export function InsightsPage() {
 
   const handleFiltersChange = (next: InsightsFilter[]) => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setFilters(next);
     if (next.length === 0) setShowFilters(false);
   };
 
   const removeBreakdown = () => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setShowBreakdown(false);
     setBreakdownProperty('');
   };
 
   const removeSegment = () => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setShowSegment(false);
     setSegmentId(null);
   };
@@ -510,16 +589,19 @@ export function InsightsPage() {
 
   const setIntervalFromInput = (next: InsightsInterval) => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setInterval(next);
   };
 
   const setBreakdownPropertyFromInput = (next: string) => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setBreakdownProperty(next);
   };
 
   const setSegmentIdFromInput = (next: string | null) => {
     userInteractedRef.current = true;
+    clearAskedQuestion();
     setSegmentId(next);
   };
 
@@ -783,6 +865,15 @@ export function InsightsPage() {
         </>
       }
     >
+      {/* "Ask your data" (feat-17 §3.2): the builder header — submitting hydrates + auto-runs the
+          normal builder below, so the built query stays transparent and fully editable. */}
+      <div className="flex flex-col gap-1.5">
+        <AskBar ref={askInputRef} projectId={projectId} onResult={applyDefinition} />
+        {askedQuestion && (
+          <p className="text-xs text-text-muted">{`Built from: "${askedQuestion}" — edit below.`}</p>
+        )}
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Events</CardTitle>

@@ -148,8 +148,11 @@ const insightsRoute = createRoute({
   // The shareable-analysis-URL `s` param (feat-01): a base64url-encoded builder state, decoded by
   // `useUrlAnalysisState` (see `features/analytics/share-state.ts`). Same explicit-`undefined`
   // pattern as `/login`'s `redirect` param, so an omitted `s` never leaks through from a parent match.
-  validateSearch: (search: Record<string, unknown>): { s?: string } => ({
+  // `ask` (feat-17 §3.2): a one-shot flag set by the command-palette "Ask your data" action so
+  // `InsightsPage` can focus the `AskBar` on arrival; it's stripped from the URL right after.
+  validateSearch: (search: Record<string, unknown>): { s?: string; ask?: boolean } => ({
     s: typeof search.s === 'string' ? search.s : undefined,
+    ask: search.ask === true ? true : undefined,
   }),
   component: InsightsPage,
 });

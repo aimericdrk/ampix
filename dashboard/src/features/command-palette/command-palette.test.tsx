@@ -99,4 +99,23 @@ describe('CommandPalette', () => {
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it('feat-17: "Ask your data" action focuses the AskBar and clears the one-shot `ask` flag', async () => {
+    authState.refreshValid = true;
+    const { router } = renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+
+    await userEvent.keyboard('{Control>}k{/Control}');
+    const input = await screen.findByRole('combobox', {
+      name: /search pages, reports, dashboards/i,
+    });
+    await userEvent.type(input, 'Ask your data');
+    await userEvent.click(await screen.findByRole('option', { name: 'Ask your data' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Ask your data')).toHaveFocus());
+    await waitFor(() =>
+      expect(router.state.location.search).not.toHaveProperty('ask'),
+    );
+  });
 });

@@ -3,6 +3,7 @@ import { phase5Handlers, TEMPLATES_FIXTURE } from './phase5-handlers';
 import type {
   Activate2faResponse,
   AcceptInvitationResponse,
+  AskDataResponse,
   AuthResponse,
   AuthUser,
   CreatedProject,
@@ -270,6 +271,18 @@ export const HISTOGRAM_FIXTURE: HistogramResponse = {
   mean: 6200,
   p50: 5200,
   p90: 12000,
+};
+
+/**
+ * Deterministic "Ask your data" (feat-17) result — a real event/property from META_EVENTS_FIXTURE /
+ * META_PROPERTIES_FIXTURE, so a hydrated builder resolves to real, selectable options.
+ */
+export const ASK_DATA_FIXTURE: InsightsQueryDefinition = {
+  events: [{ name: 'checkout_completed', aggregation: 'unique_users' }],
+  date_range: { from: '2026-06-01', to: '2026-06-30' },
+  interval: 'day',
+  filters: [],
+  breakdown: { property: 'os' },
 };
 
 // --- Advanced analysis fixtures (contracts §15) ---
@@ -1219,6 +1232,20 @@ export const handlers = [
       });
     });
     return HttpResponse.json({ series });
+  }),
+
+  // --- Ask your data (feat-17 §3.2) ---
+
+  http.post('/api/v1/projects/:projectId/query/ask', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as { question?: string };
+    if (!body.question || body.question.trim().length === 0) {
+      return problem(422, 'Could not turn that into a query');
+    }
+    const response: AskDataResponse = { question: body.question, definition: ASK_DATA_FIXTURE };
+    return HttpResponse.json(response);
   }),
 
   http.get('/api/v1/projects/:projectId/metrics/engagement', ({ request }) => {

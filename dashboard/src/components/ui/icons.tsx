@@ -123,6 +123,16 @@ export function IconExpand(props: IconProps) {
   );
 }
 
+/** Sparkle — AI-assisted actions (e.g. "Ask your data"). */
+export function IconSparkle(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+      <path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" />
+    </svg>
+  );
+}
+
 /** Star — favorite toggle. `filled` swaps the outline stroke for a solid fill (favorited state). */
 export function IconStar({ filled, ...props }: IconProps & { filled?: boolean }) {
   return (

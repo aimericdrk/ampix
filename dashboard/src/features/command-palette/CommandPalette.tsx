@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { IconSparkle } from '../../components/ui/icons';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
 import { IconSearch } from '../../components/ui/icons';
 import { useToast } from '../../components/ui/toast';
@@ -44,6 +45,8 @@ interface PaletteItem {
   key: string;
   /** Omitted for actions with no `NavIcon` entry (e.g. "Copy link") — renders {@link IconLink} instead. */
   icon?: IconName;
+  /** Overrides both `icon` and the {@link IconLink} fallback for one-off action glyphs. */
+  customIcon?: ReactNode;
   label: string;
   sublabel?: string;
   onSelect: () => void;
@@ -144,8 +147,8 @@ export function CommandPalette({ projectId }: { projectId: string }) {
   // `to` is assembled dynamically (shared nav-model paths, entity ids) so it can never be a
   // route-literal for TanStack Router's typed `navigate` overloads — this is the one narrow,
   // commented escape hatch for that, same as any dynamic-destination router call would need.
-  const goTo = (to: string, params: Record<string, string>) => {
-    void navigate({ to, params } as unknown as Parameters<typeof navigate>[0]);
+  const goTo = (to: string, params: Record<string, string>, search?: Record<string, unknown>) => {
+    void navigate({ to, params, search } as unknown as Parameters<typeof navigate>[0]);
     close();
   };
 
@@ -289,6 +292,14 @@ export function CommandPalette({ projectId }: { projectId: string }) {
         close();
       },
     },
+    {
+      // "Ask your data" (feat-17 §3.2): navigates to Insights carrying the one-shot `ask` search
+      // flag, which `InsightsPage` reads to focus the `AskBar` on arrival (then strips the flag).
+      key: 'action-ask-data',
+      label: 'Ask your data',
+      customIcon: <IconSparkle size={16} />,
+      onSelect: () => goTo('/projects/$projectId/insights', { projectId }, { ask: true }),
+    },
   ].filter((item) => matchesQuery(item.label, query));
 
   const groups: PaletteGroup[] = [
@@ -400,7 +411,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
                               : 'text-text hover:bg-border/40',
                           )}
                         >
-                          {item.icon ? <NavIcon name={item.icon} /> : <IconLink />}
+                          {item.customIcon ?? (item.icon ? <NavIcon name={item.icon} /> : <IconLink />)}
                           <span className="truncate">{item.label}</span>
                           {item.sublabel && (
                             <span className="ml-auto shrink-0 truncate text-xs text-text-muted">

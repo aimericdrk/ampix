@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, apiFetchBlob } from '../../lib/api/client';
 import type {
+  AskDataResponse,
   ClickHeatmapQuery,
   ClickHeatmapResponse,
   ScreenPathsQuery,
@@ -141,6 +142,21 @@ export function useInsightsQuery(
         body: definition,
       }),
     enabled,
+  });
+}
+
+/**
+ * "Ask your data" (feat-17 §3.2): `POST /query/ask` translates a plain-language question into a
+ * §14 {@link InsightsQueryDefinition} via the backend's Mistral integration. Errors are ProblemDetails
+ * (503 unconfigured, 422/400 invalid model output) — the caller (`AskBar`) maps those to friendly copy.
+ */
+export function useAskData(projectId: string) {
+  return useMutation({
+    mutationFn: (question: string) =>
+      apiFetch<AskDataResponse>(`${base(projectId)}/query/ask`, {
+        method: 'POST',
+        body: { question },
+      }),
   });
 }
 

@@ -466,6 +466,19 @@ export interface MetaPropertyValuesResponse {
   values: string[];
 }
 
+// --- Ask your data (feat-17): natural-language question -> §14 Insights query ---
+
+/** `POST /query/ask` body — a plain-language question, 1..500 chars. */
+export interface AskDataRequest {
+  question: string;
+}
+
+/** `POST /query/ask` response — the model-derived definition, already §14-schema-validated server-side. */
+export interface AskDataResponse {
+  question: string;
+  definition: InsightsQueryDefinition;
+}
+
 // --- Advanced analysis (contracts §15) ---
 // Request/response shapes mirror shared-contracts §15 byte-for-byte (the concurrent backend builds
 // against the same section). Filters/date-range/breakdown reuse the §14 primitives above.

@@ -4,7 +4,12 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import type { CreateTileRequest, InsightsQueryDefinition } from '../../../lib/api/types';
 import { authStore } from '../../auth/store';
-import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
+import {
+  ASK_DATA_FIXTURE,
+  TEST_PROJECT,
+  TEST_USER,
+  VALID_ACCESS_TOKEN,
+} from '../../../test/msw/handlers';
 import { TEST_COHORT_ID, TEST_DASHBOARD_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
@@ -682,6 +687,96 @@ describe('InsightsPage', () => {
       expect(await screen.findByText('Pick a valid range (From on or before To).')).toBeInTheDocument();
       expect(screen.queryByRole('img', { name: 'Insights trend vs. compare range' })).toBeNull();
       expect(screen.getByRole('img', { name: 'Insights line chart' })).toBeInTheDocument();
+    });
+  });
+
+  describe('Ask your data (feat-17)', () => {
+    it('submitting a question hydrates the builder from the returned definition and auto-runs it', async () => {
+      let capturedAskBody: { question?: string } | undefined;
+      let capturedInsightsBody: InsightsQueryDefinition | undefined;
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/ask', async ({ request }) => {
+          capturedAskBody = (await request.json()) as { question?: string };
+          return HttpResponse.json({ question: capturedAskBody.question, definition: ASK_DATA_FIXTURE });
+        }),
+        http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+          capturedInsightsBody = (await request.json()) as InsightsQueryDefinition;
+          return HttpResponse.json({
+            series: [
+              { name: 'checkout_completed', breakdown_value: 'ios', data: [{ t: '2026-06-01', value: 7 }] },
+            ],
+          });
+        }),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+
+      await userEvent.type(screen.getByLabelText('Ask your data'), 'unique checkouts by OS in June');
+      await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+      await waitFor(() => expect(capturedAskBody?.question).toBe('unique checkouts by OS in June'));
+
+      // Hydrated: the Ask-returned event/measure/breakdown replace the default-selected event.
+      expect(await screen.findByLabelText('Measure for checkout_completed')).toHaveValue(
+        'unique_users',
+      );
+      expect(screen.getByLabelText('Group by')).toHaveValue('os');
+
+      // Auto-ran with exactly the definition Ask returned — no manual "Run" needed.
+      await waitFor(() => expect(capturedInsightsBody).toEqual(ASK_DATA_FIXTURE));
+
+      expect(
+        screen.getByText('Built from: "unique checkouts by OS in June" — edit below.'),
+      ).toBeInTheDocument();
+    });
+
+    it('clears the "Built from" note once the user edits the builder by hand', async () => {
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/ask', async ({ request }) => {
+          const body = (await request.json()) as { question?: string };
+          return HttpResponse.json({ question: body.question, definition: ASK_DATA_FIXTURE });
+        }),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+
+      await userEvent.type(screen.getByLabelText('Ask your data'), 'unique checkouts by OS');
+      await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+      await screen.findByText(/^Built from:/);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add event' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'product_viewed' }));
+
+      expect(screen.queryByText(/^Built from:/)).toBeNull();
+    });
+
+    it('shows a friendly message and leaves the builder untouched when the AI query is unconfigured (503)', async () => {
+      server.use(
+        http.post('/api/v1/projects/:projectId/query/ask', () =>
+          HttpResponse.json(
+            { type: 'about:blank', title: 'AI query is not configured', status: 503 },
+            { status: 503 },
+          ),
+        ),
+      );
+
+      signIn();
+      renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+      await screen.findByRole('heading', { name: 'Insights' });
+      await waitForDefaultEvent();
+
+      await userEvent.type(screen.getByLabelText('Ask your data'), 'top events for iOS');
+      await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+      expect(await screen.findByText("AI query isn't set up (no Mistral key)")).toBeInTheDocument();
+      // Unaffected: the default-selected event is still whatever it was before asking.
+      expect(screen.getByLabelText('Measure for checkout_completed')).toBeInTheDocument();
     });
   });
 });
