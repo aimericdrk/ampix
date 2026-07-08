@@ -1,3 +1,5 @@
+import type { InsightsQuery } from './insights-query.schema';
+
 /** POST /query/insights response (contracts §14). */
 export interface InsightsSeriesPoint {
   t: string;
@@ -251,4 +253,12 @@ export interface HistogramResponse {
   mean: number;
   p50: number;
   p90: number;
+}
+
+/** POST /query/ask response (feat-17 §3.1 — "Ask your data"). The model's answer, already
+ *  validated against `insightsQuerySchema`, so the client can run it via `/query/insights` (and
+ *  edit it first — it's never a black box). */
+export interface AskResponse {
+  question: string;
+  definition: InsightsQuery;
 }

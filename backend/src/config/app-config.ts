@@ -95,6 +95,10 @@ const envSchema = z.object({
   // suppressed (app.module maps them to `debug` via customLogLevel) while app logs (info) and
   // 4xx/5xx request logs still surface. Raise to `debug`/`trace` to see successful-request logs.
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  // feat-17 §3.1 — "Ask your data". Both optional: no key means the feature is simply
+  // "unconfigured" (MistralService maps this to a 503, not a boot-time config error).
+  MISTRAL_API_KEY: z.string().optional(),
+  MISTRAL_MODEL: z.string().default('mistral-small-latest'),
 });
 
 export interface AppConfig {
@@ -112,6 +116,11 @@ export interface AppConfig {
   // Optional so pre-existing AppConfig fixtures keep compiling; loadConfig always populates it
   // (to undefined when unset → the in-memory screenshot store fallback kicks in).
   firebaseStorageBucket?: string;
+  // feat-17 §3.1 — "Ask your data" (Mistral). Optional (rather than required) so pre-existing
+  // hand-built AppConfig fixtures outside this task's scope keep compiling without every fixture
+  // needing an update; loadConfig() always populates both (mistralModel via its zod default).
+  mistralApiKey?: string;
+  mistralModel?: string;
   // §20 — pino base log level. Optional (rather than required) so pre-existing hand-built AppConfig
   // fixtures outside this task's scope (e.g. test/integration/clickhouse.int-spec.ts) keep compiling
   // without every fixture needing an update. loadConfig() always populates it (default 'info').
@@ -214,6 +223,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     screenshotMaxKb: v.SCREENSHOT_MAX_KB,
     firebaseStorageBucket: v.FIREBASE_STORAGE_BUCKET,
     logLevel: v.LOG_LEVEL,
+    mistralApiKey: v.MISTRAL_API_KEY,
+    mistralModel: v.MISTRAL_MODEL,
     auth: {
       accessTokenTtl: v.ACCESS_TOKEN_TTL,
       refreshTokenTtl: v.REFRESH_TOKEN_TTL,
@@ -290,6 +301,8 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     INGEST_RATE_LIMIT_PER_MIN: String(config.ingestRateLimitPerMin),
     SCREENSHOT_MAX_KB: String(config.screenshotMaxKb),
     FIREBASE_STORAGE_BUCKET: config.firebaseStorageBucket ?? '(not set — in-memory screenshot store)',
+    MISTRAL_API_KEY: redacted(config.mistralApiKey),
+    MISTRAL_MODEL: config.mistralModel ?? 'mistral-small-latest',
     TOTP_ISSUER: auth.totpIssuer,
     TOTP_ENC_KEY: redacted(auth.totpEncKey),
     ACCESS_TOKEN_TTL: String(auth.accessTokenTtl),

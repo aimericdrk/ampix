@@ -1,4 +1,6 @@
 import type { AuthRequest } from '../auth/auth.types';
+import { AiRequestError, AiUnconfiguredError } from './ai/mistral.service';
+import type { MistralService } from './ai/mistral.service';
 import { AnalyticsController } from './analytics.controller';
 import type { AnalyticsService } from './analytics.service';
 
@@ -20,8 +22,14 @@ function makeController() {
     getSessionsSummary: jest.fn(),
     getRevenueSummary: jest.fn(),
   };
-  const controller = new AnalyticsController(analytics as unknown as AnalyticsService);
-  return { controller, analytics };
+  const mistral = {
+    translateToInsights: jest.fn(),
+  };
+  const controller = new AnalyticsController(
+    analytics as unknown as AnalyticsService,
+    mistral as unknown as MistralService,
+  );
+  return { controller, analytics, mistral };
 }
 
 describe('AnalyticsController', () => {
@@ -328,6 +336,126 @@ describe('AnalyticsController', () => {
         '2026-06-02',
         encoded,
       );
+    });
+  });
+
+  describe('ask (feat-17 §3.1 — "Ask your data")', () => {
+    const validDefinition = {
+      events: [{ name: 'checkout_completed', aggregation: 'total' }],
+      date_range: { from: '2026-06-01', to: '2026-07-01' },
+      interval: 'day',
+      filters: [],
+    };
+
+    function mockMetadata(analytics: ReturnType<typeof makeController>['analytics']) {
+      analytics.listEventNames.mockResolvedValue({ events: ['checkout_completed', 'app_open'] });
+      analytics.listProperties.mockResolvedValue({
+        properties: [
+          { name: 'os', type: 'column' },
+          { name: 'utm_source', type: 'string' },
+        ],
+      });
+    }
+
+    it('gathers event/property metadata as context, translates via Mistral, and returns the validated definition', async () => {
+      const { controller, analytics, mistral } = makeController();
+      mockMetadata(analytics);
+      mistral.translateToInsights.mockResolvedValue(validDefinition);
+
+      const result = await controller.ask(fakeRequest(), 'p1', {
+        question: 'conversions this month',
+      });
+
+      expect(analytics.listEventNames).toHaveBeenCalledWith(USER.id, 'p1');
+      expect(analytics.listProperties).toHaveBeenCalledWith(USER.id, 'p1');
+      expect(mistral.translateToInsights).toHaveBeenCalledWith('conversions this month', {
+        events: ['checkout_completed', 'app_open'],
+        properties: ['os', 'utm_source'],
+      });
+      expect(result).toEqual({ question: 'conversions this month', definition: validDefinition });
+    });
+
+    it('never runs the raw model output through the query engine', async () => {
+      const { controller, analytics, mistral } = makeController();
+      mockMetadata(analytics);
+      mistral.translateToInsights.mockResolvedValue(validDefinition);
+
+      await controller.ask(fakeRequest(), 'p1', { question: 'conversions this month' });
+
+      expect(analytics.runInsightsQuery).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed question body with a 400', async () => {
+      const { controller, analytics, mistral } = makeController();
+      mockMetadata(analytics);
+
+      await expect(controller.ask(fakeRequest(), 'p1', { question: '' })).rejects.toMatchObject({
+        problem: { status: 400 },
+      });
+      await expect(
+        controller.ask(fakeRequest(), 'p1', { question: 'x'.repeat(501) }),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
+      expect(mistral.translateToInsights).not.toHaveBeenCalled();
+    });
+
+    it('maps an unconfigured Mistral service (no API key) to a 503', async () => {
+      const { controller, analytics, mistral } = makeController();
+      mockMetadata(analytics);
+      mistral.translateToInsights.mockRejectedValue(new AiUnconfiguredError());
+
+      await expect(
+        controller.ask(fakeRequest(), 'p1', { question: 'daily active users' }),
+      ).rejects.toMatchObject({
+        problem: { status: 503, title: 'AI query is not configured' },
+      });
+    });
+
+    it('maps a garbage/invalid model output (fails insightsQuerySchema) to a 422', async () => {
+      const { controller, analytics, mistral } = makeController();
+      mockMetadata(analytics);
+      mistral.translateToInsights.mockResolvedValue({ not: 'a valid definition' });
+
+      await expect(
+        controller.ask(fakeRequest(), 'p1', { question: 'daily active users' }),
+      ).rejects.toMatchObject({
+        problem: { status: 422, title: 'Could not turn that into a query' },
+      });
+      expect(analytics.runInsightsQuery).not.toHaveBeenCalled();
+    });
+
+    it('maps non-JSON prose output to a 422 as well', async () => {
+      const { controller, analytics, mistral } = makeController();
+      mockMetadata(analytics);
+      // MistralService itself throws AiRequestError for non-JSON content; simulate the schema
+      // failure path here for a value that parsed as JSON but doesn't match the schema shape.
+      mistral.translateToInsights.mockResolvedValue('just a string, not an object');
+
+      await expect(
+        controller.ask(fakeRequest(), 'p1', { question: 'daily active users' }),
+      ).rejects.toMatchObject({ problem: { status: 422 } });
+    });
+
+    it('propagates a membership/tenancy ProblemException raised while gathering metadata', async () => {
+      const { controller, analytics, mistral } = makeController();
+      analytics.listEventNames.mockRejectedValue(
+        Object.assign(new Error('forbidden'), { problem: { status: 403 } }),
+      );
+      analytics.listProperties.mockResolvedValue({ properties: [] });
+
+      await expect(
+        controller.ask(fakeRequest(), 'p1', { question: 'daily active users' }),
+      ).rejects.toMatchObject({ problem: { status: 403 } });
+      expect(mistral.translateToInsights).not.toHaveBeenCalled();
+    });
+
+    it('maps a Mistral transport failure to a 502', async () => {
+      const { controller, analytics, mistral } = makeController();
+      mockMetadata(analytics);
+      mistral.translateToInsights.mockRejectedValue(new AiRequestError('boom'));
+
+      await expect(
+        controller.ask(fakeRequest(), 'p1', { question: 'daily active users' }),
+      ).rejects.toMatchObject({ problem: { status: 502 } });
     });
   });
 });

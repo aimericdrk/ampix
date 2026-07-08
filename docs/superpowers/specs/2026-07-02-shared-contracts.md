@@ -23,8 +23,8 @@ myampmix/
 
 | Service | Image | Host port | Credentials (local dev only) |
 |---|---|---|---|
-| ClickHouse | `clickhouse/clickhouse-server:24.8` | 8123 (http), 9000 (native) | user `default`, password `myampmix_dev`, db `analytics` |
-| PostgreSQL | `postgres:17-alpine` | 5432 | user `myampmix`, password `myampmix_dev`, db `myampmix` |
+| ClickHouse | `clickhouse/clickhouse-server:24.8` | 8123 (http), 9000 (native) | user `default`, password `myampix_dev`, db `analytics` |
+| PostgreSQL | `postgres:17-alpine` | 5432 | user `myampix`, password `myampix_dev`, db `myampix` |
 | Redis | `redis:7-alpine` | 6379 | no auth locally |
 | Backend (dev) | local `pnpm start:dev` | **8080** | — |
 | Dashboard (dev) | Vite dev server | 5173 | proxies `/api` + `/ingest` → 8080 |
@@ -33,9 +33,9 @@ myampmix/
 
 ```
 NODE_ENV, PORT=8080
-DATABASE_URL=postgresql://myampmix:myampmix_dev@localhost:5432/myampmix
+DATABASE_URL=postgresql://myampix:myampix_dev@localhost:5432/myampix
 CLICKHOUSE_URL=http://localhost:8123
-CLICKHOUSE_USER=default  CLICKHOUSE_PASSWORD=myampmix_dev  CLICKHOUSE_DB=analytics
+CLICKHOUSE_USER=default  CLICKHOUSE_PASSWORD=myampix_dev  CLICKHOUSE_DB=analytics
 REDIS_URL=redis://localhost:6379
 JWT_ACCESS_SECRET, JWT_REFRESH_SECRET (min 32 chars; app refuses to boot without them outside NODE_ENV=test)
 INGEST_MAX_BATCH=100        # events per request
@@ -561,6 +561,9 @@ Mirrors the §14 sessions-summary pattern, off `$in_app_purchase` events' `$pric
 
 ### Optional `filters` param — `/sessions/summary`, `/metrics/revenue`, `/metrics/engagement` (added 2026-07-08, feat-02 §3.4/T2)
 All three metric endpoints above (plus §14's `/sessions/summary`) accept an optional `?filters=<base64url>` query param so the dashboard's app-wide Global Filters Bar can scope the headline KPIs, not just the filter-capable query builders. The value is `base64url(JSON.stringify(filters))` where `filters` is the same §14 `InsightsFilter[]` shape (`{property, op, value?}`, max 20) accepted by `/query/insights`; the server decodes it, validates with the shared `insightsFilterSchema` (malformed base64/JSON/schema → 400), and AND-joins the compiled clauses (`compileFilterClauses` — fully bound, never interpolated) into every underlying query (totals AND the `by_day`/`by_product`/active/stickiness sub-queries), so the whole response is filtered consistently. Absent/empty `filters` → no clause, behavior unchanged. The dashboard's `encodeFiltersParam`/`parseFiltersParam` mirror each other for this encoding.
+
+### POST /query/ask — "Ask your data" (added 2026-07-08, feat-17 §3.1/T1)
+Body: `{ "question": "<free text, 1..500 chars>" }`. Backed by an optional Mistral integration (`MISTRAL_API_KEY` + `MISTRAL_MODEL`, default `mistral-small-latest`, in app-config §3 — no key means the feature is simply "unconfigured", not a boot-time error). Engine: (1) project membership (viewer+, same as every endpoint above); (2) gather the project's metadata via the existing `GET /meta/events`/`GET /meta/properties` machinery (`listEventNames`/`listProperties`) as the model's *only* allowed event/property names; (3) `MistralService.translateToInsights(question, {events, properties})` — a chat-completions call to `https://api.mistral.ai/v1/chat/completions` with `response_format: {type:"json_object"}`, a fixed system prompt describing the exact `InsightsQueryDefinition` shape (§14) + allowed enums + STRICT rules (only real event/property names, resolve relative dates to `YYYY-MM-DD`, output ONLY JSON), and a user message = the question + the metadata lists; 15s timeout; (4) the model's raw JSON output is **never trusted or executed** — it is validated with the exact same `insightsQuerySchema` `/query/insights` uses. → `{ "question", "definition": <validated §14 InsightsQueryDefinition> }`, ready to run via `/query/insights` (and fully editable client-side — never a black box). Errors: no `MISTRAL_API_KEY` → `503 { title: "AI query is not configured" }`; a Mistral transport/timeout failure → `502`; a malformed question (empty/>500 chars) → `400`; a model output that fails schema validation (prose, wrong shape, invalid enum) → `422 { title: "Could not turn that into a query" }` — the query engine is never reached with unvalidated input.
 
 ### Templates (Amplitude-parity, seeded server-side)
 - `GET /api/v1/templates` (auth) → `{ "templates":[ {"id","name","description","kind_counts"} ] }`. Fixed catalog: `acquisition`, `activation-funnel`, `engagement`, `retention`, `revenue`, `product-usage`, `user-paths`. Each is a code-defined bundle of saved-report definitions (§14/§15) + a dashboard layout (§16).
