@@ -53,6 +53,11 @@ export function packLayout(tiles: GridTile[]): {
  * another tile) plus accessible Move earlier/later buttons; sizing is DISCRETE — per-tile
  * column-span and height steppers, never free-form drag-resize (contracts §16, and far less
  * bug-prone). No drag-and-drop dependency is used.
+ *
+ * `readOnly` (feat-16, Presentation/TV mode) hides every edit affordance — drag handle, move,
+ * resize, remove — leaving just the title + tile body; `onReorder`/`onResize`/`onRemove` are
+ * unused in that mode and become optional. `rowHeightPx` lets a bigger surface (the presentation
+ * overlay) render noticeably larger tiles without duplicating the tile-rendering logic.
  */
 export function DashboardGrid({
   tiles,
@@ -61,13 +66,17 @@ export function DashboardGrid({
   onReorder,
   onResize,
   onRemove,
+  readOnly = false,
+  rowHeightPx = ROW_HEIGHT_PX,
 }: {
   tiles: GridTile[];
   results: Map<string, AnalysisResult | { error: string }>;
   loading: boolean;
-  onReorder: (from: number, to: number) => void;
-  onResize: (id: string, size: { w?: number; h?: number }) => void;
-  onRemove: (id: string) => void;
+  onReorder?: (from: number, to: number) => void;
+  onResize?: (id: string, size: { w?: number; h?: number }) => void;
+  onRemove?: (id: string) => void;
+  readOnly?: boolean;
+  rowHeightPx?: number;
 }) {
   const positioned = packLayout(tiles);
   const draggingId = useRef<string | null>(null);
@@ -85,7 +94,7 @@ export function DashboardGrid({
     if (!overId || overId === draggingId.current) return;
     const from = tiles.findIndex((t) => t.id === draggingId.current);
     const to = tiles.findIndex((t) => t.id === overId);
-    if (from >= 0 && to >= 0) onReorder(from, to);
+    if (from >= 0 && to >= 0) onReorder?.(from, to);
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -104,7 +113,7 @@ export function DashboardGrid({
       className="grid gap-4"
       style={{
         gridTemplateColumns: `repeat(${MAX_COLS}, minmax(0, 1fr))`,
-        gridAutoRows: `${ROW_HEIGHT_PX}px`,
+        gridAutoRows: `${rowHeightPx}px`,
         gridAutoFlow: 'row dense',
       }}
     >
@@ -124,92 +133,98 @@ export function DashboardGrid({
             }}
           >
             <header className="flex flex-wrap items-center gap-1 border-b border-border p-2">
-              <button
-                type="button"
-                aria-label={`Reorder ${tile.title}`}
-                onPointerDown={(e) => handlePointerDown(e, tile.id)}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                className="cursor-grab rounded px-1 text-text-muted hover:bg-border/40"
-                title="Drag to reorder"
-              >
-                ⠿
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  aria-label={`Reorder ${tile.title}`}
+                  onPointerDown={(e) => handlePointerDown(e, tile.id)}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  className="cursor-grab rounded px-1 text-text-muted hover:bg-border/40"
+                  title="Drag to reorder"
+                >
+                  ⠿
+                </button>
+              )}
               <span className="flex-1 truncate text-sm font-medium">{tile.title}</span>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Move ${tile.title} earlier`}
-                disabled={index === 0}
-                onClick={() => onReorder(index, index - 1)}
-              >
-                ←
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Move ${tile.title} later`}
-                disabled={index === tiles.length - 1}
-                onClick={() => onReorder(index, index + 1)}
-              >
-                →
-              </Button>
+              {!readOnly && (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Move ${tile.title} earlier`}
+                    disabled={index === 0}
+                    onClick={() => onReorder?.(index, index - 1)}
+                  >
+                    ←
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Move ${tile.title} later`}
+                    disabled={index === tiles.length - 1}
+                    onClick={() => onReorder?.(index, index + 1)}
+                  >
+                    →
+                  </Button>
 
-              <span className="ml-1 text-xs tabular-nums text-text-muted" aria-hidden="true">
-                {tile.w}×{tile.h}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Decrease width of ${tile.title}`}
-                disabled={tile.w <= MIN_SPAN}
-                onClick={() => onResize(tile.id, { w: clamp(tile.w - 1, MIN_SPAN, MAX_COLS) })}
-              >
-                W−
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Increase width of ${tile.title}`}
-                disabled={tile.w >= MAX_COLS}
-                onClick={() => onResize(tile.id, { w: clamp(tile.w + 1, MIN_SPAN, MAX_COLS) })}
-              >
-                W+
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Decrease height of ${tile.title}`}
-                disabled={tile.h <= MIN_SPAN}
-                onClick={() => onResize(tile.id, { h: clamp(tile.h - 1, MIN_SPAN, MAX_ROWS) })}
-              >
-                H−
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Increase height of ${tile.title}`}
-                disabled={tile.h >= MAX_ROWS}
-                onClick={() => onResize(tile.id, { h: clamp(tile.h + 1, MIN_SPAN, MAX_ROWS) })}
-              >
-                H+
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Remove ${tile.title}`}
-                onClick={() => onRemove(tile.id)}
-              >
-                Remove
-              </Button>
+                  <span className="ml-1 text-xs tabular-nums text-text-muted" aria-hidden="true">
+                    {tile.w}×{tile.h}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Decrease width of ${tile.title}`}
+                    disabled={tile.w <= MIN_SPAN}
+                    onClick={() => onResize?.(tile.id, { w: clamp(tile.w - 1, MIN_SPAN, MAX_COLS) })}
+                  >
+                    W−
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Increase width of ${tile.title}`}
+                    disabled={tile.w >= MAX_COLS}
+                    onClick={() => onResize?.(tile.id, { w: clamp(tile.w + 1, MIN_SPAN, MAX_COLS) })}
+                  >
+                    W+
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Decrease height of ${tile.title}`}
+                    disabled={tile.h <= MIN_SPAN}
+                    onClick={() => onResize?.(tile.id, { h: clamp(tile.h - 1, MIN_SPAN, MAX_ROWS) })}
+                  >
+                    H−
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Increase height of ${tile.title}`}
+                    disabled={tile.h >= MAX_ROWS}
+                    onClick={() => onResize?.(tile.id, { h: clamp(tile.h + 1, MIN_SPAN, MAX_ROWS) })}
+                  >
+                    H+
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Remove ${tile.title}`}
+                    onClick={() => onRemove?.(tile.id)}
+                  >
+                    Remove
+                  </Button>
+                </>
+              )}
             </header>
 
             <div className="min-h-0 flex-1 overflow-auto p-3">

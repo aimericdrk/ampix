@@ -1,5 +1,5 @@
 import { useParams } from '@tanstack/react-router';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -21,6 +21,7 @@ import {
   useSaveLayout,
 } from '../api';
 import { DashboardGrid, packLayout, type GridTile } from './DashboardGrid';
+import { PresentationMode } from './PresentationMode';
 import { PageShell } from '../../../components/layout/PageShell';
 import { useRecents } from '../../favorites/recents';
 
@@ -41,6 +42,8 @@ export function DashboardViewPage() {
 
   const [layout, setLayout] = useState<GridTile[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [isPresenting, setIsPresenting] = useState(false);
+  const presentTriggerRef = useRef<HTMLButtonElement>(null);
 
   const dashboardName = dashboard.data?.name;
   // Record this visit in Recents (feat-13 §3) once the dashboard's name is known.
@@ -136,6 +139,15 @@ export function DashboardViewPage() {
       ]}
       actions={
         <>
+          {dashboard.data && (
+            <Button
+              ref={presentTriggerRef}
+              variant="secondary"
+              onClick={() => setIsPresenting(true)}
+            >
+              Present
+            </Button>
+          )}
           <AddTileDialog projectId={projectId} dashboardId={dashboardId} layout={layout} />
           <Button onClick={handleSaveLayout} disabled={!dirty || saveLayout.isPending}>
             {saveLayout.isPending ? 'Saving…' : 'Save layout'}
@@ -160,6 +172,18 @@ export function DashboardViewPage() {
           onReorder={handleReorder}
           onResize={handleResize}
           onRemove={handleRemove}
+        />
+      )}
+
+      {isPresenting && dashboard.data && (
+        <PresentationMode
+          dashboardName={dashboard.data.name}
+          tiles={layout}
+          results={results}
+          loading={data.isPending}
+          onRefresh={() => void data.refetch()}
+          onClose={() => setIsPresenting(false)}
+          restoreFocusRef={presentTriggerRef}
         />
       )}
     </PageShell>
