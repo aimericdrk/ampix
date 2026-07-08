@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/config.dart';
+import 'package:myampix_analytics/src/config.dart';
 
 import 'helpers/fake_clock.dart';
 
 void main() {
   test('config defaults match the design spec', () {
-    const config = MyAmpMixConfig(serverUrl: 'http://localhost:8080');
+    const config = MyAmpixConfig(serverUrl: 'http://localhost:8080');
     expect(config.serverUrl, 'http://localhost:8080');
     expect(config.flushAt, 20);
     expect(config.flushInterval, const Duration(seconds: 10));
@@ -18,7 +18,7 @@ void main() {
     expect(config.autocapturePurchases, isTrue);
     expect(config.autocaptureAttribution, isTrue);
     expect(config.autocaptureScreenshots, isFalse);
-    expect(config.screenshotSettleDelay, const Duration(seconds: 1));
+    expect(config.screenshotSettleDelay, const Duration(seconds: 2));
   });
 
   test('fake clock advances deterministically', () {

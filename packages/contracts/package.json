@@ -1,8 +1,8 @@
 {
-  "name": "@myampmix/contracts",
+  "name": "@myampix/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared Zod schemas and TypeScript types for MyAmpMix (ingest payloads, query definitions, API DTOs)",
+  "description": "Shared Zod schemas and TypeScript types for MyAmpix (ingest payloads, query definitions, API DTOs)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

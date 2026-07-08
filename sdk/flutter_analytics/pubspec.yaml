@@ -1,5 +1,5 @@
-name: myampmix_analytics
-description: MyAmpMix Flutter analytics SDK — offline-first event tracking for the self-hosted MyAmpMix platform.
+name: myampix_analytics
+description: MyAmpix Flutter analytics SDK — offline-first event tracking for the self-hosted MyAmpix platform.
 version: 0.1.0
 publish_to: none
 
@@ -35,13 +35,13 @@ dev_dependencies:
 # This package is a Flutter plugin: it ships native platform code (iOS
 # StoreKit / Android Play Billing) that autocaptures the app's own
 # in-app-purchase transactions and forwards them to the Dart side over the
-# `myampmix_analytics/purchases` channel (see lib/src/autocapture/
+# `myampix_analytics/purchases` channel (see lib/src/autocapture/
 # purchase_autocapture.dart). The existing pure-Dart public API is unchanged.
 flutter:
   plugin:
     platforms:
       android:
-        package: com.myampmix.analytics
-        pluginClass: MyampmixAnalyticsPlugin
+        package: com.myampix.analytics
+        pluginClass: MyampixAnalyticsPlugin
       ios:
-        pluginClass: MyampmixAnalyticsPlugin
+        pluginClass: MyampixAnalyticsPlugin

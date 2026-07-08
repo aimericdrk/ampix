@@ -45,11 +45,11 @@ docker compose -f infra/docker-compose.yml up -d --wait
 
 # 3. schema
 info "applying database migrations…"
-pnpm --filter @myampmix/backend exec prisma migrate deploy
+pnpm --filter @myampix/backend exec prisma migrate deploy
 
 # 4. build + boot the real backend
 info "building backend…"
-pnpm --filter @myampmix/backend build
+pnpm --filter @myampix/backend build
 
 info "starting backend (http://localhost:8080)…"
 : >"$BACKEND_LOG"

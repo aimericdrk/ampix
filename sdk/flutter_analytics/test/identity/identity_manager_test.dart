@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/identity/identity_manager.dart';
+import 'package:myampix_analytics/src/identity/identity_manager.dart';
 
 import '../helpers/in_memory_key_value_store.dart';
 

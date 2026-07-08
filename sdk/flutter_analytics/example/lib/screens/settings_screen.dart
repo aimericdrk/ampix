@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 import '../state/event_log.dart';
 
@@ -20,16 +20,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _toggleOptOut(bool optedOut) {
     setState(() => _optedOut = optedOut);
     if (optedOut) {
-      MyAmpMix.instance.optOutTracking();
+      MyAmpix.instance.optOutTracking();
       EventLog.instance.log('optOutTracking()');
     } else {
-      MyAmpMix.instance.optInTracking();
+      MyAmpix.instance.optInTracking();
       EventLog.instance.log('optInTracking()');
     }
   }
 
   void _flushNow() {
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     EventLog.instance.log('flush()');
     ScaffoldMessenger.of(
       context,

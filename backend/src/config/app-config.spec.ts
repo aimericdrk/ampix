@@ -4,10 +4,10 @@ const validTotpEncKey = '9d3383ee2d0de7feb67f8e677e9c6e676b217df5aeff883d1378378
 
 const validEnv: NodeJS.ProcessEnv = {
   NODE_ENV: 'production',
-  DATABASE_URL: 'postgresql://myampmix:myampmix_dev@localhost:5432/myampmix',
+  DATABASE_URL: 'postgresql://myampix:myampix_dev@localhost:5432/myampix',
   CLICKHOUSE_URL: 'http://localhost:8123',
   CLICKHOUSE_USER: 'default',
-  CLICKHOUSE_PASSWORD: 'myampmix_dev',
+  CLICKHOUSE_PASSWORD: 'myampix_dev',
   CLICKHOUSE_DB: 'analytics',
   REDIS_URL: 'redis://localhost:6379',
   JWT_ACCESS_SECRET: 'a'.repeat(32),
@@ -33,7 +33,7 @@ describe('loadConfig', () => {
     expect(config.clickhouse).toEqual({
       url: 'http://localhost:8123',
       user: 'default',
-      password: 'myampmix_dev',
+      password: 'myampix_dev',
       database: 'analytics',
     });
   });
@@ -192,7 +192,7 @@ describe('loadConfig', () => {
         accessTokenTtl: 900,
         refreshTokenTtl: 2_592_000,
         mfaTokenTtl: 300,
-        totpIssuer: 'MyAmpMix',
+        totpIssuer: 'MyAmpix',
         totpEncKey: validTotpEncKey,
         // validEnv sets this explicitly (NODE_ENV=production requires it) — see the dedicated
         // "defaults to false outside production" test below for the actual default-value behavior.
@@ -211,12 +211,12 @@ describe('loadConfig', () => {
       const config = loadConfig({
         ...validEnv,
         COOKIE_SECURE: 'true',
-        COOKIE_DOMAIN: '.myampmix.com',
+        COOKIE_DOMAIN: '.myampix.com',
       });
       // loadConfig always populates `auth`; non-null assertion reflects that guarantee (the
       // type is optional only to avoid breaking AppConfig fixtures outside this task's scope).
       expect(config.auth!.cookieSecure).toBe(true);
-      expect(config.auth!.cookieDomain).toBe('.myampmix.com');
+      expect(config.auth!.cookieDomain).toBe('.myampix.com');
     });
 
     it('overrides TTLs and issuer when explicitly set', () => {
@@ -274,7 +274,7 @@ describe('loadConfig', () => {
       expect(serialized).not.toContain(validTotpEncKey);
       expect(serialized).not.toContain(validEnv.DATABASE_URL as string);
       // The password embedded in DATABASE_URL specifically must not leak either.
-      expect(serialized).not.toContain('myampmix_dev');
+      expect(serialized).not.toContain('myampix_dev');
 
       // Secrets are marked set/MISSING, never left out silently.
       expect(description.JWT_ACCESS_SECRET).toBe('set');
@@ -289,7 +289,7 @@ describe('loadConfig', () => {
       expect(description.CLICKHOUSE_URL).toBe('http://localhost:8123');
       expect(description.CLICKHOUSE_DB).toBe('analytics');
       expect(description.DATABASE_HOST).toBe('localhost:5432');
-      expect(description.DATABASE_NAME).toBe('myampmix');
+      expect(description.DATABASE_NAME).toBe('myampix');
     });
 
     it('reports MISSING for secrets that were never set (test env)', () => {

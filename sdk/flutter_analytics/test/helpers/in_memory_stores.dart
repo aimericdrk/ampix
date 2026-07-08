@@ -1,7 +1,7 @@
-import 'package:myampmix_analytics/src/model/event.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
-import 'package:myampmix_analytics/src/storage/profile_op_store.dart';
+import 'package:myampix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/storage/profile_op_store.dart';
 
 class InMemoryEventStore implements EventStore {
   final List<StoredEvent> rows = [];

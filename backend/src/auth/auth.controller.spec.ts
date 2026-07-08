@@ -40,7 +40,7 @@ describe('AuthController', () => {
     const refreshTokens = { rotate: jest.fn(), revoke: jest.fn() };
     const totp = {
       generateSecret: jest.fn().mockReturnValue('SECRETBASE32'),
-      keyUri: jest.fn().mockReturnValue('otpauth://totp/MyAmpMix:a@b.com?secret=SECRETBASE32'),
+      keyUri: jest.fn().mockReturnValue('otpauth://totp/MyAmpix:a@b.com?secret=SECRETBASE32'),
       qrDataUrl: jest.fn().mockResolvedValue('data:image/png;base64,xyz'),
       storePending: jest.fn(),
       getPending: jest.fn(),
@@ -271,7 +271,7 @@ describe('AuthController', () => {
 
       expect(totp.storePending).toHaveBeenCalledWith(USER.id, 'SECRETBASE32');
       expect(body).toEqual({
-        otpauth_url: 'otpauth://totp/MyAmpMix:a@b.com?secret=SECRETBASE32',
+        otpauth_url: 'otpauth://totp/MyAmpix:a@b.com?secret=SECRETBASE32',
         secret: 'SECRETBASE32',
         qr_data_url: 'data:image/png;base64,xyz',
       });

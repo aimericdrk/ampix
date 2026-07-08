@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/autocapture/purchase_autocapture.dart';
-import 'package:myampmix_analytics/src/model/event.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/autocapture/purchase_autocapture.dart';
+import 'package:myampix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';
@@ -22,9 +22,9 @@ class _Emitted {
 
 /// Shape of the map the native plugin code (iOS StoreKit observer / Android
 /// Play Billing `PurchasesUpdatedListener`) forwards over the
-/// `myampmix_analytics/purchases` channel.
+/// `myampix_analytics/purchases` channel.
 Map<String, Object?> _nativePayload({
-  Object? productId = 'com.myampmix.pro_month',
+  Object? productId = 'com.myampix.pro_month',
   Object? price = 9.99,
   Object? currency = 'USD',
   Object? quantity = 1,
@@ -71,7 +71,7 @@ void main() {
       expect(emitted, hasLength(1));
       final event = emitted.single;
       expect(event.event, r'$in_app_purchase');
-      expect(event.properties[r'$product_id'], 'com.myampmix.pro_month');
+      expect(event.properties[r'$product_id'], 'com.myampix.pro_month');
       expect(event.properties[r'$price'], 9.99);
       expect(event.properties[r'$currency'], 'USD');
       expect(event.properties[r'$quantity'], 1);
@@ -184,13 +184,13 @@ void main() {
     });
 
     tearDown(() async {
-      await MyAmpMix.shutdownForTesting();
+      await MyAmpix.shutdownForTesting();
       await purchaseController.close();
     });
 
-    Future<void> initSdk({required bool autocapturePurchases}) => MyAmpMix.init(
+    Future<void> initSdk({required bool autocapturePurchases}) => MyAmpix.init(
       'mam_0123456789abcdef0123456789abcdef',
-      config: MyAmpMixConfig(
+      config: MyAmpixConfig(
         serverUrl: 'http://localhost:8080',
         autocapturePurchases: autocapturePurchases,
       ),
@@ -205,7 +205,7 @@ void main() {
     );
 
     // Asserts against the injected local queue directly, exactly like
-    // myampmix_observer_test.dart's facade-wired group: no real network
+    // myampix_observer_test.dart's facade-wired group: no real network
     // flush to wait on, just the in-memory drift store after the facade's
     // guard chain has drained.
     Future<List<AnalyticsEvent>> queuedEvents() async => [
@@ -213,14 +213,14 @@ void main() {
     ];
 
     test(r'autocapturePurchases: true delivers a full-context $in_app_purchase '
-        'to the local queue via MyAmpMix.instance.track', () async {
+        'to the local queue via MyAmpix.instance.track', () async {
       await initSdk(autocapturePurchases: true);
       purchaseController.add(_nativePayload());
       await pumpEventQueue();
 
       final events = await queuedEvents();
       final purchase = events.firstWhere((e) => e.event == r'$in_app_purchase');
-      expect(purchase.properties[r'$product_id'], 'com.myampmix.pro_month');
+      expect(purchase.properties[r'$product_id'], 'com.myampix.pro_month');
       expect(purchase.properties[r'$price'], 9.99);
       expect(purchase.properties[r'$currency'], 'USD');
       expect(purchase.properties[r'$quantity'], 1);
@@ -249,12 +249,12 @@ void main() {
 
     test(r'opted-out $in_app_purchase is dropped by the pipeline', () async {
       await initSdk(autocapturePurchases: true);
-      MyAmpMix.instance.optOutTracking();
+      MyAmpix.instance.optOutTracking();
       purchaseController.add(_nativePayload());
       await pumpEventQueue();
 
-      MyAmpMix.instance.optInTracking();
-      MyAmpMix.instance.track('after_opt_in');
+      MyAmpix.instance.optInTracking();
+      MyAmpix.instance.track('after_opt_in');
       await pumpEventQueue();
 
       final events = await queuedEvents();
@@ -267,7 +267,7 @@ void main() {
       r'purchase: automatic events are $-prefixed, manual ones are not',
       () async {
         await initSdk(autocapturePurchases: true);
-        MyAmpMix.instance.track('purchase', properties: {'value': 9.99});
+        MyAmpix.instance.track('purchase', properties: {'value': 9.99});
         purchaseController.add(_nativePayload());
         await pumpEventQueue();
 
@@ -288,7 +288,7 @@ void main() {
         'is dropped, while an unrelated track() still goes through', () async {
       await initSdk(autocapturePurchases: true);
       purchaseController.add({'unexpected': 'shape'});
-      MyAmpMix.instance.track('after_malformed');
+      MyAmpix.instance.track('after_malformed');
       await pumpEventQueue();
 
       final events = await queuedEvents();

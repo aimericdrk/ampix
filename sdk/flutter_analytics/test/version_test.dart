@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 void main() {
   test('sdk version constant matches pubspec', () {

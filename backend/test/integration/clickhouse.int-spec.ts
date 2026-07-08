@@ -15,7 +15,7 @@ function makeConfig(url: string): AppConfig {
     nodeEnv: 'test',
     port: 8080,
     databaseUrl: 'postgresql://unused',
-    clickhouse: { url, user: 'default', password: 'myampmix_dev', database: 'analytics' },
+    clickhouse: { url, user: 'default', password: 'myampix_dev', database: 'analytics' },
     redisUrl: 'redis://unused',
     jwtAccessSecret: undefined,
     jwtRefreshSecret: undefined,
@@ -73,7 +73,7 @@ describe('ClickHouseService (integration)', () => {
     admin = createClient({
       url: started.url,
       username: 'default',
-      password: 'myampmix_dev',
+      password: 'myampix_dev',
       database: 'analytics',
     });
     await applyClickHouseSchema(admin);

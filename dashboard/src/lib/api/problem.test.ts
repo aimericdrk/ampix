@@ -13,7 +13,7 @@ describe('problemFromResponse', () => {
     const problem = await problemFromResponse(
       jsonResponse(
         {
-          type: 'https://myampmix.dev/problems/validation',
+          type: 'https://myampix.dev/problems/validation',
           title: 'Validation failed',
           status: 400,
           detail: 'Two fields are invalid.',
@@ -23,7 +23,7 @@ describe('problemFromResponse', () => {
       ),
     );
     expect(problem).toEqual({
-      type: 'https://myampmix.dev/problems/validation',
+      type: 'https://myampix.dev/problems/validation',
       title: 'Validation failed',
       status: 400,
       detail: 'Two fields are invalid.',

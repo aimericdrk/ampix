@@ -5,7 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
-import 'myampmix_privacy.dart';
+import 'myampix_privacy.dart';
 import 'screenshot_boundary_key.dart';
 
 /// Longest-side cap for an uploaded screenshot (shared-contracts §18).
@@ -45,7 +45,7 @@ abstract interface class ScreenshotCapturer {
 
 /// Production [ScreenshotCapturer]: renders a root `RenderRepaintBoundary`
 /// (`toImage`), downscales to ≤ [kMaxScreenshotEdge] on the longest side by
-/// choosing the capture `pixelRatio`, blacks out any mounted [MyAmpMixPrivacy]
+/// choosing the capture `pixelRatio`, blacks out any mounted [MyAmpixPrivacy]
 /// regions, then encodes JPEG q≈70 (shared-contracts §18).
 ///
 /// This path needs a live widget tree + engine and is therefore NOT unit
@@ -55,11 +55,11 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
   RepaintBoundaryScreenshotCapturer({
     GlobalKey? boundaryKey,
     Duration maxSettle = const Duration(milliseconds: 2500),
-  }) : _boundaryKey = boundaryKey ?? myAmpMixScreenshotBoundaryKey,
+  }) : _boundaryKey = boundaryKey ?? myampixScreenshotBoundaryKey,
        _maxSettle = maxSettle;
 
   /// Key of the full-screen `RepaintBoundary` to capture. Defaults to
-  /// [myAmpMixScreenshotBoundaryKey], the boundary [MyAmpMixTracker] wraps
+  /// [myampixScreenshotBoundaryKey], the boundary [MyAmpixTracker] wraps
   /// around the app subtree — so when the tracker is mounted this resolves to
   /// the whole screen. When that key isn't mounted, `_resolveBoundary` falls
   /// back to the LARGEST `RenderRepaintBoundary` on screen (the full-screen
@@ -178,11 +178,11 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
     return best;
   }
 
-  /// Paints a solid black rectangle over every mounted [MyAmpMixPrivacy]
+  /// Paints a solid black rectangle over every mounted [MyAmpixPrivacy]
   /// region so PII the developer wrapped never reaches the uploaded image.
   void _applyPrivacyMasks(img.Image image, double pixelRatio) {
     final black = img.ColorRgb8(0, 0, 0);
-    for (final rect in MyAmpMixPrivacyRegistry.globalRects()) {
+    for (final rect in MyAmpixPrivacyRegistry.globalRects()) {
       try {
         final x0 = (rect.left * pixelRatio).floor().clamp(0, image.width - 1);
         final y0 = (rect.top * pixelRatio).floor().clamp(0, image.height - 1);

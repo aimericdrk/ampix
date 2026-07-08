@@ -1,4 +1,4 @@
-/** RFC 7807 problem details — the error shape of every MyAmpMix API response (contracts §7). */
+/** RFC 7807 problem details — the error shape of every MyAmpix API response (contracts §7). */
 export interface ApiProblem {
   type: string;
   title: string;

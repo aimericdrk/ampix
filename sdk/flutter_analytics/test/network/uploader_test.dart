@@ -5,9 +5,9 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
-import 'package:myampmix_analytics/src/network/uploader.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/network/uploader.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/builders.dart';
 import '../helpers/fake_clock.dart';

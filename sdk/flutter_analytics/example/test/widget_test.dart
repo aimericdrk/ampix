@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics_example/demo_config.dart';
-import 'package:myampmix_analytics_example/main.dart';
-import 'package:myampmix_analytics_example/state/cart_state.dart';
-import 'package:myampmix_analytics_example/state/event_log.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics_example/demo_config.dart';
+import 'package:myampix_analytics_example/main.dart';
+import 'package:myampix_analytics_example/state/cart_state.dart';
+import 'package:myampix_analytics_example/state/event_log.dart';
 
 /// Advances the widget tree by a fixed, bounded number of frames instead of
 /// `pumpAndSettle()`. Under `flutter test` the SDK's platform plugins
@@ -21,14 +21,14 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   tearDown(() async {
-    await MyAmpMix.shutdownForTesting();
+    await MyAmpix.shutdownForTesting();
     CartState.instance.clear();
     EventLog.instance.clear();
   });
 
   testWidgets('tapping Add to cart tracks add_to_cart and updates the '
       'on-screen event log', (tester) async {
-    // Harmless config. MyAmpMix.init never throws into the host app even
+    // Harmless config. MyAmpix.init never throws into the host app even
     // when its platform plugins are missing under `flutter test` — it just
     // leaves the SDK disabled and every facade call becomes a logged no-op.
     //
@@ -43,9 +43,9 @@ void main() {
     // app-side bookkeeping, independent of whether the SDK is enabled, so
     // the assertions below hold either way.
     await tester.runAsync(
-      () => MyAmpMix.init(
+      () => MyAmpix.init(
         demoToken,
-        config: const MyAmpMixConfig(serverUrl: demoServerUrl),
+        config: const MyAmpixConfig(serverUrl: demoServerUrl),
       ).timeout(const Duration(seconds: 3), onTimeout: () {}),
     );
 

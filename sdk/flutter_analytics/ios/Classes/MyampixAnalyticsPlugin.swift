@@ -2,11 +2,11 @@ import Flutter
 import StoreKit
 import UIKit
 
-/// MyAmpMix native store-purchase autocapture (iOS half).
+/// MyAmpix native store-purchase autocapture (iOS half).
 ///
 /// Registers an `SKPaymentTransactionObserver` on the shared, process-wide
 /// `SKPaymentQueue` and forwards `.purchased`/`.restored` transactions to
-/// Dart over the `myampmix_analytics/purchases` `EventChannel`. Consumed by
+/// Dart over the `myampix_analytics/purchases` `EventChannel`. Consumed by
 /// `lib/src/autocapture/purchase_autocapture.dart`, which re-emits them
 /// through the Dart facade as the reserved `$in_app_purchase` event.
 ///
@@ -24,9 +24,9 @@ import UIKit
 ///
 /// Kept deliberately defensive: every callback is wrapped so a StoreKit
 /// failure or unexpected transaction shape never crashes the host app.
-public class MyampmixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransactionObserver, SKProductsRequestDelegate, FlutterStreamHandler {
-  private static let channelName = "myampmix_analytics/purchases"
-  private static let attributionChannelName = "myampmix_analytics/attribution"
+public class MyampixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransactionObserver, SKProductsRequestDelegate, FlutterStreamHandler {
+  private static let channelName = "myampix_analytics/purchases"
+  private static let attributionChannelName = "myampix_analytics/attribution"
 
   private var eventSink: FlutterEventSink?
 
@@ -45,7 +45,7 @@ public class MyampmixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransact
   private var productIdsByRequest: [ObjectIdentifier: [String]] = [:]
 
   public static func register(with registrar: FlutterPluginRegistrar) {
-    let instance = MyampmixAnalyticsPlugin()
+    let instance = MyampixAnalyticsPlugin()
     let eventChannel = FlutterEventChannel(
       name: channelName,
       binaryMessenger: registrar.messenger()
@@ -58,18 +58,18 @@ public class MyampmixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransact
 
     // Marketing-attribution channel — iOS HAS NO INSTALL-REFERRER EQUIVALENT.
     // Unlike Android's Google Play `InstallReferrerClient` (see
-    // MyampmixAnalyticsPlugin.kt), Apple exposes no API for a generic
+    // MyampixAnalyticsPlugin.kt), Apple exposes no API for a generic
     // install-attribution string (SKAdNetwork is a privacy-preserving,
     // postback-only mechanism, not a utm_* referrer). So this half registers
-    // the `myampmix_analytics/attribution` channel purely to keep the Dart
+    // the `myampix_analytics/attribution` channel purely to keep the Dart
     // `EventChannel` well-formed, and NEVER emits: iOS attribution is
-    // deep-link-only via `MyAmpMix.trackDeepLink`. This mirrors the honest
+    // deep-link-only via `MyAmpix.trackDeepLink`. This mirrors the honest
     // Play-Billing caveat documented on the purchase channel above.
     let attributionChannel = FlutterEventChannel(
       name: attributionChannelName,
       binaryMessenger: registrar.messenger()
     )
-    attributionChannel.setStreamHandler(MyampmixAttributionNoopStreamHandler())
+    attributionChannel.setStreamHandler(MyampixAttributionNoopStreamHandler())
   }
 
   deinit {
@@ -164,12 +164,12 @@ public class MyampmixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransact
   }
 }
 
-/// No-op stream handler for the `myampmix_analytics/attribution` channel on
+/// No-op stream handler for the `myampix_analytics/attribution` channel on
 /// iOS. iOS has no install-referrer equivalent, so this handler accepts the
 /// Dart listener and never emits — iOS marketing attribution is deep-link
-/// only via `MyAmpMix.trackDeepLink`. See the caveat in
-/// `MyampmixAnalyticsPlugin.register`.
-private class MyampmixAttributionNoopStreamHandler: NSObject, FlutterStreamHandler {
+/// only via `MyAmpix.trackDeepLink`. See the caveat in
+/// `MyampixAnalyticsPlugin.register`.
+private class MyampixAttributionNoopStreamHandler: NSObject, FlutterStreamHandler {
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     // Intentionally emits nothing.
     return nil

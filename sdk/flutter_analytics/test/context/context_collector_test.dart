@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/context/context_collector.dart';
-import 'package:myampmix_analytics/src/version.dart';
+import 'package:myampix_analytics/src/context/context_collector.dart';
+import 'package:myampix_analytics/src/version.dart';
 
 import '../helpers/fake_context_data_source.dart';
 

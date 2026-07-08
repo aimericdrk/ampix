@@ -38,7 +38,7 @@ export async function startClickHouseContainer(): Promise<StartedService<Started
   const container = await new GenericContainer('clickhouse/clickhouse-server:24.8')
     .withEnvironment({
       CLICKHOUSE_USER: 'default',
-      CLICKHOUSE_PASSWORD: 'myampmix_dev',
+      CLICKHOUSE_PASSWORD: 'myampix_dev',
       CLICKHOUSE_DB: 'analytics',
     })
     .withExposedPorts(8123)

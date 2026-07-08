@@ -38,7 +38,7 @@ const bucket = getStorage(app).bucket(bucketName);
 
 const path = `screens/_diagnostic/hello.txt`;
 console.log(`\nUploading test object gs://${bucketName}/${path} …`);
-await bucket.file(path).save(Buffer.from('myampmix firebase storage check'), {
+await bucket.file(path).save(Buffer.from('myampix firebase storage check'), {
   contentType: 'text/plain',
   resumable: false,
 });

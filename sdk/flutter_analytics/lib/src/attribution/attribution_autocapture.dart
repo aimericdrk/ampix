@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Channel MyAmpMix's native plugin code forwards install-attribution data
+/// Channel MyAmpix's native plugin code forwards install-attribution data
 /// over. On Android the plugin
-/// (`android/.../MyampmixAnalyticsPlugin.kt`) fetches the Google Play
+/// (`android/.../MyampixAnalyticsPlugin.kt`) fetches the Google Play
 /// **install referrer** once on first launch and posts its raw
 /// URL-query-encoded string to this `EventChannel`. **iOS has no
-/// install-referrer equivalent** (`ios/Classes/MyampmixAnalyticsPlugin.swift`
+/// install-referrer equivalent** (`ios/Classes/MyampixAnalyticsPlugin.swift`
 /// registers this channel as a documented no-op), so iOS attribution is
-/// deep-link-only via `MyAmpMix.trackDeepLink`.
-const String attributionChannelName = 'myampmix_analytics/attribution';
+/// deep-link-only via `MyAmpix.trackDeepLink`.
+const String attributionChannelName = 'myampix_analytics/attribution';
 
 /// Called with the raw install-referrer string once native forwards it.
 typedef ReferrerHandler = void Function(String referrer);
@@ -21,7 +21,7 @@ typedef ReferrerHandler = void Function(String referrer);
 /// shared-contracts §4).
 ///
 /// Mirrors [PurchaseAutocapture] exactly: it is the one attribution path that
-/// opens a real platform channel, so `MyAmpMix.init()` only ever constructs
+/// opens a real platform channel, so `MyAmpix.init()` only ever constructs
 /// and [start]s it when `config.autocaptureAttribution` is true — an
 /// unconditional real-channel subscription DEADLOCKS host-app + our own
 /// `testWidgets` fake-async. Tests inject a fake [attributionStream] via

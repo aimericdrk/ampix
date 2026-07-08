@@ -1,4 +1,4 @@
--- MyAmpMix ClickHouse schema.
+-- MyAmpix ClickHouse schema.
 -- Source of truth: docs/superpowers/specs/2026-07-02-shared-contracts.md §5.
 -- Runs once on first container start via /docker-entrypoint-initdb.d/.
 -- Idempotent (IF NOT EXISTS) so it is safe to re-run manually.

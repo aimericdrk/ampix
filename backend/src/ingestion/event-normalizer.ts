@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ZodError } from 'zod';
-import { IngestEvent, RejectedItem, ingestEventSchema } from '@myampmix/contracts';
+import { IngestEvent, RejectedItem, ingestEventSchema } from '@myampix/contracts';
 import { EventRow, toChDateTime64 } from '../clickhouse/clickhouse.service';
 
 /** Contracts §4: client timestamp is clamped to [now-7d, now+5min]. */

@@ -19,7 +19,7 @@ export function makeAuthTestConfig(overrides: Partial<AppConfig> = {}): AppConfi
       accessTokenTtl: 900,
       refreshTokenTtl: 2_592_000,
       mfaTokenTtl: 300,
-      totpIssuer: 'MyAmpMix',
+      totpIssuer: 'MyAmpix',
       totpEncKey: 'c'.repeat(64),
       cookieSecure: false,
       cookieDomain: undefined,

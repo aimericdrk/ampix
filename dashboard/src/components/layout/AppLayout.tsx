@@ -93,7 +93,7 @@ export function AppLayout() {
 
       {/* Compact top bar on small screens: brand + a menu toggle for the collapsible sidebar. */}
       <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-border bg-surface px-4 py-2 md:hidden">
-        <span className="text-lg font-semibold">MyAmpMix</span>
+        <span className="text-lg font-semibold">MyAmpix</span>
         <Button
           variant="secondary"
           size="sm"
@@ -115,9 +115,11 @@ export function AppLayout() {
         )}
       >
         <div className="flex shrink-0 flex-col gap-3 p-4">
-          <div className="hidden text-lg font-semibold md:block">MyAmpMix</div>
+          <div className="hidden text-lg font-semibold md:block">MyAmpix</div>
           <OrgSwitcher />
           <ProjectSwitcher />
+          {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
+          {projectId && <CommandPalette projectId={projectId} />}
         </div>
 
         <nav

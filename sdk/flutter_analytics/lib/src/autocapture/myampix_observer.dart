@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../myampmix.dart';
+import '../myampix.dart';
 import '../util/clock.dart';
 
 /// Signature used to forward autocaptured events into the SDK's public
 /// `track()` path so identity/session/context/sanitization all apply the
-/// same way they do for a manual `MyAmpMix.instance.track(...)` call.
+/// same way they do for a manual `MyAmpix.instance.track(...)` call.
 typedef AutocaptureTrackFn =
     void Function(String event, Map<String, Object?> properties);
 
@@ -13,15 +13,15 @@ typedef AutocaptureTrackFn =
 /// §4, design §11, milestone M2). Attach it once:
 ///
 /// ```dart
-/// MaterialApp(navigatorObservers: [MyAmpMixObserver()])
+/// MaterialApp(navigatorObservers: [MyAmpixObserver()])
 /// ```
 ///
 /// Only `PageRoute`s count as screens; dialogs/bottom sheets are ignored.
-/// Toggle via `MyAmpMixConfig.autocaptureScreens`. Never throws: every
+/// Toggle via `MyAmpixConfig.autocaptureScreens`. Never throws: every
 /// callback is wrapped so a failure degrades to "no event", never a crash
 /// (design §13).
-class MyAmpMixObserver extends NavigatorObserver {
-  MyAmpMixObserver({
+class MyAmpixObserver extends NavigatorObserver {
+  MyAmpixObserver({
     this.screenNameExtractor,
     @visibleForTesting Clock? clock,
     @visibleForTesting AutocaptureTrackFn? track,
@@ -32,7 +32,7 @@ class MyAmpMixObserver extends NavigatorObserver {
   /// to fall back to the default (`route.settings.name`, then the route's
   /// runtime type). Use this when your routes are unnamed so screen names
   /// aren't the useless `MaterialPageRoute<...>` — e.g.
-  /// `MyAmpMixObserver(screenNameExtractor: (r) => r.settings.name ?? myNameFor(r))`.
+  /// `MyAmpixObserver(screenNameExtractor: (r) => r.settings.name ?? myNameFor(r))`.
   final String? Function(Route<dynamic> route)? screenNameExtractor;
 
   final Clock _clock;
@@ -41,7 +41,7 @@ class MyAmpMixObserver extends NavigatorObserver {
   int? _screenEnteredAtMs;
 
   /// The name of the currently visible screen, updated by this observer and
-  /// read by `MyAmpMixTracker` so `$tap`/`$rage_tap` can carry `$screen_name`
+  /// read by `MyAmpixTracker` so `$tap`/`$rage_tap` can carry `$screen_name`
   /// even though the tracker sits above the `Navigator` (design §11: "The
   /// current screen name is shared with the tap capturer."). Not part of
   /// the public API.
@@ -52,8 +52,8 @@ class MyAmpMixObserver extends NavigatorObserver {
   static void resetForTesting() => currentScreenName = null;
 
   static void _defaultTrack(String event, Map<String, Object?> properties) {
-    if (!MyAmpMix.instance.autocaptureScreensEnabled) return;
-    MyAmpMix.instance.track(event, properties: properties);
+    if (!MyAmpix.instance.autocaptureScreensEnabled) return;
+    MyAmpix.instance.track(event, properties: properties);
   }
 
   @override
@@ -81,7 +81,7 @@ class MyAmpMixObserver extends NavigatorObserver {
 
   /// Resolves the now-visible route's screen name and emits `$screen_view`.
   /// Bookkeeping (`currentScreenName`/entry timestamp) is updated even when
-  /// [MyAmpMix.autocaptureScreensEnabled] is false, so tap autocapture (an
+  /// [MyAmpix.autocaptureScreensEnabled] is false, so tap autocapture (an
   /// independently toggleable feature) still has an accurate `$screen_name`
   /// to stamp on its own events.
   void _handleRouteChange(Route<dynamic>? route) {

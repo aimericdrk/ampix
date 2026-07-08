@@ -82,7 +82,7 @@ class Uploader {
   }
 
   /// Drains both queues. Reentrancy-safe; each queue respects its own
-  /// backoff deadline unless [force] (the public `MyAmpMix.flush()`).
+  /// backoff deadline unless [force] (the public `MyAmpix.flush()`).
   ///
   /// Never throws: the timer- and size-triggered `unawaited(flush())` calls
   /// would otherwise leak storage exceptions (drift/sqlite errors, corrupt

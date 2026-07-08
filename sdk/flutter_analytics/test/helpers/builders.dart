@@ -1,4 +1,4 @@
-import 'package:myampmix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/model/event.dart';
 
 AnalyticsEvent buildEvent({
   String name = 'test_event',

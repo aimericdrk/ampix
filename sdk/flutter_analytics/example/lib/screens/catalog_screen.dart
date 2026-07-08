@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 import '../models/product.dart';
 import '../state/event_log.dart';
@@ -21,7 +21,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   void initState() {
     super.initState();
     final properties = {'product_count': demoProducts.length};
-    MyAmpMix.instance.track('catalog_viewed', properties: properties);
+    MyAmpix.instance.track('catalog_viewed', properties: properties);
     EventLog.instance.log('track("catalog_viewed")', properties);
   }
 
@@ -31,10 +31,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
       'name': product.name,
       'price': product.price,
     };
-    MyAmpMix.instance.track('product_clicked', properties: properties);
+    MyAmpix.instance.track('product_clicked', properties: properties);
     EventLog.instance.log('track("product_clicked")', properties);
     Navigator.of(context).push<void>(
-      // Naming the route gives MyAmpMixObserver a meaningful `$screen_name`
+      // Naming the route gives MyAmpixObserver a meaningful `$screen_name`
       // ("product_detail") instead of the useless "MaterialPageRoute<void>".
       MaterialPageRoute(
         settings: const RouteSettings(name: 'product_detail'),

@@ -30,11 +30,11 @@ describe('ThemeProvider', () => {
 
     expect(screen.getByRole('button')).toHaveTextContent('dark');
     expect(document.documentElement).toHaveClass('dark');
-    expect(localStorage.getItem('myampmix-theme')).toBe('dark');
+    expect(localStorage.getItem('myampix-theme')).toBe('dark');
   });
 
   it('honours a stored preference on mount', () => {
-    localStorage.setItem('myampmix-theme', 'dark');
+    localStorage.setItem('myampix-theme', 'dark');
     render(
       <ThemeProvider>
         <Probe />

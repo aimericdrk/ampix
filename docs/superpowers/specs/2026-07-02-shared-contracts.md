@@ -1,11 +1,11 @@
-# MyAmpMix — Shared Contracts (Source of Truth)
+# MyAmpix — Shared Contracts (Source of Truth)
 
 All sub-project specs and plans MUST conform to this document. Any change here requires updating every consumer.
 
 ## 1. Monorepo layout & toolchain
 
 ```
-myampmix/
+myampix/
 ├── sdk/flutter_analytics/     # Dart/Flutter package  (Flutter 3.32+, Dart 3.8+)
 ├── backend/                   # NestJS 11, Node 22, TypeScript 5.8+, pnpm workspace member
 ├── dashboard/                 # React 18, Vite 6, TypeScript 5.8+, pnpm workspace member
@@ -156,16 +156,16 @@ Inserts use `async_insert=1, wait_for_async_insert=1` (client waits for durable 
 ## 8. SDK public API (Dart) — frozen surface for v0.1
 
 ```dart
-await MyAmpMix.init(token, config: MyAmpMixConfig(...));
-MyAmpMix.instance.track('event', properties: {...});
-MyAmpMix.instance.identify('user_id');  MyAmpMix.instance.alias('new_id');
-MyAmpMix.instance.reset();              MyAmpMix.instance.flush();
-MyAmpMix.instance.timeEvent('event');
-MyAmpMix.instance.registerSuperProperties({...});
-MyAmpMix.instance.people.set({...}); // set/setOnce/increment/append/unset/deleteUser
-MyAmpMix.instance.optOutTracking(); MyAmpMix.instance.optInTracking();
-MyAmpMix.instance.trackScreen('screen_name'); // manual $screen_view for non-route nav (bottom-nav tabs / IndexedStack / PageView)
-// Widgets: MyAmpMixObserver() for Navigator, MyAmpMixTracker(child: app) for taps
+await MyAmpix.init(token, config: MyAmpixConfig(...));
+MyAmpix.instance.track('event', properties: {...});
+MyAmpix.instance.identify('user_id');  MyAmpix.instance.alias('new_id');
+MyAmpix.instance.reset();              MyAmpix.instance.flush();
+MyAmpix.instance.timeEvent('event');
+MyAmpix.instance.registerSuperProperties({...});
+MyAmpix.instance.people.set({...}); // set/setOnce/increment/append/unset/deleteUser
+MyAmpix.instance.optOutTracking(); MyAmpix.instance.optInTracking();
+MyAmpix.instance.trackScreen('screen_name'); // manual $screen_view for non-route nav (bottom-nav tabs / IndexedStack / PageView)
+// Widgets: MyAmpixObserver() for Navigator, MyAmpixTracker(child: app) for taps
 ```
 
 ## 9. Cross-cutting rules
@@ -203,7 +203,7 @@ Recovery codes: 10, single-use, stored hashed. 2FA verify/activate attempts are 
 ACCESS_TOKEN_TTL=900            # seconds (15m)
 REFRESH_TOKEN_TTL=2592000       # seconds (30d)
 MFA_TOKEN_TTL=300               # seconds (5m)
-TOTP_ISSUER=MyAmpMix            # label shown in the authenticator app
+TOTP_ISSUER=MyAmpix            # label shown in the authenticator app
 TOTP_ENC_KEY                    # 32-byte key (base64 or 64-hex) for AES-256-GCM of TOTP secrets; required outside NODE_ENV=test
 COOKIE_SECURE=false             # true in production (HTTPS)
 COOKIE_DOMAIN                   # optional
@@ -522,11 +522,11 @@ SQL builder (shape + that it never interpolates user input).
 Page images for the path map + click heatmap are **reference** screenshots captured by the DEVELOPER in a debug build (SDK → backend → dashboard), **not** collected from every user. Revised model (2026-07-06) — the earlier per-user "once per version" auto-upload was replaced because per-user uploads don't scale (storage cost) and carry PII risk. Now: capture is **off by default** and runs **only in `kDebugMode`** (release/production builds never capture or upload); the developer enables it in a debug build, walks each screen once to populate the ADMIN's single reference image per screen, and can RETAKE. The backend still keeps exactly one image per `(project, screen, app_version)`.
 
 ### SDK (Flutter, debug-only, off by default)
-- Config `autocaptureScreenshots` (**default FALSE**) + `SdkOverrides.screenshotCapturer`/`screenshotSettleDelay` test seams. Wiring is gated on `config.autocaptureScreenshots && (kDebugMode || injected-capturer)` — a release build NEVER captures/uploads. Meaningful screen names require NAMED routes (`RouteSettings(name:)`); `MyAmpMixObserver` also accepts an optional `screenNameExtractor`.
-- Capture waits **≥ `config.screenshotSettleDelay` (a `Duration`, default 1s)** AND for the navigation transition to actually FINISH before rendering — the production capturer polls `WidgetsBinding.hasScheduledFrame` between frames until the UI stops animating (capped ~2.5s), so the frame is settled, not grabbed mid-animation (a fixed delay alone isn't robust across transition durations/devices; the ≥1s floor covers slow/animated transitions and is tunable via `screenshotSettleDelay`). `MyAmpMix.instance.retakeScreenshots()` clears the local once-per-version markers so screens re-capture (pair with deleting the stored image via the DELETE endpoint below).
-- Non-route navigation (bottom-nav tabs / `IndexedStack` / `PageView` index changes) isn't a Navigator push, so `MyAmpMixObserver` never emits `$screen_view` for it — call `MyAmpMix.instance.trackScreen('name')` to record the screen (updates the shared current-screen name and captures its reference screenshot via the same `track('$screen_view', …)` path). Use STABLE names per layout; group dynamic detail screens under one name.
-- On `$screen_view`, capture the current frame via a full-screen `RepaintBoundary` (`RenderRepaintBoundary.toImage`) → downscale to ≤ 640px longest side → JPEG q≈70. **Reliable full-screen framing:** the capturer renders a dedicated `RepaintBoundary` that `MyAmpMixTracker` wraps around the app subtree (shared library-internal `GlobalKey` — wrap your app in `MyAmpMixTracker` via `MaterialApp.builder` and you get this for free). Only if that boundary isn't mounted does the SDK fall back to the LARGEST `RenderRepaintBoundary` on screen (never the first depth-first match, which is often a partial sub-boundary like a list item or overlay → mis-framed capture). **Throttle — capture each screen ONCE PER APP VERSION:** the SDK persists the set of already-captured `(screen_name, app_version)` pairs in the `keyValueStore`, so a given screen is captured+uploaded only the first time it is viewed under the current `app_version`, and NEVER again for that version — across sessions and app relaunches (a screen's layout only changes between releases). A new `app_version` re-captures each screen exactly once. (Persisted marker keyed by `app_version` so upgrading invalidates old markers.) Never-throw (design §13): any capture/encode/upload failure is dropped silently and does NOT mark the pair captured (so it retries next launch).
-- **Privacy**: a `MyAmpMixPrivacy(child: …)` widget masks its subtree (solid block) in captures; document that developers should wrap PII/input fields. MVP does not auto-mask all text — call this out in HOW-TO-USE.md.
+- Config `autocaptureScreenshots` (**default FALSE**) + `SdkOverrides.screenshotCapturer`/`screenshotSettleDelay` test seams. Wiring is gated on `config.autocaptureScreenshots && (kDebugMode || injected-capturer)` — a release build NEVER captures/uploads. Meaningful screen names require NAMED routes (`RouteSettings(name:)`); `MyAmpixObserver` also accepts an optional `screenNameExtractor`.
+- Capture waits **≥ `config.screenshotSettleDelay` (a `Duration`, default 1s)** AND for the navigation transition to actually FINISH before rendering — the production capturer polls `WidgetsBinding.hasScheduledFrame` between frames until the UI stops animating (capped ~2.5s), so the frame is settled, not grabbed mid-animation (a fixed delay alone isn't robust across transition durations/devices; the ≥1s floor covers slow/animated transitions and is tunable via `screenshotSettleDelay`). `MyAmpix.instance.retakeScreenshots()` clears the local once-per-version markers so screens re-capture (pair with deleting the stored image via the DELETE endpoint below).
+- Non-route navigation (bottom-nav tabs / `IndexedStack` / `PageView` index changes) isn't a Navigator push, so `MyAmpixObserver` never emits `$screen_view` for it — call `MyAmpix.instance.trackScreen('name')` to record the screen (updates the shared current-screen name and captures its reference screenshot via the same `track('$screen_view', …)` path). Use STABLE names per layout; group dynamic detail screens under one name.
+- On `$screen_view`, capture the current frame via a full-screen `RepaintBoundary` (`RenderRepaintBoundary.toImage`) → downscale to ≤ 640px longest side → JPEG q≈70. **Reliable full-screen framing:** the capturer renders a dedicated `RepaintBoundary` that `MyAmpixTracker` wraps around the app subtree (shared library-internal `GlobalKey` — wrap your app in `MyAmpixTracker` via `MaterialApp.builder` and you get this for free). Only if that boundary isn't mounted does the SDK fall back to the LARGEST `RenderRepaintBoundary` on screen (never the first depth-first match, which is often a partial sub-boundary like a list item or overlay → mis-framed capture). **Throttle — capture each screen ONCE PER APP VERSION:** the SDK persists the set of already-captured `(screen_name, app_version)` pairs in the `keyValueStore`, so a given screen is captured+uploaded only the first time it is viewed under the current `app_version`, and NEVER again for that version — across sessions and app relaunches (a screen's layout only changes between releases). A new `app_version` re-captures each screen exactly once. (Persisted marker keyed by `app_version` so upgrading invalidates old markers.) Never-throw (design §13): any capture/encode/upload failure is dropped silently and does NOT mark the pair captured (so it retries next launch).
+- **Privacy**: a `MyAmpixPrivacy(child: …)` widget masks its subtree (solid block) in captures; document that developers should wrap PII/input fields. MVP does not auto-mask all text — call this out in HOW-TO-USE.md.
 - Upload: `POST /ingest/screenshots` (multipart/form-data) `Authorization: Bearer <sdk_token>`, fields: `screen_name`, `app_version`, `width`, `height`, `image_hash`, `image` (JPEG bytes). → `202 {"stored": bool}` (backend may reject a dup/over-cap without error). Rate-limited per token.
 
 ### Backend (storage strategy: image bytes in **Firebase Storage**, metadata in Postgres)
@@ -578,5 +578,5 @@ Both the backend and the SDK expose a log-LEVEL setting so operators/developers 
 ### Backend — `LOG_LEVEL` env (validated app-config §3)
 `LOG_LEVEL` ∈ `fatal|error|warn|info|debug|trace|silent`, **default `info`**. Wires the pino logger's base `level`. **HTTP request auto-logging (pino-http) is emitted per-response at: `debug` for 2xx/3xx, `warn` for 4xx, `error` for 5xx** — so at the default `info`, successful-request logs are SUPPRESSED (only shown when `LOG_LEVEL=debug`/`trace`), while application logs (info) and client/server error requests still surface. Implement via `LoggerModule.forRootAsync` injecting the config: set `pinoHttp.level = config.logLevel` and a `customLogLevel(req,res,err)` returning the mapping above. Add `LOG_LEVEL` to `.env.example`.
 
-### SDK — `MyAmpMixConfig.logLevel` (Dart)
-Public enum `MyAmpMixLogLevel { none, error, warn, info, debug }` (ascending verbosity). `MyAmpMixConfig.logLevel` **default `none`** (silent — preserves today's default-quiet behavior). Back-compat: when `logLevel` is left at its default and the existing `debug: true` flag is set, the effective level is `debug`. `MamLogger` filters by the effective level: internal diagnostics log at `debug`, error-carrying diagnostics at `error`; still gated to `kDebugMode` as today (the SDK never prints in release builds). Existing `debug` flag stays for back-compat.
+### SDK — `MyAmpixConfig.logLevel` (Dart)
+Public enum `MyAmpixLogLevel { none, error, warn, info, debug }` (ascending verbosity). `MyAmpixConfig.logLevel` **default `none`** (silent — preserves today's default-quiet behavior). Back-compat: when `logLevel` is left at its default and the existing `debug: true` flag is set, the effective level is `debug`. `MamLogger` filters by the effective level: internal diagnostics log at `debug`, error-carrying diagnostics at `error`; still gated to `kDebugMode` as today (the SDK never prints in release builds). Existing `debug` flag stays for back-compat.

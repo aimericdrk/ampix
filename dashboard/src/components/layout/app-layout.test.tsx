@@ -89,7 +89,7 @@ describe('AppLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
 
     expect(document.documentElement).toHaveClass('dark');
-    expect(localStorage.getItem('myampmix-theme')).toBe('dark');
+    expect(localStorage.getItem('myampix-theme')).toBe('dark');
     expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument();
     document.documentElement.classList.remove('dark');
   });
@@ -101,7 +101,7 @@ describe('AppLayout', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
 
-    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpMix' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpix' })).toBeInTheDocument();
     expect(authStore.getState().status).toBe('anonymous');
     expect(authStore.getState().accessToken).toBeNull();
   });
@@ -121,7 +121,7 @@ describe('AppLayout', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
 
-    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpMix' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpix' })).toBeInTheDocument();
     expect(authStore.getState().status).toBe('anonymous');
     expect(authStore.getState().accessToken).toBeNull();
   });

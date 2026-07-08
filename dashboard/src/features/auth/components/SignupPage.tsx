@@ -7,7 +7,7 @@ export function SignupPage() {
     <main className="flex min-h-screen items-center justify-center bg-bg p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Create your MyAmpMix account</CardTitle>
+          <CardTitle>Create your MyAmpix account</CardTitle>
         </CardHeader>
         <CardContent>
           <SignupForm />

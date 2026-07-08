@@ -1,8 +1,8 @@
 {
-  "name": "@myampmix/backend",
+  "name": "@myampix/backend",
   "version": "0.1.0",
   "private": true,
-  "description": "MyAmpMix NestJS backend — ingestion, analytics queries, auth",
+  "description": "MyAmpix NestJS backend — ingestion, analytics queries, auth",
   "scripts": {
     "prepare": "prisma generate",
     "build": "nest build",
@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@clickhouse/client": "^1.11.0",
-    "@myampmix/contracts": "workspace:*",
+    "@myampix/contracts": "workspace:*",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/jwt": "^11.0.2",

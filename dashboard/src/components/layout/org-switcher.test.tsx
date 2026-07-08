@@ -79,7 +79,7 @@ describe('OrgSwitcher', () => {
 
   it('defaults to the first org when no valid selection is persisted', async () => {
     signIn();
-    localStorage.setItem('myampmix-current-org', 'some-other-users-org');
+    localStorage.setItem('myampix-current-org', 'some-other-users-org');
     renderApp('/projects');
 
     const trigger = await screen.findByRole('button', { name: 'Switch workspace' });

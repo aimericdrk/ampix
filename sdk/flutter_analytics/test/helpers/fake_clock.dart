@@ -1,4 +1,4 @@
-import 'package:myampmix_analytics/src/util/clock.dart';
+import 'package:myampix_analytics/src/util/clock.dart';
 
 /// Deterministic clock driven by tests.
 class FakeClock implements Clock {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
 
 void main() {
   test('serializes to the /ingest/profiles operation shape', () {

@@ -84,7 +84,7 @@ const envSchema = z.object({
   ACCESS_TOKEN_TTL: z.coerce.number().int().positive().default(900),
   REFRESH_TOKEN_TTL: z.coerce.number().int().positive().default(2_592_000),
   MFA_TOKEN_TTL: z.coerce.number().int().positive().default(300),
-  TOTP_ISSUER: z.string().min(1).default('MyAmpMix'),
+  TOTP_ISSUER: z.string().min(1).default('MyAmpix'),
   TOTP_ENC_KEY: z.string().optional(),
   COOKIE_SECURE: z.preprocess(
     (v) => (v === undefined ? false : isCookieSecureTruthy(v as string)),
@@ -278,7 +278,7 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     accessTokenTtl: 900,
     refreshTokenTtl: 2_592_000,
     mfaTokenTtl: 300,
-    totpIssuer: 'MyAmpMix',
+    totpIssuer: 'MyAmpix',
     totpEncKey: undefined,
     cookieSecure: false,
     cookieDomain: undefined,

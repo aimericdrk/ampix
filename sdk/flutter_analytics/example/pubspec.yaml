@@ -1,7 +1,7 @@
-name: myampmix_analytics_example
+name: myampix_analytics_example
 description: >-
-  Example Flutter app demonstrating the MyAmpMix analytics SDK
-  (myampmix_analytics) via manual instrumentation of a small shopping flow.
+  Example Flutter app demonstrating the MyAmpix analytics SDK
+  (myampix_analytics) via manual instrumentation of a small shopping flow.
 publish_to: none
 version: 0.1.2
 
@@ -12,7 +12,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  myampmix_analytics:
+  myampix_analytics:
     path: ../
 
 dev_dependencies:

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 import 'demo_config.dart';
 import 'screens/root_screen.dart';
@@ -10,12 +10,12 @@ Future<void> main() async {
   // Never throws: on failure (unreachable backend, rejected token, ...) the
   // SDK stays disabled and every later call becomes a logged no-op. The
   // demo keeps working either way — see lib/demo_config.dart.
-  await MyAmpMix.init(
+  await MyAmpix.init(
     demoToken,
-    config: const MyAmpMixConfig(
+    config: const MyAmpixConfig(
       serverUrl: demoServerUrl,
       debug: true,
-      logLevel: MyAmpMixLogLevel.debug,
+      logLevel: MyAmpixLogLevel.debug,
       // Reference screenshots are a DEBUG-only developer tool: this demo runs
       // in debug, so enabling it populates the admin's reference images as you
       // navigate. A release build never captures/uploads (production users
@@ -26,10 +26,12 @@ Future<void> main() async {
 
   // Demonstrates registerSuperProperties: attached to every event tracked
   // for the rest of this process, on top of the per-call properties below.
-  MyAmpMix.instance.registerSuperProperties({
+  MyAmpix.instance.registerSuperProperties({
     'demo_app': true,
     'platform': 'flutter',
   });
+
+  MyAmpix.instance.retakeScreenshots();
 
   runApp(const ShopApp());
 }
@@ -40,14 +42,15 @@ class ShopApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MyAmpMix Shop Demo',
+      title: 'MyAmpix Shop Demo',
       theme: ThemeData(colorSchemeSeed: Colors.deepPurple, useMaterial3: true),
-      // REQUIRED for autocapture: MyAmpMixObserver emits `$screen_view` on every
+      // REQUIRED for autocapture: MyAmpixObserver emits `$screen_view` on every
       // navigation — which is ALSO what triggers automatic screenshot capture
       // (§18). Without it, no screen views and no screenshots are ever captured.
-      navigatorObservers: [MyAmpMixObserver()],
-      // MyAmpMixTracker autocaptures `$tap` / `$rage_tap` (powers click heatmaps).
-      builder: (context, child) => MyAmpMixTracker(child: child ?? const SizedBox.shrink()),
+      navigatorObservers: [MyAmpixObserver()],
+      // MyAmpixTracker autocaptures `$tap` / `$rage_tap` (powers click heatmaps).
+      builder: (context, child) =>
+          MyAmpixTracker(child: child ?? const SizedBox.shrink()),
       home: const RootScreen(),
     );
   }

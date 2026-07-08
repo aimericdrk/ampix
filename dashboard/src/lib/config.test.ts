@@ -3,21 +3,21 @@ import { getRuntimeConfig } from './config';
 
 describe('getRuntimeConfig', () => {
   afterEach(() => {
-    delete window.__MYAMPMIX_CONFIG__;
+    delete window.___MYAMPIX_CONFIG__;
   });
 
   it('returns values injected by config.js', () => {
-    window.__MYAMPMIX_CONFIG__ = { apiBaseUrl: 'https://api.myampmix.example' };
-    expect(getRuntimeConfig()).toEqual({ apiBaseUrl: 'https://api.myampmix.example' });
+    window.___MYAMPIX_CONFIG__ = { apiBaseUrl: 'https://api.myampix.example' };
+    expect(getRuntimeConfig()).toEqual({ apiBaseUrl: 'https://api.myampix.example' });
   });
 
   it('falls back to same-origin default when config.js is absent (dev)', () => {
-    delete window.__MYAMPMIX_CONFIG__;
+    delete window.___MYAMPIX_CONFIG__;
     expect(getRuntimeConfig()).toEqual({ apiBaseUrl: '' });
   });
 
   it('fills missing keys from defaults', () => {
-    window.__MYAMPMIX_CONFIG__ = {};
+    window.___MYAMPIX_CONFIG__ = {};
     expect(getRuntimeConfig().apiBaseUrl).toBe('');
   });
 });

@@ -2,10 +2,10 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/model/event.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';
@@ -22,10 +22,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
-  setUp(MyAmpMixObserver.resetForTesting);
-  tearDown(MyAmpMixObserver.resetForTesting);
+  setUp(MyAmpixObserver.resetForTesting);
+  tearDown(MyAmpixObserver.resetForTesting);
 
-  group('MyAmpMixTracker (direct, injected track/clock)', () {
+  group('MyAmpixTracker (direct, injected track/clock)', () {
     late FakeClock clock;
     late List<_Emitted> emitted;
 
@@ -43,7 +43,7 @@ void main() {
       (tester) async {
         var tapped = false;
         await tester.pumpWidget(
-          MyAmpMixTracker(
+          MyAmpixTracker(
             clock: clock,
             track: fakeTrack,
             child: MaterialApp(
@@ -84,7 +84,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MyAmpMixTracker(
+        MyAmpixTracker(
           clock: clock,
           track: fakeTrack,
           child: MaterialApp(
@@ -117,7 +117,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MyAmpMixTracker(
+        MyAmpixTracker(
           clock: clock,
           track: fakeTrack,
           child: MaterialApp(
@@ -145,12 +145,12 @@ void main() {
     });
 
     testWidgets(
-      r'$screen_name is stamped from MyAmpMixObserver.currentScreenName '
+      r'$screen_name is stamped from MyAmpixObserver.currentScreenName '
       'when available',
       (tester) async {
-        MyAmpMixObserver.currentScreenName = '/checkout';
+        MyAmpixObserver.currentScreenName = '/checkout';
         await tester.pumpWidget(
-          MyAmpMixTracker(
+          MyAmpixTracker(
             clock: clock,
             track: fakeTrack,
             child: MaterialApp(
@@ -182,7 +182,7 @@ void main() {
       r'the individual $tap events',
       (tester) async {
         await tester.pumpWidget(
-          MyAmpMixTracker(
+          MyAmpixTracker(
             clock: clock,
             track: fakeTrack,
             child: MaterialApp(
@@ -217,7 +217,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MyAmpMixTracker(
+        MyAmpixTracker(
           clock: clock,
           track: fakeTrack,
           child: MaterialApp(
@@ -249,7 +249,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MyAmpMixTracker(
+        MyAmpixTracker(
           clock: clock,
           track: fakeTrack,
           child: MaterialApp(
@@ -291,7 +291,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MyAmpMixTracker(
+        MyAmpixTracker(
           clock: clock,
           track: (event, properties) => throw StateError('boom'),
           child: MaterialApp(
@@ -315,7 +315,7 @@ void main() {
     });
   });
 
-  group('MyAmpMixTracker wired through the real facade', () {
+  group('MyAmpixTracker wired through the real facade', () {
     late FakeClock clock;
     late InMemoryKeyValueStore keyValueStore;
     late AnalyticsDatabase database;
@@ -328,16 +328,16 @@ void main() {
       store = DriftEventStore(database);
     });
 
-    tearDown(() => MyAmpMix.shutdownForTesting());
+    tearDown(() => MyAmpix.shutdownForTesting());
 
-    Future<void> initSdk({required bool autocaptureTaps}) => MyAmpMix.init(
+    Future<void> initSdk({required bool autocaptureTaps}) => MyAmpix.init(
       'mam_0123456789abcdef0123456789abcdef',
-      config: MyAmpMixConfig(
+      config: MyAmpixConfig(
         serverUrl: 'http://localhost:8080',
         autocaptureTaps: autocaptureTaps,
         // This suite exercises TAP autocapture only. Disable native purchase
         // AND attribution autocapture so init() never subscribes to the real
-        // `myampmix_analytics/purchases` or `.../attribution` EventChannels —
+        // `myampix_analytics/purchases` or `.../attribution` EventChannels —
         // those subscriptions hang under testWidgets' fake-async. Each has its
         // own dedicated suite (purchase_autocapture_test.dart /
         // attribution/*_test.dart) that injects a stream instead.
@@ -369,10 +369,10 @@ void main() {
     ];
 
     testWidgets(r'autocaptureTaps: true delivers a full-context $tap to the '
-        'local queue via MyAmpMix.instance.track', (tester) async {
+        'local queue via MyAmpix.instance.track', (tester) async {
       await initSdk(autocaptureTaps: true);
       await tester.pumpWidget(
-        MyAmpMixTracker(
+        MyAmpixTracker(
           clock: clock,
           child: MaterialApp(
             home: Scaffold(
@@ -403,7 +403,7 @@ void main() {
       // soon as the callback returns, which runs BEFORE the group's
       // tearDown (a plain `tearDown()` callback fires later, via
       // package:test's own lifecycle).
-      await MyAmpMix.shutdownForTesting();
+      await MyAmpix.shutdownForTesting();
     });
 
     testWidgets(r'autocaptureTaps: false suppresses $tap entirely', (
@@ -411,7 +411,7 @@ void main() {
     ) async {
       await initSdk(autocaptureTaps: false);
       await tester.pumpWidget(
-        MyAmpMixTracker(
+        MyAmpixTracker(
           clock: clock,
           child: MaterialApp(
             home: Scaffold(
@@ -430,14 +430,14 @@ void main() {
 
       await tester.tap(find.byKey(const Key('btn')));
       await tester.pump();
-      MyAmpMix.instance.track('marker');
+      MyAmpix.instance.track('marker');
       await tester.pump();
 
       final events = await queuedEvents();
       expect(events.any((e) => e.event == 'marker'), isTrue);
       expect(events.where((e) => e.event == r'$tap'), isEmpty);
 
-      await MyAmpMix.shutdownForTesting();
+      await MyAmpix.shutdownForTesting();
     });
   });
 }

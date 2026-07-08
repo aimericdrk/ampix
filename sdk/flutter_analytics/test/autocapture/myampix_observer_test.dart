@@ -4,10 +4,10 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/model/event.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';
@@ -24,20 +24,20 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
-  setUp(MyAmpMixObserver.resetForTesting);
-  tearDown(MyAmpMixObserver.resetForTesting);
+  setUp(MyAmpixObserver.resetForTesting);
+  tearDown(MyAmpixObserver.resetForTesting);
 
-  group('MyAmpMixObserver (direct, injected track/clock)', () {
+  group('MyAmpixObserver (direct, injected track/clock)', () {
     late FakeClock clock;
     late List<_Emitted> emitted;
     late GlobalKey<NavigatorState> navKey;
-    late MyAmpMixObserver observer;
+    late MyAmpixObserver observer;
 
     setUp(() {
       clock = FakeClock(DateTime.utc(2026, 7, 2, 12));
       emitted = [];
       navKey = GlobalKey<NavigatorState>();
-      observer = MyAmpMixObserver(
+      observer = MyAmpixObserver(
         clock: clock,
         track: (event, properties) => emitted.add(_Emitted(event, properties)),
       );
@@ -161,18 +161,18 @@ void main() {
       'currentScreenName is shared static state read by the tap capturer',
       (tester) async {
         await pumpApp(tester);
-        expect(MyAmpMixObserver.currentScreenName, '/');
+        expect(MyAmpixObserver.currentScreenName, '/');
 
         unawaited(navKey.currentState!.pushNamed('/b'));
         await tester.pumpAndSettle();
-        expect(MyAmpMixObserver.currentScreenName, '/b');
+        expect(MyAmpixObserver.currentScreenName, '/b');
       },
     );
 
     testWidgets('a throwing track callback never escapes the observer', (
       tester,
     ) async {
-      final throwingObserver = MyAmpMixObserver(
+      final throwingObserver = MyAmpixObserver(
         clock: clock,
         track: (event, properties) => throw StateError('boom'),
       );
@@ -186,7 +186,7 @@ void main() {
     });
   });
 
-  group('MyAmpMixObserver wired through the real facade', () {
+  group('MyAmpixObserver wired through the real facade', () {
     late FakeClock clock;
     late InMemoryKeyValueStore keyValueStore;
     late AnalyticsDatabase database;
@@ -199,16 +199,16 @@ void main() {
       store = DriftEventStore(database);
     });
 
-    tearDown(() => MyAmpMix.shutdownForTesting());
+    tearDown(() => MyAmpix.shutdownForTesting());
 
-    Future<void> initSdk({required bool autocaptureScreens}) => MyAmpMix.init(
+    Future<void> initSdk({required bool autocaptureScreens}) => MyAmpix.init(
       'mam_0123456789abcdef0123456789abcdef',
-      config: MyAmpMixConfig(
+      config: MyAmpixConfig(
         serverUrl: 'http://localhost:8080',
         autocaptureScreens: autocaptureScreens,
         // This suite exercises SCREEN autocapture only. Disable native purchase
         // AND attribution autocapture so init() never subscribes to the real
-        // `myampmix_analytics/purchases` or `.../attribution` EventChannels —
+        // `myampix_analytics/purchases` or `.../attribution` EventChannels —
         // those subscriptions hang under testWidgets' fake-async. Each has its
         // own dedicated suite (purchase_autocapture_test.dart /
         // attribution/*_test.dart) that injects a stream instead.
@@ -242,12 +242,12 @@ void main() {
 
     testWidgets(
       r'autocaptureScreens: true delivers a full-context $screen_view '
-      'to the local queue via MyAmpMix.instance.track',
+      'to the local queue via MyAmpix.instance.track',
       (tester) async {
         await initSdk(autocaptureScreens: true);
         await tester.pumpWidget(
           MaterialApp(
-            navigatorObservers: [MyAmpMixObserver(clock: clock)],
+            navigatorObservers: [MyAmpixObserver(clock: clock)],
             initialRoute: '/',
             routes: {
               '/': (_) => const Scaffold(body: Text('A')),
@@ -269,7 +269,7 @@ void main() {
         // pending as soon as the callback returns, which runs BEFORE the
         // group's tearDown (a plain `tearDown()` callback fires later, via
         // package:test's own lifecycle).
-        await MyAmpMix.shutdownForTesting();
+        await MyAmpix.shutdownForTesting();
       },
     );
 
@@ -279,7 +279,7 @@ void main() {
       await initSdk(autocaptureScreens: false);
       await tester.pumpWidget(
         MaterialApp(
-          navigatorObservers: [MyAmpMixObserver(clock: clock)],
+          navigatorObservers: [MyAmpixObserver(clock: clock)],
           initialRoute: '/',
           routes: {
             '/': (_) => const Scaffold(body: Text('A')),
@@ -295,32 +295,32 @@ void main() {
       expect(events.any((e) => e.event == r'$app_open'), isTrue);
       expect(events.where((e) => e.event == r'$screen_view'), isEmpty);
 
-      await MyAmpMix.shutdownForTesting();
+      await MyAmpix.shutdownForTesting();
     });
 
     testWidgets(r'opted-out $screen_view is dropped by the pipeline', (
       tester,
     ) async {
       await initSdk(autocaptureScreens: true);
-      MyAmpMix.instance.optOutTracking();
+      MyAmpix.instance.optOutTracking();
       await tester.pumpWidget(
         MaterialApp(
-          navigatorObservers: [MyAmpMixObserver(clock: clock)],
+          navigatorObservers: [MyAmpixObserver(clock: clock)],
           initialRoute: '/',
           routes: {'/': (_) => const Scaffold(body: Text('A'))},
         ),
       );
       await tester.pump();
 
-      MyAmpMix.instance.optInTracking();
-      MyAmpMix.instance.track('after_opt_in');
+      MyAmpix.instance.optInTracking();
+      MyAmpix.instance.track('after_opt_in');
       await tester.pump();
 
       final events = await queuedEvents();
       expect(events.any((e) => e.event == 'after_opt_in'), isTrue);
       expect(events.where((e) => e.event == r'$screen_view'), isEmpty);
 
-      await MyAmpMix.shutdownForTesting();
+      await MyAmpix.shutdownForTesting();
     });
   });
 }

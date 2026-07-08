@@ -1,14 +1,14 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-/// Tracks the currently-mounted [MyAmpMixPrivacy] regions so the screenshot
+/// Tracks the currently-mounted [MyAmpixPrivacy] regions so the screenshot
 /// capturer can black them out in captured frames (shared-contracts §18).
 ///
 /// A process-wide registry (not per-SDK-instance) because the capturer needs
 /// to enumerate privacy regions anywhere in the tree regardless of which
 /// facade instance is active. Entries self-remove when the widget unmounts.
-class MyAmpMixPrivacyRegistry {
-  MyAmpMixPrivacyRegistry._();
+class MyAmpixPrivacyRegistry {
+  MyAmpixPrivacyRegistry._();
 
   static final Set<RenderBox> _regions = <RenderBox>{};
 
@@ -41,14 +41,14 @@ class MyAmpMixPrivacyRegistry {
 /// (shared-contracts §18). Wrap PII / input fields:
 ///
 /// ```dart
-/// MyAmpMixPrivacy(child: TextField(controller: emailController))
+/// MyAmpixPrivacy(child: TextField(controller: emailController))
 /// ```
 ///
 /// MVP behavior: the subtree renders normally on screen and is blacked out
 /// only in the captured/uploaded image. The SDK does NOT auto-mask arbitrary
 /// text — developers opt in per region (documented in HOW-TO-USE.md).
-class MyAmpMixPrivacy extends SingleChildRenderObjectWidget {
-  const MyAmpMixPrivacy({super.key, required Widget child})
+class MyAmpixPrivacy extends SingleChildRenderObjectWidget {
+  const MyAmpixPrivacy({super.key, required Widget child})
     : super(child: child);
 
   @override
@@ -62,12 +62,12 @@ class _RenderPrivacyRegion extends RenderProxyBox {
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    MyAmpMixPrivacyRegistry.register(this);
+    MyAmpixPrivacyRegistry.register(this);
   }
 
   @override
   void detach() {
-    MyAmpMixPrivacyRegistry.unregister(this);
+    MyAmpixPrivacyRegistry.unregister(this);
     super.detach();
   }
 }

@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import '../myampmix.dart';
-import 'myampmix_observer.dart' show AutocaptureTrackFn;
+import '../myampix.dart';
+import 'myampix_observer.dart' show AutocaptureTrackFn;
 
-/// Channel MyAmpMix's native plugin code forwards the app's own
+/// Channel MyAmpix's native plugin code forwards the app's own
 /// in-app-purchase transactions over — an iOS `SKPaymentTransactionObserver`
-/// (`ios/Classes/MyampmixAnalyticsPlugin.swift`) and an Android Play Billing
-/// `PurchasesUpdatedListener` (`android/.../MyampmixAnalyticsPlugin.kt`)
+/// (`ios/Classes/MyampixAnalyticsPlugin.swift`) and an Android Play Billing
+/// `PurchasesUpdatedListener` (`android/.../MyampixAnalyticsPlugin.kt`)
 /// both post to this same `EventChannel` name.
-const String purchasesChannelName = 'myampmix_analytics/purchases';
+const String purchasesChannelName = 'myampix_analytics/purchases';
 
 /// Autocaptures the reserved `$in_app_purchase` event (shared-contracts §4)
 /// from native store-transaction notifications forwarded by the platform
@@ -31,9 +31,9 @@ const String purchasesChannelName = 'myampmix_analytics/purchases';
 /// There is no API for a mobile SDK to see another app's or another user's
 /// purchases.
 ///
-/// Toggle via `MyAmpMixConfig.autocapturePurchases` (checked at emission
-/// time via `MyAmpMix.instance.autocapturePurchasesEnabled`, mirroring
-/// `MyAmpMixObserver`/`MyAmpMixTracker`). Never throws: a malformed native
+/// Toggle via `MyAmpixConfig.autocapturePurchases` (checked at emission
+/// time via `MyAmpix.instance.autocapturePurchasesEnabled`, mirroring
+/// `MyAmpixObserver`/`MyAmpixTracker`). Never throws: a malformed native
 /// payload is dropped, not propagated (design §13).
 class PurchaseAutocapture {
   PurchaseAutocapture({
@@ -49,8 +49,8 @@ class PurchaseAutocapture {
   StreamSubscription<dynamic>? _subscription;
 
   static void _defaultTrack(String event, Map<String, Object?> properties) {
-    if (!MyAmpMix.instance.autocapturePurchasesEnabled) return;
-    MyAmpMix.instance.track(event, properties: properties);
+    if (!MyAmpix.instance.autocapturePurchasesEnabled) return;
+    MyAmpix.instance.track(event, properties: properties);
   }
 
   /// Begins listening for native purchase notifications. Idempotent: a

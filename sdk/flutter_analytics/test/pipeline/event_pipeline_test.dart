@@ -1,12 +1,12 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/context/context_collector.dart';
-import 'package:myampmix_analytics/src/identity/identity_manager.dart';
-import 'package:myampmix_analytics/src/pipeline/event_pipeline.dart';
-import 'package:myampmix_analytics/src/properties/super_properties_store.dart';
-import 'package:myampmix_analytics/src/properties/timed_event_tracker.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/context/context_collector.dart';
+import 'package:myampix_analytics/src/identity/identity_manager.dart';
+import 'package:myampix_analytics/src/pipeline/event_pipeline.dart';
+import 'package:myampix_analytics/src/properties/super_properties_store.dart';
+import 'package:myampix_analytics/src/properties/timed_event_tracker.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';

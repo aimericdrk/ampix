@@ -21,9 +21,9 @@ echo "verify-build: ok — dist/index.html exists"
 [ -f dist/config.js ] || fail "dist/config.js is missing"
 echo "verify-build: ok — dist/config.js exists"
 
-grep -q '__MYAMPMIX_CONFIG__' dist/config.js ||
-  fail "dist/config.js is not the runtime config template (no __MYAMPMIX_CONFIG__)"
-echo "verify-build: ok — dist/config.js is the runtime-editable __MYAMPMIX_CONFIG__ template"
+grep -q '___MYAMPIX_CONFIG__' dist/config.js ||
+  fail "dist/config.js is not the runtime config template (no ___MYAMPIX_CONFIG__)"
+echo "verify-build: ok — dist/config.js is the runtime-editable ___MYAMPIX_CONFIG__ template"
 
 grep -q '<script src="/config.js"></script>' dist/index.html ||
   fail "dist/index.html does not load /config.js before the app bundle"

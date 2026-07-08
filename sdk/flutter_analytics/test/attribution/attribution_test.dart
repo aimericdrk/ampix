@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/model/event.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';
@@ -32,13 +32,13 @@ void main() {
   });
 
   tearDown(() async {
-    await MyAmpMix.shutdownForTesting();
+    await MyAmpix.shutdownForTesting();
     await attributionController.close();
   });
 
-  Future<void> initSdk({bool autocaptureAttribution = true}) => MyAmpMix.init(
+  Future<void> initSdk({bool autocaptureAttribution = true}) => MyAmpix.init(
     'mam_0123456789abcdef0123456789abcdef',
-    config: MyAmpMixConfig(
+    config: MyAmpixConfig(
       serverUrl: 'http://localhost:8080',
       // Screen/tap capturers are pure-Dart observers; disabling them keeps
       // the queue focused on lifecycle + attribution events. Purchase is
@@ -67,7 +67,7 @@ void main() {
     test(r'a utm link records a touch and emits $campaign_touch with the '
         r'parsed $utm_* props and $attribution_source "deep_link"', () async {
       await initSdk();
-      MyAmpMix.instance.trackDeepLink(
+      MyAmpix.instance.trackDeepLink(
         Uri.parse(
           'https://app.example.com/promo'
           '?utm_source=meta&utm_medium=cpc&utm_campaign=summer'
@@ -88,7 +88,7 @@ void main() {
 
     test('only the present utm_* params become properties', () async {
       await initSdk();
-      MyAmpMix.instance.trackDeepLink(
+      MyAmpix.instance.trackDeepLink(
         Uri.parse('myapp://open?utm_source=tiktok&utm_campaign=fall'),
       );
       await pumpEventQueue();
@@ -103,10 +103,10 @@ void main() {
 
     test('a link with no utm_* records nothing and emits nothing', () async {
       await initSdk();
-      MyAmpMix.instance.trackDeepLink(
+      MyAmpix.instance.trackDeepLink(
         Uri.parse('https://app.example.com/home'),
       );
-      MyAmpMix.instance.track('after_bare_link');
+      MyAmpix.instance.track('after_bare_link');
       await pumpEventQueue();
 
       final events = await queuedEvents();
@@ -123,12 +123,12 @@ void main() {
       // UTF-8): .queryParameters throws when decoded, so trackDeepLink must
       // swallow it (design §13).
       expect(
-        () => MyAmpMix.instance.trackDeepLink(
+        () => MyAmpix.instance.trackDeepLink(
           Uri.parse('https://app.example.com/?utm_source=%FF'),
         ),
         returnsNormally,
       );
-      MyAmpMix.instance.track('after_malformed_link');
+      MyAmpix.instance.track('after_malformed_link');
       await pumpEventQueue();
 
       final events = await queuedEvents();
@@ -141,11 +141,11 @@ void main() {
       'in its context',
       () async {
         await initSdk();
-        MyAmpMix.instance.trackDeepLink(
+        MyAmpix.instance.trackDeepLink(
           Uri.parse('myapp://o?utm_source=meta&utm_campaign=spring'),
         );
         await pumpEventQueue();
-        MyAmpMix.instance.track('purchase_started');
+        MyAmpix.instance.track('purchase_started');
         await pumpEventQueue();
 
         final event = await firstWhereName('purchase_started');
@@ -160,14 +160,14 @@ void main() {
       'last touch overwrites context utm_* while first_utm_* stays put',
       () async {
         await initSdk();
-        MyAmpMix.instance.trackDeepLink(
+        MyAmpix.instance.trackDeepLink(
           Uri.parse('myapp://o?utm_source=meta&utm_campaign=spring'),
         );
-        MyAmpMix.instance.trackDeepLink(
+        MyAmpix.instance.trackDeepLink(
           Uri.parse('myapp://o?utm_source=tiktok&utm_campaign=summer'),
         );
         await pumpEventQueue();
-        MyAmpMix.instance.track('checkout');
+        MyAmpix.instance.track('checkout');
         await pumpEventQueue();
 
         final event = await firstWhereName('checkout');
@@ -182,7 +182,7 @@ void main() {
       'trackDeepLink works even when autocaptureAttribution is false',
       () async {
         await initSdk(autocaptureAttribution: false);
-        MyAmpMix.instance.trackDeepLink(
+        MyAmpix.instance.trackDeepLink(
           Uri.parse('myapp://o?utm_source=email&utm_campaign=newsletter'),
         );
         await pumpEventQueue();
@@ -233,7 +233,7 @@ void main() {
       () async {
         await initSdk();
         attributionController.add(<String, Object?>{'unexpected': 'shape'});
-        MyAmpMix.instance.track('after_bad_referrer');
+        MyAmpix.instance.track('after_bad_referrer');
         await pumpEventQueue();
 
         final events = await queuedEvents();

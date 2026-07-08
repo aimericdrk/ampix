@@ -2,17 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship milestone M1 of the `myampmix_analytics` Flutter package: manual event tracking with a persistent offline queue, identity, SDK-computed sessions, super properties, `timeEvent`, people/profile operations, persisted opt-out, automatic context, and a gzip batch uploader with exponential backoff — delivering the exact shared-contracts §4 JSON through the exact §8 public API.
+**Goal:** Ship milestone M1 of the `myampix_analytics` Flutter package: manual event tracking with a persistent offline queue, identity, SDK-computed sessions, super properties, `timeEvent`, people/profile operations, persisted opt-out, automatic context, and a gzip batch uploader with exponential backoff — delivering the exact shared-contracts §4 JSON through the exact §8 public API.
 
-**Architecture:** A guarded `MyAmpMix` singleton facade feeds an `EventPipeline` that assembles contract-§4 events (identity + session + super properties + timed durations + context) and persists them to a drift/SQLite queue *before* any network I/O. An `Uploader` drains the queue in gzip batches (20 events or every 10 s) to `/ingest/events` and `/ingest/profiles`, deleting rows only after a server `202` and backing off with jitter otherwise. Every collaborator (clock, HTTP client, stores, platform context) is constructor-injected so tests run on fakes.
+**Architecture:** A guarded `MyAmpix` singleton facade feeds an `EventPipeline` that assembles contract-§4 events (identity + session + super properties + timed durations + context) and persists them to a drift/SQLite queue *before* any network I/O. An `Uploader` drains the queue in gzip batches (20 events or every 10 s) to `/ingest/events` and `/ingest/profiles`, deleting rows only after a server `202` and backing off with jitter otherwise. Every collaborator (clock, HTTP client, stores, platform context) is constructor-injected so tests run on fakes.
 
 **Tech Stack:** Flutter ≥ 3.32 / Dart ≥ 3.8 · drift (SQLite queue) · http · uuid (v7 ids) · package_info_plus · device_info_plus · connectivity_plus · shared_preferences · path_provider + path + sqlite3_flutter_libs (drift companions) · flutter_lints · dev: flutter_test, fake_async, drift_dev, build_runner.
 
-**Not in this phase (later milestones — do not implement):** autocapture widgets (`MyAmpMixObserver` `$screen_view`, `MyAmpMixTracker` `$tap`/`$rage_tap`) are milestone M2; attribution (Android Install Referrer, `app_links` UTM capture, `$campaign_touch`, first/last-touch persistence) is milestone M3. The `utm_*`, `first_utm_*`, and `install_referrer` context fields stay absent from M1 payloads (they are optional in contract §4). See `docs/superpowers/specs/2026-07-02-sdk-flutter-design.md` §11–§12.
+**Not in this phase (later milestones — do not implement):** autocapture widgets (`MyAmpixObserver` `$screen_view`, `MyAmpixTracker` `$tap`/`$rage_tap`) are milestone M2; attribution (Android Install Referrer, `app_links` UTM capture, `$campaign_touch`, first/last-touch persistence) is milestone M3. The `utm_*`, `first_utm_*`, and `install_referrer` context fields stay absent from M1 payloads (they are optional in contract §4). See `docs/superpowers/specs/2026-07-02-sdk-flutter-design.md` §11–§12.
 
 ## Global Constraints
 
-- Package directory: `sdk/flutter_analytics/` (package name `myampmix_analytics`). All paths below are relative to the repo root.
+- Package directory: `sdk/flutter_analytics/` (package name `myampix_analytics`). All paths below are relative to the repo root.
 - Flutter 3.32+ / Dart 3.8+, fully null-safe.
 - **No codegen required for consumers** — drift codegen (`database.g.dart`) is internal dev-time only and its output is committed to the repo.
 - **The SDK never throws into the host app.** Every public entry point is guarded; internal errors are logged only when `config.debug` in debug builds.
@@ -30,7 +30,7 @@
 - Create: `sdk/flutter_analytics/pubspec.yaml`
 - Create: `sdk/flutter_analytics/analysis_options.yaml`
 - Create: `sdk/flutter_analytics/.gitignore`
-- Create: `sdk/flutter_analytics/lib/myampmix_analytics.dart`
+- Create: `sdk/flutter_analytics/lib/myampix_analytics.dart`
 - Create: `sdk/flutter_analytics/lib/src/version.dart`
 - Test: `sdk/flutter_analytics/test/version_test.dart`
 
@@ -42,8 +42,8 @@
 - [ ] Create `pubspec.yaml`:
 
 ```yaml
-name: myampmix_analytics
-description: MyAmpMix Flutter analytics SDK — offline-first event tracking for the self-hosted MyAmpMix platform.
+name: myampix_analytics
+description: MyAmpix Flutter analytics SDK — offline-first event tracking for the self-hosted MyAmpix platform.
 version: 0.1.0
 publish_to: none
 
@@ -103,7 +103,7 @@ pubspec.lock
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 void main() {
   test('sdk version constant matches pubspec', () {
@@ -121,17 +121,17 @@ void main() {
 const String mamSdkVersion = '0.1.0';
 ```
 
-- [ ] Create `lib/myampmix_analytics.dart`:
+- [ ] Create `lib/myampix_analytics.dart`:
 
 ```dart
-/// MyAmpMix Flutter analytics SDK.
+/// MyAmpix Flutter analytics SDK.
 library;
 
 export 'src/version.dart';
 ```
 
 - [ ] Run `flutter test test/version_test.dart` — expect **PASS**.
-- [ ] Commit: `chore(sdk): scaffold myampmix_analytics package`
+- [ ] Commit: `chore(sdk): scaffold myampix_analytics package`
 
 ---
 
@@ -145,7 +145,7 @@ export 'src/version.dart';
 - Test helper: `sdk/flutter_analytics/test/helpers/fake_clock.dart`
 
 **Interfaces:**
-- Produces: `abstract interface class Clock { DateTime now(); int nowMs(); }`, `class SystemClock implements Clock` (const), `class FakeClock implements Clock { void advance(Duration) }` (test helper), `class MyAmpMixConfig` (const, fields `serverUrl, flushAt, flushInterval, maxQueueSize, sessionTimeout, maxRetryDelay, debug`), `class MamLogger { const MamLogger({required bool enabled}); void log(String, [Object?, StackTrace?]) }`.
+- Produces: `abstract interface class Clock { DateTime now(); int nowMs(); }`, `class SystemClock implements Clock` (const), `class FakeClock implements Clock { void advance(Duration) }` (test helper), `class MyAmpixConfig` (const, fields `serverUrl, flushAt, flushInterval, maxQueueSize, sessionTimeout, maxRetryDelay, debug`), `class MamLogger { const MamLogger({required bool enabled}); void log(String, [Object?, StackTrace?]) }`.
 - Consumed by: every later task.
 
 **Steps:**
@@ -154,13 +154,13 @@ export 'src/version.dart';
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/config.dart';
+import 'package:myampix_analytics/src/config.dart';
 
 import 'helpers/fake_clock.dart';
 
 void main() {
   test('config defaults match the design spec', () {
-    const config = MyAmpMixConfig(serverUrl: 'http://localhost:8080');
+    const config = MyAmpixConfig(serverUrl: 'http://localhost:8080');
     expect(config.serverUrl, 'http://localhost:8080');
     expect(config.flushAt, 20);
     expect(config.flushInterval, const Duration(seconds: 10));
@@ -183,7 +183,7 @@ void main() {
 - [ ] Write the test helper `test/helpers/fake_clock.dart`:
 
 ```dart
-import 'package:myampmix_analytics/src/util/clock.dart';
+import 'package:myampix_analytics/src/util/clock.dart';
 
 /// Deterministic clock driven by tests.
 class FakeClock implements Clock {
@@ -238,7 +238,7 @@ class MamLogger {
 
   void log(String message, [Object? error, StackTrace? stackTrace]) {
     if (!enabled || !kDebugMode) return;
-    debugPrint('[MyAmpMix] $message${error == null ? '' : ' | $error'}');
+    debugPrint('[MyAmpix] $message${error == null ? '' : ' | $error'}');
     if (stackTrace != null) {
       debugPrint('$stackTrace');
     }
@@ -249,9 +249,9 @@ class MamLogger {
 - [ ] Create `lib/src/config.dart`:
 
 ```dart
-/// Immutable SDK configuration passed to `MyAmpMix.init`.
-class MyAmpMixConfig {
-  const MyAmpMixConfig({
+/// Immutable SDK configuration passed to `MyAmpix.init`.
+class MyAmpixConfig {
+  const MyAmpixConfig({
     required this.serverUrl,
     this.flushAt = 20,
     this.flushInterval = const Duration(seconds: 10),
@@ -263,7 +263,7 @@ class MyAmpMixConfig {
             'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)'),
         assert(maxQueueSize > 0, 'maxQueueSize must be positive');
 
-  /// Base URL of the MyAmpMix backend, e.g. `https://analytics.example.com`.
+  /// Base URL of the MyAmpix backend, e.g. `https://analytics.example.com`.
   final String serverUrl;
 
   /// Batch size that triggers an immediate flush (and the upload batch size).
@@ -311,7 +311,7 @@ class MyAmpMixConfig {
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/model/event.dart';
 
 void main() {
   test('serializes exactly to the ingest contract shape (shared-contracts §4)', () {
@@ -393,7 +393,7 @@ void main() {
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
 
 void main() {
   test('serializes to the /ingest/profiles operation shape', () {
@@ -671,7 +671,7 @@ class AnalyticsDatabase extends _$AnalyticsDatabase {
   static AnalyticsDatabase open() => AnalyticsDatabase(LazyDatabase(() async {
         final directory = await getApplicationSupportDirectory();
         return NativeDatabase.createInBackground(
-            File(p.join(directory.path, 'myampmix_analytics.sqlite')));
+            File(p.join(directory.path, 'myampix_analytics.sqlite')));
       }));
 
   @override
@@ -683,7 +683,7 @@ class AnalyticsDatabase extends _$AnalyticsDatabase {
 - [ ] Write the test helper `test/helpers/builders.dart`:
 
 ```dart
-import 'package:myampmix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/model/event.dart';
 
 AnalyticsEvent buildEvent({String name = 'test_event', String insertId = 'insert-1'}) =>
     AnalyticsEvent(
@@ -701,7 +701,7 @@ AnalyticsEvent buildEvent({String name = 'test_event', String insertId = 'insert
 - [ ] Write the test helper `test/helpers/in_memory_key_value_store.dart`:
 
 ```dart
-import 'package:myampmix_analytics/src/storage/key_value_store.dart';
+import 'package:myampix_analytics/src/storage/key_value_store.dart';
 
 class InMemoryKeyValueStore implements KeyValueStore {
   final Map<String, String> values = {};
@@ -722,8 +722,8 @@ class InMemoryKeyValueStore implements KeyValueStore {
 ```dart
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/builders.dart';
 
@@ -781,9 +781,9 @@ void main() {
 ```dart
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/profile_op_store.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/profile_op_store.dart';
 
 void main() {
   ProfileOperation buildOp(String op) => ProfileOperation(
@@ -1027,7 +1027,7 @@ class DriftProfileOpStore implements ProfileOpStore {
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/identity/identity_manager.dart';
+import 'package:myampix_analytics/src/identity/identity_manager.dart';
 
 import '../helpers/in_memory_key_value_store.dart';
 
@@ -1167,7 +1167,7 @@ class IdentityManager {
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/properties/super_properties_store.dart';
+import 'package:myampix_analytics/src/properties/super_properties_store.dart';
 
 import '../helpers/in_memory_key_value_store.dart';
 
@@ -1210,7 +1210,7 @@ void main() {
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/properties/timed_event_tracker.dart';
+import 'package:myampix_analytics/src/properties/timed_event_tracker.dart';
 
 import '../helpers/fake_clock.dart';
 
@@ -1326,7 +1326,7 @@ class TimedEventTracker {
 - [ ] Write the test helper `test/helpers/fake_context_data_source.dart`:
 
 ```dart
-import 'package:myampmix_analytics/src/context/context_collector.dart';
+import 'package:myampix_analytics/src/context/context_collector.dart';
 
 class FakeContextDataSource implements ContextDataSource {
   int appInfoCalls = 0;
@@ -1363,7 +1363,7 @@ class FakeContextDataSource implements ContextDataSource {
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/context/context_collector.dart';
+import 'package:myampix_analytics/src/context/context_collector.dart';
 
 import '../helpers/fake_context_data_source.dart';
 
@@ -1593,7 +1593,7 @@ class PlatformContextDataSource implements ContextDataSource {
 import 'dart:ui' show AppLifecycleState;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/session/session_manager.dart';
+import 'package:myampix_analytics/src/session/session_manager.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/in_memory_key_value_store.dart';
@@ -1863,13 +1863,13 @@ class SessionManager {
 ```dart
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/context/context_collector.dart';
-import 'package:myampmix_analytics/src/identity/identity_manager.dart';
-import 'package:myampmix_analytics/src/pipeline/event_pipeline.dart';
-import 'package:myampmix_analytics/src/properties/super_properties_store.dart';
-import 'package:myampmix_analytics/src/properties/timed_event_tracker.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/context/context_collector.dart';
+import 'package:myampix_analytics/src/identity/identity_manager.dart';
+import 'package:myampix_analytics/src/pipeline/event_pipeline.dart';
+import 'package:myampix_analytics/src/properties/super_properties_store.dart';
+import 'package:myampix_analytics/src/properties/timed_event_tracker.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';
@@ -2072,10 +2072,10 @@ class EventPipeline {
 - [ ] Write the test helper `test/helpers/in_memory_stores.dart`:
 
 ```dart
-import 'package:myampmix_analytics/src/model/event.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
-import 'package:myampmix_analytics/src/storage/profile_op_store.dart';
+import 'package:myampix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/storage/profile_op_store.dart';
 
 class InMemoryEventStore implements EventStore {
   final List<StoredEvent> rows = [];
@@ -2164,9 +2164,9 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
-import 'package:myampmix_analytics/src/network/uploader.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/network/uploader.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import '../helpers/builders.dart';
 import '../helpers/fake_clock.dart';
@@ -2443,7 +2443,7 @@ class Uploader {
   }
 
   /// Drains both queues. Reentrancy-safe; respects the backoff deadline
-  /// unless [force] (the public `MyAmpMix.flush()`).
+  /// unless [force] (the public `MyAmpix.flush()`).
   Future<void> flush({bool force = false}) async {
     if (_flushing) return;
     final deadline = _nextAttemptAt;
@@ -2580,7 +2580,7 @@ class Uploader {
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/people.dart';
+import 'package:myampix_analytics/src/people.dart';
 
 import 'helpers/fake_clock.dart';
 import 'helpers/in_memory_stores.dart';
@@ -2670,7 +2670,7 @@ import 'storage/profile_op_store.dart';
 import 'util/clock.dart';
 import 'util/logger.dart';
 
-/// `MyAmpMix.instance.people` — maps 1:1 to `/ingest/profiles` operations
+/// `MyAmpix.instance.people` — maps 1:1 to `/ingest/profiles` operations
 /// (shared-contracts §4 and §8). Methods are synchronous fire-and-forget
 /// per the frozen surface and never throw into the host app.
 class People {
@@ -2690,7 +2690,7 @@ class People {
         _onQueued = onQueued,
         _logger = logger;
 
-  /// Inert instance used before `MyAmpMix.init` completes (design §13).
+  /// Inert instance used before `MyAmpix.init` completes (design §13).
   factory People.noop() => People(
         store: _NoopProfileOpStore(),
         distinctId: () => '',
@@ -2780,7 +2780,7 @@ class _NoopProfileOpStore implements ProfileOpStore {
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/optout/opt_out_state.dart';
+import 'package:myampix_analytics/src/optout/opt_out_state.dart';
 
 import '../helpers/builders.dart';
 import '../helpers/in_memory_key_value_store.dart';
@@ -2882,26 +2882,26 @@ class OptOutState {
 
 ---
 
-### Task 13: Public facade — `MyAmpMix` (frozen contracts §8 surface)
+### Task 13: Public facade — `MyAmpix` (frozen contracts §8 surface)
 
 **Files:**
-- Create: `sdk/flutter_analytics/lib/src/myampmix.dart`
-- Modify: `sdk/flutter_analytics/lib/myampmix_analytics.dart` (final barrel exports)
-- Test: `sdk/flutter_analytics/test/myampmix_test.dart`
+- Create: `sdk/flutter_analytics/lib/src/myampix.dart`
+- Modify: `sdk/flutter_analytics/lib/myampix_analytics.dart` (final barrel exports)
+- Test: `sdk/flutter_analytics/test/myampix_test.dart`
 
 **Interfaces:**
 - Consumes: everything from Tasks 2–12.
 - Produces the exact §8 surface:
-  - `static Future<void> MyAmpMix.init(String token, {required MyAmpMixConfig config, SdkOverrides? overrides})` (`overrides` is `@visibleForTesting` only)
-  - `static MyAmpMix get instance`
+  - `static Future<void> MyAmpix.init(String token, {required MyAmpixConfig config, SdkOverrides? overrides})` (`overrides` is `@visibleForTesting` only)
+  - `static MyAmpix get instance`
   - `void track(String event, {Map<String, Object?>? properties})`, `void identify(String userId)`, `void alias(String aliasId)`, `void reset()`, `void flush()`, `void timeEvent(String event)`, `void registerSuperProperties(Map<String, Object?> properties)`, `People people`, `void optOutTracking()`, `void optInTracking()`
   - `class SdkOverrides { Clock? clock; http.Client? httpClient; AnalyticsDatabase? database; KeyValueStore? keyValueStore; ContextDataSource? contextDataSource; String Function()? idFactory; math.Random? random; }`
-  - `@visibleForTesting static Future<void> MyAmpMix.shutdownForTesting({bool closeDatabase = true})`
-- Never-throw guard: every method routes through `_guard`, which catches sync throws and attaches `catchError` to fire-and-forget futures; pre-init calls are logged no-ops. `MyAmpMixObserver`/`MyAmpMixTracker` widgets from §8 are **milestone M2** — not implemented here.
+  - `@visibleForTesting static Future<void> MyAmpix.shutdownForTesting({bool closeDatabase = true})`
+- Never-throw guard: every method routes through `_guard`, which catches sync throws and attaches `catchError` to fire-and-forget futures; pre-init calls are logged no-ops. `MyAmpixObserver`/`MyAmpixTracker` widgets from §8 are **milestone M2** — not implemented here.
 
 **Steps:**
 
-- [ ] Write the failing test `test/myampmix_test.dart`:
+- [ ] Write the failing test `test/myampix_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -2912,9 +2912,9 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/key_value_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/key_value_store.dart';
 
 import 'helpers/fake_clock.dart';
 import 'helpers/fake_context_data_source.dart';
@@ -2946,16 +2946,16 @@ void main() {
     keyValueStore = InMemoryKeyValueStore();
   });
 
-  tearDown(() => MyAmpMix.shutdownForTesting());
+  tearDown(() => MyAmpix.shutdownForTesting());
 
   MockClient acceptAll() => MockClient((request) async {
         requests.add(request);
         return http.Response('{"accepted": 100, "rejected": []}', 202);
       });
 
-  Future<void> initSdk({http.Client? client}) => MyAmpMix.init(
+  Future<void> initSdk({http.Client? client}) => MyAmpix.init(
         'mam_0123456789abcdef0123456789abcdef',
-        config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+        config: const MyAmpixConfig(serverUrl: 'http://localhost:8080'),
         overrides: SdkOverrides(
           clock: clock,
           httpClient: client ?? acceptAll(),
@@ -2983,8 +2983,8 @@ void main() {
 
   test('init + track + flush delivers a contract-shaped event', () async {
     await initSdk();
-    MyAmpMix.instance.track('checkout_completed', properties: {'value': 9.99});
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('checkout_completed', properties: {'value': 9.99});
+    MyAmpix.instance.flush();
     await waitFor(
         () => sentEvents().any((e) => e['event'] == 'checkout_completed'));
 
@@ -3000,7 +3000,7 @@ void main() {
 
   test('first launch sends the session lifecycle events in order', () async {
     await initSdk();
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().length >= 3);
     expect(sentEvents().map((e) => e['event']).toList(),
         containsAllInOrder([r'$session_start', r'$first_open', r'$app_open']));
@@ -3008,9 +3008,9 @@ void main() {
 
   test(r'identify emits $identify and switches distinct_id', () async {
     await initSdk();
-    MyAmpMix.instance.identify('u_42');
-    MyAmpMix.instance.track('after_login');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.identify('u_42');
+    MyAmpix.instance.track('after_login');
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == 'after_login'));
 
     final identifyEvent =
@@ -3024,8 +3024,8 @@ void main() {
 
   test(r'alias emits $identify carrying $alias', () async {
     await initSdk();
-    MyAmpMix.instance.alias('new-id');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.alias('new-id');
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) =>
         e['event'] == r'$identify' &&
         (e['properties'] as Map)[r'$alias'] == 'new-id'));
@@ -3046,7 +3046,7 @@ void main() {
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await pumpEventQueue();
 
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == r'$session_end'));
 
     final names = sentEvents().map((e) => e['event']).toList();
@@ -3062,9 +3062,9 @@ void main() {
 
   test('people operations are delivered to /ingest/profiles', () async {
     await initSdk();
-    MyAmpMix.instance.people.set({'plan': 'pro'});
+    MyAmpix.instance.people.set({'plan': 'pro'});
     await pumpEventQueue();
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(
         () => requests.any((r) => r.url.path == '/ingest/profiles'));
 
@@ -3079,29 +3079,29 @@ void main() {
 
   test('opt-out drops events until opt-in', () async {
     await initSdk();
-    MyAmpMix.instance.optOutTracking();
+    MyAmpix.instance.optOutTracking();
     await pumpEventQueue();
 
-    MyAmpMix.instance.track('secret');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('secret');
+    MyAmpix.instance.flush();
     await pumpEventQueue();
     expect(sentEvents().where((e) => e['event'] == 'secret'), isEmpty);
 
-    MyAmpMix.instance.optInTracking();
+    MyAmpix.instance.optInTracking();
     await pumpEventQueue();
-    MyAmpMix.instance.track('visible');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('visible');
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == 'visible'));
   });
 
   test('registerSuperProperties and timeEvent flow through track', () async {
     await initSdk();
-    MyAmpMix.instance.registerSuperProperties({'ab_group': 'b'});
-    MyAmpMix.instance.timeEvent('level_completed');
+    MyAmpix.instance.registerSuperProperties({'ab_group': 'b'});
+    MyAmpix.instance.timeEvent('level_completed');
     await pumpEventQueue();
     clock.advance(const Duration(seconds: 7));
-    MyAmpMix.instance.track('level_completed');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('level_completed');
+    MyAmpix.instance.flush();
     await waitFor(
         () => sentEvents().any((e) => e['event'] == 'level_completed'));
 
@@ -3114,13 +3114,13 @@ void main() {
   test('reset issues a fresh anonymous identity and clears super properties',
       () async {
     await initSdk();
-    MyAmpMix.instance.identify('u_42');
-    MyAmpMix.instance.registerSuperProperties({'plan': 'pro'});
+    MyAmpix.instance.identify('u_42');
+    MyAmpix.instance.registerSuperProperties({'plan': 'pro'});
     await pumpEventQueue();
-    MyAmpMix.instance.reset();
+    MyAmpix.instance.reset();
     await pumpEventQueue();
-    MyAmpMix.instance.track('after_reset');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('after_reset');
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == 'after_reset'));
 
     final event = sentEvents().firstWhere((e) => e['event'] == 'after_reset');
@@ -3130,8 +3130,8 @@ void main() {
   });
 
   test('no public method throws before init', () async {
-    await MyAmpMix.shutdownForTesting(); // pristine uninitialized instance
-    final sdk = MyAmpMix.instance;
+    await MyAmpix.shutdownForTesting(); // pristine uninitialized instance
+    final sdk = MyAmpix.instance;
     expect(() {
       sdk.track('e');
       sdk.identify('u');
@@ -3148,9 +3148,9 @@ void main() {
 
   test('init failure disables the SDK instead of throwing', () async {
     final db = AnalyticsDatabase(NativeDatabase.memory());
-    await MyAmpMix.init(
+    await MyAmpix.init(
       'mam_0123456789abcdef0123456789abcdef',
-      config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+      config: const MyAmpixConfig(serverUrl: 'http://localhost:8080'),
       overrides: SdkOverrides(
         clock: clock,
         httpClient: acceptAll(),
@@ -3159,15 +3159,15 @@ void main() {
         contextDataSource: FakeContextDataSource(),
       ),
     );
-    expect(() => MyAmpMix.instance.track('e'), returnsNormally);
+    expect(() => MyAmpix.instance.track('e'), returnsNormally);
     await pumpEventQueue();
     await db.close();
   });
 }
 ```
 
-- [ ] Run `flutter test test/myampmix_test.dart` — expect **FAIL** (missing `myampmix.dart`).
-- [ ] Create `lib/src/myampmix.dart`:
+- [ ] Run `flutter test test/myampix_test.dart` — expect **FAIL** (missing `myampix.dart`).
+- [ ] Create `lib/src/myampix.dart`:
 
 ```dart
 import 'dart:async';
@@ -3195,7 +3195,7 @@ import 'storage/profile_op_store.dart';
 import 'util/clock.dart';
 import 'util/logger.dart';
 
-/// Testing-only dependency overrides for [MyAmpMix.init]. Production code
+/// Testing-only dependency overrides for [MyAmpix.init]. Production code
 /// must not pass this parameter.
 @visibleForTesting
 class SdkOverrides {
@@ -3220,14 +3220,14 @@ class SdkOverrides {
 
 /// Public facade — the exact shared-contracts §8 surface. Every method is
 /// guarded: the SDK never throws into the host app (design §13). The M2
-/// widgets (MyAmpMixObserver, MyAmpMixTracker) ship in the autocapture
+/// widgets (MyAmpixObserver, MyAmpixTracker) ship in the autocapture
 /// milestone, not in phase 1.
-class MyAmpMix {
-  MyAmpMix._();
+class MyAmpix {
+  MyAmpix._();
 
-  static MyAmpMix _instance = MyAmpMix._();
+  static MyAmpix _instance = MyAmpix._();
 
-  static MyAmpMix get instance => _instance;
+  static MyAmpix get instance => _instance;
 
   bool _initialized = false;
   MamLogger _logger = const MamLogger(enabled: false);
@@ -3249,10 +3249,10 @@ class MyAmpMix {
   /// and every call becomes a logged no-op.
   static Future<void> init(
     String token, {
-    required MyAmpMixConfig config,
+    required MyAmpixConfig config,
     @visibleForTesting SdkOverrides? overrides,
   }) async {
-    final sdk = MyAmpMix._();
+    final sdk = MyAmpix._();
     try {
       await sdk._start(token, config, overrides);
       _instance = sdk;
@@ -3263,7 +3263,7 @@ class MyAmpMix {
   }
 
   Future<void> _start(
-      String token, MyAmpMixConfig config, SdkOverrides? overrides) async {
+      String token, MyAmpixConfig config, SdkOverrides? overrides) async {
     WidgetsFlutterBinding.ensureInitialized();
     _logger = MamLogger(enabled: config.debug);
     final clock = overrides?.clock ?? const SystemClock();
@@ -3372,7 +3372,7 @@ class MyAmpMix {
 
   void _guard(String operation, FutureOr<void> Function() body) {
     if (!_initialized) {
-      _logger.log('$operation ignored: MyAmpMix.init has not completed.');
+      _logger.log('$operation ignored: MyAmpix.init has not completed.');
       return;
     }
     try {
@@ -3397,7 +3397,7 @@ class MyAmpMix {
       if (observer != null) WidgetsBinding.instance.removeObserver(observer);
       if (closeDatabase) await sdk._database.close();
     }
-    _instance = MyAmpMix._();
+    _instance = MyAmpix._();
   }
 }
 
@@ -3416,24 +3416,24 @@ class _SdkLifecycleObserver with WidgetsBindingObserver {
 }
 ```
 
-- [ ] Replace `lib/myampmix_analytics.dart` with the final barrel:
+- [ ] Replace `lib/myampix_analytics.dart` with the final barrel:
 
 ```dart
-/// MyAmpMix Flutter analytics SDK.
+/// MyAmpix Flutter analytics SDK.
 ///
 /// Public surface per shared-contracts §8. The autocapture widgets
-/// (MyAmpMixObserver, MyAmpMixTracker) ship in milestone M2.
+/// (MyAmpixObserver, MyAmpixTracker) ship in milestone M2.
 library;
 
 export 'src/config.dart';
-export 'src/myampmix.dart' show MyAmpMix, SdkOverrides;
+export 'src/myampix.dart' show MyAmpix, SdkOverrides;
 export 'src/people.dart' show People;
 export 'src/version.dart';
 ```
 
-- [ ] Run `flutter test test/myampmix_test.dart` — expect **PASS**.
+- [ ] Run `flutter test test/myampix_test.dart` — expect **PASS**.
 - [ ] Run `flutter test` (full suite) — expect **PASS** (no regressions).
-- [ ] Commit: `feat(sdk): MyAmpMix facade wiring the frozen contracts §8 surface`
+- [ ] Commit: `feat(sdk): MyAmpix facade wiring the frozen contracts §8 surface`
 
 ---
 
@@ -3458,9 +3458,9 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import 'helpers/fake_clock.dart';
 import 'helpers/fake_context_data_source.dart';
@@ -3483,9 +3483,9 @@ void main() {
       return http.Response('{"accepted": 100, "rejected": []}', 202);
     });
 
-    Future<void> boot() => MyAmpMix.init(
+    Future<void> boot() => MyAmpix.init(
           'mam_0123456789abcdef0123456789abcdef',
-          config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+          config: const MyAmpixConfig(serverUrl: 'http://localhost:8080'),
           overrides: SdkOverrides(
             clock: clock,
             httpClient: client,
@@ -3498,9 +3498,9 @@ void main() {
 
     // ── Run 1: offline. Events must persist, nothing must be sent. ──
     await boot();
-    MyAmpMix.instance.track('offline_1');
-    MyAmpMix.instance.track('offline_2');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('offline_1');
+    MyAmpix.instance.track('offline_2');
+    MyAmpix.instance.flush();
     await pumpEventQueue(times: 50);
     expect(requests, isEmpty);
 
@@ -3513,13 +3513,13 @@ void main() {
         isTrue);
 
     // ── "Kill": tear down without closing the shared in-memory DB. ──
-    await MyAmpMix.shutdownForTesting(closeDatabase: false);
+    await MyAmpix.shutdownForTesting(closeDatabase: false);
 
     // ── Run 2: relaunch hours later with network restored. ──
     clock.advance(const Duration(hours: 2));
     online = true;
     await boot();
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     for (var i = 0; i < 200 && requests.isEmpty; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
@@ -3541,7 +3541,7 @@ void main() {
     expect(deliveredIds.containsAll(queuedIds), isTrue);
     expect(deliveredNames, contains(r'$session_end'));
 
-    await MyAmpMix.shutdownForTesting();
+    await MyAmpix.shutdownForTesting();
   });
 }
 ```

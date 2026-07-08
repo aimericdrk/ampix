@@ -28,7 +28,7 @@ class AnalyticsDatabase extends _$AnalyticsDatabase {
     LazyDatabase(() async {
       final directory = await getApplicationSupportDirectory();
       return NativeDatabase.createInBackground(
-        File(p.join(directory.path, 'myampmix_analytics.sqlite')),
+        File(p.join(directory.path, 'myampix_analytics.sqlite')),
       );
     }),
   );

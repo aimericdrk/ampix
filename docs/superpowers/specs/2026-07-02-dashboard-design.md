@@ -1,4 +1,4 @@
-# MyAmpMix Dashboard — Design
+# MyAmpix Dashboard — Design
 
 **Date:** 2026-07-02
 **Status:** Approved design
@@ -105,8 +105,8 @@ One immutable build must run against any backend origin. Mechanism:
 
 ```js
 // Runtime configuration — overwrite this file at deploy time. Do not import from the bundle.
-window.__MYAMPMIX_CONFIG__ = {
-  apiBaseUrl: '', // '' = same origin (dev proxy / reverse-proxied prod). Or e.g. 'https://api.myampmix.example'
+window.___MYAMPIX_CONFIG__ = {
+  apiBaseUrl: '', // '' = same origin (dev proxy / reverse-proxied prod). Or e.g. 'https://api.myampix.example'
 };
 ```
 
@@ -118,7 +118,7 @@ export interface RuntimeConfig {
 }
 
 export function getRuntimeConfig(): RuntimeConfig {
-  return { apiBaseUrl: '', ...window.__MYAMPMIX_CONFIG__ };
+  return { apiBaseUrl: '', ...window.___MYAMPIX_CONFIG__ };
 }
 ```
 
@@ -368,7 +368,7 @@ Light/dark via a `dark` class on `<html>` and **CSS variables** consumed by Tail
 @theme inline { --color-bg: var(--bg); --color-surface: var(--surface); /* … */ }
 ```
 
-- `ThemeProvider` initializes from `localStorage('myampmix-theme')` → `prefers-color-scheme` → light; toggle in the sidebar persists the choice.
+- `ThemeProvider` initializes from `localStorage('myampix-theme')` → `prefers-color-scheme` → light; toggle in the sidebar persists the choice.
 - Components only use semantic tokens (`bg-surface`, `text-text-muted`, `border-border`, `bg-accent`…); raw palette values appear only in `index.css`. Chart palette variables live alongside.
 
 ## 11. Accessibility Baseline

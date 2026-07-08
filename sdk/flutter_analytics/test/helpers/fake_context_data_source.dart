@@ -1,4 +1,4 @@
-import 'package:myampmix_analytics/src/context/context_collector.dart';
+import 'package:myampix_analytics/src/context/context_collector.dart';
 
 class FakeContextDataSource implements ContextDataSource {
   int appInfoCalls = 0;

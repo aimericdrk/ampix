@@ -1,8 +1,8 @@
-# MyAmpMix Flutter SDK — How To Use
+# MyAmpix Flutter SDK — How To Use
 
 ## 1. What it is
 
-MyAmpMix is a self-hosted, Mixpanel-style product-analytics SDK for Flutter. You call `track()`/`identify()`/`people.*` in your app; the SDK writes every call to a local offline queue first, then batches and gzip-uploads it to your own MyAmpMix backend (`/ingest/events`, `/ingest/profiles`), which lands the data in ClickHouse. Beyond manual `track()`, the SDK also **autocaptures** — screen views, taps/rage-taps, native in-app purchases, marketing attribution, and (optionally) one screenshot per screen per app version — all `$`-prefixed and toggleable (§14 below). A React dashboard ships alongside for browsing/visualizing the data (insights, funnels, retention, user-path map, click heatmaps, cohorts, custom dashboards).
+MyAmpix is a self-hosted, Mixpanel-style product-analytics SDK for Flutter. You call `track()`/`identify()`/`people.*` in your app; the SDK writes every call to a local offline queue first, then batches and gzip-uploads it to your own MyAmpix backend (`/ingest/events`, `/ingest/profiles`), which lands the data in ClickHouse. Beyond manual `track()`, the SDK also **autocaptures** — screen views, taps/rage-taps, native in-app purchases, marketing attribution, and (optionally) one screenshot per screen per app version — all `$`-prefixed and toggleable (§14 below). A React dashboard ships alongside for browsing/visualizing the data (insights, funnels, retention, user-path map, click heatmaps, cohorts, custom dashboards).
 
 ## 2. Install
 
@@ -11,13 +11,13 @@ The package isn't published to pub.dev yet. Point at it via `path:` (working ins
 ```yaml
 # pubspec.yaml
 dependencies:
-  myampmix_analytics:
-    path: ../MyAmpMix/sdk/flutter_analytics # adjust to your app's location relative to this repo
+  myampix_analytics:
+    path: ../MyAmpix/sdk/flutter_analytics # adjust to your app's location relative to this repo
 
   # or, from another repo:
-  myampmix_analytics:
+  myampix_analytics:
     git:
-      url: https://github.com/<your-org>/MyAmpMix.git
+      url: https://github.com/<your-org>/MyAmpix.git
       path: sdk/flutter_analytics
 ```
 
@@ -29,14 +29,14 @@ flutter pub get   # if `flutter` is aliased oddly in your shell, use: command fl
 
 ```dart
 import 'package:flutter/widgets.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await MyAmpMix.init(
+  await MyAmpix.init(
     'mam_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', // your project's ingest token
-    config: const MyAmpMixConfig(
+    config: const MyAmpixConfig(
       serverUrl: 'http://localhost:8080', // required — see Android note below
       // Everything else is optional; defaults shown:
       flushAt: 20,                                 // batch size that triggers an immediate flush (1..100)
@@ -46,8 +46,8 @@ Future<void> main() async {
       maxRetryDelay: Duration(minutes: 5),         // cap on exponential retry backoff
       debug: false,                                // enable internal SDK logging (debug builds only)
       // Autocapture toggles — see §14:
-      autocaptureScreens: true,                    // default true — $screen_view via MyAmpMixObserver
-      autocaptureTaps: true,                       // default true — $tap / $rage_tap via MyAmpMixTracker
+      autocaptureScreens: true,                    // default true — $screen_view via MyAmpixObserver
+      autocaptureTaps: true,                       // default true — $tap / $rage_tap via MyAmpixTracker
       autocapturePurchases: true,                  // default true — native $in_app_purchase (StoreKit / Play Billing)
       autocaptureAttribution: true,                // default true — deep-link UTM + Android install referrer
       autocaptureScreenshots: false,               // default FALSE — dev/reference tool, debug-only (see §14)
@@ -58,7 +58,7 @@ Future<void> main() async {
 }
 ```
 
-`MyAmpMix.init` is idempotent (a second call is a logged no-op keeping the first instance) and never throws — if it fails, the SDK stays disabled and every subsequent call becomes a silent no-op instead of crashing your app.
+`MyAmpix.init` is idempotent (a second call is a logged no-op keeping the first instance) and never throws — if it fails, the SDK stays disabled and every subsequent call becomes a silent no-op instead of crashing your app.
 
 **Where the token comes from:** the fastest path is the one-command dev stack, which seeds a ready-to-use demo token automatically:
 
@@ -67,20 +67,20 @@ pnpm dev   # from the repo root: starts DBs + backend (:8080) + dashboard (:5173
            # applies migrations, and seeds a demo project + ingest token.
 ```
 
-The seed creates the fixed demo token `mam_00000000000000000000000000000000` (already used by the Flutter example in `sdk/flutter_analytics/example`, so that app works with no edits). Phase 1 has no token-management UI yet (later phase); to mint additional/real tokens, use Prisma Studio against the backend's Postgres store — `pnpm --filter ./backend exec prisma studio`, then create one row each in `Organization` → `Project` (`orgId` = the org's id) → `SdkToken` (`projectId` = the project's id, `token` = `mam_` + 32 lowercase hex, e.g. `mam_$(openssl rand -hex 16)`, any `label`). The `token` you pass to `MyAmpMix.init` authenticates every ingest request as `Authorization: Bearer <token>` (shared-contracts §4) — an invalid or absent token gets `401`.
+The seed creates the fixed demo token `mam_00000000000000000000000000000000` (already used by the Flutter example in `sdk/flutter_analytics/example`, so that app works with no edits). Phase 1 has no token-management UI yet (later phase); to mint additional/real tokens, use Prisma Studio against the backend's Postgres store — `pnpm --filter ./backend exec prisma studio`, then create one row each in `Organization` → `Project` (`orgId` = the org's id) → `SdkToken` (`projectId` = the project's id, `token` = `mam_` + 32 lowercase hex, e.g. `mam_$(openssl rand -hex 16)`, any `label`). The `token` you pass to `MyAmpix.init` authenticates every ingest request as `Authorization: Bearer <token>` (shared-contracts §4) — an invalid or absent token gets `401`.
 
 **Android emulator note:** the emulator's `localhost` refers to the emulator itself, not your host machine. Use `http://10.0.2.2:8080` as `serverUrl` instead. iOS simulator and desktop can use `http://localhost:8080` directly.
 
 ## 4. Tracking events
 
 ```dart
-MyAmpMix.instance.track('checkout_completed', properties: {
+MyAmpix.instance.track('checkout_completed', properties: {
   'plan': 'pro',
   'value': 9.99,
   'promo_applied': true,
 });
 
-MyAmpMix.instance.track('search_performed', properties: {
+MyAmpix.instance.track('search_performed', properties: {
   'query': 'blue running shoes',
   'results_count': 12,
   'filters_applied': ['color', 'size'], // lists of scalars are fine
@@ -92,9 +92,9 @@ Flat-properties rule (shared-contracts §4): a property value may be a `String`,
 ## 5. Identity
 
 ```dart
-MyAmpMix.instance.identify('user_42');
-MyAmpMix.instance.alias('user_42_new_account_id');
-MyAmpMix.instance.reset(); // call this on logout
+MyAmpix.instance.identify('user_42');
+MyAmpix.instance.alias('user_42_new_account_id');
+MyAmpix.instance.reset(); // call this on logout
 ```
 
 The SDK is anonymous by default: on first launch it generates `anon_id`, a stable UUID v7 persisted for the life of the install. `distinct_id` starts out equal to `anon_id` and switches to whatever you pass `identify()` — that also fires a `$identify` event carrying `{"$anon_id": ...}` so the backend can link the pre-login history to the real user (only if the id actually changed). `alias()` doesn't change the local identity; it sends a `$identify` event with `{"$alias": "<newId>"}` — there's no separate alias transport. `reset()` generates a fresh `anon_id`, clears `distinct_id` back to it, and clears super properties and any pending `timeEvent()` timers — call it on logout so the next user isn't attributed to the previous one.
@@ -102,12 +102,12 @@ The SDK is anonymous by default: on first launch it generates `anon_id`, a stabl
 ## 6. User profiles
 
 ```dart
-MyAmpMix.instance.people.set({'plan': 'pro', 'email': 'a@example.com'});
-MyAmpMix.instance.people.setOnce({'first_seen_at': '2026-07-01'});
-MyAmpMix.instance.people.increment({'login_count': 1});
-MyAmpMix.instance.people.append({'devices': 'iPhone16,2'});
-MyAmpMix.instance.people.unset(['trial_expires_at']);
-MyAmpMix.instance.people.deleteUser();
+MyAmpix.instance.people.set({'plan': 'pro', 'email': 'a@example.com'});
+MyAmpix.instance.people.setOnce({'first_seen_at': '2026-07-01'});
+MyAmpix.instance.people.increment({'login_count': 1});
+MyAmpix.instance.people.append({'devices': 'iPhone16,2'});
+MyAmpix.instance.people.unset(['trial_expires_at']);
+MyAmpix.instance.people.deleteUser();
 ```
 
 These map 1:1 to `POST /ingest/profiles` operations (`set`/`set_once`/`increment`/`append`/`unset`/`delete`). The flat-properties rule from §4 applies to profile properties too. All calls are fire-and-forget and attributed to the current `distinct_id` at the time they run.
@@ -115,15 +115,15 @@ These map 1:1 to `POST /ingest/profiles` operations (`set`/`set_once`/`increment
 ## 7. Timed events
 
 ```dart
-MyAmpMix.instance.timeEvent('level_completed');
+MyAmpix.instance.timeEvent('level_completed');
 // ... gameplay happens ...
-MyAmpMix.instance.track('level_completed'); // auto-attaches $duration_ms (elapsed ms)
+MyAmpix.instance.track('level_completed'); // auto-attaches $duration_ms (elapsed ms)
 ```
 
 ## 8. Super properties
 
 ```dart
-MyAmpMix.instance.registerSuperProperties({
+MyAmpix.instance.registerSuperProperties({
   'app_flavor': 'production',
   'ab_test_group': 'B',
 });
@@ -138,9 +138,9 @@ Fully automatic — nothing to call. The SDK maintains a `session_id` and emits 
 ## 10. Privacy
 
 ```dart
-MyAmpMix.instance.optOutTracking(); // persisted across restarts; purges the local queue immediately
-MyAmpMix.instance.optInTracking();
-MyAmpMix.instance.flush();          // force an immediate upload attempt of whatever's queued
+MyAmpix.instance.optOutTracking(); // persisted across restarts; purges the local queue immediately
+MyAmpix.instance.optInTracking();
+MyAmpix.instance.flush();          // force an immediate upload attempt of whatever's queued
 ```
 
 While opted out, `track()`/`people.*`/`timeEvent()` are no-ops.
@@ -155,7 +155,7 @@ There's no dashboard UI to browse events yet, so confirm delivery straight from 
 
 ```bash
 docker compose -f infra/docker-compose.yml exec clickhouse \
-  clickhouse-client --user default --password myampmix_dev --database analytics \
+  clickhouse-client --user default --password myampix_dev --database analytics \
   --query "SELECT event, count() FROM events GROUP BY event"
 ```
 
@@ -170,35 +170,35 @@ docker compose -f infra/docker-compose.yml exec clickhouse \
 
 ## 14. Autocapture
 
-All autocapture is `$`-prefixed and reserved (so it's always distinguishable from your own manual events, which are never `$`-prefixed) and each stream is independently toggleable via `MyAmpMixConfig` (§3, all default `true`).
+All autocapture is `$`-prefixed and reserved (so it's always distinguishable from your own manual events, which are never `$`-prefixed) and each stream is independently toggleable via `MyAmpixConfig` (§3, all default `true`).
 
 **Screen views & taps** — wire the two widgets once:
 
 ```dart
 MaterialApp(
-  navigatorObservers: [MyAmpMixObserver()],   // → $screen_view (with $previous_screen, $time_on_previous_ms)
+  navigatorObservers: [MyAmpixObserver()],   // → $screen_view (with $previous_screen, $time_on_previous_ms)
   builder: (context, child) =>
-      MyAmpMixTracker(child: child!),          // → $tap / $rage_tap (widget type/label/position, non-blocking)
+      MyAmpixTracker(child: child!),          // → $tap / $rage_tap (widget type/label/position, non-blocking)
 );
 ```
 
 **Native in-app purchases** (`autocapturePurchases`) — no wiring needed: the SDK observes StoreKit (iOS) / Play Billing (Android) and emits `$in_app_purchase` (`$product_id`, `$price`, `$currency`, `$store`, `$purchase_source: "native"`) for the app's own store transactions, always distinct from a purchase you track manually.
 
-**Attribution** (`autocaptureAttribution`) — the Android install referrer is captured automatically; for deep links, call `MyAmpMix.instance.trackDeepLink(uri)` from your link handler. UTM params are persisted (first- and last-touch) and attached to every event; a `$campaign_touch` is emitted on each new touch.
+**Attribution** (`autocaptureAttribution`) — the Android install referrer is captured automatically; for deep links, call `MyAmpix.instance.trackDeepLink(uri)` from your link handler. UTM params are persisted (first- and last-touch) and attached to every event; a `$campaign_touch` is emitted on each new touch.
 
 **Screenshots** (`autocaptureScreenshots`, default **false**) — a **developer/reference tool, not a per-user feature.** It is off by default and only ever runs in **debug builds** — a release/production build never captures or uploads, so your end users never send screenshots (bounded storage, no PII collected in the wild). These reference images power the dashboard's user-path map and click heatmaps.
 
 **How to populate them:** in a DEBUG build, set `autocaptureScreenshots: true`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition: at least `screenshotSettleDelay` (a `Duration`, default **~1s**) AND until the UI stops animating. Bump `screenshotSettleDelay` if your transitions are longer/heavier and captures still look mid-animation.
 
-For correctly-framed full-screen captures, wrap your app in `MyAmpMixTracker` via `MaterialApp.builder` (the screen-view/tap wiring above already does this): the SDK captures the dedicated `RepaintBoundary` the tracker provides — the whole screen — rather than guessing a boundary from the render tree. Without the tracker mounted it falls back to the largest boundary on screen.
+For correctly-framed full-screen captures, wrap your app in `MyAmpixTracker` via `MaterialApp.builder` (the screen-view/tap wiring above already does this): the SDK captures the dedicated `RepaintBoundary` the tracker provides — the whole screen — rather than guessing a boundary from the render tree. Without the tracker mounted it falls back to the largest boundary on screen.
 
-**Non-route navigation (bottom-nav tabs, IndexedStack, PageView):** these aren't Navigator pushes, so `MyAmpMixObserver` can't see them — every tab would collapse into one screen. Call `trackScreen` yourself when the visible screen changes:
+**Non-route navigation (bottom-nav tabs, IndexedStack, PageView):** these aren't Navigator pushes, so `MyAmpixObserver` can't see them — every tab would collapse into one screen. Call `trackScreen` yourself when the visible screen changes:
 ```dart
 NavigationBar(
   selectedIndex: _index,
   onDestinationSelected: (i) {
     setState(() => _index = i);
-    MyAmpMix.instance.trackScreen(['catalog', 'cart', 'profile'][i]); // → $screen_view (+ reference screenshot)
+    MyAmpix.instance.trackScreen(['catalog', 'cart', 'profile'][i]); // → $screen_view (+ reference screenshot)
   },
 );
 ```
@@ -213,12 +213,12 @@ Navigator.push(context, MaterialPageRoute(
   builder: (_) => const ProductDetailScreen(),
 ));
 // or a custom mapping without renaming routes:
-MyAmpMixObserver(screenNameExtractor: (route) => route.settings.name ?? myNameFor(route))
+MyAmpixObserver(screenNameExtractor: (route) => route.settings.name ?? myNameFor(route))
 ```
 
-**Retake / fix a bad capture:** delete it in the dashboard (Screens → Retake/Delete), then call `MyAmpMix.instance.retakeScreenshots()` and re-navigate in a debug build to re-capture. Wrap PII/payment fields to keep them out of captures:
+**Retake / fix a bad capture:** delete it in the dashboard (Screens → Retake/Delete), then call `MyAmpix.instance.retakeScreenshots()` and re-navigate in a debug build to re-capture. Wrap PII/payment fields to keep them out of captures:
 ```dart
-MyAmpMixPrivacy(child: CreditCardForm())   // masked (solid block) in screenshots
+MyAmpixPrivacy(child: CreditCardForm())   // masked (solid block) in screenshots
 ```
 > MVP masking is opt-in per widget; it does not auto-redact arbitrary text.
 

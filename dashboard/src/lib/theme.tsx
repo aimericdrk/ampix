@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 export type Theme = 'light' | 'dark';
 
-const STORAGE_KEY = 'myampmix-theme';
+const STORAGE_KEY = 'myampix-theme';
 
 interface ThemeContextValue {
   theme: Theme;

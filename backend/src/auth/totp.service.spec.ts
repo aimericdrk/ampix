@@ -38,7 +38,7 @@ describe('TotpService', () => {
     const { totp } = makeService();
     const uri = totp.keyUri('user@example.com', 'JBSWY3DPEHPK3PXP');
     expect(uri).toMatch(/^otpauth:\/\/totp\//);
-    expect(uri).toContain('MyAmpMix');
+    expect(uri).toContain('MyAmpix');
     expect(decodeURIComponent(uri)).toContain('user@example.com');
   });
 

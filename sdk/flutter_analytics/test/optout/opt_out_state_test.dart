@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
-import 'package:myampmix_analytics/src/optout/opt_out_state.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/optout/opt_out_state.dart';
 
 import '../helpers/builders.dart';
 import '../helpers/in_memory_key_value_store.dart';

@@ -7,11 +7,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/autocapture/screenshot_autocapture.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/key_value_store.dart';
-import 'package:myampmix_analytics/src/util/logger.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/autocapture/screenshot_autocapture.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/key_value_store.dart';
+import 'package:myampix_analytics/src/util/logger.dart';
 
 import '../helpers/fake_clock.dart';
 import '../helpers/fake_context_data_source.dart';
@@ -320,7 +320,7 @@ void main() {
     ScreenshotAutocapture build({
       required ScreenshotCapturer capturer,
       required http.Client client,
-      required MyAmpMixLogLevel logLevel,
+      required MyAmpixLogLevel logLevel,
       String appVersion = '1.4.2',
     }) => ScreenshotAutocapture(
       capturer: capturer,
@@ -344,7 +344,7 @@ void main() {
         capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
         client: client,
         // error level is enough for the rejection — it is error-carrying.
-        logLevel: MyAmpMixLogLevel.error,
+        logLevel: MyAmpixLogLevel.error,
       ).onScreenView('Home');
 
       expect(requests, hasLength(1));
@@ -367,7 +367,7 @@ void main() {
       await build(
         capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
         client: client,
-        logLevel: MyAmpMixLogLevel.error,
+        logLevel: MyAmpixLogLevel.error,
       ).onScreenView('Home');
 
       final rejection = lines
@@ -387,7 +387,7 @@ void main() {
       await build(
         capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
         client: client,
-        logLevel: MyAmpMixLogLevel.error,
+        logLevel: MyAmpixLogLevel.error,
       ).onScreenView('Home');
 
       expect(
@@ -410,7 +410,7 @@ void main() {
       await build(
         capturer: FakeScreenshotCapturer(result: shot([1, 2, 3])),
         client: client,
-        logLevel: MyAmpMixLogLevel.debug,
+        logLevel: MyAmpixLogLevel.debug,
       ).onScreenView('Home');
       expect(
         lines.any((l) => l.contains('screenshot uploaded: Home (status 202)')),
@@ -423,7 +423,7 @@ void main() {
       await build(
         capturer: FakeScreenshotCapturer(result: shot([9, 9, 9])),
         client: client,
-        logLevel: MyAmpMixLogLevel.debug,
+        logLevel: MyAmpixLogLevel.debug,
       ).onScreenView('Home');
       expect(
         lines.any(
@@ -444,7 +444,7 @@ void main() {
       await build(
         capturer: FakeScreenshotCapturer(result: null),
         client: client,
-        logLevel: MyAmpMixLogLevel.debug,
+        logLevel: MyAmpixLogLevel.debug,
       ).onScreenView('Home');
 
       expect(requests, isEmpty);
@@ -468,12 +468,12 @@ void main() {
       keyValueStore = InMemoryKeyValueStore();
       database = AnalyticsDatabase(NativeDatabase.memory());
       requests = [];
-      MyAmpMixObserver.resetForTesting();
+      MyAmpixObserver.resetForTesting();
     });
 
     tearDown(() async {
-      await MyAmpMix.shutdownForTesting();
-      MyAmpMixObserver.resetForTesting();
+      await MyAmpix.shutdownForTesting();
+      MyAmpixObserver.resetForTesting();
     });
 
     MockClient client() => MockClient((request) async {
@@ -484,9 +484,9 @@ void main() {
     Future<void> initSdk({
       required bool autocaptureScreenshots,
       ScreenshotCapturer? capturer,
-    }) => MyAmpMix.init(
+    }) => MyAmpix.init(
       token,
-      config: MyAmpMixConfig(
+      config: MyAmpixConfig(
         serverUrl: 'http://localhost:8080',
         autocaptureScreenshots: autocaptureScreenshots,
         // Keep the real purchase/attribution channels out of this suite.
@@ -515,7 +515,7 @@ void main() {
       );
       await initSdk(autocaptureScreenshots: true, capturer: capturer);
 
-      MyAmpMix.instance.track(r'$screen_view', properties: {
+      MyAmpix.instance.track(r'$screen_view', properties: {
         r'$screen_name': 'Home',
       });
       await pumpEventQueue();
@@ -530,7 +530,7 @@ void main() {
       expect(capturer.captureCount, 1);
 
       // Second identical view → persisted-skip, no re-upload.
-      MyAmpMix.instance.track(r'$screen_view', properties: {
+      MyAmpix.instance.track(r'$screen_view', properties: {
         r'$screen_name': 'Home',
       });
       await pumpEventQueue();
@@ -542,7 +542,7 @@ void main() {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
       await initSdk(autocaptureScreenshots: false, capturer: capturer);
 
-      MyAmpMix.instance.track(r'$screen_view', properties: {
+      MyAmpix.instance.track(r'$screen_view', properties: {
         r'$screen_name': 'Home',
       });
       await pumpEventQueue();
@@ -555,10 +555,10 @@ void main() {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
       await initSdk(autocaptureScreenshots: true, capturer: capturer);
 
-      MyAmpMix.instance.optOutTracking();
+      MyAmpix.instance.optOutTracking();
       await pumpEventQueue(); // let opt-out take effect
 
-      MyAmpMix.instance.track(r'$screen_view', properties: {
+      MyAmpix.instance.track(r'$screen_view', properties: {
         r'$screen_name': 'Home',
       });
       await pumpEventQueue();
@@ -571,7 +571,7 @@ void main() {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
       await initSdk(autocaptureScreenshots: true, capturer: capturer);
 
-      MyAmpMix.instance.track('checkout_completed', properties: {'value': 9.99});
+      MyAmpix.instance.track('checkout_completed', properties: {'value': 9.99});
       await pumpEventQueue();
 
       expect(screenshotRequests(), isEmpty);
@@ -587,7 +587,7 @@ void main() {
 
       // Bottom-nav tab switch: no Navigator push, so the observer can't see it
       // — trackScreen routes through track() and captures the reference shot.
-      MyAmpMix.instance.trackScreen('catalog');
+      MyAmpix.instance.trackScreen('catalog');
       await pumpEventQueue();
 
       final shots = screenshotRequests();

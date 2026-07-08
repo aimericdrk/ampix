@@ -1,4 +1,4 @@
-# MyAmpMix
+# MyAmpix
 
 Self-hosted, Mixpanel-class product analytics platform: Flutter SDK →
 NestJS ingestion/API → ClickHouse + Postgres + Redis → React dashboard.
@@ -38,8 +38,8 @@ Verify: `curl http://localhost:8123/ping` → `Ok.`
 
 | Service    | Port(s)    | Credentials                                        |
 | ---------- | ---------- | -------------------------------------------------- |
-| ClickHouse | 8123, 9000 | `default` / `myampmix_dev`, db `analytics`         |
-| PostgreSQL | 5432       | `myampmix` / `myampmix_dev`, db `myampmix`         |
+| ClickHouse | 8123, 9000 | `default` / `myampix_dev`, db `analytics`         |
+| PostgreSQL | 5432       | `myampix` / `myampix_dev`, db `myampix`         |
 | Redis      | 6379       | none                                               |
 | Backend    | 8080       | `pnpm --filter ./backend start:dev`                |
 | Dashboard  | 5173       | Vite dev server, proxies `/api` + `/ingest` → 8080 |

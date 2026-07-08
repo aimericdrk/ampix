@@ -1,5 +1,5 @@
 {
-  "name": "myampmix",
+  "name": "myampix",
   "version": "0.0.0",
   "private": true,
   "description": "Self-hosted Mixpanel-class product analytics platform (monorepo root)",
@@ -23,7 +23,7 @@
     "test": "pnpm -r --if-present test",
     "test:functional": "bash scripts/functional-test.sh",
     "dev": "bash scripts/dev.sh",
-    "seed": "pnpm --filter @myampmix/backend exec prisma db seed",
+    "seed": "pnpm --filter @myampix/backend exec prisma db seed",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:reset": "docker compose -f infra/docker-compose.yml down -v"

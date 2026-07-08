@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One command to run the whole MyAmpMix stack locally:
+# One command to run the whole MyAmpix stack locally:
 #   databases (ClickHouse + Postgres + Redis) → migrate → seed → backend + dashboard.
 # Ctrl-C stops the backend and dashboard; the databases keep running
 # (stop them with `pnpm infra:down`).
@@ -33,13 +33,13 @@ docker compose -f infra/docker-compose.yml up -d --wait
 
 # 3. schema + demo data
 info "applying database migrations…"
-pnpm --filter @myampmix/backend exec prisma migrate deploy
+pnpm --filter @myampix/backend exec prisma migrate deploy
 info "seeding demo project + ingest token…"
-pnpm --filter @myampmix/backend exec prisma db seed
+pnpm --filter @myampix/backend exec prisma db seed
 
 # 4. app processes — Ctrl-C stops both
 info "starting backend (http://localhost:8080) + dashboard (http://localhost:5173)…"
 trap 'echo; info "shutting down backend + dashboard…"; kill 0' EXIT INT TERM
-pnpm --filter @myampmix/backend start:dev &
+pnpm --filter @myampix/backend start:dev &
 pnpm --filter dashboard dev &
 wait

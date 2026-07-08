@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/pipeline/event_pipeline.dart';
-import 'package:myampmix_analytics/src/util/logger.dart';
+import 'package:myampix_analytics/src/pipeline/event_pipeline.dart';
+import 'package:myampix_analytics/src/util/logger.dart';
 
 void main() {
   const logger = MamLogger();

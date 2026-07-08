@@ -5,9 +5,9 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
 
 import 'helpers/fake_clock.dart';
 import 'helpers/fake_context_data_source.dart';
@@ -52,9 +52,9 @@ void main() {
               .cast<Map<String, dynamic>>(),
       ];
 
-      Future<void> boot() => MyAmpMix.init(
+      Future<void> boot() => MyAmpix.init(
         'mam_0123456789abcdef0123456789abcdef',
-        config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+        config: const MyAmpixConfig(serverUrl: 'http://localhost:8080'),
         overrides: SdkOverrides(
           clock: clock,
           httpClient: client,
@@ -67,9 +67,9 @@ void main() {
 
       // ── Run 1: offline. Events must persist, nothing must be sent. ──
       await boot();
-      MyAmpMix.instance.track('offline_1');
-      MyAmpMix.instance.track('offline_2');
-      MyAmpMix.instance.flush();
+      MyAmpix.instance.track('offline_1');
+      MyAmpix.instance.track('offline_2');
+      MyAmpix.instance.flush();
       await pumpEventQueue(times: 50);
       expect(requests, isEmpty);
 
@@ -92,13 +92,13 @@ void main() {
       expect(trackedQueued, hasLength(2));
 
       // ── "Kill": tear down without closing the shared in-memory DB. ──
-      await MyAmpMix.shutdownForTesting(closeDatabase: false);
+      await MyAmpix.shutdownForTesting(closeDatabase: false);
 
       // ── Run 2: relaunch hours later with network restored. ──
       clock.advance(const Duration(hours: 2));
       online = true;
       await boot();
-      MyAmpMix.instance.flush();
+      MyAmpix.instance.flush();
 
       // Everything that may EVER legitimately reach the wire, as a multiset
       // of event names: run 1's offline-queued events plus run 2's relaunch
@@ -160,7 +160,7 @@ void main() {
         );
       }
 
-      await MyAmpMix.shutdownForTesting();
+      await MyAmpix.shutdownForTesting();
     },
   );
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 import '../models/product.dart';
 import '../state/cart_state.dart';
@@ -28,7 +28,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       'name': product.name,
       'price': product.price,
     };
-    MyAmpMix.instance.track('product_viewed', properties: properties);
+    MyAmpix.instance.track('product_viewed', properties: properties);
     EventLog.instance.log('track("product_viewed")', properties);
   }
 
@@ -39,8 +39,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       'name': product.name,
       'price': product.price,
     };
-    MyAmpMix.instance.track('add_to_cart', properties: properties);
-    MyAmpMix.instance.people.increment({'cart_items': 1});
+    MyAmpix.instance.track('add_to_cart', properties: properties);
+    MyAmpix.instance.people.increment({'cart_items': 1});
     CartState.instance.add(product);
     EventLog.instance.log(
       'track("add_to_cart") + people.increment({"cart_items": 1})',

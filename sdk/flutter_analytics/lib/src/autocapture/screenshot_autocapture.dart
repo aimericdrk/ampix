@@ -41,7 +41,7 @@ class ScreenshotAutocapture {
        _appVersion = appVersion,
        // Wait for the push/replace transition to finish before capturing so
        // the frame isn't grabbed mid-animation (off-centre / half-painted).
-       // At least 1s by default (matches `MyAmpMixConfig.screenshotSettleDelay`)
+       // At least 1s by default (matches `MyAmpixConfig.screenshotSettleDelay`)
        // so slow/animated transitions finish; the production capturer ALSO
        // polls `hasScheduledFrame` on top of this. Tests inject Duration.zero
        // so they don't wait.
@@ -51,7 +51,7 @@ class ScreenshotAutocapture {
   /// KeyValueStore key prefix for the persisted captured-screen set. Suffixed
   /// with the `app_version` so upgrading to a new version starts a fresh,
   /// empty marker set (old markers become stale and unused).
-  static const String _markerKeyPrefix = 'myampmix.screenshots.v1.';
+  static const String _markerKeyPrefix = 'myampix.screenshots.v1.';
 
   final ScreenshotCapturer _capturer;
   final http.Client _client;

@@ -1,4 +1,4 @@
-import { SDK_TOKEN_REGEX } from '@myampmix/contracts';
+import { SDK_TOKEN_REGEX } from '@myampix/contracts';
 import { generateSdkToken } from './sdk-token';
 
 describe('generateSdkToken', () => {

@@ -26,7 +26,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
             onClick={() => window.location.assign('/')}
           >
-            Reload MyAmpMix
+            Reload MyAmpix
           </button>
         </main>
       );

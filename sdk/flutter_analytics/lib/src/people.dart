@@ -4,7 +4,7 @@ import 'storage/profile_op_store.dart';
 import 'util/clock.dart';
 import 'util/logger.dart';
 
-/// `MyAmpMix.instance.people` — maps 1:1 to `/ingest/profiles` operations
+/// `MyAmpix.instance.people` — maps 1:1 to `/ingest/profiles` operations
 /// (shared-contracts §4 and §8). Methods are synchronous fire-and-forget
 /// per the frozen surface and never throw into the host app.
 class People {
@@ -26,7 +26,7 @@ class People {
        _logger = logger,
        _schedule = schedule;
 
-  /// Inert instance used before `MyAmpMix.init` completes (design §13).
+  /// Inert instance used before `MyAmpix.init` completes (design §13).
   factory People.noop() => People(
     store: _NoopProfileOpStore(),
     distinctId: () => '',

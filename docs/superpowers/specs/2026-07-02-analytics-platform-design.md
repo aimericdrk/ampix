@@ -1,4 +1,4 @@
-# MyAmpMix — Self-Hosted Product Analytics Platform (Mixpanel-class)
+# MyAmpix — Self-Hosted Product Analytics Platform (Mixpanel-class)
 
 **Date:** 2026-07-02
 **Status:** Approved design, pending implementation planning
@@ -19,7 +19,7 @@ A self-hosted product-analytics platform with full Mixpanel-class features:
 Monorepo:
 
 ```
-myampmix/
+myampix/
 ├── sdk/flutter_analytics/     # Flutter SDK (pub-publishable package)
 ├── backend/                   # NestJS — ingestion, analytics queries, auth
 ├── dashboard/                 # React 18 + TypeScript + Vite SPA

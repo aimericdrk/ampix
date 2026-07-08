@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/people.dart';
+import 'package:myampix_analytics/src/people.dart';
 
 import 'helpers/fake_clock.dart';
 import 'helpers/in_memory_stores.dart';

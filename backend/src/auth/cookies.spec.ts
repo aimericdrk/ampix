@@ -35,14 +35,14 @@ describe('refresh cookie helpers', () => {
     const auth = {
       ...makeAuthTestConfig().auth!,
       cookieSecure: true,
-      cookieDomain: '.myampmix.com',
+      cookieDomain: '.myampix.com',
     };
     setRefreshCookie(res, 'token', auth);
 
     expect(res.cookie).toHaveBeenCalledWith(
       REFRESH_COOKIE_NAME,
       'token',
-      expect.objectContaining({ secure: true, domain: '.myampmix.com' }),
+      expect.objectContaining({ secure: true, domain: '.myampix.com' }),
     );
   });
 

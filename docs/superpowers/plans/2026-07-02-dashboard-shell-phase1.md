@@ -15,7 +15,7 @@
 - **Vite 6**; dev server port **5173** with proxy `/api` and `/ingest` → `http://localhost:8080` (contracts §2).
 - **Coverage floor 75% lines** (contracts §9), enforced via Vitest coverage thresholds.
 - **RFC 7807** error shape everywhere: `{type, title, status, detail?, errors?}` (contracts §7).
-- **Single-page static build** with runtime `config.js` → `window.__MYAMPMIX_CONFIG__ = { apiBaseUrl }`; one build deploys anywhere.
+- **Single-page static build** with runtime `config.js` → `window.___MYAMPIX_CONFIG__ = { apiBaseUrl }`; one build deploys anywhere.
 - **Conventional Commits** (`feat:`, `fix:`, `test:`, `docs:`, `chore:`, `ci:`), scope `dashboard`.
 - TDD for every task: write the failing test, watch it fail, implement, watch it pass, commit. DRY, YAGNI — nothing speculative beyond this phase.
 
@@ -47,7 +47,7 @@ test-results
 
 ```json
 {
-  "name": "@myampmix/dashboard",
+  "name": "@myampix/dashboard",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -183,7 +183,7 @@ export default tseslint.config(
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MyAmpMix</title>
+    <title>MyAmpix</title>
     <script src="/config.js"></script>
   </head>
   <body>
@@ -196,12 +196,12 @@ export default tseslint.config(
 - [ ] Create `dashboard/public/config.js` (runtime config template — copied verbatim into `dist/`, overwritten at deploy time):
 
 ```js
-// MyAmpMix runtime configuration.
+// MyAmpix runtime configuration.
 // This file is loaded before the app bundle and is REPLACED at deploy time —
 // the same static build works against any backend origin.
-window.__MYAMPMIX_CONFIG__ = {
+window.___MYAMPIX_CONFIG__ = {
   // '' = same origin (Vite dev proxy locally, reverse proxy in prod).
-  // Or an absolute origin, e.g. 'https://api.myampmix.example'.
+  // Or an absolute origin, e.g. 'https://api.myampix.example'.
   apiBaseUrl: '',
 };
 ```
@@ -290,7 +290,7 @@ import { App } from './App';
 describe('App', () => {
   it('renders the product name', () => {
     render(<App />);
-    expect(screen.getByRole('heading', { name: 'MyAmpMix' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'MyAmpix' })).toBeInTheDocument();
   });
 });
 ```
@@ -302,7 +302,7 @@ describe('App', () => {
 export function App() {
   return (
     <main className="p-8">
-      <h1 className="text-2xl font-semibold">MyAmpMix</h1>
+      <h1 className="text-2xl font-semibold">MyAmpix</h1>
       <p className="mt-2 text-text-muted">Self-hosted product analytics.</p>
     </main>
   );
@@ -340,7 +340,7 @@ createRoot(container).render(
 - Test: `dashboard/src/lib/config.test.ts`
 
 **Interfaces:**
-- Consumes: `window.__MYAMPMIX_CONFIG__` set by `public/config.js` (Task 1).
+- Consumes: `window.___MYAMPIX_CONFIG__` set by `public/config.js` (Task 1).
 - Produces: `RuntimeConfig` interface `{ apiBaseUrl: string }`, `getRuntimeConfig(): RuntimeConfig` — consumed by `apiFetch` (Task 7).
 
 **Steps:**
@@ -353,21 +353,21 @@ import { getRuntimeConfig } from './config';
 
 describe('getRuntimeConfig', () => {
   afterEach(() => {
-    delete window.__MYAMPMIX_CONFIG__;
+    delete window.___MYAMPIX_CONFIG__;
   });
 
   it('returns values injected by config.js', () => {
-    window.__MYAMPMIX_CONFIG__ = { apiBaseUrl: 'https://api.myampmix.example' };
-    expect(getRuntimeConfig()).toEqual({ apiBaseUrl: 'https://api.myampmix.example' });
+    window.___MYAMPIX_CONFIG__ = { apiBaseUrl: 'https://api.myampix.example' };
+    expect(getRuntimeConfig()).toEqual({ apiBaseUrl: 'https://api.myampix.example' });
   });
 
   it('falls back to same-origin default when config.js is absent (dev)', () => {
-    delete window.__MYAMPMIX_CONFIG__;
+    delete window.___MYAMPIX_CONFIG__;
     expect(getRuntimeConfig()).toEqual({ apiBaseUrl: '' });
   });
 
   it('fills missing keys from defaults', () => {
-    window.__MYAMPMIX_CONFIG__ = {};
+    window.___MYAMPIX_CONFIG__ = {};
     expect(getRuntimeConfig().apiBaseUrl).toBe('');
   });
 });
@@ -384,7 +384,7 @@ export interface RuntimeConfig {
 
 declare global {
   interface Window {
-    __MYAMPMIX_CONFIG__?: Partial<RuntimeConfig>;
+    ___MYAMPIX_CONFIG__?: Partial<RuntimeConfig>;
   }
 }
 
@@ -394,7 +394,7 @@ const DEFAULTS: RuntimeConfig = {
 
 /** Merges the runtime config injected by /config.js over dev-safe defaults. */
 export function getRuntimeConfig(): RuntimeConfig {
-  return { ...DEFAULTS, ...window.__MYAMPMIX_CONFIG__ };
+  return { ...DEFAULTS, ...window.___MYAMPIX_CONFIG__ };
 }
 ```
 
@@ -450,11 +450,11 @@ describe('ThemeProvider', () => {
 
     expect(screen.getByRole('button')).toHaveTextContent('dark');
     expect(document.documentElement).toHaveClass('dark');
-    expect(localStorage.getItem('myampmix-theme')).toBe('dark');
+    expect(localStorage.getItem('myampix-theme')).toBe('dark');
   });
 
   it('honours a stored preference on mount', () => {
-    localStorage.setItem('myampmix-theme', 'dark');
+    localStorage.setItem('myampix-theme', 'dark');
     render(
       <ThemeProvider>
         <Probe />
@@ -485,7 +485,7 @@ import {
 
 export type Theme = 'light' | 'dark';
 
-const STORAGE_KEY = 'myampmix-theme';
+const STORAGE_KEY = 'myampix-theme';
 
 interface ThemeContextValue {
   theme: Theme;
@@ -937,7 +937,7 @@ describe('problemFromResponse', () => {
     const problem = await problemFromResponse(
       jsonResponse(
         {
-          type: 'https://myampmix.dev/problems/validation',
+          type: 'https://myampix.dev/problems/validation',
           title: 'Validation failed',
           status: 400,
           detail: 'Two fields are invalid.',
@@ -947,7 +947,7 @@ describe('problemFromResponse', () => {
       ),
     );
     expect(problem).toEqual({
-      type: 'https://myampmix.dev/problems/validation',
+      type: 'https://myampix.dev/problems/validation',
       title: 'Validation failed',
       status: 400,
       detail: 'Two fields are invalid.',
@@ -1008,7 +1008,7 @@ describe('ApiError', () => {
 - [ ] Create `dashboard/src/lib/api/problem.ts`:
 
 ```ts
-/** RFC 7807 problem details — the error shape of every MyAmpMix API response (contracts §7). */
+/** RFC 7807 problem details — the error shape of every MyAmpix API response (contracts §7). */
 export interface ApiProblem {
   type: string;
   title: string;
@@ -1601,7 +1601,7 @@ describe('router', () => {
     authState.refreshValid = false; // no refresh cookie
     const { router } = renderApp('/projects');
     expect(
-      await screen.findByRole('heading', { name: 'Log in to MyAmpMix' }),
+      await screen.findByRole('heading', { name: 'Log in to MyAmpix' }),
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/login');
     expect(router.state.location.search).toEqual({ redirect: '/projects' });
@@ -1617,7 +1617,7 @@ describe('router', () => {
   it('redirects / to /projects (then to login when anonymous)', async () => {
     authState.refreshValid = false;
     const { router } = renderApp('/');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     expect(router.state.location.pathname).toBe('/login');
   });
 
@@ -1678,7 +1678,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
             onClick={() => window.location.assign('/')}
           >
-            Reload MyAmpMix
+            Reload MyAmpix
           </button>
         </main>
       );
@@ -1731,7 +1731,7 @@ export function AppLayout() {
   return (
     <div className="flex min-h-screen">
       <aside className="w-60 border-r border-border bg-surface p-4" aria-label="Primary">
-        <div className="text-lg font-semibold">MyAmpMix</div>
+        <div className="text-lg font-semibold">MyAmpix</div>
       </aside>
       <main className="flex-1 p-8">
         <Outlet />
@@ -1752,7 +1752,7 @@ export function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-bg p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Log in to MyAmpMix</CardTitle>
+          <CardTitle>Log in to MyAmpix</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-text-muted">Login form coming in the next task.</p>
@@ -1780,7 +1780,7 @@ export function SignupPage() {
     <main className="flex min-h-screen items-center justify-center bg-bg p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Create your MyAmpMix account</CardTitle>
+          <CardTitle>Create your MyAmpix account</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-text-muted">Signup form coming in the next task.</p>
@@ -2103,7 +2103,7 @@ describe('App', () => {
   it('boots to the login page when no session exists', async () => {
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Log in to MyAmpMix' }),
+      await screen.findByRole('heading', { name: 'Log in to MyAmpix' }),
     ).toBeInTheDocument();
   });
 });
@@ -2182,7 +2182,7 @@ import { renderApp } from '../../../test/render-app';
 describe('LoginForm', () => {
   it('shows field errors on empty submit', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
     expect(screen.getByText('Email is required')).toBeInTheDocument();
     expect(screen.getByText('Password is required')).toBeInTheDocument();
@@ -2190,7 +2190,7 @@ describe('LoginForm', () => {
 
   it('shows the problem title inline on invalid credentials', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), 'wrong-password');
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -2200,7 +2200,7 @@ describe('LoginForm', () => {
 
   it('logs in, stores the session in memory, and lands on projects', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), TEST_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -2218,7 +2218,7 @@ describe('LoginForm', () => {
     const { router } = renderApp(
       '/login?redirect=%2Fprojects%2F0197f6a0-0000-7000-8000-0000000000aa',
     );
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), TEST_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -2233,7 +2233,7 @@ describe('LoginForm', () => {
 describe('SignupForm', () => {
   it('shows an inline conflict message when the email is taken', async () => {
     renderApp('/signup');
-    await screen.findByRole('heading', { name: 'Create your MyAmpMix account' });
+    await screen.findByRole('heading', { name: 'Create your MyAmpix account' });
     await userEvent.type(screen.getByLabelText('Name'), 'Ada Lovelace');
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), 'correct-horse-9');
@@ -2243,7 +2243,7 @@ describe('SignupForm', () => {
 
   it('signs up a new user and lands on projects', async () => {
     renderApp('/signup');
-    await screen.findByRole('heading', { name: 'Create your MyAmpMix account' });
+    await screen.findByRole('heading', { name: 'Create your MyAmpix account' });
     await userEvent.type(screen.getByLabelText('Name'), 'Grace Hopper');
     await userEvent.type(screen.getByLabelText('Email'), 'grace@example.com');
     await userEvent.type(screen.getByLabelText('Password'), 'correct-horse-9');
@@ -2549,7 +2549,7 @@ export function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-bg p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Log in to MyAmpMix</CardTitle>
+          <CardTitle>Log in to MyAmpix</CardTitle>
         </CardHeader>
         <CardContent>
           <LoginForm />
@@ -2578,7 +2578,7 @@ export function SignupPage() {
     <main className="flex min-h-screen items-center justify-center bg-bg p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Create your MyAmpMix account</CardTitle>
+          <CardTitle>Create your MyAmpix account</CardTitle>
         </CardHeader>
         <CardContent>
           <SignupForm />
@@ -2644,7 +2644,7 @@ describe('AppLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
 
     expect(document.documentElement).toHaveClass('dark');
-    expect(localStorage.getItem('myampmix-theme')).toBe('dark');
+    expect(localStorage.getItem('myampix-theme')).toBe('dark');
     expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument();
     document.documentElement.classList.remove('dark');
   });
@@ -2657,7 +2657,7 @@ describe('AppLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
 
     expect(
-      await screen.findByRole('heading', { name: 'Log in to MyAmpMix' }),
+      await screen.findByRole('heading', { name: 'Log in to MyAmpix' }),
     ).toBeInTheDocument();
     expect(authStore.getState().status).toBe('anonymous');
     expect(authStore.getState().accessToken).toBeNull();
@@ -2747,7 +2747,7 @@ export function AppLayout() {
         Skip to content
       </a>
       <aside className="flex w-60 flex-col border-r border-border bg-surface p-4">
-        <div className="mb-6 text-lg font-semibold">MyAmpMix</div>
+        <div className="mb-6 text-lg font-semibold">MyAmpix</div>
         <ProjectSwitcher />
         <nav aria-label="Primary" className="mt-6 flex-1">
           <Link
@@ -2873,7 +2873,7 @@ test('boots, logs in, and lands on the projects page', async ({ page }) => {
 
   // Anonymous visitor is redirected to login by the auth guard.
   await expect(page).toHaveURL(/\/login/);
-  await expect(page.getByRole('heading', { name: 'Log in to MyAmpMix' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Log in to MyAmpix' })).toBeVisible();
 
   await page.getByLabel('Email').fill('ada@example.com');
   await page.getByLabel('Password').fill('correct-horse-9');
@@ -2902,7 +2902,7 @@ test('shows inline error for bad credentials', async ({ page }) => {
 pnpm build
 test -f dist/index.html
 test -f dist/config.js
-grep -q '__MYAMPMIX_CONFIG__' dist/config.js
+grep -q '___MYAMPIX_CONFIG__' dist/config.js
 grep -q '<script src="/config.js"></script>' dist/index.html
 # exactly one HTML entry point (SPA)
 [ "$(find dist -name '*.html' | wc -l | tr -d ' ')" = "1" ]

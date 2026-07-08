@@ -1,4 +1,4 @@
-# MyAmpMix Flutter SDK (`sdk/flutter_analytics`) — Design
+# MyAmpix Flutter SDK (`sdk/flutter_analytics`) — Design
 
 **Date:** 2026-07-02
 **Status:** Approved design
@@ -13,16 +13,16 @@ The shared-contracts document is the source of truth. Where this design elaborat
 | Milestone | Contents | Plan |
 |---|---|---|
 | **M1 — Core tracking** | Facade + config, event model, drift persistent queue, identity, sessions, super properties, timeEvent, people ops, opt-out, context collection, gzip batch uploader with backoff | `docs/superpowers/plans/2026-07-02-sdk-core-phase1.md` |
-| **M2 — Autocapture** | `MyAmpMixObserver` ($screen_view), `MyAmpMixTracker` ($tap, $rage_tap) | later plan |
+| **M2 — Autocapture** | `MyAmpixObserver` ($screen_view), `MyAmpixTracker` ($tap, $rage_tap) | later plan |
 | **M3 — Attribution** | Android Install Referrer, `app_links` UTM capture, first/last-touch persistence, `$campaign_touch` | later plan |
 
-Package: `myampmix_analytics`, Flutter ≥ 3.32, Dart ≥ 3.8, null-safe, pub-publishable. Consumers never run codegen (drift's generated `database.g.dart` is committed; `drift_dev`/`build_runner` are dev-time only).
+Package: `myampix_analytics`, Flutter ≥ 3.32, Dart ≥ 3.8, null-safe, pub-publishable. Consumers never run codegen (drift's generated `database.g.dart` is committed; `drift_dev`/`build_runner` are dev-time only).
 
 ## 2. Architecture layers
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ Public facade  MyAmpMix (singleton)  +  People  + M2 widgets  │  contracts §8, guarded — never throws
+│ Public facade  MyAmpix (singleton)  +  People  + M2 widgets  │  contracts §8, guarded — never throws
 ├───────────────────────────────────────────────────────────────┤
 │ Event pipeline  EventPipeline                                  │  assembles contract-§4 events:
 │   identity ▸ session id ▸ super props ▸ timed durations ▸ ctx │  insert_id/timestamp stamped here
@@ -33,7 +33,7 @@ Package: `myampmix_analytics`, Flutter ≥ 3.32, Dart ≥ 3.8, null-safe, pub-pu
 │ Network uploader  Uploader                                     │  gzip batches → /ingest/events,
 │   flush @ 20 events or 10 s · backoff+jitter · 202 handling   │  /ingest/profiles
 └───────────────────────────────────────────────────────────────┘
-Cross-cutting: Clock (injectable), MamLogger (debug-only), MyAmpMixConfig
+Cross-cutting: Clock (injectable), MamLogger (debug-only), MyAmpixConfig
 ```
 
 ### Key interfaces (frozen for M1)
@@ -71,7 +71,7 @@ abstract interface class ContextDataSource {     // platform impl vs. test fake
 }
 ```
 
-Every component receives its collaborators via constructor injection (`Clock`, `http.Client`, stores, `ContextDataSource`, `String Function() idFactory`, `Random`), so tests substitute fakes everywhere. There is no global mutable state other than the `MyAmpMix` singleton facade itself.
+Every component receives its collaborators via constructor injection (`Clock`, `http.Client`, stores, `ContextDataSource`, `String Function() idFactory`, `Random`), so tests substitute fakes everywhere. There is no global mutable state other than the `MyAmpix` singleton facade itself.
 
 ## 3. Identity model
 
@@ -103,7 +103,7 @@ All reserved names/properties come from contracts §4: `$first_open`, `$app_open
 - Tables: `pending_events(id INTEGER PK AUTOINCREMENT, payload TEXT)` and `pending_profile_ops(id ...)`. Payload is the JSON-encoded contract object — the queue stores exactly what will be sent, so serialization happens once and relaunch cannot change a queued event.
 - **Write-before-send:** `track()` returns only after the row is durably inserted. Only a server `202` deletes rows. A crash/kill between send and ack causes a re-send, which is safe: every event carries a UUID v7 **`insert_id`** stamped at queue time, and ClickHouse dedups by `insert_id` (master design §2). Retries are therefore idempotent end-to-end.
 - **Cap & eviction:** `maxQueueSize` (default 10 000 events) enforced inside the insert transaction; overflow deletes the **oldest** rows first (lowest `id`). Same policy for profile ops.
-- DB file: `<application-support>/myampmix_analytics.sqlite` via `path_provider`; background-isolate `NativeDatabase.createInBackground` keeps the UI thread free.
+- DB file: `<application-support>/myampix_analytics.sqlite` via `path_provider`; background-isolate `NativeDatabase.createInBackground` keeps the UI thread free.
 
 ## 6. Network uploader
 
@@ -123,7 +123,7 @@ All reserved names/properties come from contracts §4: `$first_open`, `$app_open
 
 ## 8. People → `/ingest/profiles`
 
-`MyAmpMix.instance.people` maps 1:1 to contract §4 profile operations, queued in `pending_profile_ops` and flushed by the same uploader:
+`MyAmpix.instance.people` maps 1:1 to contract §4 profile operations, queued in `pending_profile_ops` and flushed by the same uploader:
 
 | Dart API | `op` | `properties` payload |
 |---|---|---|
@@ -162,14 +162,14 @@ Null fields are omitted from the serialized `context` object.
 
 ## 11. Autocapture design — milestone M2
 
-Both widgets are part of the frozen §8 surface; each capture type is independently toggleable in `MyAmpMixConfig`.
+Both widgets are part of the frozen §8 surface; each capture type is independently toggleable in `MyAmpixConfig`.
 
-### `$screen_view` — `MyAmpMixObserver` (NavigatorObserver)
-- Attach: `MaterialApp(navigatorObservers: [MyAmpMixObserver()])`.
+### `$screen_view` — `MyAmpixObserver` (NavigatorObserver)
+- Attach: `MaterialApp(navigatorObservers: [MyAmpixObserver()])`.
 - On `didPush`/`didReplace`/`didPop`, resolve the now-visible route's name (`RouteSettings.name`, fallback `route.runtimeType`), and emit `$screen_view` with `$screen_name`, `$previous_screen`, and `$time_on_previous_ms` (injected-clock delta since the previous screen became visible). Only `PageRoute`s count as screens; dialogs/bottom-sheets are ignored. The current screen name is shared with the tap capturer.
 
-### `$tap` — `MyAmpMixTracker` root widget
-- Attach: `MyAmpMixTracker(child: MyApp())`. Implementation: a translucent `Listener` recording `onPointerDown/onPointerUp`; a pair within tap slop (18 logical px) and ≤ 500 ms is a tap.
+### `$tap` — `MyAmpixTracker` root widget
+- Attach: `MyAmpixTracker(child: MyApp())`. Implementation: a translucent `Listener` recording `onPointerDown/onPointerUp`; a pair within tap slop (18 logical px) and ≤ 500 ms is a tap.
 - Target resolution: run `RendererBinding.hitTestInView` at the tap position, then walk the widget `Element` tree from the root collecting elements whose `RenderObject` is on the hit-test path (works in release builds, unlike `debugCreator`). Choose the deepest element whose widget is "interesting": has a `Key`, is a known interactive type (`*Button`, `InkWell`, `GestureDetector`, `ListTile`, `Switch`, `Checkbox`, …), or carries `Semantics` with a label. Emit `$tap` with `$widget_type` (runtimeType), `$widget_label` (Key value → semantics label → nearest `Text` data, first non-null), `$screen_name` (from the observer), `$pos_x`, `$pos_y` (logical).
 - **Rage tap:** ≥ 3 taps within 1 s inside a 32-px radius → one `$rage_tap` (same target properties + `$tap_count`). Detection is a sliding window in the tracker; rage taps do not suppress the individual `$tap` events.
 - All hit-testing runs inside a try/catch outside the gesture arena — it observes pointers, never competes with app gestures, and a failure degrades to "no event".
@@ -199,11 +199,11 @@ Both widgets are part of the frozen §8 surface; each capture type is independen
 - **Queue persistence:** drift stores tested on `NativeDatabase.memory()`; round-trip (`AnalyticsEvent` → payload → `fromJson`), FIFO order, cap/oldest-first eviction, delete-only-after-202.
 - **Retry/backoff:** injected `Random` fakes make jitter deterministic; assert exponential growth, cap, reset-on-success, no-send-before-deadline, forced `flush()` override.
 - **Session tests:** cold start, resume < 30 min, rotation ≥ 30 min, relaunch-after-kill finalization, `$duration_ms` exactness, event ordering.
-- **Widget tests:** lifecycle transitions via `tester.binding.handleAppLifecycleStateChanged`; M2 adds `MyAmpMixObserver`/`MyAmpMixTracker` widget tests (pump real routes, tap real widgets, assert `$screen_view`/`$tap` payloads).
+- **Widget tests:** lifecycle transitions via `tester.binding.handleAppLifecycleStateChanged`; M2 adds `MyAmpixObserver`/`MyAmpixTracker` widget tests (pump real routes, tap real widgets, assert `$screen_view`/`$tap` payloads).
 - **Golden scenario (master §6):** offline (client throws) → track N events → simulated kill/relaunch (new facade over the same DB) → network restored → flush → server receives all N with their **original** `insert_id`s.
 - **Never-throws suite:** every public method invoked before init, after failed init, and with a throwing collaborator — asserts no exception escapes.
 
-## 15. Configuration reference (`MyAmpMixConfig`)
+## 15. Configuration reference (`MyAmpixConfig`)
 
 | Option | Default | Notes |
 |---|---|---|

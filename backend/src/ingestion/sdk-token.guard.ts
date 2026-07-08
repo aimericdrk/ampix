@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { SDK_TOKEN_REGEX } from '@myampmix/contracts';
+import { SDK_TOKEN_REGEX } from '@myampix/contracts';
 import { REDIS } from '../redis/redis.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
@@ -29,7 +29,7 @@ export class SdkTokenGuard implements CanActivate {
   constructor(
     @Inject(REDIS) private readonly redis: Redis,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<IngestRequest>();

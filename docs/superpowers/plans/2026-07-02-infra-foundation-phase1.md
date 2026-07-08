@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the MyAmpMix monorepo root (pnpm 10 workspace, Node 22, ESLint 9 flat + Prettier 3), the local Docker Compose infrastructure (ClickHouse 24.8 with the authoritative schema, Postgres 17, Redis 7, all healthchecked), and a path-filtered GitHub Actions CI skeleton that passes today and picks up backend/dashboard/sdk packages automatically when they land.
+**Goal:** Stand up the MyAmpix monorepo root (pnpm 10 workspace, Node 22, ESLint 9 flat + Prettier 3), the local Docker Compose infrastructure (ClickHouse 24.8 with the authoritative schema, Postgres 17, Redis 7, all healthchecked), and a path-filtered GitHub Actions CI skeleton that passes today and picks up backend/dashboard/sdk packages automatically when they land.
 
 **Architecture:** A pnpm workspace at the repo root fans out lint/typecheck/test to future packages via `--if-present`, so root scripts and CI are stable interfaces from day zero. Local databases run in one Compose project with healthchecks and named volumes; ClickHouse is initialized from `infra/clickhouse/init.sql`, which is schema-identical to contracts §5, wrapped for idempotent container init (adds `SET allow_experimental_json_type`, `CREATE DATABASE IF NOT EXISTS`, and `IF NOT EXISTS` guards). CI uses `dorny/paths-filter` plus in-job existence guards so jobs for not-yet-scaffolded packages skip gracefully.
 
@@ -17,11 +17,11 @@ Copied from `docs/superpowers/specs/2026-07-02-shared-contracts.md` — these ex
 - Package manager: **pnpm 10**, workspace at repo root; `pnpm-workspace.yaml` lists `backend`, `dashboard`, `packages/*`.
 - Node **22**, pinned in `.nvmrc` and `package.json` `engines`.
 - Lint/format: **ESLint 9 flat config + Prettier 3** (root config, per-package extends). TypeScript **5.8+**.
-- ClickHouse `clickhouse/clickhouse-server:24.8` — host ports **8123** (http), **9000** (native) — user `default`, password `myampmix_dev`, db `analytics`.
-- PostgreSQL `postgres:17-alpine` — host port **5432** — user `myampmix`, password `myampmix_dev`, db `myampmix`.
+- ClickHouse `clickhouse/clickhouse-server:24.8` — host ports **8123** (http), **9000** (native) — user `default`, password `myampix_dev`, db `analytics`.
+- PostgreSQL `postgres:17-alpine` — host port **5432** — user `myampix`, password `myampix_dev`, db `myampix`.
 - Redis `redis:7-alpine` — host port **6379** — no auth locally.
 - Backend dev port **8080**; dashboard dev port **5173** (owned by those sub-projects; documented here only in `.env.example`/README).
-- Backend env vars (contracts §3): `NODE_ENV`, `PORT=8080`, `DATABASE_URL=postgresql://myampmix:myampmix_dev@localhost:5432/myampmix`, `CLICKHOUSE_URL=http://localhost:8123`, `CLICKHOUSE_USER=default`, `CLICKHOUSE_PASSWORD=myampmix_dev`, `CLICKHOUSE_DB=analytics`, `REDIS_URL=redis://localhost:6379`, `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` (min 32 chars), `INGEST_MAX_BATCH=100`, `INGEST_MAX_BODY_KB=1024`.
+- Backend env vars (contracts §3): `NODE_ENV`, `PORT=8080`, `DATABASE_URL=postgresql://myampix:myampix_dev@localhost:5432/myampix`, `CLICKHOUSE_URL=http://localhost:8123`, `CLICKHOUSE_USER=default`, `CLICKHOUSE_PASSWORD=myampix_dev`, `CLICKHOUSE_DB=analytics`, `REDIS_URL=redis://localhost:6379`, `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` (min 32 chars), `INGEST_MAX_BATCH=100`, `INGEST_MAX_BODY_KB=1024`.
 - ClickHouse DDL: schema-identical to contracts §5 (tables `analytics.events`, `analytics.user_profiles`, `analytics.identity_mappings`); `infra/clickhouse/init.sql` wraps it for idempotent container init (adds `SET allow_experimental_json_type`, `CREATE DATABASE IF NOT EXISTS`, and `IF NOT EXISTS` guards) rather than reproducing it byte-for-byte.
 - Commit style: Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`, `ci:`).
 - Coverage floors (enforced later inside each package's test command): backend 85%, SDK 85%, dashboard 75%.
@@ -45,11 +45,11 @@ Copied from `docs/superpowers/specs/2026-07-02-shared-contracts.md` — these ex
 - [ ] **Step 1: Initialize the git repository (skip if already one).**
 
 ```bash
-cd /Users/aimeric/Documents/personnal-project/MyAmpMix
+cd /Users/aimeric/Documents/personnal-project/MyAmpix
 git rev-parse --is-inside-work-tree 2>/dev/null || git init -b main
 ```
 
-Expected output (fresh repo): `Initialized empty Git repository in /Users/aimeric/Documents/personnal-project/MyAmpMix/.git/`
+Expected output (fresh repo): `Initialized empty Git repository in /Users/aimeric/Documents/personnal-project/MyAmpix/.git/`
 
 - [ ] **Step 2: Create `.gitignore`** with this complete content:
 
@@ -103,7 +103,7 @@ packages:
 
 ```json
 {
-  "name": "myampmix",
+  "name": "myampix",
   "version": "0.0.0",
   "private": true,
   "description": "Self-hosted Mixpanel-class product analytics platform (monorepo root)",
@@ -274,7 +274,7 @@ Expected output: `[main …] chore: add ESLint 9 flat config and Prettier 3 root
 - [ ] **Step 1: Create `infra/clickhouse/init.sql`** with this complete content:
 
 ```sql
--- MyAmpMix ClickHouse schema.
+-- MyAmpix ClickHouse schema.
 -- Source of truth: docs/superpowers/specs/2026-07-02-shared-contracts.md §5.
 -- Runs once on first container start via /docker-entrypoint-initdb.d/.
 -- Idempotent (IF NOT EXISTS) so it is safe to re-run manually.
@@ -353,15 +353,15 @@ Expected output: `[main …] feat: add authoritative ClickHouse schema init scri
 
 **Interfaces:**
 - Consumes: `infra/clickhouse/init.sql` (Task 3); root scripts `infra:up`/`infra:down`/`infra:reset` (Task 1).
-- Produces: Compose project `myampmix` with healthchecked services `clickhouse` (8123/9000), `postgres` (5432), `redis` (6379) and named volumes `clickhouse_data`, `postgres_data`, `redis_data`; `.env.example` documenting every contracts §3 backend variable. The backend sub-project's local dev and Testcontainers-free integration runs depend on these exact service names, ports, and credentials.
+- Produces: Compose project `myampix` with healthchecked services `clickhouse` (8123/9000), `postgres` (5432), `redis` (6379) and named volumes `clickhouse_data`, `postgres_data`, `redis_data`; `.env.example` documenting every contracts §3 backend variable. The backend sub-project's local dev and Testcontainers-free integration runs depend on these exact service names, ports, and credentials.
 
 - [ ] **Step 1: Create `infra/docker-compose.yml`** with this complete content:
 
 ```yaml
-# MyAmpMix local development infrastructure.
+# MyAmpix local development infrastructure.
 # Ports & credentials: docs/superpowers/specs/2026-07-02-shared-contracts.md §2.
 # Usage: pnpm infra:up  (docker compose -f infra/docker-compose.yml up -d --wait)
-name: myampmix
+name: myampix
 
 services:
   clickhouse:
@@ -371,7 +371,7 @@ services:
       - "9000:9000" # native protocol
     environment:
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: myampmix_dev
+      CLICKHOUSE_PASSWORD: myampix_dev
       CLICKHOUSE_DB: analytics
     volumes:
       - clickhouse_data:/var/lib/clickhouse
@@ -384,7 +384,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "clickhouse-client --user default --password myampmix_dev --query 'SELECT 1'",
+          "clickhouse-client --user default --password myampix_dev --query 'SELECT 1'",
         ]
       interval: 5s
       timeout: 5s
@@ -396,13 +396,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: myampmix
-      POSTGRES_PASSWORD: myampmix_dev
-      POSTGRES_DB: myampmix
+      POSTGRES_USER: myampix
+      POSTGRES_PASSWORD: myampix_dev
+      POSTGRES_DB: myampix
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myampmix -d myampmix"]
+      test: ["CMD-SHELL", "pg_isready -U myampix -d myampix"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -429,7 +429,7 @@ volumes:
 - [ ] **Step 2: Create `.env.example`** with this complete content (values are contracts §3 verbatim; dev-only credentials):
 
 ```bash
-# MyAmpMix backend environment — local development values.
+# MyAmpix backend environment — local development values.
 # Copy to .env and adjust if needed. .env is gitignored; this example is committed.
 # Source of truth: docs/superpowers/specs/2026-07-02-shared-contracts.md §3.
 
@@ -437,12 +437,12 @@ NODE_ENV=development
 PORT=8080
 
 # PostgreSQL (metadata: orgs, users, projects, tokens…)
-DATABASE_URL=postgresql://myampmix:myampmix_dev@localhost:5432/myampmix
+DATABASE_URL=postgresql://myampix:myampix_dev@localhost:5432/myampix
 
 # ClickHouse (event store)
 CLICKHOUSE_URL=http://localhost:8123
 CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=myampmix_dev
+CLICKHOUSE_PASSWORD=myampix_dev
 CLICKHOUSE_DB=analytics
 
 # Redis (rate limiting, token cache, BullMQ)
@@ -470,9 +470,9 @@ Expected output: `up -d --wait` returns 0 after all healthchecks pass; `ps` show
 
 ```
 NAME                   IMAGE                                 ... STATUS
-myampmix-clickhouse-1  clickhouse/clickhouse-server:24.8     ... Up 30 seconds (healthy)
-myampmix-postgres-1    postgres:17-alpine                    ... Up 30 seconds (healthy)
-myampmix-redis-1       redis:7-alpine                        ... Up 30 seconds (healthy)
+myampix-clickhouse-1  clickhouse/clickhouse-server:24.8     ... Up 30 seconds (healthy)
+myampix-postgres-1    postgres:17-alpine                    ... Up 30 seconds (healthy)
+myampix-redis-1       redis:7-alpine                        ... Up 30 seconds (healthy)
 ```
 
 - [ ] **Step 4: Verify ClickHouse HTTP ping and schema.**
@@ -480,7 +480,7 @@ myampmix-redis-1       redis:7-alpine                        ... Up 30 seconds (
 ```bash
 curl http://localhost:8123/ping
 docker compose -f infra/docker-compose.yml exec clickhouse \
-  clickhouse-client --user default --password myampmix_dev \
+  clickhouse-client --user default --password myampix_dev \
   --query "SHOW TABLES FROM analytics"
 ```
 
@@ -496,7 +496,7 @@ user_profiles
 
 ```bash
 docker compose -f infra/docker-compose.yml exec postgres \
-  psql -U myampmix -d myampmix -c "SELECT 1 AS ok;"
+  psql -U myampix -d myampix -c "SELECT 1 AS ok;"
 docker compose -f infra/docker-compose.yml exec redis redis-cli ping
 ```
 
@@ -507,7 +507,7 @@ Expected output: a one-row result ` ok\n----\n  1\n(1 row)` from psql, and `PONG
 ```bash
 pnpm infra:down && pnpm infra:up
 docker compose -f infra/docker-compose.yml exec clickhouse \
-  clickhouse-client --user default --password myampmix_dev \
+  clickhouse-client --user default --password myampix_dev \
   --query "SHOW TABLES FROM analytics" | wc -l
 ```
 
@@ -771,7 +771,7 @@ Expected output: `[main …] ci: add path-filtered CI skeleton with graceful pac
 - [ ] **Step 1: Create `README.md`** with this complete content:
 
 ````markdown
-# MyAmpMix
+# MyAmpix
 
 Self-hosted, Mixpanel-class product analytics platform: Flutter SDK →
 NestJS ingestion/API → ClickHouse + Postgres + Redis → React dashboard.
@@ -811,8 +811,8 @@ Verify: `curl http://localhost:8123/ping` → `Ok.`
 
 | Service    | Port(s)    | Credentials                              |
 | ---------- | ---------- | ---------------------------------------- |
-| ClickHouse | 8123, 9000 | `default` / `myampmix_dev`, db `analytics` |
-| PostgreSQL | 5432       | `myampmix` / `myampmix_dev`, db `myampmix` |
+| ClickHouse | 8123, 9000 | `default` / `myampix_dev`, db `analytics` |
+| PostgreSQL | 5432       | `myampix` / `myampix_dev`, db `myampix` |
 | Redis      | 6379       | none                                     |
 | Backend    | 8080       | `pnpm --filter ./backend start:dev` (once scaffolded) |
 | Dashboard  | 5173       | Vite dev server, proxies `/api` + `/ingest` → 8080 |
@@ -855,7 +855,7 @@ pnpm lint && pnpm typecheck && pnpm test
 pnpm infra:up
 curl http://localhost:8123/ping
 docker compose -f infra/docker-compose.yml exec clickhouse \
-  clickhouse-client --user default --password myampmix_dev \
+  clickhouse-client --user default --password myampix_dev \
   --query "SHOW TABLES FROM analytics"
 docker compose -f infra/docker-compose.yml ps --format '{{.Name}} {{.Status}}'
 ```

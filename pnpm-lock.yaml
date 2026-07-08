@@ -35,7 +35,7 @@ importers:
       '@clickhouse/client':
         specifier: ^1.11.0
         version: 1.23.0
-      '@myampmix/contracts':
+      '@myampix/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
       '@nestjs/common':

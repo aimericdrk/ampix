@@ -1,4 +1,4 @@
-import type { ProfileOperation } from '@myampmix/contracts';
+import type { ProfileOperation } from '@myampix/contracts';
 import type { ClickHouseService, ProfileRow } from '../clickhouse/clickhouse.service';
 import { applyOperation, ProfileWriter } from './profile-writer';
 

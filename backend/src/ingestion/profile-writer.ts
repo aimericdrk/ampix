@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ProfileOperation } from '@myampmix/contracts';
+import type { ProfileOperation } from '@myampix/contracts';
 import { ClickHouseService, ProfileRow, toChDateTime64 } from '../clickhouse/clickhouse.service';
 
 /** Pure profile-op semantics (contracts §4). Never mutates `current`. */
@@ -60,7 +60,7 @@ export function applyOperation(
  */
 @Injectable()
 export class ProfileWriter {
-  constructor(private readonly clickhouse: ClickHouseService) {}
+  constructor(private readonly clickhouse: ClickHouseService) { }
 
   async apply(
     projectId: string,

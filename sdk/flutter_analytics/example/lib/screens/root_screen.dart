@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 import 'cart_screen.dart';
 import 'catalog_screen.dart';
@@ -23,7 +23,7 @@ class _RootScreenState extends State<RootScreen> {
   int _index = 0;
 
   /// Stable per-tab screen names. Bottom-nav switches are NOT Navigator route
-  /// pushes, so `MyAmpMixObserver` never sees them — without `trackScreen`
+  /// pushes, so `MyAmpixObserver` never sees them — without `trackScreen`
   /// every tab would collapse into the single hosting route. One STABLE name
   /// per tab makes each a distinct screen (distinct `$screen_view` + reference
   /// screenshot). The pushed `product_detail` route stays one screen (its
@@ -35,12 +35,12 @@ class _RootScreenState extends State<RootScreen> {
   void initState() {
     super.initState();
     // The initial tab is a screen view the observer can't see either.
-    MyAmpMix.instance.trackScreen(_tabNames[_index]);
+    MyAmpix.instance.trackScreen(_tabNames[_index]);
   }
 
   void _onTabSelected(int index) {
     setState(() => _index = index);
-    MyAmpMix.instance.trackScreen(_tabNames[index]);
+    MyAmpix.instance.trackScreen(_tabNames[index]);
   }
 
   Widget _buildBody() {

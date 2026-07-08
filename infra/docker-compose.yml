@@ -1,7 +1,7 @@
-# MyAmpMix local development infrastructure.
+# MyAmpix local development infrastructure.
 # Ports & credentials: docs/superpowers/specs/2026-07-02-shared-contracts.md §2.
 # Usage: pnpm infra:up  (docker compose -f infra/docker-compose.yml up -d --wait)
-name: myampmix
+name: myampix
 
 services:
   clickhouse:
@@ -11,7 +11,7 @@ services:
       - "9000:9000" # native protocol
     environment:
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: myampmix_dev
+      CLICKHOUSE_PASSWORD: myampix_dev
       CLICKHOUSE_DB: analytics
     volumes:
       - clickhouse_data:/var/lib/clickhouse
@@ -24,7 +24,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "clickhouse-client --user default --password myampmix_dev --query 'SELECT 1'",
+          "clickhouse-client --user default --password myampix_dev --query 'SELECT 1'",
         ]
       interval: 5s
       timeout: 5s
@@ -36,13 +36,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: myampmix
-      POSTGRES_PASSWORD: myampmix_dev
-      POSTGRES_DB: myampmix
+      POSTGRES_USER: myampix
+      POSTGRES_PASSWORD: myampix_dev
+      POSTGRES_DB: myampix
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myampmix -d myampmix"]
+      test: ["CMD-SHELL", "pg_isready -U myampix -d myampix"]
       interval: 5s
       timeout: 5s
       retries: 12

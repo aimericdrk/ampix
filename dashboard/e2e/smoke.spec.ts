@@ -5,7 +5,7 @@ test('boots, logs in, and lands on the projects page', async ({ page }) => {
 
   // Anonymous visitor is redirected to login by the auth guard.
   await expect(page).toHaveURL(/\/login/);
-  await expect(page.getByRole('heading', { name: 'Log in to MyAmpMix' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Log in to MyAmpix' })).toBeVisible();
 
   await page.getByLabel('Email').fill('ada@example.com');
   await page.getByLabel('Password').fill('correct-horse-9');

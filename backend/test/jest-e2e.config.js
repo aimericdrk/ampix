@@ -4,7 +4,7 @@ module.exports = {
   rootDir: '..',
   testMatch: ['<rootDir>/test/e2e/**/*.e2e-spec.ts'],
   moduleNameMapper: {
-    '^@myampmix/contracts$': '<rootDir>/../packages/contracts/src',
+    '^@myampix/contracts$': '<rootDir>/../packages/contracts/src',
   },
   testTimeout: 300000,
 };

@@ -26,11 +26,11 @@ Copied from `docs/superpowers/specs/2026-07-02-shared-contracts.md` — these ar
 
 **Prerequisites (assumed, do NOT create):** root `pnpm-workspace.yaml` + root ESLint/Prettier config, `infra/docker-compose.yml` (contracts §2), `infra/clickhouse/init.sql` containing contracts §5 DDL, `.nvmrc` = 22. Docker must be running for integration/e2e tasks. Run `pnpm install` at the repo root after any `package.json` is created.
 
-**Conventions for this plan:** all paths relative to repo root `myampmix/`. Every task ends with a commit. Run unit tests with `pnpm --filter @myampmix/backend test`, integration with `... test:int`, e2e with `... test:e2e`.
+**Conventions for this plan:** all paths relative to repo root `myampix/`. Every task ends with a commit. Run unit tests with `pnpm --filter @myampix/backend test`, integration with `... test:int`, e2e with `... test:e2e`.
 
 ---
 
-### Task 1: `@myampmix/contracts` — ingest payload schemas and types
+### Task 1: `@myampix/contracts` — ingest payload schemas and types
 
 **Files:**
 - Create: `packages/contracts/package.json`
@@ -55,10 +55,10 @@ Copied from `docs/superpowers/specs/2026-07-02-shared-contracts.md` — these ar
 
 ```json
 {
-  "name": "@myampmix/contracts",
+  "name": "@myampix/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared Zod schemas and TypeScript types for MyAmpMix (ingest payloads, query definitions, API DTOs)",
+  "description": "Shared Zod schemas and TypeScript types for MyAmpix (ingest payloads, query definitions, API DTOs)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -264,7 +264,7 @@ describe('reserved names', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/contracts test` — expected **FAIL**: `Cannot find module '../src'` (nothing implemented yet).
+- [ ] Run `pnpm --filter @myampix/contracts test` — expected **FAIL**: `Cannot find module '../src'` (nothing implemented yet).
 - [ ] Implement `packages/contracts/src/ingest.ts` (COMPLETE file):
 
 ```ts
@@ -375,8 +375,8 @@ export interface IngestResponse {
 export * from './ingest';
 ```
 
-- [ ] Run `pnpm --filter @myampmix/contracts test` — expected **PASS**: `Tests: 24 passed`.
-- [ ] Run `pnpm --filter @myampmix/contracts build` — expected: `dist/` emitted with `.d.ts` files, no errors.
+- [ ] Run `pnpm --filter @myampix/contracts test` — expected **PASS**: `Tests: 24 passed`.
+- [ ] Run `pnpm --filter @myampix/contracts build` — expected: `dist/` emitted with `.d.ts` files, no errors.
 - [ ] Commit:
 
 ```bash
@@ -412,10 +412,10 @@ git commit -m "feat(contracts): zod schemas and types for ingest event/profile p
 
 ```json
 {
-  "name": "@myampmix/backend",
+  "name": "@myampix/backend",
   "version": "0.1.0",
   "private": true,
-  "description": "MyAmpMix NestJS backend — ingestion, analytics queries, auth",
+  "description": "MyAmpix NestJS backend — ingestion, analytics queries, auth",
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
@@ -429,7 +429,7 @@ git commit -m "feat(contracts): zod schemas and types for ingest event/profile p
   },
   "dependencies": {
     "@clickhouse/client": "^1.11.0",
-    "@myampmix/contracts": "workspace:*",
+    "@myampix/contracts": "workspace:*",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
@@ -527,7 +527,7 @@ module.exports = {
   rootDir: '.',
   testMatch: ['<rootDir>/src/**/*.spec.ts'],
   moduleNameMapper: {
-    '^@myampmix/contracts$': '<rootDir>/../packages/contracts/src',
+    '^@myampix/contracts$': '<rootDir>/../packages/contracts/src',
   },
   collectCoverageFrom: ['src/**/*.ts', '!src/main.ts', '!src/**/*.module.ts', '!src/**/*.spec.ts'],
   coverageThreshold: { global: { lines: 85 } },
@@ -539,10 +539,10 @@ module.exports = {
 ```
 NODE_ENV=development
 PORT=8080
-DATABASE_URL=postgresql://myampmix:myampmix_dev@localhost:5432/myampmix
+DATABASE_URL=postgresql://myampix:myampix_dev@localhost:5432/myampix
 CLICKHOUSE_URL=http://localhost:8123
 CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=myampmix_dev
+CLICKHOUSE_PASSWORD=myampix_dev
 CLICKHOUSE_DB=analytics
 REDIS_URL=redis://localhost:6379
 JWT_ACCESS_SECRET=dev_only_change_me_dev_only_change_me
@@ -559,10 +559,10 @@ import { loadConfig } from './app-config';
 
 const validEnv: NodeJS.ProcessEnv = {
   NODE_ENV: 'production',
-  DATABASE_URL: 'postgresql://myampmix:myampmix_dev@localhost:5432/myampmix',
+  DATABASE_URL: 'postgresql://myampix:myampix_dev@localhost:5432/myampix',
   CLICKHOUSE_URL: 'http://localhost:8123',
   CLICKHOUSE_USER: 'default',
-  CLICKHOUSE_PASSWORD: 'myampmix_dev',
+  CLICKHOUSE_PASSWORD: 'myampix_dev',
   CLICKHOUSE_DB: 'analytics',
   REDIS_URL: 'redis://localhost:6379',
   JWT_ACCESS_SECRET: 'a'.repeat(32),
@@ -582,7 +582,7 @@ describe('loadConfig', () => {
     expect(config.clickhouse).toEqual({
       url: 'http://localhost:8123',
       user: 'default',
-      password: 'myampmix_dev',
+      password: 'myampix_dev',
       database: 'analytics',
     });
   });
@@ -618,7 +618,7 @@ describe('loadConfig', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './app-config'`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './app-config'`.
 - [ ] Implement `backend/src/config/app-config.ts` (COMPLETE file):
 
 ```ts
@@ -744,8 +744,8 @@ if (require.main === module) {
 }
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 7 passed`.
-- [ ] Verify the boot-crash behavior: `pnpm --filter @myampmix/contracts build && pnpm --filter @myampmix/backend build && cd backend && NODE_ENV=production node dist/main.js; cd ..` — expected: process exits non-zero printing `Invalid environment configuration:` naming the missing vars.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 7 passed`.
+- [ ] Verify the boot-crash behavior: `pnpm --filter @myampix/contracts build && pnpm --filter @myampix/backend build && cd backend && NODE_ENV=production node dist/main.js; cd ..` — expected: process exits non-zero printing `Invalid environment configuration:` naming the missing vars.
 - [ ] Commit:
 
 ```bash
@@ -911,7 +911,7 @@ describe('problemFromBodyParserError', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './problem-details'` / `'./json-body.middleware'`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './problem-details'` / `'./json-body.middleware'`.
 - [ ] Implement `backend/src/common/problem-details.ts` (COMPLETE file):
 
 ```ts
@@ -1133,7 +1133,7 @@ if (require.main === module) {
 }
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 16 passed` (7 config + 5 filter + 4 middleware).
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 16 passed` (7 config + 5 filter + 4 middleware).
 - [ ] Commit:
 
 ```bash
@@ -1263,7 +1263,7 @@ model RefreshToken {
 }
 ```
 
-- [ ] Generate the first migration against the local compose Postgres (infra already exists): from repo root run `docker compose -f infra/docker-compose.yml up -d postgres`, then `cd backend && DATABASE_URL=postgresql://myampmix:myampmix_dev@localhost:5432/myampmix pnpm prisma migrate dev --name init && cd ..` — expected: `backend/prisma/migrations/<ts>_init/migration.sql` created, `@prisma/client` generated.
+- [ ] Generate the first migration against the local compose Postgres (infra already exists): from repo root run `docker compose -f infra/docker-compose.yml up -d postgres`, then `cd backend && DATABASE_URL=postgresql://myampix:myampix_dev@localhost:5432/myampix pnpm prisma migrate dev --name init && cd ..` — expected: `backend/prisma/migrations/<ts>_init/migration.sql` created, `@prisma/client` generated.
 - [ ] Create `backend/test/jest-integration.config.js`:
 
 ```js
@@ -1273,7 +1273,7 @@ module.exports = {
   rootDir: '..',
   testMatch: ['<rootDir>/test/integration/**/*.int-spec.ts'],
   moduleNameMapper: {
-    '^@myampmix/contracts$': '<rootDir>/../packages/contracts/src',
+    '^@myampix/contracts$': '<rootDir>/../packages/contracts/src',
   },
   testTimeout: 300000,
 };
@@ -1320,7 +1320,7 @@ export async function startClickHouseContainer(): Promise<StartedService<Started
   const container = await new GenericContainer('clickhouse/clickhouse-server:24.8')
     .withEnvironment({
       CLICKHOUSE_USER: 'default',
-      CLICKHOUSE_PASSWORD: 'myampmix_dev',
+      CLICKHOUSE_PASSWORD: 'myampix_dev',
       CLICKHOUSE_DB: 'analytics',
     })
     .withExposedPorts(8123)
@@ -1391,7 +1391,7 @@ describe('Prisma schema (shared contracts §6)', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test:int` — expected **PASS** (the schema/migration already exist from the earlier step; if the migration step was skipped the suite FAILS with `relation "organizations" does not exist` — go back and generate it). TDD note: the failing state for this task is the pre-migration run.
+- [ ] Run `pnpm --filter @myampix/backend test:int` — expected **PASS** (the schema/migration already exist from the earlier step; if the migration step was skipped the suite FAILS with `relation "organizations" does not exist` — go back and generate it). TDD note: the failing state for this task is the pre-migration run.
 - [ ] Implement `backend/src/prisma/prisma.service.ts` (COMPLETE file):
 
 ```ts
@@ -1426,7 +1426,7 @@ export class PrismaModule {}
 ```
 
 - [ ] Modify `backend/src/app.module.ts`: add `PrismaModule` to the imports array (exact edit — add the import line `import { PrismaModule } from './prisma/prisma.module';` and append `PrismaModule,` after `AppConfigModule,` in `imports`).
-- [ ] Run `pnpm --filter @myampmix/backend typecheck` — expected: no errors. Run `pnpm --filter @myampmix/backend test` — expected **PASS** (unit suite unchanged).
+- [ ] Run `pnpm --filter @myampix/backend typecheck` — expected: no errors. Run `pnpm --filter @myampix/backend test` — expected **PASS** (unit suite unchanged).
 - [ ] Commit:
 
 ```bash
@@ -1473,7 +1473,7 @@ describe('toChDateTime64', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './clickhouse.service'`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './clickhouse.service'`.
 - [ ] Implement `backend/src/clickhouse/clickhouse.service.ts` (COMPLETE file):
 
 ```ts
@@ -1680,7 +1680,7 @@ function makeConfig(url: string): AppConfig {
     nodeEnv: 'test',
     port: 8080,
     databaseUrl: 'postgresql://unused',
-    clickhouse: { url, user: 'default', password: 'myampmix_dev', database: 'analytics' },
+    clickhouse: { url, user: 'default', password: 'myampix_dev', database: 'analytics' },
     redisUrl: 'redis://unused',
     jwtAccessSecret: undefined,
     jwtRefreshSecret: undefined,
@@ -1737,7 +1737,7 @@ describe('ClickHouseService (integration)', () => {
     admin = createClient({
       url: started.url,
       username: 'default',
-      password: 'myampmix_dev',
+      password: 'myampix_dev',
       database: 'analytics',
     });
     await applyClickHouseSchema(admin);
@@ -1824,7 +1824,7 @@ describe('Redis client (integration)', () => {
 ```
 
 - [ ] Modify `backend/src/app.module.ts`: add imports `import { RedisModule } from './redis/redis.module';` and `import { ClickHouseModule } from './clickhouse/clickhouse.module';`, and append `RedisModule, ClickHouseModule,` to the `imports` array after `PrismaModule,`.
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS** (18 unit tests). Run `pnpm --filter @myampmix/backend test:int` — expected **PASS**: prisma + clickhouse + redis suites green (first run pulls images; allow several minutes).
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS** (18 unit tests). Run `pnpm --filter @myampix/backend test:int` — expected **PASS**: prisma + clickhouse + redis suites green (first run pulls images; allow several minutes).
 - [ ] Commit:
 
 ```bash
@@ -1959,13 +1959,13 @@ describe('SdkTokenGuard', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './sdk-token.guard'`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './sdk-token.guard'`.
 - [ ] Implement `backend/src/ingestion/sdk-token.guard.ts` (COMPLETE file):
 
 ```ts
 import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { SDK_TOKEN_REGEX } from '@myampmix/contracts';
+import { SDK_TOKEN_REGEX } from '@myampix/contracts';
 import { REDIS } from '../redis/redis.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
@@ -2034,7 +2034,7 @@ export class SdkTokenGuard implements CanActivate {
 }
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 25 passed`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 25 passed`.
 - [ ] Commit:
 
 ```bash
@@ -2103,7 +2103,7 @@ describe('IngestRateLimitGuard', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './rate-limit.guard'`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './rate-limit.guard'`.
 - [ ] Implement `backend/src/ingestion/rate-limiter.ts` (COMPLETE file):
 
 ```ts
@@ -2200,7 +2200,7 @@ export class IngestRateLimitGuard implements CanActivate {
 }
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 28 passed`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 28 passed`.
 - [ ] Write the integration test `backend/test/integration/rate-limiter.int-spec.ts` (COMPLETE file):
 
 ```ts
@@ -2259,7 +2259,7 @@ describe('SlidingWindowRateLimiter (integration)', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test:int` — expected **PASS**: all integration suites green (prisma, clickhouse, redis, rate-limiter).
+- [ ] Run `pnpm --filter @myampix/backend test:int` — expected **PASS**: all integration suites green (prisma, clickhouse, redis, rate-limiter).
 - [ ] Commit:
 
 ```bash
@@ -2385,13 +2385,13 @@ describe('EventNormalizer.normalizeBatch', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './event-normalizer'`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './event-normalizer'`.
 - [ ] Implement `backend/src/ingestion/event-normalizer.ts` (COMPLETE file):
 
 ```ts
 import { Injectable } from '@nestjs/common';
 import type { ZodError } from 'zod';
-import { IngestEvent, RejectedItem, ingestEventSchema } from '@myampmix/contracts';
+import { IngestEvent, RejectedItem, ingestEventSchema } from '@myampix/contracts';
 import { EventRow, toChDateTime64 } from '../clickhouse/clickhouse.service';
 
 /** Contracts §4: client timestamp is clamped to [now-7d, now+5min]. */
@@ -2472,7 +2472,7 @@ export class EventNormalizer {
 }
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 37 passed`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 37 passed`.
 - [ ] Commit:
 
 ```bash
@@ -2508,7 +2508,7 @@ module.exports = {
   rootDir: '..',
   testMatch: ['<rootDir>/test/e2e/**/*.e2e-spec.ts'],
   moduleNameMapper: {
-    '^@myampmix/contracts$': '<rootDir>/../packages/contracts/src',
+    '^@myampix/contracts$': '<rootDir>/../packages/contracts/src',
   },
   testTimeout: 300000,
 };
@@ -2555,7 +2555,7 @@ export async function startTestStack(envOverrides: Record<string, string> = {}):
     DATABASE_URL: pg.url,
     CLICKHOUSE_URL: chc.url,
     CLICKHOUSE_USER: 'default',
-    CLICKHOUSE_PASSWORD: 'myampmix_dev',
+    CLICKHOUSE_PASSWORD: 'myampix_dev',
     CLICKHOUSE_DB: 'analytics',
     REDIS_URL: redis.url,
     INGEST_MAX_BATCH: '100',
@@ -2567,7 +2567,7 @@ export async function startTestStack(envOverrides: Record<string, string> = {}):
   const ch = createClient({
     url: chc.url,
     username: 'default',
-    password: 'myampmix_dev',
+    password: 'myampix_dev',
     database: 'analytics',
   });
   await applyClickHouseSchema(ch);
@@ -2724,13 +2724,13 @@ describe('POST /ingest/events (e2e)', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test:e2e` — expected **FAIL**: `expected 202 "Accepted", got 404 "Not Found"` (no controller yet).
+- [ ] Run `pnpm --filter @myampix/backend test:e2e` — expected **FAIL**: `expected 202 "Accepted", got 404 "Not Found"` (no controller yet).
 - [ ] Implement `backend/src/ingestion/ingest.controller.ts` (COMPLETE file — the profiles endpoint is added in Task 10):
 
 ```ts
 import { Body, Controller, HttpCode, Inject, Post, Req, UseGuards } from '@nestjs/common';
 import type { ZodTypeAny } from 'zod';
-import { IngestResponse, ingestEventsRequestSchema } from '@myampmix/contracts';
+import { IngestResponse, ingestEventsRequestSchema } from '@myampix/contracts';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
@@ -2797,8 +2797,8 @@ export class IngestModule {}
 ```
 
 - [ ] Modify `backend/src/app.module.ts`: add `import { IngestModule } from './ingestion/ingest.module';` and append `IngestModule,` to the `imports` array after `ClickHouseModule,`.
-- [ ] Run `pnpm --filter @myampmix/backend test:e2e` — expected **PASS**: `Tests: 6 passed` (first run pulls three container images; allow several minutes).
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 37 passed` (unit suite untouched).
+- [ ] Run `pnpm --filter @myampix/backend test:e2e` — expected **PASS**: `Tests: 6 passed` (first run pulls three container images; allow several minutes).
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 37 passed` (unit suite untouched).
 - [ ] Commit:
 
 ```bash
@@ -2827,7 +2827,7 @@ git commit -m "feat(backend): POST /ingest/events per contracts §4 with gzip, p
 - [ ] Write the failing unit test `backend/src/ingestion/profile-writer.spec.ts` (COMPLETE file):
 
 ```ts
-import type { ProfileOperation } from '@myampmix/contracts';
+import type { ProfileOperation } from '@myampix/contracts';
 import type { ClickHouseService, ProfileRow } from '../clickhouse/clickhouse.service';
 import { applyOperation, ProfileWriter } from './profile-writer';
 
@@ -2937,12 +2937,12 @@ describe('ProfileWriter.apply', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './profile-writer'`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './profile-writer'`.
 - [ ] Implement `backend/src/ingestion/profile-writer.ts` (COMPLETE file):
 
 ```ts
 import { Injectable } from '@nestjs/common';
-import type { ProfileOperation } from '@myampmix/contracts';
+import type { ProfileOperation } from '@myampix/contracts';
 import { ClickHouseService, ProfileRow, toChDateTime64 } from '../clickhouse/clickhouse.service';
 
 /** Pure profile-op semantics (contracts §4). Never mutates `current`. */
@@ -3033,7 +3033,7 @@ export class ProfileWriter {
 }
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 48 passed`.
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 48 passed`.
 - [ ] Write the failing e2e test `backend/test/e2e/ingest-profiles.e2e-spec.ts` (COMPLETE file):
 
 ```ts
@@ -3102,7 +3102,7 @@ describe('POST /ingest/profiles (e2e)', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test:e2e` — expected **FAIL**: `expected 202 "Accepted", got 404 "Not Found"` for the profiles suite (events suite still passes).
+- [ ] Run `pnpm --filter @myampix/backend test:e2e` — expected **FAIL**: `expected 202 "Accepted", got 404 "Not Found"` for the profiles suite (events suite still passes).
 - [ ] Modify `backend/src/ingestion/ingest.controller.ts` (COMPLETE new file content — adds `ProfileWriter` and the profiles endpoint):
 
 ```ts
@@ -3115,7 +3115,7 @@ import {
   ingestEventsRequestSchema,
   ingestProfilesRequestSchema,
   profileOperationSchema,
-} from '@myampmix/contracts';
+} from '@myampix/contracts';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
@@ -3202,8 +3202,8 @@ import { SlidingWindowRateLimiter } from './rate-limiter';
 export class IngestModule {}
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test:e2e` — expected **PASS**: `Tests: 9 passed` (6 events + 3 profiles).
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 48 passed`.
+- [ ] Run `pnpm --filter @myampix/backend test:e2e` — expected **PASS**: `Tests: 9 passed` (6 events + 3 profiles).
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 48 passed`.
 - [ ] Commit:
 
 ```bash
@@ -3321,7 +3321,7 @@ describe('RedisModule graceful shutdown', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **FAIL**: `Cannot find module './health.controller'` (the redis.module suite passes immediately — the shutdown hook exists since Task 5; it is locked in here).
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **FAIL**: `Cannot find module './health.controller'` (the redis.module suite passes immediately — the shutdown hook exists since Task 5; it is locked in here).
 - [ ] Implement `backend/src/health/health.controller.ts` (COMPLETE file):
 
 ```ts
@@ -3431,8 +3431,8 @@ import { HealthModule } from './health/health.module';
 export class AppModule {}
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test` — expected **PASS**: `Tests: 55 passed` (48 + 5 health + 2 shutdown).
-- [ ] Manual SIGTERM check (optional but recommended): `docker compose -f infra/docker-compose.yml up -d`; dev boot needs the env vars from Task 2's `.env.example` (Zod-validated config crashes on missing `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` otherwise), so run `cp backend/.env.example backend/.env` if `backend/.env` doesn't already exist, then start the server with those vars loaded: `env $(grep -v '^#' backend/.env | xargs) pnpm --filter @myampmix/backend start:dev`; in another terminal, `kill -TERM <pid>` — expected: process logs shutdown and exits 0 within ~2 s (drained connections, closed pools).
+- [ ] Run `pnpm --filter @myampix/backend test` — expected **PASS**: `Tests: 55 passed` (48 + 5 health + 2 shutdown).
+- [ ] Manual SIGTERM check (optional but recommended): `docker compose -f infra/docker-compose.yml up -d`; dev boot needs the env vars from Task 2's `.env.example` (Zod-validated config crashes on missing `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` otherwise), so run `cp backend/.env.example backend/.env` if `backend/.env` doesn't already exist, then start the server with those vars loaded: `env $(grep -v '^#' backend/.env | xargs) pnpm --filter @myampix/backend start:dev`; in another terminal, `kill -TERM <pid>` — expected: process logs shutdown and exits 0 within ~2 s (drained connections, closed pools).
 - [ ] Commit:
 
 ```bash
@@ -3590,7 +3590,7 @@ describe('/ingest hardening (e2e): auth, limits, dedup, health', () => {
 });
 ```
 
-- [ ] Run `pnpm --filter @myampmix/backend test:e2e` — expected **PASS**: `Tests: 17 passed` (6 events + 3 profiles + 8 hardening). No implementation change should be needed; if any hardening test fails, fix the implementation (not the test) — every assertion is a direct contracts §4 requirement.
+- [ ] Run `pnpm --filter @myampix/backend test:e2e` — expected **PASS**: `Tests: 17 passed` (6 events + 3 profiles + 8 hardening). No implementation change should be needed; if any hardening test fails, fix the implementation (not the test) — every assertion is a direct contracts §4 requirement.
 - [ ] Create `backend/jest.config.coverage.js` (COMPLETE file — the unit suite alone under-covers files only exercised by the integration suite, e.g. `ClickHouseService`, `PrismaService`, `jsonBodyParser`, `rate-limiter.ts`; `test:cov` therefore runs both projects together with coverage collected across both):
 
 ```js
@@ -3601,16 +3601,16 @@ module.exports = {
 };
 ```
 
-- [ ] Run the coverage gate: `pnpm --filter @myampmix/backend test:cov` — expected **PASS**: runs the unit suite and the integration suite (Testcontainers; Docker must be running) together, with coverage collected across both, `All files` lines coverage ≥ 85% (jest exits non-zero below the `coverageThreshold`, which is the CI gate).
+- [ ] Run the coverage gate: `pnpm --filter @myampix/backend test:cov` — expected **PASS**: runs the unit suite and the integration suite (Testcontainers; Docker must be running) together, with coverage collected across both, `All files` lines coverage ≥ 85% (jest exits non-zero below the `coverageThreshold`, which is the CI gate).
 - [ ] Full verification sweep (all must pass):
 
 ```bash
-pnpm --filter @myampmix/contracts test && pnpm --filter @myampmix/contracts build
-pnpm --filter @myampmix/backend typecheck
-pnpm --filter @myampmix/backend test:cov
-pnpm --filter @myampmix/backend test:int
-pnpm --filter @myampmix/backend test:e2e
-pnpm --filter @myampmix/backend build
+pnpm --filter @myampix/contracts test && pnpm --filter @myampix/contracts build
+pnpm --filter @myampix/backend typecheck
+pnpm --filter @myampix/backend test:cov
+pnpm --filter @myampix/backend test:int
+pnpm --filter @myampix/backend test:e2e
+pnpm --filter @myampix/backend build
 ```
 
 - [ ] Commit:
@@ -3625,8 +3625,8 @@ git commit -m "test(backend): e2e hardening for auth matrix, rate limit, insert_
 ## Success Criteria (phase-1 done means ALL of these)
 
 **Commands (all green):**
-- `pnpm --filter @myampmix/contracts test` and `build` pass.
-- `pnpm --filter @myampmix/backend typecheck`, `test:cov` (≥ 85% lines, threshold-enforced), `test:int`, `test:e2e`, `build` all pass. Integration/e2e run against real `clickhouse/clickhouse-server:24.8`, `postgres:17-alpine`, `redis:7-alpine` via Testcontainers.
+- `pnpm --filter @myampix/contracts test` and `build` pass.
+- `pnpm --filter @myampix/backend typecheck`, `test:cov` (≥ 85% lines, threshold-enforced), `test:int`, `test:e2e`, `build` all pass. Integration/e2e run against real `clickhouse/clickhouse-server:24.8`, `postgres:17-alpine`, `redis:7-alpine` via Testcontainers.
 
 **Contract behaviors (proven by the suites above):**
 - `POST /ingest/events` and `POST /ingest/profiles`: `Bearer mam_<32hex>` auth (401 for missing/malformed/unknown/revoked, with a 60 s Redis cache and negative caching), 1000 req/min per-token Redis sliding window (429 + `Retry-After`; test-only env override), gzip request bodies, per-item accept/reject with `202 {accepted, rejected:[{index, reason}]}` (never all-or-nothing), `"missing insert_id"`-style reasons, batch cap `INGEST_MAX_BATCH=100` (400) and body cap `INGEST_MAX_BODY_KB=1024` (413), client timestamps clamped to `[now−7d, now+5min]` with authoritative `server_timestamp`.

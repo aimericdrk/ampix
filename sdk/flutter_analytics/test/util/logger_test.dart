@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/config.dart';
-import 'package:myampmix_analytics/src/util/logger.dart';
+import 'package:myampix_analytics/src/config.dart';
+import 'package:myampix_analytics/src/util/logger.dart';
 
 void main() {
   // Captures whatever the logger routes through `debugPrint`. The test runner
@@ -23,14 +23,14 @@ void main() {
 
   group('MamLogger level threshold', () {
     test('at none, nothing logs (neither internal nor error-carrying)', () {
-      const logger = MamLogger(level: MyAmpMixLogLevel.none);
+      const logger = MamLogger(level: MyAmpixLogLevel.none);
       logger.log('internal diagnostic');
       logger.log('boom', Exception('kaboom'));
       expect(lines, isEmpty);
     });
 
     test('at error, only error-carrying diagnostics log', () {
-      const logger = MamLogger(level: MyAmpMixLogLevel.error);
+      const logger = MamLogger(level: MyAmpixLogLevel.error);
       logger.log('internal diagnostic');
       expect(lines, isEmpty);
 
@@ -42,7 +42,7 @@ void main() {
 
     test('at warn/info, error-carrying logs but internal diagnostics do not',
         () {
-      for (final level in [MyAmpMixLogLevel.warn, MyAmpMixLogLevel.info]) {
+      for (final level in [MyAmpixLogLevel.warn, MyAmpixLogLevel.info]) {
         lines.clear();
         final logger = MamLogger(level: level);
         logger.log('internal diagnostic');
@@ -53,7 +53,7 @@ void main() {
     });
 
     test('at debug, everything logs', () {
-      const logger = MamLogger(level: MyAmpMixLogLevel.debug);
+      const logger = MamLogger(level: MyAmpixLogLevel.debug);
       logger.log('internal diagnostic');
       expect(lines, hasLength(1));
       expect(lines.single, contains('internal diagnostic'));
@@ -64,12 +64,12 @@ void main() {
     });
 
     test('a stack trace is printed as its own line at debug', () {
-      const logger = MamLogger(level: MyAmpMixLogLevel.debug);
+      const logger = MamLogger(level: MyAmpixLogLevel.debug);
       logger.log('failed', Exception('kaboom'), StackTrace.current);
       expect(lines, hasLength(2));
       expect(lines.first, contains('failed'));
-      // Second line is the stack trace itself (no [MyAmpMix] prefix).
-      expect(lines[1], isNot(contains('[MyAmpMix]')));
+      // Second line is the stack trace itself (no [MyAmpix] prefix).
+      expect(lines[1], isNot(contains('[MyAmpix]')));
     });
 
     test('default level is none (silent)', () {
@@ -82,9 +82,9 @@ void main() {
 
   group('MamLogger.fromConfig / effectiveLogLevel', () {
     test('default config is silent', () {
-      const config = MyAmpMixConfig(serverUrl: 'http://localhost:8080');
-      expect(config.logLevel, MyAmpMixLogLevel.none);
-      expect(config.effectiveLogLevel, MyAmpMixLogLevel.none);
+      const config = MyAmpixConfig(serverUrl: 'http://localhost:8080');
+      expect(config.logLevel, MyAmpixLogLevel.none);
+      expect(config.effectiveLogLevel, MyAmpixLogLevel.none);
 
       MamLogger.fromConfig(config)
         ..log('internal diagnostic')
@@ -93,23 +93,23 @@ void main() {
     });
 
     test('legacy debug:true promotes effective level to debug', () {
-      const config = MyAmpMixConfig(
+      const config = MyAmpixConfig(
         serverUrl: 'http://localhost:8080',
         debug: true,
       );
-      expect(config.effectiveLogLevel, MyAmpMixLogLevel.debug);
+      expect(config.effectiveLogLevel, MyAmpixLogLevel.debug);
 
       MamLogger.fromConfig(config).log('internal diagnostic');
       expect(lines, hasLength(1));
     });
 
     test('explicit logLevel wins over legacy debug flag', () {
-      const config = MyAmpMixConfig(
+      const config = MyAmpixConfig(
         serverUrl: 'http://localhost:8080',
         debug: true,
-        logLevel: MyAmpMixLogLevel.error,
+        logLevel: MyAmpixLogLevel.error,
       );
-      expect(config.effectiveLogLevel, MyAmpMixLogLevel.error);
+      expect(config.effectiveLogLevel, MyAmpixLogLevel.error);
 
       final logger = MamLogger.fromConfig(config);
       logger.log('internal diagnostic');

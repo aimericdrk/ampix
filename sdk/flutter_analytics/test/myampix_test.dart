@@ -8,12 +8,12 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
-import 'package:myampmix_analytics/src/model/event.dart';
-import 'package:myampmix_analytics/src/properties/super_properties_store.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/event_store.dart';
-import 'package:myampmix_analytics/src/storage/key_value_store.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
+import 'package:myampix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/properties/super_properties_store.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/event_store.dart';
+import 'package:myampix_analytics/src/storage/key_value_store.dart';
 
 import 'helpers/fake_clock.dart';
 import 'helpers/fake_context_data_source.dart';
@@ -34,7 +34,7 @@ class ThrowingKeyValueStore implements KeyValueStore {
 }
 
 /// Throws for any custom (non `$`-prefixed) event while letting the SDK's
-/// own session-lifecycle events through, so `MyAmpMix.init` still completes
+/// own session-lifecycle events through, so `MyAmpix.init` still completes
 /// normally. Used to prove the never-throw guard swallows an exception
 /// raised deep in the write path when the host app calls `track()` after a
 /// successful init (controller-adjudicated requirement 1).
@@ -80,12 +80,12 @@ void main() {
     requests = [];
     clock = FakeClock(DateTime.utc(2026, 7, 2, 12));
     keyValueStore = InMemoryKeyValueStore();
-    MyAmpMixObserver.resetForTesting();
+    MyAmpixObserver.resetForTesting();
   });
 
   tearDown(() async {
-    await MyAmpMix.shutdownForTesting();
-    MyAmpMixObserver.resetForTesting();
+    await MyAmpix.shutdownForTesting();
+    MyAmpixObserver.resetForTesting();
   });
 
   MockClient acceptAll() => MockClient((request) async {
@@ -94,9 +94,9 @@ void main() {
   });
 
   Future<void> initSdk({http.Client? client, EventStore? eventStore}) =>
-      MyAmpMix.init(
+      MyAmpix.init(
         'mam_0123456789abcdef0123456789abcdef',
-        config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+        config: const MyAmpixConfig(serverUrl: 'http://localhost:8080'),
         overrides: SdkOverrides(
           clock: clock,
           httpClient: client ?? acceptAll(),
@@ -135,8 +135,8 @@ void main() {
 
   test('init + track + flush delivers a contract-shaped event', () async {
     await initSdk();
-    MyAmpMix.instance.track('checkout_completed', properties: {'value': 9.99});
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('checkout_completed', properties: {'value': 9.99});
+    MyAmpix.instance.flush();
     await waitFor(
       () => sentEvents().any((e) => e['event'] == 'checkout_completed'),
     );
@@ -154,7 +154,7 @@ void main() {
 
   test('first launch sends the session lifecycle events in order', () async {
     await initSdk();
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().length >= 3);
     expect(
       sentEvents().map((e) => e['event']).toList(),
@@ -164,9 +164,9 @@ void main() {
 
   test(r'identify emits $identify and switches distinct_id', () async {
     await initSdk();
-    MyAmpMix.instance.identify('u_42');
-    MyAmpMix.instance.track('after_login');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.identify('u_42');
+    MyAmpix.instance.track('after_login');
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == 'after_login'));
 
     final identifyEvent = sentEvents().firstWhere(
@@ -183,8 +183,8 @@ void main() {
 
   test(r'alias emits $identify carrying $alias', () async {
     await initSdk();
-    MyAmpMix.instance.alias('new-id');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.alias('new-id');
+    MyAmpix.instance.flush();
     await waitFor(
       () => sentEvents().any(
         (e) =>
@@ -209,7 +209,7 @@ void main() {
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await pumpEventQueue();
 
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == r'$session_end'));
 
     final names = sentEvents().map((e) => e['event']).toList();
@@ -228,9 +228,9 @@ void main() {
 
   test('people operations are delivered to /ingest/profiles', () async {
     await initSdk();
-    MyAmpMix.instance.people.set({'plan': 'pro'});
+    MyAmpix.instance.people.set({'plan': 'pro'});
     await pumpEventQueue();
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(() => requests.any((r) => r.url.path == '/ingest/profiles'));
 
     final request = requests.firstWhere(
@@ -250,9 +250,9 @@ void main() {
   test('people.set immediately after identify() attributes the profile op '
       'to the new distinct id', () async {
     await initSdk();
-    MyAmpMix.instance.identify('u_42');
-    MyAmpMix.instance.people.set({'plan': 'pro'});
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.identify('u_42');
+    MyAmpix.instance.people.set({'plan': 'pro'});
+    MyAmpix.instance.flush();
     await waitFor(() => profileOps().isNotEmpty);
 
     expect(profileOps().single['distinct_id'], 'u_42');
@@ -261,12 +261,12 @@ void main() {
   test('people.set immediately after reset() carries the NEW anonymous id, '
       'not the previous user\'s', () async {
     await initSdk();
-    MyAmpMix.instance.identify('u_42');
+    MyAmpix.instance.identify('u_42');
     await pumpEventQueue();
-    MyAmpMix.instance.reset();
-    MyAmpMix.instance.people.set({'plan': 'free'});
-    MyAmpMix.instance.track('after_reset');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.reset();
+    MyAmpix.instance.people.set({'plan': 'free'});
+    MyAmpix.instance.track('after_reset');
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == 'after_reset'));
     await waitFor(() => profileOps().isNotEmpty);
 
@@ -278,29 +278,29 @@ void main() {
 
   test('opt-out drops events until opt-in', () async {
     await initSdk();
-    MyAmpMix.instance.optOutTracking();
+    MyAmpix.instance.optOutTracking();
     await pumpEventQueue();
 
-    MyAmpMix.instance.track('secret');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('secret');
+    MyAmpix.instance.flush();
     await pumpEventQueue();
     expect(sentEvents().where((e) => e['event'] == 'secret'), isEmpty);
 
-    MyAmpMix.instance.optInTracking();
+    MyAmpix.instance.optInTracking();
     await pumpEventQueue();
-    MyAmpMix.instance.track('visible');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('visible');
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == 'visible'));
   });
 
   test('registerSuperProperties and timeEvent flow through track', () async {
     await initSdk();
-    MyAmpMix.instance.registerSuperProperties({'ab_group': 'b'});
-    MyAmpMix.instance.timeEvent('level_completed');
+    MyAmpix.instance.registerSuperProperties({'ab_group': 'b'});
+    MyAmpix.instance.timeEvent('level_completed');
     await pumpEventQueue();
     clock.advance(const Duration(seconds: 7));
-    MyAmpMix.instance.track('level_completed');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('level_completed');
+    MyAmpix.instance.flush();
     await waitFor(
       () => sentEvents().any((e) => e['event'] == 'level_completed'),
     );
@@ -316,13 +316,13 @@ void main() {
     'reset issues a fresh anonymous identity and clears super properties',
     () async {
       await initSdk();
-      MyAmpMix.instance.identify('u_42');
-      MyAmpMix.instance.registerSuperProperties({'plan': 'pro'});
+      MyAmpix.instance.identify('u_42');
+      MyAmpix.instance.registerSuperProperties({'plan': 'pro'});
       await pumpEventQueue();
-      MyAmpMix.instance.reset();
+      MyAmpix.instance.reset();
       await pumpEventQueue();
-      MyAmpMix.instance.track('after_reset');
-      MyAmpMix.instance.flush();
+      MyAmpix.instance.track('after_reset');
+      MyAmpix.instance.flush();
       await waitFor(() => sentEvents().any((e) => e['event'] == 'after_reset'));
 
       final event = sentEvents().firstWhere((e) => e['event'] == 'after_reset');
@@ -333,8 +333,8 @@ void main() {
   );
 
   test('no public method throws before init', () async {
-    await MyAmpMix.shutdownForTesting(); // pristine uninitialized instance
-    final sdk = MyAmpMix.instance;
+    await MyAmpix.shutdownForTesting(); // pristine uninitialized instance
+    final sdk = MyAmpix.instance;
     expect(() {
       sdk.track('e');
       sdk.trackScreen('home');
@@ -353,9 +353,9 @@ void main() {
 
   test('init failure disables the SDK instead of throwing', () async {
     final db = AnalyticsDatabase(NativeDatabase.memory());
-    await MyAmpMix.init(
+    await MyAmpix.init(
       'mam_0123456789abcdef0123456789abcdef',
-      config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+      config: const MyAmpixConfig(serverUrl: 'http://localhost:8080'),
       overrides: SdkOverrides(
         clock: clock,
         httpClient: acceptAll(),
@@ -364,7 +364,7 @@ void main() {
         contextDataSource: FakeContextDataSource(),
       ),
     );
-    expect(() => MyAmpMix.instance.track('e'), returnsNormally);
+    expect(() => MyAmpix.instance.track('e'), returnsNormally);
     await pumpEventQueue();
     await db.close();
   });
@@ -381,7 +381,7 @@ void main() {
     expect(store.attemptedEvents, contains(r'$app_open'));
 
     expect(
-      () => MyAmpMix.instance.track('checkout_completed'),
+      () => MyAmpix.instance.track('checkout_completed'),
       returnsNormally,
     );
     await pumpEventQueue();
@@ -397,8 +397,8 @@ void main() {
     keyValueStore.values[SuperPropertiesStore.storageKey] = 'not-json{{{';
     await initSdk();
 
-    MyAmpMix.instance.track('after_corrupt_props');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.track('after_corrupt_props');
+    MyAmpix.instance.flush();
     await waitFor(
       () => sentEvents().any((e) => e['event'] == 'after_corrupt_props'),
     );
@@ -422,11 +422,11 @@ void main() {
     });
     await initSdk(client: slowClient, eventStore: store);
 
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     // The drain is now in flight, blocked on the unanswered request.
     await waitFor(() => requests.any((r) => r.url.path == '/ingest/events'));
 
-    MyAmpMix.instance.track('queued_during_flush');
+    MyAmpix.instance.track('queued_during_flush');
     await waitFor(
       () => store.rows.any((r) => r.event.event == 'queued_during_flush'),
     );
@@ -447,15 +447,15 @@ void main() {
   test('a second init() call keeps the existing instance and starts no '
       'second session', () async {
     await initSdk();
-    final first = MyAmpMix.instance;
+    final first = MyAmpix.instance;
 
     // A realistic double-init with a full fresh dependency set: were init
     // not idempotent, this would genuinely construct and start a second
     // uploader/session stack — caught by the event counts below.
     final secondDb = AnalyticsDatabase(NativeDatabase.memory());
-    await MyAmpMix.init(
+    await MyAmpix.init(
       'mam_0123456789abcdef0123456789abcdef',
-      config: const MyAmpMixConfig(serverUrl: 'http://localhost:8080'),
+      config: const MyAmpixConfig(serverUrl: 'http://localhost:8080'),
       overrides: SdkOverrides(
         clock: clock,
         httpClient: acceptAll(),
@@ -465,9 +465,9 @@ void main() {
         random: FixedRandom(0.5),
       ),
     );
-    expect(identical(MyAmpMix.instance, first), isTrue);
+    expect(identical(MyAmpix.instance, first), isTrue);
 
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == r'$app_open'));
     // A non-idempotent init would have run SessionManager.start() again and
     // emitted a second $app_open (and $session_start) from a second
@@ -485,11 +485,11 @@ void main() {
   test(r'trackScreen emits $screen_view with $screen_name and updates the '
       'shared currentScreenName', () async {
     await initSdk();
-    MyAmpMix.instance.trackScreen('catalog');
+    MyAmpix.instance.trackScreen('catalog');
     // The shared static is updated synchronously so tap autocapture is stamped.
-    expect(MyAmpMixObserver.currentScreenName, 'catalog');
+    expect(MyAmpixObserver.currentScreenName, 'catalog');
 
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.flush();
     await waitFor(() => sentEvents().any((e) => e['event'] == r'$screen_view'));
 
     final view = sentEvents().firstWhere((e) => e['event'] == r'$screen_view');
@@ -503,9 +503,9 @@ void main() {
 
   test(r'trackScreen carries $previous_screen when the screen changed', () async {
     await initSdk();
-    MyAmpMix.instance.trackScreen('catalog');
-    MyAmpMix.instance.trackScreen('cart');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.trackScreen('catalog');
+    MyAmpix.instance.trackScreen('cart');
+    MyAmpix.instance.flush();
     await waitFor(
       () =>
           sentEvents().where((e) => e['event'] == r'$screen_view').length >= 2,
@@ -517,25 +517,25 @@ void main() {
           (e['properties'] as Map)[r'$screen_name'] == 'cart',
     );
     expect((cart['properties'] as Map)[r'$previous_screen'], 'catalog');
-    expect(MyAmpMixObserver.currentScreenName, 'cart');
+    expect(MyAmpixObserver.currentScreenName, 'cart');
   });
 
   test('trackScreen ignores an empty screen name (no event, no state change)',
       () async {
     await initSdk();
-    MyAmpMix.instance.trackScreen('');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.trackScreen('');
+    MyAmpix.instance.flush();
     await pumpEventQueue();
 
     expect(sentEvents().where((e) => e['event'] == r'$screen_view'), isEmpty);
-    expect(MyAmpMixObserver.currentScreenName, isNull);
+    expect(MyAmpixObserver.currentScreenName, isNull);
   });
 
   test(r're-tracking the SAME screen omits $previous_screen', () async {
     await initSdk();
-    MyAmpMix.instance.trackScreen('catalog');
-    MyAmpMix.instance.trackScreen('catalog');
-    MyAmpMix.instance.flush();
+    MyAmpix.instance.trackScreen('catalog');
+    MyAmpix.instance.trackScreen('catalog');
+    MyAmpix.instance.flush();
     await waitFor(
       () =>
           sentEvents().where((e) => e['event'] == r'$screen_view').length >= 2,

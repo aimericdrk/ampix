@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 import '../state/event_log.dart';
 import '../state/session_state.dart';
@@ -34,8 +34,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Fake login: the email is a stable, human-readable stand-in for a
     // real backend user id.
     final userId = email;
-    MyAmpMix.instance.identify(userId);
-    MyAmpMix.instance.people.set({'email': email, 'name': name});
+    MyAmpix.instance.identify(userId);
+    MyAmpix.instance.people.set({'email': email, 'name': name});
     SessionState.instance.login(userId: userId, email: email, name: name);
     EventLog.instance.log('identify(...) + people.set({"email", "name"})', {
       'userId': userId,
@@ -45,7 +45,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _logout() {
-    MyAmpMix.instance.reset();
+    MyAmpix.instance.reset();
     SessionState.instance.logout();
     EventLog.instance.log('reset()');
   }

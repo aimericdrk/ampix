@@ -736,7 +736,7 @@ export const handlers = [
     if (!user) return problem(401, 'Access token invalid or expired');
     authState.pendingSecret.set(user.email, MOCK_TOTP_SECRET);
     const response: Setup2faResponse = {
-      otpauth_url: `otpauth://totp/MyAmpMix:${encodeURIComponent(user.email)}?secret=${MOCK_TOTP_SECRET}&issuer=MyAmpMix`,
+      otpauth_url: `otpauth://totp/MyAmpix:${encodeURIComponent(user.email)}?secret=${MOCK_TOTP_SECRET}&issuer=MyAmpix`,
       secret: MOCK_TOTP_SECRET,
       qr_data_url: MOCK_QR_DATA_URL,
     };

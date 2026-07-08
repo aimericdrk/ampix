@@ -5,7 +5,7 @@ export interface RuntimeConfig {
 
 declare global {
   interface Window {
-    __MYAMPMIX_CONFIG__?: Partial<RuntimeConfig>;
+    ___MYAMPIX_CONFIG__?: Partial<RuntimeConfig>;
   }
 }
 
@@ -15,5 +15,5 @@ const DEFAULTS: RuntimeConfig = {
 
 /** Merges the runtime config injected by /config.js over dev-safe defaults. */
 export function getRuntimeConfig(): RuntimeConfig {
-  return { ...DEFAULTS, ...window.__MYAMPMIX_CONFIG__ };
+  return { ...DEFAULTS, ...window.___MYAMPIX_CONFIG__ };
 }

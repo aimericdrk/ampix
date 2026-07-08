@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/model/event.dart';
+import 'package:myampix_analytics/src/model/event.dart';
 
 void main() {
   test(

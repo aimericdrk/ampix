@@ -1,4 +1,4 @@
-import 'package:myampmix_analytics/src/storage/key_value_store.dart';
+import 'package:myampix_analytics/src/storage/key_value_store.dart';
 
 class InMemoryKeyValueStore implements KeyValueStore {
   final Map<String, String> values = {};

@@ -1,9 +1,9 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-import '../myampmix.dart';
+import '../myampix.dart';
 import '../util/clock.dart';
-import 'myampmix_observer.dart';
+import 'myampix_observer.dart';
 import 'screenshot_boundary_key.dart';
 
 /// Tap slop (design §11): a pointer down/up pair within this many logical
@@ -34,7 +34,7 @@ const Set<String> _interactiveWidgetTypes = {
 /// the subtree (shared-contracts §4, design §11, milestone M2):
 ///
 /// ```dart
-/// runApp(MyAmpMixTracker(child: MyApp()))
+/// runApp(MyAmpixTracker(child: MyApp()))
 /// ```
 ///
 /// Implementation is a passive `Listener` (`onPointerDown`/`onPointerUp`)
@@ -42,11 +42,11 @@ const Set<String> _interactiveWidgetTypes = {
 /// normal gesture arena and never absorbs or competes with the app's own
 /// gesture handling (design §11: "never competes with app gestures").
 ///
-/// Toggle via `MyAmpMixConfig.autocaptureTaps`. Never throws: hit-testing
+/// Toggle via `MyAmpixConfig.autocaptureTaps`. Never throws: hit-testing
 /// and tree-walking run inside a try/catch and a failure degrades to "no
 /// event" (design §13).
-class MyAmpMixTracker extends StatefulWidget {
-  const MyAmpMixTracker({
+class MyAmpixTracker extends StatefulWidget {
+  const MyAmpixTracker({
     super.key,
     required this.child,
     @visibleForTesting this.clock,
@@ -62,7 +62,7 @@ class MyAmpMixTracker extends StatefulWidget {
   final AutocaptureTrackFn? track;
 
   @override
-  State<MyAmpMixTracker> createState() => _MyAmpMixTrackerState();
+  State<MyAmpixTracker> createState() => _MyAmpixTrackerState();
 }
 
 class _PointerDownInfo {
@@ -83,7 +83,7 @@ class _TapTarget {
   final String? label;
 }
 
-class _MyAmpMixTrackerState extends State<MyAmpMixTracker> {
+class _MyAmpixTrackerState extends State<MyAmpixTracker> {
   late final Clock _clock = widget.clock ?? const SystemClock();
   late final AutocaptureTrackFn _track = widget.track ?? _defaultTrack;
 
@@ -91,8 +91,8 @@ class _MyAmpMixTrackerState extends State<MyAmpMixTracker> {
   final List<_RecentTap> _recentTaps = [];
 
   static void _defaultTrack(String event, Map<String, Object?> properties) {
-    if (!MyAmpMix.instance.autocaptureTapsEnabled) return;
-    MyAmpMix.instance.track(event, properties: properties);
+    if (!MyAmpix.instance.autocaptureTapsEnabled) return;
+    MyAmpix.instance.track(event, properties: properties);
   }
 
   void _onPointerDown(PointerDownEvent event) {
@@ -128,8 +128,8 @@ class _MyAmpMixTrackerState extends State<MyAmpMixTracker> {
     final properties = <String, Object?>{
       if (target?.widgetType != null) r'$widget_type': target!.widgetType,
       if (target?.label != null) r'$widget_label': target!.label,
-      if (MyAmpMixObserver.currentScreenName != null)
-        r'$screen_name': MyAmpMixObserver.currentScreenName,
+      if (MyAmpixObserver.currentScreenName != null)
+        r'$screen_name': MyAmpixObserver.currentScreenName,
       r'$pos_x': position.dx,
       r'$pos_y': position.dy,
     };
@@ -247,7 +247,7 @@ class _MyAmpMixTrackerState extends State<MyAmpMixTracker> {
     // SDK-controlled boundary instead of the first/partial one a tree walk
     // would find — the same subtree we already observe for taps.
     return RepaintBoundary(
-      key: myAmpMixScreenshotBoundaryKey,
+      key: myampixScreenshotBoundaryKey,
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: _onPointerDown,

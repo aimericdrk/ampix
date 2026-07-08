@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:myampmix_analytics/myampmix_analytics.dart';
+import 'package:myampix_analytics/myampix_analytics.dart';
 
 import '../state/cart_state.dart';
 import '../state/event_log.dart';
@@ -21,7 +21,7 @@ class _CartScreenState extends State<CartScreen> {
   @override
   void initState() {
     super.initState();
-    MyAmpMix.instance.timeEvent('checkout_completed');
+    MyAmpix.instance.timeEvent('checkout_completed');
     EventLog.instance.log('timeEvent("checkout_completed")');
   }
 
@@ -30,8 +30,8 @@ class _CartScreenState extends State<CartScreen> {
     final total = cart.total;
     final items = cart.itemCount;
     final properties = {'value': total, 'items': items};
-    MyAmpMix.instance.track('checkout_completed', properties: properties);
-    MyAmpMix.instance.people.set({'last_purchase_value': total});
+    MyAmpix.instance.track('checkout_completed', properties: properties);
+    MyAmpix.instance.people.set({'last_purchase_value': total});
     EventLog.instance.log(
       'track("checkout_completed") + people.set({"last_purchase_value": ...})',
       properties,

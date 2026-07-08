@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/properties/super_properties_store.dart';
+import 'package:myampix_analytics/src/properties/super_properties_store.dart';
 
 import '../helpers/in_memory_key_value_store.dart';
 

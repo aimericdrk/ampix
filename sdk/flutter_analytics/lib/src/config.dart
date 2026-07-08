@@ -4,11 +4,11 @@
 /// permits strictly more. The SDK only ever emits internal diagnostics — it
 /// never surfaces errors to the host app — and every emission is additionally
 /// gated to debug builds (`kDebugMode`), so nothing is ever printed in release.
-enum MyAmpMixLogLevel { none, error, warn, info, debug }
+enum MyAmpixLogLevel { none, error, warn, info, debug }
 
-/// Immutable SDK configuration passed to `MyAmpMix.init`.
-class MyAmpMixConfig {
-  const MyAmpMixConfig({
+/// Immutable SDK configuration passed to `MyAmpix.init`.
+class MyAmpixConfig {
+  const MyAmpixConfig({
     required this.serverUrl,
     this.flushAt = 20,
     this.flushInterval = const Duration(seconds: 10),
@@ -16,20 +16,20 @@ class MyAmpMixConfig {
     this.sessionTimeout = const Duration(minutes: 30),
     this.maxRetryDelay = const Duration(minutes: 5),
     this.debug = false,
-    this.logLevel = MyAmpMixLogLevel.none,
+    this.logLevel = MyAmpixLogLevel.none,
     this.autocaptureScreens = true,
     this.autocaptureTaps = true,
     this.autocapturePurchases = true,
     this.autocaptureAttribution = true,
     this.autocaptureScreenshots = false,
-    this.screenshotSettleDelay = const Duration(seconds: 1),
+    this.screenshotSettleDelay = const Duration(seconds: 2),
   }) : assert(
          flushAt > 0 && flushAt <= 100,
          'flushAt must be 1..100 (server INGEST_MAX_BATCH is 100)',
        ),
        assert(maxQueueSize > 0, 'maxQueueSize must be positive');
 
-  /// Base URL of the MyAmpMix backend, e.g. `https://analytics.example.com`.
+  /// Base URL of the MyAmpix backend, e.g. `https://analytics.example.com`.
   final String serverUrl;
 
   /// Batch size that triggers an immediate flush (and the upload batch size).
@@ -50,37 +50,37 @@ class MyAmpMixConfig {
   /// Enables internal logging in debug builds.
   ///
   /// Retained for back-compat; prefer [logLevel]. When [logLevel] is left at
-  /// its default [MyAmpMixLogLevel.none] and this is `true`, the effective
-  /// level is promoted to [MyAmpMixLogLevel.debug] (see [effectiveLogLevel]).
+  /// its default [MyAmpixLogLevel.none] and this is `true`, the effective
+  /// level is promoted to [MyAmpixLogLevel.debug] (see [effectiveLogLevel]).
   final bool debug;
 
   /// Verbosity of the SDK's internal, debug-only logging (shared-contracts
-  /// §20). Defaults to [MyAmpMixLogLevel.none] (silent), preserving the SDK's
+  /// §20). Defaults to [MyAmpixLogLevel.none] (silent), preserving the SDK's
   /// historically quiet default. Filtering is by effective level: internal
-  /// diagnostics emit at [MyAmpMixLogLevel.debug], error-carrying diagnostics
-  /// at [MyAmpMixLogLevel.error]. See [effectiveLogLevel] for the exact
+  /// diagnostics emit at [MyAmpixLogLevel.debug], error-carrying diagnostics
+  /// at [MyAmpixLogLevel.error]. See [effectiveLogLevel] for the exact
   /// interaction with the legacy [debug] flag.
-  final MyAmpMixLogLevel logLevel;
+  final MyAmpixLogLevel logLevel;
 
   /// The log level the SDK actually applies, reconciling [logLevel] with the
   /// legacy [debug] flag.
   ///
   /// - When [logLevel] is set to anything other than its default
-  ///   [MyAmpMixLogLevel.none], it wins outright.
-  /// - When [logLevel] is left at [MyAmpMixLogLevel.none] **and** [debug] is
-  ///   `true`, the effective level is [MyAmpMixLogLevel.debug] (back-compat:
+  ///   [MyAmpixLogLevel.none], it wins outright.
+  /// - When [logLevel] is left at [MyAmpixLogLevel.none] **and** [debug] is
+  ///   `true`, the effective level is [MyAmpixLogLevel.debug] (back-compat:
   ///   `debug: true` used to enable full internal logging).
-  /// - Otherwise the effective level is [MyAmpMixLogLevel.none].
-  MyAmpMixLogLevel get effectiveLogLevel =>
-      logLevel == MyAmpMixLogLevel.none && debug
-      ? MyAmpMixLogLevel.debug
+  /// - Otherwise the effective level is [MyAmpixLogLevel.none].
+  MyAmpixLogLevel get effectiveLogLevel =>
+      logLevel == MyAmpixLogLevel.none && debug
+      ? MyAmpixLogLevel.debug
       : logLevel;
 
-  /// Enables `MyAmpMixObserver` to emit `$screen_view` (design §11, M2).
+  /// Enables `MyAmpixObserver` to emit `$screen_view` (design §11, M2).
   /// Independently toggleable from [autocaptureTaps].
   final bool autocaptureScreens;
 
-  /// Enables `MyAmpMixTracker` to emit `$tap`/`$rage_tap` (design §11, M2).
+  /// Enables `MyAmpixTracker` to emit `$tap`/`$rage_tap` (design §11, M2).
   /// Independently toggleable from [autocaptureScreens].
   final bool autocaptureTaps;
 
@@ -102,11 +102,11 @@ class MyAmpMixConfig {
   /// shared-contracts §4/§5). iOS has no install-referrer equivalent, so on
   /// iOS this flag only governs whether the (no-op) attribution channel is
   /// subscribed; iOS attribution is deep-link-only via
-  /// [MyAmpMix.trackDeepLink], which is always available regardless of this
+  /// [MyAmpix.trackDeepLink], which is always available regardless of this
   /// flag. Like [autocapturePurchases], this is the one attribution path that
   /// opens a real platform channel, so gating it at subscribe-time gives host
   /// apps a clean escape hatch (`autocaptureAttribution: false`) that keeps
-  /// `MyAmpMix.init()` from touching a platform channel in their widget
+  /// `MyAmpix.init()` from touching a platform channel in their widget
   /// tests. Independently toggleable from the other autocapture flags.
   final bool autocaptureAttribution;
 
@@ -122,9 +122,9 @@ class MyAmpMixConfig {
   /// waits for the navigation transition to settle first (so it isn't grabbed
   /// mid-animation), renders the current frame via a root `RepaintBoundary`,
   /// downscales it (≤ 640px longest side, JPEG q≈70), blacks out any
-  /// `MyAmpMixPrivacy` regions, then uploads. To replace a bad/outdated
+  /// `MyAmpixPrivacy` regions, then uploads. To replace a bad/outdated
   /// capture, delete it in the dashboard and/or call
-  /// `MyAmpMix.instance.retakeScreenshots()` and re-navigate. Meaningful screen
+  /// `MyAmpix.instance.retakeScreenshots()` and re-navigate. Meaningful screen
   /// names require NAMED routes (`RouteSettings(name: ...)`) — otherwise the
   /// screen falls back to the route's runtime type.
   final bool autocaptureScreenshots;

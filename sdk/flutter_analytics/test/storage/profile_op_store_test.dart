@@ -1,8 +1,8 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/model/profile_operation.dart';
-import 'package:myampmix_analytics/src/storage/database.dart';
-import 'package:myampmix_analytics/src/storage/profile_op_store.dart';
+import 'package:myampix_analytics/src/model/profile_operation.dart';
+import 'package:myampix_analytics/src/storage/database.dart';
+import 'package:myampix_analytics/src/storage/profile_op_store.dart';
 
 void main() {
   ProfileOperation buildOp(String op) => ProfileOperation(

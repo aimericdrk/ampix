@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/properties/timed_event_tracker.dart';
+import 'package:myampix_analytics/src/properties/timed_event_tracker.dart';
 
 import '../helpers/fake_clock.dart';
 

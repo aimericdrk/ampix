@@ -7,7 +7,7 @@ import {
   ingestEventsRequestSchema,
   ingestProfilesRequestSchema,
   profileOperationSchema,
-} from '@myampmix/contracts';
+} from '@myampix/contracts';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
@@ -25,7 +25,7 @@ export class IngestController {
     private readonly profileWriter: ProfileWriter,
     private readonly clickhouse: ClickHouseService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
-  ) {}
+  ) { }
 
   @Post('events')
   @HttpCode(202)

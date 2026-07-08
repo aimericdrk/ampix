@@ -40,7 +40,7 @@ export async function startTestStack(
     DATABASE_URL: pg.url.replace(/^postgres:\/\//, 'postgresql://'),
     CLICKHOUSE_URL: chc.url,
     CLICKHOUSE_USER: 'default',
-    CLICKHOUSE_PASSWORD: 'myampmix_dev',
+    CLICKHOUSE_PASSWORD: 'myampix_dev',
     CLICKHOUSE_DB: 'analytics',
     REDIS_URL: redis.url,
     INGEST_MAX_BATCH: '100',
@@ -52,7 +52,7 @@ export async function startTestStack(
   const ch = createClient({
     url: chc.url,
     username: 'default',
-    password: 'myampmix_dev',
+    password: 'myampix_dev',
     database: 'analytics',
     // Match ClickHouseService's query settings: ClickHouse 24.8's JSON type infers
     // integer leaves as Int64, which this client would otherwise quote as JSON strings

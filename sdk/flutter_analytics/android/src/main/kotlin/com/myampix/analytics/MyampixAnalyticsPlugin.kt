@@ -1,4 +1,4 @@
-package com.myampmix.analytics
+package com.myampix.analytics
 
 import android.content.Context
 import com.android.billingclient.api.BillingClient
@@ -14,7 +14,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 
 /**
- * MyAmpMix native store-purchase autocapture (Android half).
+ * MyAmpix native store-purchase autocapture (Android half).
  *
  * Wraps a Google Play [BillingClient] purely as an OBSERVER of the app's own
  * in-app-purchase transactions — the same role RevenueCat/Adjust play when
@@ -23,7 +23,7 @@ import io.flutter.plugin.common.EventChannel
  * the responsibility of whatever code in the host app actually granted the
  * purchase. Forwarded payloads are consumed by
  * `lib/src/autocapture/purchase_autocapture.dart` over the
- * `myampmix_analytics/purchases` [EventChannel] and re-emitted through the
+ * `myampix_analytics/purchases` [EventChannel] and re-emitted through the
  * Dart facade as the reserved `$in_app_purchase` event.
  *
  * IMPORTANT ANDROID CAVEAT (unlike iOS, where `SKPaymentQueue` is a single
@@ -44,7 +44,7 @@ import io.flutter.plugin.common.EventChannel
  * Billing failure (missing Play Services, library mismatch, disconnects,
  * malformed callback data, ...) never crashes the host app.
  */
-class MyampmixAnalyticsPlugin :
+class MyampixAnalyticsPlugin :
     FlutterPlugin,
     PurchasesUpdatedListener {
 
@@ -324,9 +324,9 @@ class MyampmixAnalyticsPlugin :
     }
 
     private companion object {
-        const val CHANNEL_NAME = "myampmix_analytics/purchases"
-        const val ATTRIBUTION_CHANNEL_NAME = "myampmix_analytics/attribution"
-        const val PREFS_NAME = "myampmix_analytics"
+        const val CHANNEL_NAME = "myampix_analytics/purchases"
+        const val ATTRIBUTION_CHANNEL_NAME = "myampix_analytics/attribution"
+        const val PREFS_NAME = "myampix_analytics"
         const val PREF_REFERRER_FORWARDED = "install_referrer_forwarded"
     }
 }

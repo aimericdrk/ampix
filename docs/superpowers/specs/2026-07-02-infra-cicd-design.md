@@ -1,4 +1,4 @@
-# MyAmpMix — Infra & CI/CD Sub-Project Design
+# MyAmpix — Infra & CI/CD Sub-Project Design
 
 **Date:** 2026-07-02
 **Status:** Approved design
@@ -43,14 +43,14 @@ The root ESLint config ignores `sdk/**` (Dart, not ESLint's job), `dist/`, `cove
 
 ## 3. Local Development Environment (`infra/docker-compose.yml`)
 
-One Compose file, project name `myampmix`, used identically by developers and (with a prod overlay) by the production VM — dev/prod parity via identical images.
+One Compose file, project name `myampix`, used identically by developers and (with a prod overlay) by the production VM — dev/prod parity via identical images.
 
 Services, ports, credentials — **exactly** contracts §2:
 
 | Service | Image | Host ports | Credentials |
 |---|---|---|---|
-| `clickhouse` | `clickhouse/clickhouse-server:24.8` | 8123 (HTTP), 9000 (native) | `default` / `myampmix_dev`, db `analytics` |
-| `postgres` | `postgres:17-alpine` | 5432 | `myampmix` / `myampmix_dev`, db `myampmix` |
+| `clickhouse` | `clickhouse/clickhouse-server:24.8` | 8123 (HTTP), 9000 (native) | `default` / `myampix_dev`, db `analytics` |
+| `postgres` | `postgres:17-alpine` | 5432 | `myampix` / `myampix_dev`, db `myampix` |
 | `redis` | `redis:7-alpine` | 6379 | no auth locally |
 
 Design points:
@@ -58,7 +58,7 @@ Design points:
 - **Healthchecks on every service** (`clickhouse-client --query 'SELECT 1'`, `pg_isready`, `redis-cli ping`) so `docker compose up --wait` returns only when the stack is actually usable, and so backend Testcontainers-style waits are unnecessary for the shared dev stack.
 - **Named volumes** (`clickhouse_data`, `postgres_data`, `redis_data`) — data survives `down`; `infra:reset` wipes them deliberately.
 - **ClickHouse init**: `infra/clickhouse/init.sql` mounted read-only into `/docker-entrypoint-initdb.d/`; runs once on first boot. Its content is the authoritative DDL from contracts §5 verbatim (`analytics.events`, `analytics.user_profiles`, `analytics.identity_mappings`), prefixed with `CREATE DATABASE IF NOT EXISTS analytics` and `SET allow_experimental_json_type = 1` (the `JSON` column type is behind that flag in ClickHouse 24.8). `IF NOT EXISTS` on every statement keeps the script idempotent.
-- **Postgres has no init SQL** — schema is owned by the backend via Prisma migrations (contracts §1, §6). Compose only guarantees the server, user, and empty `myampmix` database exist.
+- **Postgres has no init SQL** — schema is owned by the backend via Prisma migrations (contracts §1, §6). Compose only guarantees the server, user, and empty `myampix` database exist.
 - **Redis persistence**: `--appendonly yes` locally so BullMQ dev queues survive restarts.
 - **ulimits** for ClickHouse (`nofile` 262144) per upstream recommendation.
 - Backend (`:8080`) and dashboard (`:5173`) run on the host via `pnpm`, not in Compose — fastest iteration loop; they connect over localhost using the env vars of contracts §3, which a committed root `.env.example` documents value-for-value.
@@ -89,7 +89,7 @@ Two services built from the same backend image (master design §2):
 | `api` | `--min-instances=0 --max-instances=10 --concurrency=80 --cpu=1 --memory=512Mi --port=8080 --timeout=60` | Scale-to-zero: pay only for traffic. Stateless by design (async_insert, Redis-held shared state). |
 | `worker` | `--min-instances=1 --max-instances=1 --no-cpu-throttling --cpu=1 --memory=512Mi` | BullMQ consumers + schedulers need CPU **always allocated**, not just during requests; exactly one instance avoids duplicate scheduled work (BullMQ locks make >1 safe later if needed). |
 
-Both: SIGTERM graceful shutdown within Cloud Run's 10 s window (backend contract), `--service-account` scoped per service, env from Secret Manager (§5), egress `--vpc-connector=myampmix-connector --vpc-egress=private-ranges-only`.
+Both: SIGTERM graceful shutdown within Cloud Run's 10 s window (backend contract), `--service-account` scoped per service, env from Secret Manager (§5), egress `--vpc-connector=myampix-connector --vpc-egress=private-ranges-only`.
 
 ### 4.2 Database VM
 
@@ -100,8 +100,8 @@ Both: SIGTERM graceful shutdown within Cloud Run's 10 s window (backend contract
 
 ### 4.3 Networking
 
-- Dedicated VPC `myampmix-vpc`, one region (matches Cloud Run region).
-- **Serverless VPC Access connector** `myampmix-connector` (min 2 / max 3 `e2-micro` instances — smallest allowed) gives Cloud Run private-IP reach to the VM. (Direct VPC egress is the zero-cost alternative; the connector is chosen for GA maturity — revisit when Direct VPC egress fits all constraints.)
+- Dedicated VPC `myampix-vpc`, one region (matches Cloud Run region).
+- **Serverless VPC Access connector** `myampix-connector` (min 2 / max 3 `e2-micro` instances — smallest allowed) gives Cloud Run private-IP reach to the VM. (Direct VPC egress is the zero-cost alternative; the connector is chosen for GA maturity — revisit when Direct VPC egress fits all constraints.)
 - The VM's private IP is stable (reserved internal address) and referenced by the Cloud Run env vars: `DATABASE_URL`, `CLICKHOUSE_URL`, `REDIS_URL` (names per contracts §3, hosts swapped from `localhost` to the VM IP).
 
 ### 4.4 Cloud Scheduler
@@ -120,8 +120,8 @@ All calls authenticated with **OIDC** (scheduler service account → Cloud Run i
 
 | What | How | Schedule | Retention |
 |---|---|---|---|
-| Postgres | `pg_dump -Fc` from a cron container/systemd timer on the VM → `gs://myampmix-backups/pg/` | nightly 03:00 UTC | 30 days (GCS lifecycle rule) |
-| ClickHouse | **clickhouse-backup** (OSS, Altinity) full weekly + incremental nightly → `gs://myampmix-backups/clickhouse/` | nightly 03:30 UTC | 4 full generations |
+| Postgres | `pg_dump -Fc` from a cron container/systemd timer on the VM → `gs://myampix-backups/pg/` | nightly 03:00 UTC | 30 days (GCS lifecycle rule) |
+| ClickHouse | **clickhouse-backup** (OSS, Altinity) full weekly + incremental nightly → `gs://myampix-backups/clickhouse/` | nightly 03:30 UTC | 4 full generations |
 | Whole data disk | GCE **snapshot schedule** on the data disk | daily | 7 days |
 
 Restore procedures are documented in `infra/gcp/vm/README` (created with the provisioning milestone): disk snapshot for disaster recovery, `pg_restore` / `clickhouse-backup restore` for surgical recovery. The VM's service account has `objectAdmin` on the backup bucket only.
@@ -140,10 +140,10 @@ Restore procedures are documented in `infra/gcp/vm/README` (created with the pro
 Delivery paths:
 
 - **Cloud Run**: `--set-secrets=JWT_ACCESS_SECRET=jwt-access-secret:latest,…` — mounted as env vars by the platform; rotation = add secret version + redeploy revision.
-- **GCE VM**: `cloud-init` fetches secrets via `gcloud secrets versions access` using the VM service account and writes a root-only `/opt/myampmix/.env` consumed by `docker-compose.prod.yml`. Rotation = re-run the fetch unit + `docker compose up -d`.
+- **GCE VM**: `cloud-init` fetches secrets via `gcloud secrets versions access` using the VM service account and writes a root-only `/opt/myampix/.env` consumed by `docker-compose.prod.yml`. Rotation = re-run the fetch unit + `docker compose up -d`.
 - **CI**: no long-lived secrets at all — Workload Identity Federation (§6.3) issues short-lived tokens; GitHub repo secrets hold only non-sensitive identifiers (project id, WIF provider name).
 
-Local dev uses the fixed contracts §2 credentials (`myampmix_dev`) committed in `.env.example` — explicitly dev-only.
+Local dev uses the fixed contracts §2 credentials (`myampix_dev`) committed in `.env.example` — explicitly dev-only.
 
 ## 6. CI/CD Design (GitHub Actions)
 
@@ -169,7 +169,7 @@ Coverage floors (backend 85%, SDK 85%, dashboard 75% — contracts §9) are enfo
 
 `deploy-backend.yml` (later milestone): after CI passes on `main`,
 
-1. Build backend Docker image once (multi-stage, distroless runtime), tag `europe-west1-docker.pkg.dev/<project>/myampmix/backend:{sha,semver}`.
+1. Build backend Docker image once (multi-stage, distroless runtime), tag `europe-west1-docker.pkg.dev/<project>/myampix/backend:{sha,semver}`.
 2. Push to **Artifact Registry** (auth via WIF, §6.3).
 
 The same image serves `api` and `worker` (different start commands) — one build, two deploys.
@@ -177,7 +177,7 @@ The same image serves `api` and `worker` (different start commands) — one buil
 ### 6.3 Workload Identity Federation — no long-lived keys
 
 - One workload identity pool + GitHub OIDC provider, attribute-mapped to `repository` and `ref`.
-- Deploy service account (`roles/run.developer`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser` on the runtime SAs) impersonable **only** from `repo:<owner>/myampmix` on `refs/heads/main`.
+- Deploy service account (`roles/run.developer`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser` on the runtime SAs) impersonable **only** from `repo:<owner>/myampix` on `refs/heads/main`.
 - CI uses `google-github-actions/auth@v2` with `workload_identity_provider` + `service_account`; zero JSON keys anywhere.
 
 ### 6.4 Deploy with gradual rollout + health-check rollback
@@ -213,7 +213,7 @@ Billed: Cloud Run compute beyond free tier, one e2-small VM + disks/snapshots, V
 | `infra/clickhouse/init.sql` | Authoritative DDL (contracts §5) + database create + JSON-type flag | **Phase 1** |
 | `infra/gcp/provision.sh` | Idempotent gcloud provisioning: APIs, VPC, connector, firewall, VM, buckets + lifecycle, Artifact Registry, service accounts, WIF pool/provider, Scheduler jobs | GCP milestone |
 | `infra/gcp/secrets.sh` | Creates/rotates Secret Manager secrets (prompts, never echoes) | GCP milestone |
-| `infra/gcp/vm/cloud-init.yaml` | VM bootstrap: Docker, secret fetch → `/opt/myampmix/.env`, compose up, backup timers | GCP milestone |
+| `infra/gcp/vm/cloud-init.yaml` | VM bootstrap: Docker, secret fetch → `/opt/myampix/.env`, compose up, backup timers | GCP milestone |
 | `infra/gcp/vm/docker-compose.prod.yml` | Prod overlay: Secret-Manager passwords, restart policies, private binding, clickhouse-backup sidecar | GCP milestone |
 | `infra/gcp/vm/clickhouse-backup.yaml` | clickhouse-backup config (GCS remote, schedules, retention) | GCP milestone |
 | `infra/gcp/vm/backup.sh` | Nightly `pg_dump -Fc` → GCS (systemd timer unit installed by cloud-init) | GCP milestone |

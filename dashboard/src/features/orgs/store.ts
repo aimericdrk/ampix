@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-const STORAGE_KEY = 'myampmix-current-org';
+const STORAGE_KEY = 'myampix-current-org';
 
 function readPersisted(): string | null {
   try {

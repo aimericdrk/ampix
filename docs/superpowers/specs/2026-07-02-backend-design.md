@@ -1,4 +1,4 @@
-# MyAmpMix Backend (NestJS) — Design Specification
+# MyAmpix Backend (NestJS) — Design Specification
 
 **Date:** 2026-07-02
 **Status:** Approved design
@@ -92,7 +92,7 @@ export class ProjectAccessGuard {}         // :projectId → org membership chec
 
 Single source of truth for every payload that crosses a service boundary. Consumed by `backend` (runtime validation) and `dashboard` (types + client). The Flutter SDK conforms by contract test (it cannot import TS).
 
-- **Name:** `@myampmix/contracts`, private, `main: dist/index.js`, built with `tsc`. Dependency: `zod` only (keep it lean — the dashboard bundles it).
+- **Name:** `@myampix/contracts`, private, `main: dist/index.js`, built with `tsc`. Dependency: `zod` only (keep it lean — the dashboard bundles it).
 - **Phase 1 exports (ingest):** `ingestEventSchema`, `eventContextSchema`, `ingestEventsRequestSchema`, `profileOperationSchema`, `ingestProfilesRequestSchema`, types `IngestEvent`, `EventContext`, `ProfileOperation`, `ProfileOp`, `IngestResponse { accepted: number; rejected: RejectedItem[] }`, `RejectedItem { index: number; reason: string }`, `SDK_TOKEN_REGEX = /^mam_[0-9a-f]{32}$/`, reserved-name constants (`RESERVED_EVENTS`, `RESERVED_PROPERTY_PREFIX = '$'`).
 - **Phase 3+ exports (query definitions):** `insightsQuerySchema`, `funnelQuerySchema`, `retentionQuerySchema`, `flowsQuerySchema` + inferred types; `SeriesResponse` per contracts §7. The dashboard report builder produces these objects, saved reports store them verbatim (JSONB in Postgres), and the backend validates them with the same schema it compiles from — zero drift by construction.
 - **OpenAPI:** the backend emits `packages/contracts/openapi/openapi.json` (see §10); the dashboard generates its typed client from that file. Ingest DTOs and query DTOs are declared once as Zod and surfaced to Swagger via `nestjs-zod` (`createZodDto`), so Zod remains the single source.

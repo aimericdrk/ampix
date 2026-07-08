@@ -22,7 +22,7 @@ function respondWithFieldErrors(path: string, errors: Record<string, string[]>) 
 describe('LoginForm', () => {
   it('shows field errors on empty submit', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
     expect(screen.getByText('Email is required')).toBeInTheDocument();
     expect(screen.getByText('Password is required')).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe('LoginForm', () => {
 
   it('shows the problem title inline on invalid credentials', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), 'wrong-password');
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -40,7 +40,7 @@ describe('LoginForm', () => {
 
   it('logs in, stores the session in memory, and lands on projects', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), TEST_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -58,7 +58,7 @@ describe('LoginForm', () => {
     const { router } = renderApp(
       '/login?redirect=%2Fprojects%2F0197f6a0-0000-7000-8000-0000000000aa',
     );
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), TEST_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -74,7 +74,7 @@ describe('LoginForm', () => {
 
   it('ignores an absolute-URL ?redirect= and falls back to /projects (open redirect)', async () => {
     const { router } = renderApp('/login?redirect=https%3A%2F%2Fevil.com');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     // Dropped at the route boundary — the unsafe value never reaches the form.
     expect(loginSearch(router)).toEqual({});
 
@@ -88,7 +88,7 @@ describe('LoginForm', () => {
 
   it('ignores a protocol-relative ?redirect= (//evil.com)', async () => {
     const { router } = renderApp('/login?redirect=%2F%2Fevil.com');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     expect(loginSearch(router)).toEqual({});
   });
 
@@ -96,7 +96,7 @@ describe('LoginForm', () => {
     // Browsers treat backslashes as slashes during URL resolution, so
     // '/\\evil.com' resolves to https://evil.com — must be dropped too.
     const { router } = renderApp('/login?redirect=%2F%5Cevil.com');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     expect(loginSearch(router)).toEqual({});
   });
 
@@ -105,7 +105,7 @@ describe('LoginForm', () => {
       email: ['Email domain is not allowed', 'second message ignored'],
     });
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), TEST_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -120,7 +120,7 @@ describe('LoginForm', () => {
 describe('SignupForm', () => {
   it('shows an inline conflict message when the email is taken', async () => {
     renderApp('/signup');
-    await screen.findByRole('heading', { name: 'Create your MyAmpMix account' });
+    await screen.findByRole('heading', { name: 'Create your MyAmpix account' });
     await userEvent.type(screen.getByLabelText('Name'), 'Ada Lovelace');
     await userEvent.type(screen.getByLabelText('Email'), TEST_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), 'correct-horse-9');
@@ -130,7 +130,7 @@ describe('SignupForm', () => {
 
   it('signs up a new user and lands on projects', async () => {
     renderApp('/signup');
-    await screen.findByRole('heading', { name: 'Create your MyAmpMix account' });
+    await screen.findByRole('heading', { name: 'Create your MyAmpix account' });
     await userEvent.type(screen.getByLabelText('Name'), 'Grace Hopper');
     await userEvent.type(screen.getByLabelText('Email'), 'grace@example.com');
     await userEvent.type(screen.getByLabelText('Password'), 'correct-horse-9');
@@ -145,7 +145,7 @@ describe('SignupForm', () => {
       email: ['Email domain is not allowed'],
     });
     renderApp('/signup');
-    await screen.findByRole('heading', { name: 'Create your MyAmpMix account' });
+    await screen.findByRole('heading', { name: 'Create your MyAmpix account' });
     await userEvent.type(screen.getByLabelText('Name'), 'Grace Hopper');
     await userEvent.type(screen.getByLabelText('Email'), 'grace@example.com');
     await userEvent.type(screen.getByLabelText('Password'), 'correct-horse-9');

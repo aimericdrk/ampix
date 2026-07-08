@@ -8,7 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import 'attribution/attribution_autocapture.dart';
 import 'attribution/attribution_store.dart';
-import 'autocapture/myampmix_observer.dart';
+import 'autocapture/myampix_observer.dart';
 import 'autocapture/purchase_autocapture.dart';
 import 'autocapture/screenshot_autocapture.dart';
 import 'autocapture/screenshot_capturer.dart';
@@ -30,7 +30,7 @@ import 'storage/profile_op_store.dart';
 import 'util/clock.dart';
 import 'util/logger.dart';
 
-/// Testing-only dependency overrides for [MyAmpMix.init]. Production code
+/// Testing-only dependency overrides for [MyAmpix.init]. Production code
 /// must not pass this parameter.
 @visibleForTesting
 class SdkOverrides {
@@ -63,13 +63,13 @@ class SdkOverrides {
   /// frozen §8 surface.
   final EventStore? eventStore;
 
-  /// Test-only seam replacing the real `myampmix_analytics/purchases`
+  /// Test-only seam replacing the real `myampix_analytics/purchases`
   /// `EventChannel` stream so native store-purchase autocapture can be
   /// driven with a fake payload instead of a real platform channel. Not
   /// part of the frozen §8 surface.
   final Stream<dynamic>? purchaseStream;
 
-  /// Test-only seam replacing the real `myampmix_analytics/attribution`
+  /// Test-only seam replacing the real `myampix_analytics/attribution`
   /// `EventChannel` stream so native install-referrer autocapture can be
   /// driven with a fake referrer payload instead of a real platform channel.
   /// Not part of the frozen §8 surface.
@@ -84,21 +84,21 @@ class SdkOverrides {
 
   /// Test-only seam overriding the delay the screenshot autocapture waits for
   /// the navigation transition to settle before capturing (production default
-  /// comes from `MyAmpMixConfig.screenshotSettleDelay`, ~1s). Tests pass
+  /// comes from `MyAmpixConfig.screenshotSettleDelay`, ~1s). Tests pass
   /// `Duration.zero` so they don't wait. Not part of the frozen §8 surface.
   final Duration? screenshotSettleDelay;
 }
 
 /// Public facade — the exact shared-contracts §8 surface. Every method is
 /// guarded: the SDK never throws into the host app (design §13). The M2
-/// widgets (MyAmpMixObserver, MyAmpMixTracker) ship in the autocapture
+/// widgets (MyAmpixObserver, MyAmpixTracker) ship in the autocapture
 /// milestone, not in phase 1.
-class MyAmpMix {
-  MyAmpMix._();
+class MyAmpix {
+  MyAmpix._();
 
-  static MyAmpMix _instance = MyAmpMix._();
+  static MyAmpix _instance = MyAmpix._();
 
-  static MyAmpMix get instance => _instance;
+  static MyAmpix get instance => _instance;
 
   bool _initialized = false;
   MamLogger _logger = const MamLogger();
@@ -131,16 +131,16 @@ class MyAmpMix {
   /// existing instance (no new timers, observers or database connections).
   static Future<void> init(
     String token, {
-    required MyAmpMixConfig config,
+    required MyAmpixConfig config,
     @visibleForTesting SdkOverrides? overrides,
   }) async {
     if (_instance._initialized) {
       MamLogger.fromConfig(
         config,
-      ).log('MyAmpMix.init ignored: SDK is already initialized.');
+      ).log('MyAmpix.init ignored: SDK is already initialized.');
       return;
     }
-    final sdk = MyAmpMix._();
+    final sdk = MyAmpix._();
     try {
       await sdk._start(token, config, overrides);
       _instance = sdk;
@@ -153,7 +153,7 @@ class MyAmpMix {
 
   Future<void> _start(
     String token,
-    MyAmpMixConfig config,
+    MyAmpixConfig config,
     SdkOverrides? overrides,
   ) async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -275,11 +275,11 @@ class MyAmpMix {
     // Native store-purchase autocapture (shared-contracts §4). Gated on
     // `config.autocapturePurchases` (default true): when enabled we subscribe
     // to the platform plugin's transaction stream (the real
-    // `myampmix_analytics/purchases` EventChannel, or an injected test stream).
+    // `myampix_analytics/purchases` EventChannel, or an injected test stream).
     // Unlike the screen/tap capturers — which are pure-Dart observers — this is
     // the one autocapture that opens a real platform channel, so gating at
     // subscribe-time gives host apps a clean escape hatch (`autocapturePurchases:
-    // false`) that keeps `MyAmpMix.init()` from ever touching a platform channel
+    // false`) that keeps `MyAmpix.init()` from ever touching a platform channel
     // in their widget tests. Emission is ALSO guarded by
     // `autocapturePurchasesEnabled` (defense in depth).
     if (config.autocapturePurchases) {
@@ -292,10 +292,10 @@ class MyAmpMix {
     // Native install-referrer autocapture (shared-contracts §4/§5). Gated on
     // `config.autocaptureAttribution` (default true) for EXACTLY the same
     // reason as the purchase block above: this opens the real
-    // `myampmix_analytics/attribution` EventChannel, and an unconditional
+    // `myampix_analytics/attribution` EventChannel, and an unconditional
     // subscription DEADLOCKS host-app + our own `testWidgets` fake-async.
     // Gating at subscribe-time gives host apps a clean escape hatch
-    // (`autocaptureAttribution: false`) that keeps `MyAmpMix.init()` from
+    // (`autocaptureAttribution: false`) that keeps `MyAmpix.init()` from
     // touching a platform channel in their widget tests. `trackDeepLink` is
     // deliberately NOT gated — it is an explicit host call with no channel.
     if (config.autocaptureAttribution) {
@@ -316,7 +316,7 @@ class MyAmpMix {
     // `config.autocaptureScreenshots` (default true) for the SAME fake-async
     // reason as the purchase/attribution blocks: the default capturer renders
     // a real `RepaintBoundary` frame, so leaving it wired would make a plain
-    // `MyAmpMix.init()` try to render/upload under `testWidgets`. When enabled
+    // `MyAmpix.init()` try to render/upload under `testWidgets`. When enabled
     // we build it from the injected capturer (or the real
     // `RepaintBoundary` one) and reuse the same http client the uploader uses.
     // Triggered lazily from `track()` on `$screen_view`; captures each screen
@@ -354,7 +354,7 @@ class MyAmpMix {
     _maybeCaptureScreenshot(event, properties);
   }
 
-  /// Manually records a screen view for navigation the `MyAmpMixObserver`
+  /// Manually records a screen view for navigation the `MyAmpixObserver`
   /// (a `NavigatorObserver`) can't see — bottom-nav tabs, `IndexedStack` /
   /// `PageView` index changes, custom routers. Without this, such switches are
   /// not route pushes, so no `$screen_view` fires and every tab collapses into
@@ -362,7 +362,7 @@ class MyAmpMix {
   ///
   /// Emits the reserved `$screen_view` (with `$screen_name`, and
   /// `$previous_screen` when the screen actually changed), updates the shared
-  /// current-screen name (`MyAmpMixObserver.currentScreenName`) so autocaptured
+  /// current-screen name (`MyAmpixObserver.currentScreenName`) so autocaptured
   /// `$tap` / `$rage_tap` are stamped with the right screen, and — in a debug
   /// build with `autocaptureScreenshots` on — captures that screen's reference
   /// screenshot (§18). It routes through the same public [track] path as the
@@ -375,8 +375,8 @@ class MyAmpMix {
   void trackScreen(String screenName) {
     try {
       if (screenName.isEmpty) return;
-      final previous = MyAmpMixObserver.currentScreenName;
-      MyAmpMixObserver.currentScreenName = screenName;
+      final previous = MyAmpixObserver.currentScreenName;
+      MyAmpixObserver.currentScreenName = screenName;
       final properties = <String, Object?>{r'$screen_name': screenName};
       if (previous != null && previous != screenName) {
         properties[r'$previous_screen'] = previous;
@@ -457,12 +457,12 @@ class MyAmpMix {
   }
 
   /// Whether `$screen_view` autocapture is enabled (`config.autocaptureScreens`).
-  /// Read by `MyAmpMixObserver`'s default wiring; not part of the frozen §8
+  /// Read by `MyAmpixObserver`'s default wiring; not part of the frozen §8
   /// method surface, but a public property of the facade class.
   bool get autocaptureScreensEnabled => _initialized && _autocaptureScreens;
 
   /// Whether `$tap`/`$rage_tap` autocapture is enabled (`config.autocaptureTaps`).
-  /// Read by `MyAmpMixTracker`'s default wiring; not part of the frozen §8
+  /// Read by `MyAmpixTracker`'s default wiring; not part of the frozen §8
   /// method surface, but a public property of the facade class.
   bool get autocaptureTapsEnabled => _initialized && _autocaptureTaps;
 
@@ -523,7 +523,7 @@ class MyAmpMix {
   /// guarded calls issued after flush() chain independently of the network.
   void flush() {
     if (!_initialized) {
-      _logger.log('flush ignored: MyAmpMix.init has not completed.');
+      _logger.log('flush ignored: MyAmpix.init has not completed.');
       return;
     }
     final priorOps = _tail;
@@ -548,7 +548,7 @@ class MyAmpMix {
 
   void _guard(String operation, FutureOr<void> Function() body) {
     if (!_initialized) {
-      _logger.log('$operation ignored: MyAmpMix.init has not completed.');
+      _logger.log('$operation ignored: MyAmpix.init has not completed.');
       return;
     }
     _tail = _tail.then((_) async {
@@ -572,7 +572,7 @@ class MyAmpMix {
       if (observer != null) WidgetsBinding.instance.removeObserver(observer);
       if (closeDatabase) await sdk._database.close();
     }
-    _instance = MyAmpMix._();
+    _instance = MyAmpix._();
   }
 }
 

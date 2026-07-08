@@ -12,7 +12,7 @@ const RETAKE_HINT =
  * Per-screen "Retake / Delete" control for a reference screenshot (§18). Reference screenshots are a
  * developer debug tool: there's no re-capture button here — the dashboard's job is to DELETE an
  * outdated image (via `DELETE /screens/:screenName`), after which the developer re-captures it by
- * running a debug build (`MyAmpMix.instance.retakeScreenshots()`) and re-navigating. Uses an inline
+ * running a debug build (`MyAmpix.instance.retakeScreenshots()`) and re-navigating. Uses an inline
  * two-step confirm so a stray click can't wipe an image, and surfaces success/failure as a toast.
  */
 export function RetakeScreenButton({

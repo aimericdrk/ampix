@@ -7,7 +7,7 @@ describe('router', () => {
   it('redirects anonymous visitors from a private route to /login', async () => {
     authState.refreshValid = false; // no refresh cookie
     const { router } = renderApp('/projects');
-    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpMix' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpix' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/login');
     expect(router.state.location.search).toEqual({ redirect: '/projects' });
   });
@@ -22,7 +22,7 @@ describe('router', () => {
   it('redirects / to /projects (then to login when anonymous)', async () => {
     authState.refreshValid = false;
     const { router } = renderApp('/');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     expect(router.state.location.pathname).toBe('/login');
   });
 

@@ -1,9 +1,9 @@
-# MyAmpMix analytics SDK — Flutter example
+# MyAmpix analytics SDK — Flutter example
 
 A small, real multi-screen shopping demo that exercises the
-`myampmix_analytics` Flutter SDK through **manual** instrumentation only.
+`myampix_analytics` Flutter SDK through **manual** instrumentation only.
 Phase-1 of the SDK has no autocapture widgets, so every event in this app is
-triggered by an explicit call to the `MyAmpMix` facade from a genuine user
+triggered by an explicit call to the `MyAmpix` facade from a genuine user
 action (tapping a product, adding to cart, checking out, logging in/out,
 opting out, flushing).
 
@@ -35,7 +35,7 @@ Edit `lib/demo_config.dart`:
 - `demoToken` is a placeholder (`mam_` + 32 hex zeros) and will be rejected
   (401) by a real backend. Replace it with the token printed by `pnpm dev`'s
   demo seed script (run from the repo root) to see events actually accepted
-  by your local MyAmpMix backend. Until then the app still runs fine and the
+  by your local MyAmpix backend. Until then the app still runs fine and the
   Event Log still shows everything that was tracked locally — it just won't
   reach a server.
 

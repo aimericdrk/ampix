@@ -15,7 +15,7 @@ import { renderApp } from '../../../test/render-app';
 describe('2FA login step-up', () => {
   it('challenges a 2FA-enabled user, then authenticates on the correct code', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), MFA_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), MFA_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -38,7 +38,7 @@ describe('2FA login step-up', () => {
 
   it('shows an inline error for a wrong code and allows retrying with the right one', async () => {
     renderApp('/login');
-    await screen.findByRole('heading', { name: 'Log in to MyAmpMix' });
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
     await userEvent.type(screen.getByLabelText('Email'), MFA_USER.email);
     await userEvent.type(screen.getByLabelText('Password'), MFA_PASSWORD);
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:myampmix_analytics/src/attribution/attribution_autocapture.dart';
+import 'package:myampix_analytics/src/attribution/attribution_autocapture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
