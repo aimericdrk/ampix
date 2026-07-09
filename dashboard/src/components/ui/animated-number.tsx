@@ -18,24 +18,28 @@ export interface AnimatedNumberProps {
 }
 
 /**
- * Counts from the previous value up to `value` over 800ms with ease-out easing.
- * Renders the final value immediately under reduced motion or in tests, since
- * jsdom offers no reliable rAF timing.
+ * Counts from 0 (or the currently displayed value) up to `value` over 800ms with
+ * ease-out easing. Renders the final value immediately under reduced motion or in
+ * tests, since jsdom offers no reliable rAF timing.
  */
 export function AnimatedNumber({ value, format = defaultFormat, className }: AnimatedNumberProps) {
   const reducedMotion = useReducedMotion();
   const skipAnimation = reducedMotion || import.meta.env.MODE === 'test';
-  const [display, setDisplay] = useState(value);
-  const previousValueRef = useRef(value);
+  const [display, setDisplay] = useState(0);
+  // Last value actually rendered, updated on every tick. Using this (rather than the
+  // previous *target*) as the tween origin means a `value` change mid-animation
+  // retargets smoothly from wherever the count currently is, instead of jumping
+  // backward to a stale origin.
+  const displayRef = useRef(0);
 
   useEffect(() => {
     if (skipAnimation) {
+      displayRef.current = value;
       setDisplay(value);
-      previousValueRef.current = value;
       return;
     }
 
-    const from = previousValueRef.current;
+    const from = displayRef.current;
     const to = value;
     const start = performance.now();
     let frame: number;
@@ -43,13 +47,12 @@ export function AnimatedNumber({ value, format = defaultFormat, className }: Ani
     const tick = (now: number) => {
       const elapsed = now - start;
       const t = Math.min(elapsed / DURATION_MS, 1);
-      const eased = easeOutCubic(t);
-      setDisplay(from + (to - from) * eased);
+      const next = from + (to - from) * easeOutCubic(t);
+      displayRef.current = next;
+      setDisplay(next);
 
       if (t < 1) {
         frame = requestAnimationFrame(tick);
-      } else {
-        previousValueRef.current = to;
       }
     };
 
