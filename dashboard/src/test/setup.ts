@@ -6,6 +6,21 @@ import { resetAuthState, resetOrgsState } from './msw/handlers';
 import { resetPhase5State } from './msw/phase5-handlers';
 import { server } from './msw/server';
 
+// jsdom has no matchMedia implementation; motion.ts's useReducedMotion() (and theme.tsx)
+// call it directly, so stub it with a standard MediaQueryList-shaped object.
+window.matchMedia ??=
+  (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
+
 // Radix UI relies on browser APIs jsdom does not implement.
 window.HTMLElement.prototype.hasPointerCapture ??= () => false;
 window.HTMLElement.prototype.setPointerCapture ??= () => {};
