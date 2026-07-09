@@ -272,6 +272,20 @@ class MyAmpix {
     WidgetsBinding.instance.addObserver(_observer!);
     _uploader.start();
 
+    // Debug-only init banner: proves logging is actually ON (needs
+    // MyAmpixConfig(logLevel: MyAmpixLogLevel.debug) or debug: true — a debug BUILD alone is not
+    // enough) and echoes the effective setup so you can confirm what the SDK is running with.
+    _logger.log(
+      'MyAmpix initialized '
+      '| serverUrl=${config.serverUrl} '
+      '| flushAt=${config.flushAt} flushInterval=${config.flushInterval.inSeconds}s '
+      '| autocapture{screens:$_autocaptureScreens, taps:$_autocaptureTaps, '
+      'purchases:$_autocapturePurchases, attribution:$_autocaptureAttribution, '
+      'screenshots:$_autocaptureScreenshots} '
+      '| distinctId=${_identity.distinctId} '
+      '| superProperties=${_superProperties.current}',
+    );
+
     // Native store-purchase autocapture (shared-contracts §4). Gated on
     // `config.autocapturePurchases` (default true): when enabled we subscribe
     // to the platform plugin's transaction stream (the real
@@ -487,6 +501,12 @@ class MyAmpix {
 
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);
+    // Debug-only: shows the identity transition. `changed=false` means the user was already
+    // identified as this id (no $identify event is emitted in that case).
+    _logger.log(
+      'identify → distinctId now "${_identity.distinctId}" '
+      '(anonId ${_identity.anonId}, changed=$changed)',
+    );
     if (changed) {
       await _pipeline.track(r'$identify', {r'$anon_id': _identity.anonId});
     }
@@ -501,6 +521,12 @@ class MyAmpix {
     await _identity.reset();
     await _superProperties.clear();
     _timedEvents.clear();
+    // Debug-only: reset wipes identity + super properties (so any registered `country` is GONE
+    // after this) and issues a fresh anonymous id.
+    _logger.log(
+      'reset → fresh anonymous distinctId "${_identity.distinctId}", '
+      'super properties cleared',
+    );
   });
 
   void timeEvent(String event) =>
@@ -508,7 +534,15 @@ class MyAmpix {
 
   void registerSuperProperties(Map<String, Object?> properties) => _guard(
     'registerSuperProperties',
-    () => _superProperties.register(properties),
+    () async {
+      await _superProperties.register(properties);
+      // Debug-only: confirms the registration landed and shows the FULL super-property set now
+      // attached to every subsequent event — verify e.g. `{country: FR, …}` here.
+      _logger.log(
+        'registerSuperProperties($properties) '
+        '→ super properties now ${_superProperties.current}',
+      );
+    },
   );
 
   void optOutTracking() => _guard('optOutTracking', () => _optOut.optOut());
@@ -552,6 +586,10 @@ class MyAmpix {
       return;
     }
     _tail = _tail.then((_) async {
+      // Debug-only: log EVERY public SDK call as it runs (track, identify, alias, reset, flush,
+      // people.*, registerSuperProperties, timeEvent, optIn/optOut, …). Enable with
+      // MyAmpixConfig(logLevel: MyAmpixLogLevel.debug) or debug: true.
+      _logger.log('→ $operation()');
       try {
         await body();
       } on Object catch (error, stackTrace) {

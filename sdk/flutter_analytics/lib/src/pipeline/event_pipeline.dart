@@ -90,6 +90,10 @@ class EventPipeline {
       ...?properties,
       r'$duration_ms': ?durationMs,
     }, _logger);
+    // Debug-only (needs logLevel: debug / debug: true): shows every tracked event with its FULL
+    // merged properties — including any registered super properties (e.g. `country`) — so you can
+    // verify what actually gets attached and queued.
+    _logger.log('track "$event" | properties=$mergedProperties');
     final analyticsEvent = AnalyticsEvent(
       insertId: _idFactory(),
       event: event,
@@ -101,6 +105,13 @@ class EventPipeline {
       context: await _contextCollector.collect(),
     );
     await _store.add(analyticsEvent, maxQueueSize: _maxQueueSize);
-    onEventQueued?.call(await _store.count());
+    final queuedCount = await _store.count();
+    // Debug-only: the queue depth after persisting this event. When it reaches flushAt the uploader
+    // triggers a size-based flush; this lets you watch events accumulate then drain.
+    _logger.log(
+      'queued "$event" (insertId=${analyticsEvent.insertId}) '
+      '→ $queuedCount event(s) waiting to upload',
+    );
+    onEventQueued?.call(queuedCount);
   }
 }

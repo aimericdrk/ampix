@@ -91,6 +91,9 @@ class Uploader {
   Future<void> flush({bool force = false}) async {
     if (_flushing) return;
     _flushing = true;
+    // Debug-only: marks each flush attempt (needs logLevel: debug / debug: true). `force: true`
+    // bypasses the retry backoff (e.g. a manual MyAmpix.instance.flush()).
+    _logger.log('flush(force: $force)');
     try {
       await _drainEvents(force: force);
       await _drainProfiles(force: force);
@@ -119,12 +122,26 @@ class Uploader {
       final body = jsonEncode({
         'events': [for (final stored in batch) stored.event.toJson()],
       });
+      // Debug-only: shows each event batch being sent, with the event names in it, so you can
+      // watch e.g. `$app_open`/`track` events leave the device.
+      _logger.log(
+        'upload: POST /ingest/events (${batch.length} event(s): '
+        '${[for (final stored in batch) stored.event.event].join(', ')})',
+      );
       switch (await _post('/ingest/events', body, _eventsBackoff)) {
         case _SendOutcome.delivered:
         case _SendOutcome.invalid:
           // Delivered: server has the batch (202). Invalid: it never will.
+          _logger.log(
+            'upload: /ingest/events batch of ${batch.length} accepted/dropped '
+            '→ removed from queue',
+          );
           await _events.delete([for (final stored in batch) stored.id]);
         case _SendOutcome.retryLater:
+          _logger.log(
+            'upload: /ingest/events deferred (server busy/offline) '
+            '→ ${batch.length} event(s) kept, will retry after backoff',
+          );
           return;
       }
     }
@@ -138,11 +155,24 @@ class Uploader {
       final body = jsonEncode({
         'operations': [for (final stored in batch) stored.op.toJson()],
       });
+      // Debug-only: shows each profile-operation batch (people.set/increment/etc.) being sent —
+      // these are the ops that write onto the USER PROFILE (distinct from event super properties).
+      _logger.log(
+        'upload: POST /ingest/profiles (${batch.length} operation(s))',
+      );
       switch (await _post('/ingest/profiles', body, _profilesBackoff)) {
         case _SendOutcome.delivered:
         case _SendOutcome.invalid:
+          _logger.log(
+            'upload: /ingest/profiles batch of ${batch.length} accepted/dropped '
+            '→ removed from queue',
+          );
           await _profiles.delete([for (final stored in batch) stored.id]);
         case _SendOutcome.retryLater:
+          _logger.log(
+            'upload: /ingest/profiles deferred (server busy/offline) '
+            '→ ${batch.length} operation(s) kept, will retry after backoff',
+          );
           return;
       }
     }
@@ -159,6 +189,9 @@ class Uploader {
         },
         body: gzip.encode(utf8.encode(body)),
       );
+      // Debug-only: the raw HTTP status for every upload — 202 = accepted, 4xx = rejected/dropped,
+      // 429/5xx = will retry. The single most useful line when uploads silently "don't work".
+      _logger.log('upload: $path → HTTP ${response.statusCode}');
       if (response.statusCode == 202) {
         backoff.reset();
         _logRejections(response.body);
