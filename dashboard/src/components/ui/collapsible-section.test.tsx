@@ -52,10 +52,10 @@ describe('CollapsibleSection', () => {
 });
 
 describe('Skeleton', () => {
-  it('renders a pulsing placeholder block', () => {
+  it('renders a shimmering placeholder block', () => {
     render(<Skeleton data-testid="skeleton" className="h-4 w-24" />);
     const el = screen.getByTestId('skeleton');
-    expect(el).toHaveClass('animate-pulse');
+    expect(el).toHaveClass('animate-shimmer');
     expect(el).toHaveClass('h-4');
     expect(el).toHaveClass('w-24');
   });
