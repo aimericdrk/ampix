@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { InsightsResponse, InsightsSeries } from '../../lib/api/types';
-import { breakdownBars, pctDelta, previousRange, seriesTrendRows, sumSeries } from './derive';
+import {
+  breakdownBars,
+  installsByCountry,
+  pctDelta,
+  previousRange,
+  seriesTrendRows,
+  sumSeries,
+} from './derive';
 
 describe('previousRange', () => {
   it('returns the immediately-preceding equal-length window (30-day June -> May)', () => {
@@ -128,5 +135,72 @@ describe('breakdownBars', () => {
       series: [{ name: 'app_open', breakdown_value: null, data: [{ t: '2026-06-29', value: 4 }] }],
     };
     expect(breakdownBars(response)).toEqual([{ label: '(none)', value: 4 }]);
+  });
+});
+
+describe('installsByCountry', () => {
+  it('folds resolvable breakdown values (ISO-2, ISO-3, name) that share an ISO-3 into one map entry', () => {
+    const response: InsightsResponse = {
+      series: [
+        { name: '$first_open', breakdown_value: 'US', data: [{ t: '2026-06-29', value: 10 }] },
+        { name: '$first_open', breakdown_value: 'USA', data: [{ t: '2026-06-30', value: 5 }] },
+        {
+          name: '$first_open',
+          breakdown_value: 'United States of America',
+          data: [{ t: '2026-07-01', value: 2 }],
+        },
+        { name: '$first_open', breakdown_value: 'FR', data: [{ t: '2026-06-29', value: 8 }] },
+      ],
+    };
+    const result = installsByCountry(response);
+    expect(result.mapData).toEqual({ USA: 17, FRA: 8 });
+    expect(result.total).toBe(25);
+    expect(result.countryCount).toBe(2);
+  });
+
+  it('buckets unresolvable breakdown values under an Unknown row, listed last regardless of count', () => {
+    const response: InsightsResponse = {
+      series: [
+        { name: '$first_open', breakdown_value: 'FR', data: [{ t: '2026-06-29', value: 48 }] },
+        { name: '$first_open', breakdown_value: 'US', data: [{ t: '2026-06-29', value: 33 }] },
+        { name: '$first_open', breakdown_value: 'Wakanda', data: [{ t: '2026-06-29', value: 63 }] },
+      ],
+    };
+    const result = installsByCountry(response);
+    expect(result.mapData).toEqual({ FRA: 48, USA: 33 });
+    expect(result.total).toBe(144);
+    expect(result.countryCount).toBe(2);
+    expect(result.rows.map((r) => r.name)).toEqual([
+      'France',
+      'United States of America',
+      'Unknown',
+    ]);
+    expect(result.rows.map((r) => r.iso3)).toEqual(['FRA', 'USA', null]);
+    // Sorted desc by count among resolved rows; Unknown is always last even though it's the
+    // largest bucket here (63 > 48 > 33).
+    expect(result.rows.map((r) => r.count)).toEqual([48, 33, 63]);
+    expect(result.rows.map((r) => Math.round(r.share * 1000) / 1000)).toEqual([
+      Math.round((48 / 144) * 1000) / 1000,
+      Math.round((33 / 144) * 1000) / 1000,
+      Math.round((63 / 144) * 1000) / 1000,
+    ]);
+  });
+
+  it('omits the Unknown row entirely when every value resolves', () => {
+    const response: InsightsResponse = {
+      series: [{ name: '$first_open', breakdown_value: 'FR', data: [{ t: '2026-06-29', value: 1 }] }],
+    };
+    const result = installsByCountry(response);
+    expect(result.rows.some((r) => r.iso3 === null)).toBe(false);
+  });
+
+  it('returns empty structures for undefined/empty responses', () => {
+    expect(installsByCountry(undefined)).toEqual({ mapData: {}, rows: [], total: 0, countryCount: 0 });
+    expect(installsByCountry({ series: [] })).toEqual({
+      mapData: {},
+      rows: [],
+      total: 0,
+      countryCount: 0,
+    });
   });
 });

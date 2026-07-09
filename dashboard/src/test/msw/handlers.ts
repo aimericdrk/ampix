@@ -1215,9 +1215,16 @@ export const handlers = [
 
     // Deterministic 3-bucket series so tests can assert on exact values. When a breakdown is
     // requested, each event fans out into two breakdown-value series (never a rainbow of
-    // unbounded values in this fixture).
+    // unbounded values in this fixture) — except `country` (feat-18 §3.4), which fans out into
+    // three raw SDK-style values (two resolvable, one not) so Home's Installations section has
+    // something realistic to fold through `toIso3`/aggregate into an "Unknown" bucket.
     const buckets = ['2026-06-29', '2026-06-30', '2026-07-01'];
-    const breakdownValues: (string | null)[] = body.breakdown ? ['ios', 'android'] : [null];
+    const breakdownValues: (string | null)[] =
+      body.breakdown?.property === 'country'
+        ? ['US', 'FR', 'Wakanda']
+        : body.breakdown
+          ? ['ios', 'android']
+          : [null];
     const series: InsightsSeries[] = [];
     body.events.forEach((eventQuery, eventIndex) => {
       breakdownValues.forEach((breakdownValue, breakdownIndex) => {

@@ -118,7 +118,7 @@ export function WorldChoropleth({
           height="100%"
           preserveAspectRatio="xMidYMid meet"
         >
-          {features.map((feature) => {
+          {features.map((feature, i) => {
             const value = data[feature.iso3];
             const isActive = feature.iso3 === activeIso3;
             const selectable = Boolean(onSelectCountry);
@@ -137,7 +137,7 @@ export function WorldChoropleth({
 
             return (
               <path
-                key={feature.iso3}
+                key={`${feature.iso3}-${i}`}
                 d={feature.d}
                 fill={value === undefined ? NO_DATA_FILL : sequentialColor(max > 0 ? Math.sqrt(value) / Math.sqrt(max) : 0)}
                 stroke={isActive ? 'var(--accent)' : 'var(--chart-surface)'}

@@ -31,7 +31,14 @@ import { useFavorites } from '../../favorites/favorites';
 import type { FavItem } from '../../favorites/favorites';
 import { useRecents } from '../../favorites/recents';
 import { favItemRoute } from '../../favorites/routes';
-import { breakdownBars, pctDelta, previousRange, sumSeries } from '../derive';
+import {
+  breakdownBars,
+  installsByCountry,
+  pctDelta,
+  previousRange,
+  sumSeries,
+  type CountryInstallRow,
+} from '../derive';
 import { formatDurationMs, formatPercent } from '../format';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { computeHighlights, type HighlightMetricInput } from '../highlights';
@@ -46,6 +53,7 @@ import { ChartCard } from './charts/ChartCard';
 import { ComparisonTrend } from './charts/ComparisonTrend';
 import { DonutChart } from './charts/DonutChart';
 import { KpiTile } from './charts/KpiTile';
+import { WorldChoropleth } from './charts/WorldChoropleth';
 
 /** Sorts engagement-style points (`{ t, ... }`) oldest → newest without mutating the input. */
 function sortByT<T extends { t: string }>(points: T[]): T[] {
@@ -117,6 +125,22 @@ export function HomePage() {
   const versionDef: InsightsQueryDefinition = { ...currentDef, breakdown: { property: 'app_version' } };
   const utmDef: InsightsQueryDefinition = { ...currentDef, breakdown: { property: 'utm_source' } };
 
+  // Installations (feat-18 §3.4): "installation" = the `$first_open` event, fired once per install
+  // and (when the app sets a `country` super property) carrying a country value. Independent of
+  // the top-5 `eventNames` above — `$first_open` may not be a top-5 event by volume — so these run
+  // unconditionally (gated only on the date range being non-empty, like `totalsPrevious`).
+  const installsBaseDef: InsightsQueryDefinition = {
+    events: [{ name: '$first_open', aggregation: 'total' }],
+    date_range: { from, to },
+    interval: 'day',
+    filters: mergeGlobalFilters([], globalFilters),
+  };
+  const installsCountryDef: InsightsQueryDefinition = {
+    ...installsBaseDef,
+    breakdown: { property: 'country' },
+  };
+  const installsOsDef: InsightsQueryDefinition = { ...installsBaseDef, breakdown: { property: 'os' } };
+
   // The previous-period query re-runs `previousDef`, which is only meaningful once both bounds of
   // the (current) range are non-empty — a cleared custom "From" would otherwise fire a `from=''`
   // request, consistent with how `useEngagement` gates itself.
@@ -126,6 +150,8 @@ export function HomePage() {
   const osInsights = useInsightsQuery(projectId, osDef, hasEventNames);
   const versionInsights = useInsightsQuery(projectId, versionDef, hasEventNames);
   const utmInsights = useInsightsQuery(projectId, utmDef, hasEventNames);
+  const installsCountry = useInsightsQuery(projectId, installsCountryDef, hasRange);
+  const installsOs = useInsightsQuery(projectId, installsOsDef, hasRange);
 
   const reports = useReports(projectId);
   const dashboards = useDashboards(projectId);
@@ -240,6 +266,26 @@ export function HomePage() {
   const versionBars = versionInsights.data ? breakdownBars(versionInsights.data) : [];
   const utmBars = utmInsights.data ? breakdownBars(utmInsights.data) : [];
 
+  // Installations (feat-18 §3.4): fold the country breakdown through `toIso3` into map/table data;
+  // "empty" means no `$first_open` events carried a resolvable country at all (no data, or every
+  // value landed in the Unknown bucket) — the by-OS chart still renders independently below.
+  const installsData = installsByCountry(installsCountry.data);
+  const installsOsBars = installsOs.data ? breakdownBars(installsOs.data) : [];
+  const installsCountryEmpty =
+    !installsCountry.isPending && !installsCountry.isError && installsData.countryCount === 0;
+  const topInstallsCountry = installsData.countryCount > 0 ? installsData.rows[0] : undefined;
+  const installsCountryColumns: Array<DataTableColumn<CountryInstallRow>> = [
+    { key: 'name', header: 'Country', sortable: true },
+    { key: 'count', header: 'Installs', align: 'right', sortable: true },
+    {
+      key: 'share',
+      header: 'Share %',
+      align: 'right',
+      sortable: true,
+      render: (row) => formatPercent(row.share),
+    },
+  ];
+
   const reportItems: RecentItem[] = (reports.data?.reports ?? []).slice(0, 5).map((r) => ({
     id: r.id,
     name: r.name,
@@ -329,6 +375,61 @@ export function HomePage() {
               loading={dayEngagement.isPending}
             />
           </SectionGrid>
+
+          {/* Installations (feat-18): "installation" = the `$first_open` event. A world map +
+              by-country table + by-OS breakdown, prominent right after the KPI row. */}
+          <SectionGrid>
+            <KpiTile
+              label="Total installs"
+              value={installsData.total}
+              hint="`$first_open` events, selected range"
+              loading={installsCountry.isPending}
+            />
+            <KpiTile
+              label="Countries"
+              value={installsData.countryCount}
+              hint="Distinct countries with installs"
+              loading={installsCountry.isPending}
+            />
+            {topInstallsCountry && (
+              <KpiTile
+                label="Top country"
+                value={topInstallsCountry.name}
+                hint={`${formatPercent(topInstallsCountry.share)} of installs`}
+                loading={installsCountry.isPending}
+              />
+            )}
+          </SectionGrid>
+
+          <ChartCard
+            title="Installations by country"
+            description="`$first_open` installs by resolved country, selected range."
+            state={chartState(installsCountry.isPending, installsCountry.isError, installsCountryEmpty)}
+            emptyText="No installations with a country yet — set a `country` super property in your app: `MyAmpix.instance.registerSuperProperties({'country': 'US'})`."
+          >
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <WorldChoropleth
+                data={installsData.mapData}
+                ariaLabel="Installations by country"
+                valueLabel="installs"
+              />
+              <DataTable
+                columns={installsCountryColumns}
+                rows={installsData.rows}
+                caption="Installations by country"
+                initialSort={{ key: 'count', dir: 'desc' }}
+                rowKey={(row) => row.iso3 ?? 'unknown'}
+                exportFilename="installs-by-country"
+              />
+            </div>
+          </ChartCard>
+
+          <ChartCard
+            title="Installations by OS"
+            state={chartState(installsOs.isPending, installsOs.isError, installsOsBars.length === 0)}
+          >
+            <BreakdownChart data={installsOsBars} ariaLabel="Installations by OS" />
+          </ChartCard>
 
           <ChartCard
             title="Active users"

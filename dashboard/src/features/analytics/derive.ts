@@ -1,4 +1,5 @@
 import type { InsightsResponse, InsightsSeries } from '../../lib/api/types';
+import { iso3Name, toIso3 } from './geo/country-codes';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -80,4 +81,63 @@ export function breakdownBars(response: InsightsResponse): Array<{ label: string
   return Array.from(totals, ([label, value]) => ({ label, value })).sort(
     (a, b) => b.value - a.value,
   );
+}
+
+/** One row of the by-country installs breakdown (feat-18 §3.4): a resolved ISO-3 country, or the
+ * `iso3: null` "Unknown" rollup for values `toIso3` couldn't resolve. */
+export interface CountryInstallRow {
+  iso3: string | null;
+  name: string;
+  count: number;
+  /** Share of the grand total (resolved + unknown), in [0,1]; 0 when the total is 0. */
+  share: number;
+}
+
+export interface InstallsByCountry {
+  /** ISO-3 -> install count, ready for `WorldChoropleth`'s `data` prop. Excludes the Unknown bucket
+   * (unresolved country values have no geometry to shade). */
+  mapData: Record<string, number>;
+  /** Sorted desc by count; an `iso3: null` "Unknown" row (if any installs are unresolved) is
+   * always appended last, regardless of its count. */
+  rows: CountryInstallRow[];
+  /** Grand total across every breakdown value, resolved or not. */
+  total: number;
+  /** Distinct resolved ISO-3 countries (excludes the Unknown bucket). */
+  countryCount: number;
+}
+
+/**
+ * Derives the Installations-by-country map/table data (feat-18 §3.4) from a `$first_open`
+ * breakdown-by-country {@link InsightsResponse}: each series' `sumSeries` is that breakdown
+ * value's install count; values are folded through `toIso3` so different SDK-supplied spellings
+ * of the same country (ISO-2, ISO-3, name) aggregate into one ISO-3 entry, and anything `toIso3`
+ * can't resolve rolls up into a single "Unknown" row.
+ */
+export function installsByCountry(response: InsightsResponse | undefined): InstallsByCountry {
+  const mapData: Record<string, number> = {};
+  let unknown = 0;
+  for (const s of response?.series ?? []) {
+    const count = sumSeries([s]);
+    const iso3 = toIso3(s.breakdown_value);
+    if (iso3) {
+      mapData[iso3] = (mapData[iso3] ?? 0) + count;
+    } else {
+      unknown += count;
+    }
+  }
+
+  const total = Object.values(mapData).reduce((sum, value) => sum + value, 0) + unknown;
+  const rows: CountryInstallRow[] = Object.entries(mapData)
+    .map(([iso3, count]) => ({
+      iso3,
+      name: iso3Name(iso3),
+      count,
+      share: total > 0 ? count / total : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
+  if (unknown > 0) {
+    rows.push({ iso3: null, name: 'Unknown', count: unknown, share: total > 0 ? unknown / total : 0 });
+  }
+
+  return { mapData, rows, total, countryCount: Object.keys(mapData).length };
 }

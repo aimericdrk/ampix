@@ -1,8 +1,9 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { authStore } from '../../auth/store';
+import type { InsightsQueryDefinition, InsightsSeries } from '../../../lib/api/types';
 import {
   ENGAGEMENT_FIXTURE,
   SESSIONS_SUMMARY_FIXTURE,
@@ -12,6 +13,8 @@ import {
 } from '../../../test/msw/handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+
+afterEach(() => server.events.removeAllListeners());
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -261,5 +264,87 @@ describe('HomePage', () => {
       within(favoritesSection).queryByRole('link', { name: 'Starred report' }),
     ).not.toBeInTheDocument();
     expect(within(favoritesSection).getByText(/Star a report/)).toBeInTheDocument();
+  });
+
+  it('feat-18 §3.4/T2: renders the Installations map, by-country table, and by-OS chart, posting the $first_open country-breakdown query', async () => {
+    const countryQueryBodies: InsightsQueryDefinition[] = [];
+    server.events.on('request:start', ({ request }) => {
+      if (request.method !== 'POST' || !request.url.includes('/query/insights')) return;
+      void request
+        .clone()
+        .json()
+        .then((body) => {
+          const definition = body as InsightsQueryDefinition;
+          if (definition.breakdown?.property === 'country') countryQueryBodies.push(definition);
+        });
+    });
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+
+    // KPI tiles for the section.
+    expect(await main.findByText('Total installs')).toBeInTheDocument();
+    expect(main.getByText('Countries')).toBeInTheDocument();
+
+    // The map renders with an accessible name, fed the folded ISO-3 -> count data.
+    expect(await main.findByRole('img', { name: 'Installations by country' })).toBeInTheDocument();
+
+    // The by-country DataTable (distinct from the map's own internal accessible table) lists the
+    // resolved country names plus an Unknown row for the fixture's unresolvable breakdown value.
+    const countryTable = main.getByRole('table', { name: 'Installations by country' });
+    expect(within(countryTable).getByText('United States of America')).toBeInTheDocument();
+    expect(within(countryTable).getByText('France')).toBeInTheDocument();
+    expect(within(countryTable).getByText('Unknown')).toBeInTheDocument();
+
+    // The by-OS breakdown chart for the same $first_open event.
+    expect(await main.findByRole('img', { name: 'Installations by OS' })).toBeInTheDocument();
+
+    // The country-breakdown query posted the exact $first_open + country-breakdown definition.
+    await waitFor(() => expect(countryQueryBodies.length).toBeGreaterThan(0));
+    const [countryQueryBody] = countryQueryBodies;
+    expect(countryQueryBody?.events).toEqual([{ name: '$first_open', aggregation: 'total' }]);
+    expect(countryQueryBody?.breakdown).toEqual({ property: 'country' });
+  });
+
+  it('feat-18 §3.4/T2: shows a friendly empty-state message when no installs have a resolvable country, but still renders by-OS', async () => {
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+        const body = (await request.json()) as InsightsQueryDefinition;
+        if (body.breakdown?.property === 'country') {
+          return HttpResponse.json({ series: [] });
+        }
+        const buckets = ['2026-06-29', '2026-06-30', '2026-07-01'];
+        const breakdownValues: (string | null)[] = body.breakdown ? ['ios', 'android'] : [null];
+        const series: InsightsSeries[] = [];
+        body.events.forEach((eventQuery, eventIndex) => {
+          breakdownValues.forEach((breakdownValue, breakdownIndex) => {
+            series.push({
+              name: eventQuery.name,
+              breakdown_value: breakdownValue,
+              data: buckets.map((t, bucketIndex) => ({
+                t,
+                value: (eventIndex + 1) * 10 + breakdownIndex * 5 + bucketIndex,
+              })),
+            });
+          });
+        });
+        return HttpResponse.json({ series });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+
+    expect(
+      await main.findByText(/No installations with a country yet/),
+    ).toBeInTheDocument();
+    expect(main.queryByRole('img', { name: 'Installations by country' })).not.toBeInTheDocument();
+
+    // The by-OS chart still has data and renders independently of the country empty state.
+    expect(await main.findByRole('img', { name: 'Installations by OS' })).toBeInTheDocument();
   });
 });
