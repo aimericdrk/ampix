@@ -33,7 +33,6 @@ import { RevenuePage } from './features/analytics/components/RevenuePage';
 import { DistributionsPage } from './features/analytics/components/DistributionsPage';
 import { PropertyExplorerPage } from './features/analytics/components/PropertyExplorerPage';
 import { EventCatalogPage } from './features/analytics/components/EventCatalogPage';
-import { UserProfilePage } from './features/analytics/components/UserProfilePage';
 import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
@@ -246,10 +245,13 @@ const usersRoute = createRoute({
   component: UsersPage,
 });
 
+// The per-user profile is a modal over the Users list (not a standalone page), so this route renders
+// the same `UsersPage`; it reads the `$distinctId` param and auto-opens the profile modal. Keeps
+// deep-links, favorites, and the command palette (all of which target `/users/$distinctId`) working.
 const userProfileRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/users/$distinctId',
-  component: UserProfilePage,
+  component: UsersPage,
 });
 
 const sessionsRoute = createRoute({

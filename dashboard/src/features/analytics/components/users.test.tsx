@@ -83,15 +83,18 @@ describe('UsersPage', () => {
 
     await userEvent.click(await screen.findByText('Alex Chen'));
 
-    expect(await screen.findByRole('heading', { name: 'user-001' })).toBeInTheDocument();
-    expect(screen.getByText(USER_PROFILE_FIXTURE.profile.email as string)).toBeInTheDocument();
-    expect(screen.getByText(USER_PROFILE_FIXTURE.profile.plan as string)).toBeInTheDocument();
-    expect(screen.getByText(String(USERS_FIXTURE[0]!.event_count))).toBeInTheDocument();
+    // The profile now opens as a modal OVER the list (not a separate page), so scope every profile
+    // assertion to the dialog — values like the event count also appear in the list row behind it.
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'user-001' })).toBeInTheDocument();
+    expect(within(dialog).getByText(USER_PROFILE_FIXTURE.profile.email as string)).toBeInTheDocument();
+    expect(within(dialog).getByText(USER_PROFILE_FIXTURE.profile.plan as string)).toBeInTheDocument();
+    expect(within(dialog).getByText(String(USERS_FIXTURE[0]!.event_count))).toBeInTheDocument();
 
     // The timeline lists every recent event (some event names recur, e.g. repeated $screen_view).
     const eventNames = [...new Set(USER_PROFILE_FIXTURE.recent_events.map((e) => e.event))];
     for (const name of eventNames) {
-      expect(screen.getAllByText(name).length).toBeGreaterThan(0);
+      expect(within(dialog).getAllByText(name).length).toBeGreaterThan(0);
     }
   });
 });
