@@ -248,11 +248,11 @@ describe('HomePage', () => {
     const main = within(screen.getByRole('main'));
 
     const favoritesHeading = await main.findByRole('heading', { name: 'Favorites' });
-    const favoritesSection = favoritesHeading.closest('.rounded-lg') as HTMLElement;
+    const favoritesSection = favoritesHeading.closest('.rounded-xl') as HTMLElement;
     expect(within(favoritesSection).getByRole('link', { name: 'Starred report' })).toBeInTheDocument();
 
     const recentsHeading = main.getByRole('heading', { name: 'Recently viewed' });
-    const recentsSection = recentsHeading.closest('.rounded-lg') as HTMLElement;
+    const recentsSection = recentsHeading.closest('.rounded-xl') as HTMLElement;
     expect(
       within(recentsSection).getByRole('link', { name: 'Recently opened board' }),
     ).toBeInTheDocument();
