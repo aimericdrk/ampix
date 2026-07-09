@@ -67,6 +67,20 @@ export interface UsersResponse {
   next_cursor: string | null;
 }
 
+/** Device/app context captured with an event (the §5 context columns), surfaced per recent event. */
+export interface RecentEventContext {
+  os: string;
+  os_version: string;
+  app_version: string;
+  app_build: string;
+  device_model: string;
+  device_manufacturer: string;
+  locale: string;
+  timezone: string;
+  network: string;
+  sdk_version: string;
+}
+
 /** GET /users/:distinctId response (contracts §14). */
 export interface RecentEvent {
   insert_id: string;
@@ -74,6 +88,10 @@ export interface RecentEvent {
   timestamp: string;
   /** The `$screen_name` of `$screen_view`/`$tap` events; null for events without one. */
   screen_name: string | null;
+  /** Every custom property (contracts §4 flat map) attached to this event, verbatim. */
+  properties: Record<string, unknown>;
+  /** The device/app context captured with the event. */
+  context: RecentEventContext;
 }
 
 export interface UserProfileResponse {

@@ -205,6 +205,20 @@ export const USERS_FIXTURE: UserListItem[] = [
   }),
 ];
 
+/** Shared device/app context for the profile fixture's recent events. */
+const DEVICE_CONTEXT_FIXTURE = {
+  os: 'ios',
+  os_version: '17.4',
+  app_version: '2.0.0',
+  app_build: '210',
+  device_model: 'iPhone15,3',
+  device_manufacturer: 'Apple',
+  locale: 'fr-FR',
+  timezone: 'Europe/Paris',
+  network: 'wifi',
+  sdk_version: '0.1.2',
+};
+
 export const USER_PROFILE_FIXTURE: Omit<
   UserProfileResponse,
   'distinct_id' | 'last_seen' | 'event_count'
@@ -215,12 +229,54 @@ export const USER_PROFILE_FIXTURE: Omit<
   // home → catalog → catalog → cart, collapsing to home → catalog → cart. Non-screen events carry
   // a null screen_name.
   recent_events: [
-    { insert_id: 'evt-106', event: 'checkout_completed', timestamp: '2026-07-01T10:00:00.000Z', screen_name: null },
-    { insert_id: 'evt-105', event: '$screen_view', timestamp: '2026-07-01T09:58:00.000Z', screen_name: 'cart' },
-    { insert_id: 'evt-104', event: '$screen_view', timestamp: '2026-07-01T09:56:00.000Z', screen_name: 'catalog' },
-    { insert_id: 'evt-103', event: '$screen_view', timestamp: '2026-07-01T09:54:00.000Z', screen_name: 'catalog' },
-    { insert_id: 'evt-102', event: '$screen_view', timestamp: '2026-07-01T09:52:00.000Z', screen_name: 'home' },
-    { insert_id: 'evt-101', event: 'app_opened', timestamp: '2026-07-01T09:50:00.000Z', screen_name: null },
+    {
+      insert_id: 'evt-106',
+      event: 'checkout_completed',
+      timestamp: '2026-07-01T10:00:00.000Z',
+      screen_name: null,
+      properties: { country: 'FR', $price: 42.5, currency: 'EUR', order_id: 'ord-9' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
+    {
+      insert_id: 'evt-105',
+      event: '$screen_view',
+      timestamp: '2026-07-01T09:58:00.000Z',
+      screen_name: 'cart',
+      properties: { country: 'FR', $screen_name: 'cart' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
+    {
+      insert_id: 'evt-104',
+      event: '$screen_view',
+      timestamp: '2026-07-01T09:56:00.000Z',
+      screen_name: 'catalog',
+      properties: { country: 'FR', $screen_name: 'catalog' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
+    {
+      insert_id: 'evt-103',
+      event: '$screen_view',
+      timestamp: '2026-07-01T09:54:00.000Z',
+      screen_name: 'catalog',
+      properties: { country: 'FR', $screen_name: 'catalog' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
+    {
+      insert_id: 'evt-102',
+      event: '$screen_view',
+      timestamp: '2026-07-01T09:52:00.000Z',
+      screen_name: 'home',
+      properties: { country: 'FR', $screen_name: 'home' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
+    {
+      insert_id: 'evt-101',
+      event: 'app_opened',
+      timestamp: '2026-07-01T09:50:00.000Z',
+      screen_name: null,
+      properties: { country: 'FR' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
   ],
   // §17 identity set — canonical id + an aliased anon_id — for the identity-correct per-user heatmap.
   distinct_ids: ['user-001', 'anon-001'],

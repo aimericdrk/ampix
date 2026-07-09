@@ -93,6 +93,17 @@ interface RecentEventRow {
   event: string;
   timestamp: string;
   screen_name: string;
+  properties: Record<string, unknown>;
+  os: string;
+  os_version: string;
+  app_version: string;
+  app_build: string;
+  device_model: string;
+  device_manufacturer: string;
+  locale: string;
+  timezone: string;
+  network: string;
+  sdk_version: string;
 }
 
 interface SessionsTotalsRow {
@@ -528,7 +539,12 @@ export class AnalyticsService {
       this.clickhouse.query<RecentEventRow>(
         `WITH ${canon.cte}
          SELECT e.insert_id AS insert_id, e.event AS event, e.timestamp AS timestamp,
-                JSONExtractString(toJSONString(e.properties), '$screen_name') AS screen_name
+                JSONExtractString(toJSONString(e.properties), '$screen_name') AS screen_name,
+                e.properties AS properties,
+                e.os AS os, e.os_version AS os_version, e.app_version AS app_version,
+                e.app_build AS app_build, e.device_model AS device_model,
+                e.device_manufacturer AS device_manufacturer, e.locale AS locale,
+                e.timezone AS timezone, e.network AS network, e.sdk_version AS sdk_version
          FROM events AS e
          ${canon.join}
          WHERE e.project_id = {projectId:UUID}
@@ -568,6 +584,19 @@ export class AnalyticsService {
         event: row.event,
         timestamp: fromChDateTime64(row.timestamp),
         screen_name: row.screen_name || null,
+        properties: row.properties ?? {},
+        context: {
+          os: row.os ?? '',
+          os_version: row.os_version ?? '',
+          app_version: row.app_version ?? '',
+          app_build: row.app_build ?? '',
+          device_model: row.device_model ?? '',
+          device_manufacturer: row.device_manufacturer ?? '',
+          locale: row.locale ?? '',
+          timezone: row.timezone ?? '',
+          network: row.network ?? '',
+          sdk_version: row.sdk_version ?? '',
+        },
       })),
       distinct_ids: distinctIds,
     };

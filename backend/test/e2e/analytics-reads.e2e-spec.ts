@@ -314,6 +314,22 @@ describe('Analytics read endpoints (e2e, contracts §14)', () => {
           insert_id: e.insert_id,
           event: e.event,
           timestamp: new Date(e.timestamp).toISOString(),
+          // None of the seeded events carry a `$screen_name`, so it resolves to null.
+          screen_name: (e.properties?.$screen_name as string | undefined) ?? null,
+          properties: e.properties ?? {},
+          // makeEvent only sets os + app_version; every other context column defaults to ''.
+          context: {
+            os: (e.context?.os as string | undefined) ?? '',
+            os_version: '',
+            app_version: (e.context?.app_version as string | undefined) ?? '',
+            app_build: '',
+            device_model: '',
+            device_manufacturer: '',
+            locale: '',
+            timezone: '',
+            network: '',
+            sdk_version: '',
+          },
         })),
       });
     });

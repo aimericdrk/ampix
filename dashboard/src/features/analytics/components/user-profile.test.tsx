@@ -41,23 +41,28 @@ describe('UserProfilePage', () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
 
-    const toggle = await screen.findByRole('button', { name: 'Activity timeline' });
+    // Scope to the timeline card: the selected event's name also appears in the detail panel.
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-lg')! as HTMLElement;
+    const toggle = within(timeline).getByRole('button', { name: 'Activity timeline' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('checkout_completed')).toBeVisible();
+    expect(within(timeline).getByText('checkout_completed')).toBeVisible();
 
     await userEvent.click(toggle);
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByText('checkout_completed')).not.toBeVisible();
+    expect(within(timeline).getByText('checkout_completed')).not.toBeVisible();
   });
 
   it('derives the screen-path chain in chronological order with consecutive duplicates collapsed', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
 
-    const pathCard = (await screen.findByRole('button', { name: 'Screen path' })).closest(
-      '.rounded-lg',
-    )!;
+    // Screen path is collapsed by default now — expand it before reading its pills.
+    const toggle = await screen.findByRole('button', { name: 'Screen path' });
+    await userEvent.click(toggle);
+    const pathCard = toggle.closest('.rounded-lg')!;
     const pills = within(pathCard as HTMLElement).getAllByRole('listitem');
     // recent_events (newest-first) has screen views cart, catalog, catalog, home → reversed to
     // home, catalog, catalog, cart → consecutive dupes collapsed to home → catalog → cart.
@@ -82,6 +87,8 @@ describe('UserProfilePage', () => {
     renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
     await screen.findByRole('heading', { name: 'user-001' });
 
+    // Tap heatmap is collapsed by default now — expand it before picking a screen.
+    await userEvent.click(await screen.findByRole('button', { name: 'Tap heatmap' }));
     await screen.findByRole('option', { name: 'home' });
     await userEvent.selectOptions(screen.getByLabelText('Screen'), 'home');
 

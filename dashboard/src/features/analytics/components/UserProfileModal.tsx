@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '../../../components/ui/dialog';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   ClickHeatmapResponse,
   HeatmapGrid,
   ScreenPathsResponse,
+  UserEventContext,
   UserRecentEvent,
 } from '../../../lib/api/types';
 import { formatExactNumber } from '../format';
@@ -21,6 +24,20 @@ import { PathMap } from './PathMap';
 /** The screen-view autocapture event (contracts §4) — drives the per-user screen-path diagram. */
 const SCREEN_VIEW_EVENT = '$screen_view';
 const HEATMAP_GRID: HeatmapGrid = { cols: 20, rows: 40 };
+
+/** Device/app context fields, in display order, with friendly labels. */
+const DEVICE_FIELDS: ReadonlyArray<readonly [keyof UserEventContext, string]> = [
+  ['os', 'OS'],
+  ['os_version', 'OS version'],
+  ['device_model', 'Device model'],
+  ['device_manufacturer', 'Manufacturer'],
+  ['app_version', 'App version'],
+  ['app_build', 'App build'],
+  ['locale', 'Locale'],
+  ['timezone', 'Timezone'],
+  ['network', 'Network'],
+  ['sdk_version', 'SDK version'],
+];
 
 /**
  * The user's screen sequence, derived from `recent_events`: keep `$screen_view` events that carry a
@@ -41,12 +58,57 @@ function monogram(distinctId: string): string {
   return (letters.slice(0, 2) || distinctId.slice(0, 2) || '?').toUpperCase();
 }
 
+/** Pretty-render an arbitrary property value: typed badges/mono, never a raw JSON dump. */
+function formatValue(value: unknown): ReactNode {
+  if (value === null || value === undefined || value === '') {
+    return <span className="text-text-muted">—</span>;
+  }
+  if (typeof value === 'boolean') {
+    return (
+      <span
+        className={cn(
+          'rounded-full px-2 py-0.5 text-xs font-medium',
+          value ? 'bg-accent/15 text-accent' : 'bg-chart-surface text-text-muted',
+        )}
+      >
+        {value ? 'true' : 'false'}
+      </span>
+    );
+  }
+  if (typeof value === 'number') {
+    return <span className="tabular-nums">{value.toLocaleString()}</span>;
+  }
+  if (typeof value === 'object') {
+    return <code className="break-all font-mono text-xs">{JSON.stringify(value)}</code>;
+  }
+  return <span className="break-words">{String(value)}</span>;
+}
+
+/** A definition list of key → pretty value; keys shown verbatim (mono), values right-aligned. */
+function PropertyGrid({ entries }: { entries: Array<[string, unknown]> }) {
+  if (entries.length === 0) {
+    return <p className="text-sm text-text-muted">None.</p>;
+  }
+  return (
+    <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-4 gap-y-2 text-sm">
+      {entries.map(([key, value]) => (
+        <div key={key} className="contents">
+          <dt className="truncate font-mono text-xs text-text-muted" title={key}>
+            {key}
+          </dt>
+          <dd className="min-w-0 break-words text-right">{formatValue(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /**
  * The per-user profile shown as a modal (feat: user info in a popup instead of a dedicated page).
- * Layout: the Activity timeline is the centre column — the hero — with everything else split onto
- * the two flanking columns: identity + profile properties + screen path on the left, the full path
- * map + tap heatmap on the right. Opened from the Users list (and from deep-links / favorites, which
- * still resolve to `/users/$distinctId`).
+ * Three columns: the LEFT gathers everything about the person (user + device properties, then the
+ * collapsed-by-default screen path, path map and tap heatmap); the CENTRE is the activity timeline
+ * whose events are clickable; the RIGHT is a rich, pretty-printed detail panel for the selected
+ * event (the latest event by default). Opened from the Users list and from deep-links / favorites.
  */
 export function UserProfileModal({
   projectId,
@@ -66,8 +128,35 @@ export function UserProfileModal({
   const recents = useRecents(projectId);
   const recordRecent = recents.record;
 
-  // Record this profile visit in Recents (feat-13 §3) as soon as it's opened — keyed on `distinctId`
-  // so opening the same user twice records it once per open.
+  // The event whose detail is shown on the right. `null` means "follow the latest" (recent_events
+  // is newest-first, so index 0). Clicking a timeline event pins it here.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const events = data?.recent_events ?? [];
+  const selectedEvent = events.find((e) => e.insert_id === selectedId) ?? events[0];
+
+  // Country: prefer the profile row (set via people.set); otherwise fall back to the most recent
+  // event carrying a `country` super property (registerSuperProperties rides on events, not the
+  // profile), so it still surfaces here.
+  const derivedCountry = useMemo(
+    () => events.find((e) => e.properties.country != null && e.properties.country !== '')?.properties.country,
+    [events],
+  );
+  // Device context: the most recent event that actually captured one (falls back to the newest).
+  const device = useMemo(
+    () => events.find((e) => e.context.os !== '')?.context ?? events[0]?.context,
+    [events],
+  );
+
+  const userPropertyEntries: Array<[string, unknown]> = useMemo(() => {
+    if (!data) return [];
+    const profileEntries = Object.entries(data.profile);
+    const hasCountry = profileEntries.some(([k]) => k === 'country');
+    return hasCountry || derivedCountry == null
+      ? profileEntries
+      : [['country', derivedCountry], ...profileEntries];
+  }, [data, derivedCountry]);
+
+  // Record this profile visit in Recents (feat-13 §3) as soon as it's opened — keyed on `distinctId`.
   useEffect(() => {
     recordRecent({ type: 'user', id: distinctId, name: distinctId });
   }, [distinctId, recordRecent]);
@@ -152,32 +241,35 @@ export function UserProfileModal({
           )}
 
           {data && (
-            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)]">
-              {/* LEFT — identity: profile properties + screen path. */}
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)]">
+              {/* LEFT — everything about the person. */}
               <div className="flex flex-col gap-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Profile properties</CardTitle>
+                    <CardTitle>User properties</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {Object.keys(data.profile).length === 0 ? (
-                      <p className="text-text-muted">No profile properties.</p>
-                    ) : (
-                      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                        {Object.entries(data.profile).map(([key, value]) => (
-                          <div key={key} className="contents">
-                            <dt className="font-medium text-text-muted">{key}</dt>
-                            <dd className="truncate text-right">{String(value)}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
+                    <PropertyGrid entries={userPropertyEntries} />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Device properties</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <PropertyGrid
+                      entries={DEVICE_FIELDS.filter(([key]) => device?.[key]).map(([key, label]) => [
+                        label,
+                        device![key],
+                      ])}
+                    />
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardContent>
-                    <CollapsibleSection title="Screen path" defaultOpen>
+                    <CollapsibleSection title="Screen path" defaultOpen={false}>
                       {screenPath.length === 0 ? (
                         <p className="text-text-muted">No screen views recorded.</p>
                       ) : (
@@ -199,51 +291,10 @@ export function UserProfileModal({
                     </CollapsibleSection>
                   </CardContent>
                 </Card>
-              </div>
 
-              {/* CENTRE — the hero: activity timeline. */}
-              <Card className="border-accent/30 lg:sticky lg:top-0">
-                <CardContent>
-                  <CollapsibleSection title="Activity timeline" defaultOpen>
-                    {data.recent_events.length === 0 ? (
-                      <p className="text-text-muted">No recent events.</p>
-                    ) : (
-                      <div
-                        className="max-h-[60vh] overflow-y-auto pr-2"
-                        data-testid="activity-timeline-scroll"
-                      >
-                        <ol className="flex flex-col gap-3 border-l border-border pl-6 text-sm">
-                          {data.recent_events.map((event) => (
-                            <li key={event.insert_id} className="relative">
-                              <span
-                                aria-hidden
-                                className="absolute -left-[1.6875rem] top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-accent"
-                              />
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-medium">{event.event}</span>
-                                {event.screen_name && (
-                                  <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
-                                    {event.screen_name}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xs text-text-muted">
-                                {new Date(event.timestamp).toLocaleString()}
-                              </div>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
-                  </CollapsibleSection>
-                </CardContent>
-              </Card>
-
-              {/* RIGHT — behaviour: path map + tap heatmap. */}
-              <div className="flex flex-col gap-4">
                 <Card>
                   <CardContent>
-                    <CollapsibleSection title="Path map" defaultOpen>
+                    <CollapsibleSection title="Path map" defaultOpen={false}>
                       <UserPathMap projectId={projectId} distinctIds={data.distinct_ids} />
                     </CollapsibleSection>
                   </CardContent>
@@ -251,17 +302,141 @@ export function UserProfileModal({
 
                 <Card>
                   <CardContent>
-                    <CollapsibleSection title="Tap heatmap" defaultOpen>
+                    <CollapsibleSection title="Tap heatmap" defaultOpen={false}>
                       <UserTapHeatmap projectId={projectId} distinctIds={data.distinct_ids} />
                     </CollapsibleSection>
                   </CardContent>
                 </Card>
+              </div>
+
+              {/* CENTRE — the activity timeline; each event selects itself on click. */}
+              <Card className="border-accent/30">
+                <CardContent>
+                  <CollapsibleSection title="Activity timeline" defaultOpen>
+                    {events.length === 0 ? (
+                      <p className="text-text-muted">No recent events.</p>
+                    ) : (
+                      <div
+                        className="max-h-[62vh] overflow-y-auto pr-1"
+                        data-testid="activity-timeline-scroll"
+                      >
+                        <ol className="flex flex-col gap-1 border-l border-border pl-4 text-sm">
+                          {events.map((event) => {
+                            const isSelected = event.insert_id === selectedEvent?.insert_id;
+                            return (
+                              <li key={event.insert_id} className="relative">
+                                <span
+                                  aria-hidden
+                                  className={cn(
+                                    'absolute -left-[1.3125rem] top-2.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
+                                    isSelected ? 'bg-accent ring-2 ring-accent/30' : 'bg-accent',
+                                  )}
+                                />
+                                <button
+                                  type="button"
+                                  aria-pressed={isSelected}
+                                  onClick={() => setSelectedId(event.insert_id)}
+                                  className={cn(
+                                    'w-full rounded-md px-2 py-1.5 text-left transition-colors',
+                                    isSelected
+                                      ? 'bg-accent/10 ring-1 ring-accent/40'
+                                      : 'hover:bg-chart-surface',
+                                  )}
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-medium">{event.event}</span>
+                                    {event.screen_name && (
+                                      <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
+                                        {event.screen_name}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-text-muted">
+                                    {new Date(event.timestamp).toLocaleString()}
+                                  </div>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </div>
+                    )}
+                  </CollapsibleSection>
+                </CardContent>
+              </Card>
+
+              {/* RIGHT — pretty, full detail for the selected (default: latest) event. */}
+              <div className="lg:sticky lg:top-0">
+                {selectedEvent ? (
+                  <EventDetail event={selectedEvent} />
+                ) : (
+                  <Card>
+                    <CardContent>
+                      <p className="text-text-muted">Select an event to see its details.</p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           )}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The right-hand panel: every field of one event, grouped and pretty-printed. */
+function EventDetail({ event }: { event: UserRecentEvent }) {
+  const contextEntries = DEVICE_FIELDS.filter(([key]) => event.context[key]).map(
+    ([key, label]) => [label, event.context[key]] as [string, unknown],
+  );
+  const propertyEntries = Object.entries(event.properties);
+
+  return (
+    <Card data-testid="event-detail">
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-accent/15 px-2 py-0.5 text-sm font-semibold text-accent">
+            {event.event}
+          </span>
+          {event.screen_name && (
+            <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
+              {event.screen_name}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-text-muted">{new Date(event.timestamp).toLocaleString()}</p>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Event
+          </h3>
+          <PropertyGrid
+            entries={[
+              ['insert_id', event.insert_id],
+              ['event', event.event],
+              ['timestamp', new Date(event.timestamp).toLocaleString()],
+              ...(event.screen_name ? [['screen_name', event.screen_name] as [string, unknown]] : []),
+            ]}
+          />
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Properties
+          </h3>
+          <PropertyGrid entries={propertyEntries} />
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Device &amp; context
+          </h3>
+          <PropertyGrid entries={contextEntries} />
+        </section>
+      </CardContent>
+    </Card>
   );
 }
 
