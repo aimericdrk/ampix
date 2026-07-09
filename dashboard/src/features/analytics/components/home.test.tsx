@@ -266,7 +266,7 @@ describe('HomePage', () => {
     expect(within(favoritesSection).getByText(/Star a report/)).toBeInTheDocument();
   });
 
-  it('feat-18 §3.4/T2: renders the Installations map, by-country table, and by-OS chart, posting the $first_open country-breakdown query', async () => {
+  it('feat-18 §3.4/T2: renders the Installations map, by-country table, and by-OS chart, posting the $app_open country-breakdown query', async () => {
     const countryQueryBodies: InsightsQueryDefinition[] = [];
     server.events.on('request:start', ({ request }) => {
       if (request.method !== 'POST' || !request.url.includes('/query/insights')) return;
@@ -285,26 +285,26 @@ describe('HomePage', () => {
     const main = within(screen.getByRole('main'));
 
     // KPI tiles for the section.
-    expect(await main.findByText('Total installs')).toBeInTheDocument();
+    expect(await main.findByText('Total users')).toBeInTheDocument();
     expect(main.getByText('Countries')).toBeInTheDocument();
 
     // The map renders with an accessible name, fed the folded ISO-3 -> count data.
-    expect(await main.findByRole('img', { name: 'Installations by country' })).toBeInTheDocument();
+    expect(await main.findByRole('img', { name: 'Users by country' })).toBeInTheDocument();
 
     // The by-country DataTable (distinct from the map's own internal accessible table) lists the
     // resolved country names plus an Unknown row for the fixture's unresolvable breakdown value.
-    const countryTable = main.getByRole('table', { name: 'Installations by country' });
+    const countryTable = main.getByRole('table', { name: 'Users by country' });
     expect(within(countryTable).getByText('United States of America')).toBeInTheDocument();
     expect(within(countryTable).getByText('France')).toBeInTheDocument();
     expect(within(countryTable).getByText('Unknown')).toBeInTheDocument();
 
-    // The by-OS breakdown chart for the same $first_open event.
-    expect(await main.findByRole('img', { name: 'Installations by OS' })).toBeInTheDocument();
+    // The by-OS breakdown chart for the same $app_open event.
+    expect(await main.findByRole('img', { name: 'Users by OS' })).toBeInTheDocument();
 
     // The country-breakdown query posted the exact $first_open + country-breakdown definition.
     await waitFor(() => expect(countryQueryBodies.length).toBeGreaterThan(0));
     const [countryQueryBody] = countryQueryBodies;
-    expect(countryQueryBody?.events).toEqual([{ name: '$first_open', aggregation: 'total' }]);
+    expect(countryQueryBody?.events).toEqual([{ name: '$app_open', aggregation: 'unique_users' }]);
     expect(countryQueryBody?.breakdown).toEqual({ property: 'country' });
   });
 
@@ -340,11 +340,11 @@ describe('HomePage', () => {
     const main = within(screen.getByRole('main'));
 
     expect(
-      await main.findByText(/No installations with a country yet/),
+      await main.findByText(/No users with a country yet/),
     ).toBeInTheDocument();
-    expect(main.queryByRole('img', { name: 'Installations by country' })).not.toBeInTheDocument();
+    expect(main.queryByRole('img', { name: 'Users by country' })).not.toBeInTheDocument();
 
     // The by-OS chart still has data and renders independently of the country empty state.
-    expect(await main.findByRole('img', { name: 'Installations by OS' })).toBeInTheDocument();
+    expect(await main.findByRole('img', { name: 'Users by OS' })).toBeInTheDocument();
   });
 });

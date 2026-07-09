@@ -125,12 +125,14 @@ export function HomePage() {
   const versionDef: InsightsQueryDefinition = { ...currentDef, breakdown: { property: 'app_version' } };
   const utmDef: InsightsQueryDefinition = { ...currentDef, breakdown: { property: 'utm_source' } };
 
-  // Installations (feat-18 §3.4): "installation" = the `$first_open` event, fired once per install
-  // and (when the app sets a `country` super property) carrying a country value. Independent of
-  // the top-5 `eventNames` above — `$first_open` may not be a top-5 event by volume — so these run
-  // unconditionally (gated only on the date range being non-empty, like `totalsPrevious`).
+  // Users by country/OS (feat-18 §3.4): distinct users grouped by their `country`/`os`, over the
+  // universal `$app_open` event. We deliberately do NOT use `$first_open`: it fires at SDK init,
+  // before app code can call `registerSuperProperties({'country': …})`, so it never carries a
+  // country. `$app_open` fires every launch and carries the PERSISTED super property, so this
+  // populates from any events sent after the app set its country. `unique_users` counts distinct
+  // users per country (a device that opens the app many times counts once).
   const installsBaseDef: InsightsQueryDefinition = {
-    events: [{ name: '$first_open', aggregation: 'total' }],
+    events: [{ name: '$app_open', aggregation: 'unique_users' }],
     date_range: { from, to },
     interval: 'day',
     filters: mergeGlobalFilters([], globalFilters),
@@ -376,59 +378,59 @@ export function HomePage() {
             />
           </SectionGrid>
 
-          {/* Installations (feat-18): "installation" = the `$first_open` event. A world map +
-              by-country table + by-OS breakdown, prominent right after the KPI row. */}
+          {/* Users by country/OS (feat-18): distinct users grouped by their `country`/`os` super
+              property, over `$app_open`. A world map + by-country table + by-OS breakdown. */}
           <SectionGrid>
             <KpiTile
-              label="Total installs"
+              label="Total users"
               value={installsData.total}
-              hint="`$first_open` events, selected range"
+              hint="Distinct users (by country), selected range"
               loading={installsCountry.isPending}
             />
             <KpiTile
               label="Countries"
               value={installsData.countryCount}
-              hint="Distinct countries with installs"
+              hint="Distinct countries with users"
               loading={installsCountry.isPending}
             />
             {topInstallsCountry && (
               <KpiTile
                 label="Top country"
                 value={topInstallsCountry.name}
-                hint={`${formatPercent(topInstallsCountry.share)} of installs`}
+                hint={`${formatPercent(topInstallsCountry.share)} of users`}
                 loading={installsCountry.isPending}
               />
             )}
           </SectionGrid>
 
           <ChartCard
-            title="Installations by country"
-            description="`$first_open` installs by resolved country, selected range."
+            title="Users by country"
+            description="Distinct users by resolved country (from the app's `country` super property), selected range."
             state={chartState(installsCountry.isPending, installsCountry.isError, installsCountryEmpty)}
-            emptyText="No installations with a country yet — set a `country` super property in your app: `MyAmpix.instance.registerSuperProperties({'country': 'US'})`."
+            emptyText="No users with a country yet — set a `country` super property in your app: `MyAmpix.instance.registerSuperProperties({'country': 'US'})`. It attaches to events sent afterward (the map reads `$app_open`)."
           >
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <WorldChoropleth
                 data={installsData.mapData}
-                ariaLabel="Installations by country"
-                valueLabel="installs"
+                ariaLabel="Users by country"
+                valueLabel="users"
               />
               <DataTable
                 columns={installsCountryColumns}
                 rows={installsData.rows}
-                caption="Installations by country"
+                caption="Users by country"
                 initialSort={{ key: 'count', dir: 'desc' }}
                 rowKey={(row) => row.iso3 ?? 'unknown'}
-                exportFilename="installs-by-country"
+                exportFilename="users-by-country"
               />
             </div>
           </ChartCard>
 
           <ChartCard
-            title="Installations by OS"
+            title="Users by OS"
             state={chartState(installsOs.isPending, installsOs.isError, installsOsBars.length === 0)}
           >
-            <BreakdownChart data={installsOsBars} ariaLabel="Installations by OS" />
+            <BreakdownChart data={installsOsBars} ariaLabel="Users by OS" />
           </ChartCard>
 
           <ChartCard
