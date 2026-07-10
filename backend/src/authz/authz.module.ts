@@ -7,7 +7,9 @@ import { ProjectRolesGuard } from './project-roles.guard';
 /**
  * Shared tenancy authorization building blocks (contracts §13): PrismaModule/RedisModule are
  * @Global(), so nothing else needs importing here. Consumers import AuthzModule and use
- * `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(...)` on their routes.
+ * `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(...)` on their org-scoped routes, or
+ * `@UseGuards(JwtAuthGuard, ProjectRolesGuard)` + `@ProjectRoles(...)` on their project-scoped
+ * routes.
  */
 @Module({
   providers: [OrgRoleResolverService, RolesGuard, ProjectRoleResolverService, ProjectRolesGuard],
