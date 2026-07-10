@@ -2,7 +2,10 @@ import { useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { fieldLook, Input } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   FunnelOrder,
@@ -325,6 +328,7 @@ export function FunnelsPage() {
       dateRangeControl={<DateRangeControl />}
       actions={<CopyLinkButton />}
     >
+      <Reveal index={0}>
       <Card>
         <CardHeader>
           <CardTitle>Funnel builder</CardTitle>
@@ -338,7 +342,7 @@ export function FunnelsPage() {
                 {steps.map((step, index) => (
                   <li
                     key={`${step.event}-${index}`}
-                    className="flex flex-col gap-2 rounded-md border border-border p-3"
+                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
                   >
                     <div className="flex items-center gap-2">
                       <span className="flex-1 text-sm font-medium">
@@ -407,14 +411,14 @@ export function FunnelsPage() {
               <label htmlFor="funnel-window" className="mb-1 block text-sm font-medium">
                 Conversion window (days)
               </label>
-              <input
+              <Input
                 id="funnel-window"
                 type="number"
                 min={1}
                 max={365}
                 value={windowDays}
                 onChange={(e) => setWindowDaysFromInput(Number(e.target.value))}
-                className="h-10 w-32 rounded-md border border-border bg-surface px-3 text-sm"
+                className="w-32"
               />
             </div>
             <div>
@@ -425,7 +429,7 @@ export function FunnelsPage() {
                 id="funnel-order"
                 value={order}
                 onChange={(e) => setOrderFromInput(e.target.value as FunnelOrder)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                className={cn(fieldLook, 'w-auto')}
               >
                 {FUNNEL_ORDERS.map((value) => (
                   <option key={value} value={value}>
@@ -442,7 +446,7 @@ export function FunnelsPage() {
                 id="funnel-breakdown"
                 value={breakdownProperty}
                 onChange={(e) => setBreakdownPropertyFromInput(e.target.value)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                className={cn(fieldLook, 'w-auto')}
               >
                 <option value="">No breakdown</option>
                 {propertyNames.map((name) => (
@@ -469,17 +473,20 @@ export function FunnelsPage() {
           </div>
         </CardContent>
       </Card>
+      </Reveal>
 
       {runFunnels.isError && (
-        <p role="alert" className="text-danger">
-          {runFunnels.error instanceof ApiError
-            ? runFunnels.error.problem.title
-            : 'Failed to run the funnel'}
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            {runFunnels.error instanceof ApiError
+              ? runFunnels.error.problem.title
+              : 'Failed to run the funnel'}
+          </p>
+        </Reveal>
       )}
 
       {result && (
-        <div className="flex flex-col gap-6">
+        <Reveal index={2} className="flex flex-col gap-6">
           {result.steps.length > 0 && (
             <SectionGrid min={200}>
               <KpiTile
@@ -507,7 +514,7 @@ export function FunnelsPage() {
               />
             )}
           </ChartCard>
-        </div>
+        </Reveal>
       )}
     </PageShell>
   );

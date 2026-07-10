@@ -13,7 +13,9 @@ export function HeatmapLegend({ total, maxCount }: { total: number; maxCount: nu
   return (
     <div className="flex flex-wrap items-center gap-6">
       <div>
-        <div className="text-2xl font-semibold tabular-nums">{formatExactNumber(total)}</div>
+        <div className="font-display text-2xl font-semibold tabular-nums">
+          {formatExactNumber(total)}
+        </div>
         <div className="text-xs text-text-muted">total taps</div>
       </div>
       <div className="flex flex-col gap-1">
@@ -56,7 +58,7 @@ export function HeatmapCanvas({
       screenName={screenName}
       alt={`Screenshot of ${screenName}`}
       cacheKey={summary?.latest_image_hash}
-      className="mx-auto w-full max-w-xs rounded-lg border border-border"
+      className="mx-auto w-full max-w-xs rounded-xl border border-border shadow-sm"
       aspectRatio={aspectRatio}
     >
       <div className="pointer-events-none absolute inset-0" style={{ opacity }} aria-hidden={false}>

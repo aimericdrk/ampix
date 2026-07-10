@@ -1,5 +1,6 @@
+import { X } from 'lucide-react';
 import { useMemo } from 'react';
-import { Button } from '../../../components/ui/button';
+import { IconButton } from '../../../components/ui/icon-button';
 import { useCohorts } from '../api';
 import { colorForIndex } from '../palette';
 import { EventPicker } from './explore-controls';
@@ -82,7 +83,7 @@ export function SegmentCompareControl({
             return (
               <li
                 key={`${id ?? 'all-users'}-${index}`}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-bg/40 py-1 pl-2.5 pr-1 text-sm"
+                className="flex items-center gap-1.5 rounded-full border border-border bg-surface-raised py-1 pl-2.5 pr-1 text-sm"
               >
                 <span
                   aria-hidden="true"
@@ -90,16 +91,15 @@ export function SegmentCompareControl({
                   style={{ backgroundColor: colorForIndex(index) }}
                 />
                 <span>{label}</span>
-                <Button
-                  type="button"
+                <IconButton
                   variant="ghost"
                   size="sm"
                   aria-label={`Remove ${label} from comparison`}
                   onClick={() => removeSegment(index)}
-                  className="h-6 w-6 rounded-full p-0"
+                  className="size-6 rounded-full"
                 >
-                  ✕
-                </Button>
+                  <X aria-hidden="true" />
+                </IconButton>
               </li>
             );
           })}

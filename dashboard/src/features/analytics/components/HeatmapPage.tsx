@@ -2,8 +2,11 @@ import { useParams } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { fieldLook } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { PageShell } from '../../../components/layout/PageShell';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type { ClickHeatmapQuery, ClickHeatmapResponse, HeatmapGrid } from '../../../lib/api/types';
 import { useRunClickHeatmap, useScreens } from '../api';
@@ -66,6 +69,7 @@ export function HeatmapPage() {
       breadcrumbs={[{ label: 'Explore' }, { label: 'Heatmap' }]}
       dateRangeControl={<DateRangeControl />}
     >
+      <Reveal index={0}>
       <Card>
         <CardHeader>
           <CardTitle>Heatmap builder</CardTitle>
@@ -79,7 +83,7 @@ export function HeatmapPage() {
               id="heatmap-screen"
               value={selectedScreen}
               onChange={(e) => onSelectScreen(e.target.value)}
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+              className={cn(fieldLook, 'w-auto')}
             >
               <option value="">Select a screen…</option>
               {screenList.map((screen) => (
@@ -109,66 +113,72 @@ export function HeatmapPage() {
                 step={0.05}
                 value={opacity}
                 onChange={(e) => setOpacity(Number(e.target.value))}
+                className="accent-[var(--accent)]"
               />
             </div>
           </div>
         </CardContent>
       </Card>
+      </Reveal>
 
       {runHeatmap.isError && (
-        <p role="alert" className="text-danger">
-          {runHeatmap.error instanceof ApiError
-            ? runHeatmap.error.problem.title
-            : 'Failed to load the heatmap'}
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            {runHeatmap.error instanceof ApiError
+              ? runHeatmap.error.problem.title
+              : 'Failed to load the heatmap'}
+          </p>
+        </Reveal>
       )}
 
       {selectedScreen && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-            <div>
-              <div className="text-sm font-medium">{selectedScreen}</div>
-              <div className="text-xs text-text-muted">
-                Reference screenshot — a developer debug capture (§18).
+        <Reveal index={2}>
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <div>
+                <div className="text-sm font-medium">{selectedScreen}</div>
+                <div className="text-xs text-text-muted">
+                  Reference screenshot — a developer debug capture (§18).
+                </div>
               </div>
+              <RetakeScreenButton
+                projectId={projectId}
+                screenName={selectedScreen}
+                onDeleted={() => {
+                  setSelectedScreen('');
+                  setResult(null);
+                }}
+              />
+            </CardContent>
+          </Card>
+        </Reveal>
+      )}
+
+      {selectedScreen && result && (
+        <Reveal index={3} className="flex flex-col gap-4">
+          <SectionGrid min={220}>
+            <KpiTile label="Total taps" value={result.total} />
+          </SectionGrid>
+
+          <ChartCard
+            title="Heatmap"
+            state={hasTaps ? 'ready' : 'empty'}
+            emptyText="No taps recorded for this screen in the selected range."
+          >
+            <div className="flex flex-col gap-4">
+              <HeatmapLegend total={result.total} maxCount={maxCount} />
+              <HeatmapCanvas
+                projectId={projectId}
+                screenName={selectedScreen}
+                summary={selectedSummary}
+                result={result}
+                grid={activeGrid}
+                maxCount={maxCount}
+                opacity={opacity}
+              />
             </div>
-            <RetakeScreenButton
-              projectId={projectId}
-              screenName={selectedScreen}
-              onDeleted={() => {
-                setSelectedScreen('');
-                setResult(null);
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {selectedScreen && result && (
-        <SectionGrid min={220}>
-          <KpiTile label="Total taps" value={result.total} />
-        </SectionGrid>
-      )}
-
-      {selectedScreen && result && (
-        <ChartCard
-          title="Heatmap"
-          state={hasTaps ? 'ready' : 'empty'}
-          emptyText="No taps recorded for this screen in the selected range."
-        >
-          <div className="flex flex-col gap-4">
-            <HeatmapLegend total={result.total} maxCount={maxCount} />
-            <HeatmapCanvas
-              projectId={projectId}
-              screenName={selectedScreen}
-              summary={selectedSummary}
-              result={result}
-              grid={activeGrid}
-              maxCount={maxCount}
-              opacity={opacity}
-            />
-          </div>
-        </ChartCard>
+          </ChartCard>
+        </Reveal>
       )}
     </PageShell>
   );

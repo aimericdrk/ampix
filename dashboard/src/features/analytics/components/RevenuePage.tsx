@@ -1,6 +1,8 @@
 import { useParams } from '@tanstack/react-router';
+import { Inbox } from 'lucide-react';
 import { PageShell } from '../../../components/layout/PageShell';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import type { RevenueByProduct } from '../../../lib/api/types';
@@ -76,64 +78,71 @@ export function RevenuePage() {
       )}
 
       {data && !hasPurchases && (
-        <Card>
-          <CardHeader>
-            <CardTitle>No revenue yet</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-text-muted">
-            No in-app purchases (<code>$in_app_purchase</code>) recorded in the selected range.
-          </CardContent>
-        </Card>
+        <Reveal index={0}>
+          <EmptyState
+            icon={Inbox}
+            title="No revenue yet"
+            description="No in-app purchases ($in_app_purchase) recorded in the selected range."
+          />
+        </Reveal>
       )}
 
       {data && hasPurchases && (
         <>
-          <SectionGrid>
-            <KpiTile label="Total revenue" value={formatCurrency(data.total_revenue)} />
-            <KpiTile label="Purchases" value={data.purchases} />
-            <KpiTile label="Paying users" value={data.paying_users} />
-            <KpiTile
-              label="ARPPU"
-              value={formatCurrency(data.arppu)}
-              hint="Average revenue per paying user"
-            />
-            <KpiTile label="Avg purchase value" value={formatCurrency(data.avg_purchase_value)} />
-          </SectionGrid>
+          <Reveal index={0}>
+            <SectionGrid>
+              <KpiTile label="Total revenue" value={formatCurrency(data.total_revenue)} />
+              <KpiTile label="Purchases" value={data.purchases} />
+              <KpiTile label="Paying users" value={data.paying_users} />
+              <KpiTile
+                label="ARPPU"
+                value={formatCurrency(data.arppu)}
+                hint="Average revenue per paying user"
+              />
+              <KpiTile label="Avg purchase value" value={formatCurrency(data.avg_purchase_value)} />
+            </SectionGrid>
+          </Reveal>
 
-          <ChartCard
-            title="Revenue"
-            description="Daily revenue for the selected range."
-            state={chartState(revenue.isPending, revenue.isError, trend.length === 0)}
-            exportImageName="revenue-trend"
-          >
-            <ComparisonTrend
-              current={trend}
-              xKey="t"
-              valueKey="value"
-              label="Revenue"
-              ariaLabel="Revenue trend"
-              anomalies={trendAnomalies}
-            />
-            <AnomalyCallout anomalies={trendAnomalies} />
-          </ChartCard>
+          <Reveal index={1}>
+            <ChartCard
+              title="Revenue"
+              description="Daily revenue for the selected range."
+              state={chartState(revenue.isPending, revenue.isError, trend.length === 0)}
+              exportImageName="revenue-trend"
+            >
+              <ComparisonTrend
+                current={trend}
+                xKey="t"
+                valueKey="value"
+                label="Revenue"
+                ariaLabel="Revenue trend"
+                anomalies={trendAnomalies}
+              />
+              <AnomalyCallout anomalies={trendAnomalies} />
+            </ChartCard>
+          </Reveal>
 
-          <ChartCard
-            title="Revenue by product"
-            state={chartState(revenue.isPending, revenue.isError, byProductBars.length === 0)}
-          >
-            <BreakdownChart data={byProductBars} ariaLabel="Revenue by product" />
-          </ChartCard>
+          <Reveal index={2}>
+            <ChartCard
+              title="Revenue by product"
+              state={chartState(revenue.isPending, revenue.isError, byProductBars.length === 0)}
+            >
+              <BreakdownChart data={byProductBars} ariaLabel="Revenue by product" />
+            </ChartCard>
+          </Reveal>
 
-          <ChartCard title="By product">
-            <DataTable
-              columns={BY_PRODUCT_COLUMNS}
-              rows={data.by_product}
-              caption="Revenue by product"
-              initialSort={{ key: 'revenue', dir: 'desc' }}
-              rowKey={(row) => row.product_id}
-              exportFilename="revenue-by-product"
-            />
-          </ChartCard>
+          <Reveal index={3}>
+            <ChartCard title="By product">
+              <DataTable
+                columns={BY_PRODUCT_COLUMNS}
+                rows={data.by_product}
+                caption="Revenue by product"
+                initialSort={{ key: 'revenue', dir: 'desc' }}
+                rowKey={(row) => row.product_id}
+                exportFilename="revenue-by-product"
+              />
+            </ChartCard>
+          </Reveal>
         </>
       )}
     </PageShell>

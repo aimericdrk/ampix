@@ -1,9 +1,14 @@
 import { useParams } from '@tanstack/react-router';
+import { Route } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { fieldLook, Input } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { PageShell } from '../../../components/layout/PageShell';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   FlowsDirection,
@@ -301,6 +306,7 @@ export function PathsPage() {
       dateRangeControl={<DateRangeControl />}
       actions={<CopyLinkButton />}
     >
+      <Reveal index={0}>
       <Card>
         <CardHeader>
           <CardTitle>Path builder</CardTitle>
@@ -327,7 +333,7 @@ export function PathsPage() {
                 id="paths-direction"
                 value={direction}
                 onChange={(e) => setDirectionFromInput(e.target.value as FlowsDirection)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                className={cn(fieldLook, 'w-auto')}
               >
                 {FLOWS_DIRECTIONS.map((value) => (
                   <option key={value} value={value}>
@@ -344,7 +350,7 @@ export function PathsPage() {
                 id="paths-unit"
                 value={unit}
                 onChange={(e) => setUnitFromInput(e.target.value as FlowsUnit)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                className={cn(fieldLook, 'w-auto')}
               >
                 {FLOWS_UNITS.map((value) => (
                   <option key={value} value={value}>
@@ -357,28 +363,28 @@ export function PathsPage() {
               <label htmlFor="paths-steps" className="mb-1 block text-sm font-medium">
                 Steps (hops)
               </label>
-              <input
+              <Input
                 id="paths-steps"
                 type="number"
                 min={1}
                 max={5}
                 value={steps}
                 onChange={(e) => setStepsFromInput(Number(e.target.value))}
-                className="h-10 w-32 rounded-md border border-border bg-surface px-3 text-sm"
+                className="w-32"
               />
             </div>
             <div>
               <label htmlFor="paths-max-nodes" className="mb-1 block text-sm font-medium">
                 Max screens per step
               </label>
-              <input
+              <Input
                 id="paths-max-nodes"
                 type="number"
                 min={1}
                 max={20}
                 value={maxNodesPerStep}
                 onChange={(e) => setMaxNodesPerStepFromInput(Number(e.target.value))}
-                className="h-10 w-32 rounded-md border border-border bg-surface px-3 text-sm"
+                className="w-32"
               />
             </div>
           </div>
@@ -390,21 +396,30 @@ export function PathsPage() {
           </div>
         </CardContent>
       </Card>
+      </Reveal>
 
       {runScreenPaths.isError && (
-        <p role="alert" className="text-danger">
-          {runScreenPaths.error instanceof ApiError
-            ? runScreenPaths.error.problem.title
-            : 'Failed to run the path query'}
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            {runScreenPaths.error instanceof ApiError
+              ? runScreenPaths.error.problem.title
+              : 'Failed to run the path query'}
+          </p>
+        </Reveal>
       )}
 
       {result && result.nodes.length === 0 && (
-        <p className="text-text-muted">No screen-path data for this query yet.</p>
+        <Reveal index={1}>
+          <EmptyState
+            icon={Route}
+            title="No paths yet"
+            description="No screen-path data for this query yet."
+          />
+        </Reveal>
       )}
 
       {hasResult && result && (
-        <div className="flex flex-col gap-4">
+        <Reveal index={2} className="flex flex-col gap-4">
           <SectionGrid min={220}>
             <KpiTile
               label={unit === 'user' ? 'Total users' : 'Total sessions'}
@@ -418,7 +433,7 @@ export function PathsPage() {
             <div
               role="group"
               aria-label="Path view"
-              className="inline-flex w-fit rounded-md border border-border p-0.5"
+              className="inline-flex w-fit rounded-lg border border-border bg-surface-raised p-0.5"
             >
               <ViewToggle current={view} value="map" label="Map" onSelect={setView} />
               <ViewToggle current={view} value="diagram" label="Diagram" onSelect={setView} />
@@ -457,8 +472,8 @@ export function PathsPage() {
               aria-label="User path map (fullscreen)"
               className="fixed inset-0 z-50 flex flex-col gap-3 bg-surface p-4"
             >
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">User path map</h2>
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <h2 className="font-display text-lg font-semibold">User path map</h2>
                 <Button
                   ref={closeFullscreenRef}
                   variant="secondary"
@@ -480,7 +495,7 @@ export function PathsPage() {
               </div>
             </div>
           )}
-        </div>
+        </Reveal>
       )}
     </PageShell>
   );
@@ -503,11 +518,10 @@ function ViewToggle({
       type="button"
       aria-pressed={active}
       onClick={() => onSelect(value)}
-      className={
-        active
-          ? 'rounded px-3 py-1.5 text-sm font-medium bg-border/60 text-text'
-          : 'rounded px-3 py-1.5 text-sm text-text-muted hover:text-text'
-      }
+      className={cn(
+        'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+        active ? 'bg-accent-soft text-accent' : 'text-text-muted hover:text-text',
+      )}
     >
       {label}
     </button>
@@ -518,33 +532,40 @@ function ViewToggle({
 function TransitionsTable({ result }: { result: ScreenPathsResponse }) {
   const labelById = new Map(result.nodes.map((n) => [n.id, screenLabel(n.event)]));
   return (
-    <div>
-      <h3 className="mb-2 text-sm font-medium text-text-muted">Transitions</h3>
-      <table className="w-full max-w-xl border-collapse text-left text-sm">
-        <caption className="sr-only">Screen-path transitions</caption>
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className="py-2 font-medium">
-              From
-            </th>
-            <th scope="col" className="py-2 font-medium">
-              To
-            </th>
-            <th scope="col" className="py-2 text-right font-medium">
-              Users
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.links.map((link, index) => (
-            <tr key={`${link.source}-${link.target}-${index}`} className="border-b border-border">
-              <td className="py-2">{labelById.get(link.source) ?? link.source}</td>
-              <td className="py-2">{labelById.get(link.target) ?? link.target}</td>
-              <td className="py-2 text-right tabular-nums">{formatExactNumber(link.value)}</td>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm font-medium text-text-muted">Transitions</CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full max-w-xl border-collapse text-left text-sm">
+          <caption className="sr-only">Screen-path transitions</caption>
+          <thead>
+            <tr className="border-b border-border">
+              <th scope="col" className="py-2 font-medium">
+                From
+              </th>
+              <th scope="col" className="py-2 font-medium">
+                To
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Users
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {result.links.map((link, index) => (
+              <tr
+                key={`${link.source}-${link.target}-${index}`}
+                className="border-b border-border transition-colors hover:bg-surface-raised/60"
+              >
+                <td className="py-2">{labelById.get(link.source) ?? link.source}</td>
+                <td className="py-2">{labelById.get(link.target) ?? link.target}</td>
+                <td className="py-2 text-right tabular-nums">{formatExactNumber(link.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
   );
 }

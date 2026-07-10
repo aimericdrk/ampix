@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
+import { Inbox, MousePointerClick } from 'lucide-react';
 import { PageShell } from '../../../components/layout/PageShell';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Reveal } from '../../../components/ui/reveal';
+import { Segmented } from '../../../components/ui/segmented';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
-import { cn } from '../../../lib/cn';
 import type { InsightsQueryDefinition, InsightsSeries } from '../../../lib/api/types';
 import { useInsightsQuery, useMetaEvents, useMetaProperties, useMetaPropertyValues } from '../api';
 import { breakdownBars } from '../derive';
@@ -32,52 +35,6 @@ function chartState(
 
 const TOP_N_OPTIONS = [5, 10, 20] as const;
 const OTHER_LABEL = 'Other';
-
-/** A "Top" segmented radiogroup — same visual pattern as `DateRangePresets`/Distributions' Bins control. */
-function SegmentedControl<T extends string | number>({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: Array<{ id: T; label: string }>;
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div>
-      <span className="mb-1 block text-sm font-medium">{label}</span>
-      <div
-        role="radiogroup"
-        aria-label={label}
-        className="inline-flex w-fit flex-wrap gap-0.5 rounded-lg border border-border bg-surface p-0.5"
-      >
-        {options.map((option) => {
-          const active = option.id === value;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(option.id)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-sm transition-colors',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-                active
-                  ? 'bg-accent font-medium text-accent-fg'
-                  : 'text-text-muted hover:bg-border/40 hover:text-text',
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Top-N + "Other" rollup: `bars` is already sorted desc (per `breakdownBars`); anything past
@@ -197,66 +154,78 @@ export function PropertyExplorerPage() {
       breadcrumbs={[{ label: 'Explore' }, { label: 'Properties' }]}
       dateRangeControl={<DateRangeControl />}
     >
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap gap-4">
-          <EventSelectField
-            label="Property"
-            value={property}
-            onChange={setProperty}
-            options={propertyNames}
-            isLoading={metaProperties.isPending}
-            noun="property"
-          />
-          <EventSelectField
-            label="Event scope"
-            value={eventScope}
-            onChange={setEventScope}
-            options={eventOptions}
-            isLoading={metaEvents.isPending}
-            noun="event"
-            placeholder="All events"
-            allowClear
-          />
-        </div>
+      <Reveal index={0}>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap gap-4">
+            <EventSelectField
+              label="Property"
+              value={property}
+              onChange={setProperty}
+              options={propertyNames}
+              isLoading={metaProperties.isPending}
+              noun="property"
+            />
+            <EventSelectField
+              label="Event scope"
+              value={eventScope}
+              onChange={setEventScope}
+              options={eventOptions}
+              isLoading={metaEvents.isPending}
+              noun="event"
+              placeholder="All events"
+              allowClear
+            />
+          </div>
 
-        {usingAllEventsFallback && effectiveEvent && (
-          <p className="text-xs text-text-muted">
-            Scoped to <code>{effectiveEvent}</code> — the query engine counts a specific event,
-            not a true "all events" total. Pick an event above to scope precisely.
+          {usingAllEventsFallback && effectiveEvent && (
+            <p className="text-xs text-text-muted">
+              Scoped to <code>{effectiveEvent}</code> — the query engine counts a specific event,
+              not a true "all events" total. Pick an event above to scope precisely.
+            </p>
+          )}
+
+          <div>
+            <span className="mb-1 block text-sm font-medium">Top</span>
+            <Segmented
+              aria-label="Top"
+              value={String(topN)}
+              onValueChange={(next) => setTopN(Number(next))}
+              options={TOP_N_OPTIONS.map((option) => ({
+                value: String(option),
+                label: String(option),
+              }))}
+            />
+          </div>
+        </div>
+      </Reveal>
+
+      <Reveal index={1}>
+        {!property && (
+          <EmptyState icon={MousePointerClick} title="Choose a property to see its top values." />
+        )}
+
+        {property && !enabled && (
+          <EmptyState
+            icon={Inbox}
+            title="No events tracked yet"
+            description="Property values need at least one event to count against."
+          />
+        )}
+
+        {property && enabled && result.isPending && <p role="status">Loading property values…</p>}
+        {property && enabled && result.isError && (
+          <p role="alert" className="text-danger">
+            Failed to load property values
           </p>
         )}
 
-        <SegmentedControl
-          label="Top"
-          value={topN}
-          onChange={setTopN}
-          options={TOP_N_OPTIONS.map((option) => ({ id: option, label: String(option) }))}
-        />
-      </div>
-
-      {!property && (
-        <p className="text-sm text-text-muted">Choose a property to see its top values.</p>
-      )}
-
-      {property && !enabled && (
-        <p className="text-sm text-text-muted">
-          No events tracked yet — property values need at least one event to count against.
-        </p>
-      )}
-
-      {property && enabled && result.isPending && <p role="status">Loading property values…</p>}
-      {property && enabled && result.isError && (
-        <p role="alert" className="text-danger">
-          Failed to load property values
-        </p>
-      )}
-
-      {property && enabled && isEmpty && (
-        <p className="text-sm text-text-muted">No values for {property} in this range.</p>
-      )}
+        {property && enabled && isEmpty && (
+          <EmptyState icon={Inbox} title={`No values for ${property} in this range.`} />
+        )}
+      </Reveal>
 
       {property && enabled && result.data && !isEmpty && (
-        <>
+        <Reveal index={2} className="flex flex-col gap-6">
           <SectionGrid>
             <KpiTile label="Distinct values" value={distinctValues} />
             <KpiTile label="Total" value={total} />
@@ -309,7 +278,7 @@ export function PropertyExplorerPage() {
               exportFilename={`property-${property}`}
             />
           </ChartCard>
-        </>
+        </Reveal>
       )}
     </PageShell>
   );

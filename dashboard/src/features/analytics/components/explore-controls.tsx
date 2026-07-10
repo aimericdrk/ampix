@@ -6,6 +6,7 @@ import {
   useCloseComboboxOnOutsideClick,
 } from '../../../components/ui/combobox';
 import { Input } from '../../../components/ui/input';
+import { Segmented } from '../../../components/ui/segmented';
 import { cn } from '../../../lib/cn';
 import { DateRangeFields, defaultDate } from './builder-controls';
 
@@ -103,7 +104,7 @@ export function EventPicker({
       </Button>
 
       {open && (
-        <div className="absolute left-0 z-30 mt-1.5 w-64 rounded-lg border border-border bg-surface p-2 shadow-lg">
+        <div className="absolute left-0 z-30 mt-1.5 w-64 animate-scale-in rounded-xl border border-border bg-surface-raised p-2 shadow-lift">
           <Input
             ref={inputRef}
             role="combobox"
@@ -271,33 +272,13 @@ export function DateRangePresets({
     <div className="flex flex-col gap-3">
       <div>
         <span className="mb-1 block text-sm font-medium">Date range</span>
-        <div
-          role="radiogroup"
+        <Segmented
           aria-label="Date range"
-          className="inline-flex w-fit flex-wrap gap-0.5 rounded-lg border border-border bg-surface p-0.5"
-        >
-          {segments.map((segment) => {
-            const active = mode === segment.id;
-            return (
-              <button
-                key={segment.id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => choose(segment.id)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-sm transition-colors',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-                  active
-                    ? 'bg-accent font-medium text-accent-fg'
-                    : 'text-text-muted hover:bg-border/40 hover:text-text',
-                )}
-              >
-                {segment.label}
-              </button>
-            );
-          })}
-        </div>
+          value={mode}
+          onValueChange={choose}
+          options={segments.map((segment) => ({ value: segment.id, label: segment.label }))}
+          className="w-fit flex-wrap"
+        />
       </div>
       {mode === 'custom' && (
         <DateRangeFields

@@ -1,3 +1,5 @@
+import { fieldLook } from '../../../components/ui/input';
+import { cn } from '../../../lib/cn';
 import { useCohortPreview, useCohorts } from '../api';
 import { formatExactNumber } from '../format';
 
@@ -42,7 +44,7 @@ export function SegmentPicker({
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
         disabled={isLoading}
-        className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+        className={cn(fieldLook, 'w-auto')}
       >
         <option value="">All users (no segment)</option>
         {options.map((cohort) => (
