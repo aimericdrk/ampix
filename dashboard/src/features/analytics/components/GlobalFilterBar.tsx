@@ -68,7 +68,7 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
         <button
           type="button"
           onClick={openAdd}
-          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.98]"
         >
           <span aria-hidden="true">＋</span> Add a filter to scope the whole workspace
         </button>
@@ -86,7 +86,7 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
               type="button"
               aria-label={`Remove filter ${label}`}
               onClick={() => removeFilter(index)}
-              className="text-accent/70 hover:text-accent"
+              className="rounded-full text-accent/70 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <X aria-hidden="true" size={12} />
             </button>
@@ -98,7 +98,7 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
         <button
           type="button"
           onClick={openAdd}
-          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.98]"
         >
           <span aria-hidden="true">＋</span> Add filter
         </button>

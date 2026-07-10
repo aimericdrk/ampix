@@ -13,7 +13,7 @@ export interface PageHeaderProps {
 }
 
 /** Standalone page-level heading: icon tile, title, description, breadcrumbs, and right-aligned
- * actions. Not yet wired into `PageShell` (Task 11 does that) — used directly for now. */
+ * actions. Rendered by `PageShell` as every page's frame; also usable directly. */
 export function PageHeader({ icon: Icon, title, description, breadcrumbs, actions, className }: PageHeaderProps) {
   return (
     <Reveal className={cn('flex flex-col gap-3', className)}>
@@ -30,7 +30,7 @@ export function PageHeader({ icon: Icon, title, description, breadcrumbs, action
             {description ? <p className="mt-1 max-w-2xl text-sm text-text-muted">{description}</p> : null}
           </div>
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
     </Reveal>
   );
