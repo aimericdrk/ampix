@@ -1,4 +1,4 @@
-import { Card } from '../../../components/ui/card';
+import { GlowCard } from '../../../components/ui/glow-card';
 import { IconTrendDown, IconTrendUp } from '../../../components/ui/icons';
 import type { Highlight } from '../highlights';
 
@@ -21,10 +21,13 @@ export function HomeHighlights({ highlights }: { highlights: Highlight[] }) {
     <ul aria-label="Highlights" className="flex flex-wrap gap-3">
       {highlights.map((highlight) => (
         <li key={highlight.id}>
-          <Card className="flex items-center gap-2 px-3 py-2 text-sm">
+          <GlowCard
+            outerClassName="rounded-full"
+            className="flex items-center gap-2 rounded-full px-3 py-2 text-sm"
+          >
             <HighlightIcon tone={highlight.tone} />
             <span className={TEXT_TONE[highlight.tone]}>{highlight.text}</span>
-          </Card>
+          </GlowCard>
         </li>
       ))}
     </ul>
