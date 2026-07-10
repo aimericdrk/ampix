@@ -41,13 +41,21 @@ export function AnimatedNumber({ value, format = defaultFormat, className }: Ani
 
     const from = displayRef.current;
     const to = value;
+    // An integer-to-integer tween must never surface fractional intermediates: callers often
+    // pass full-precision formatters (e.g. formatExactNumber) with no fraction cap, so raw
+    // interpolation would flicker values like "617.284" before settling on "617". Rounding
+    // each tick also keeps displayRef integer, so a mid-flight retarget between integers
+    // stays on the integer path. Non-integer targets keep raw interpolation — their
+    // formatters expect fractional values.
+    const integerTween = Number.isInteger(from) && Number.isInteger(to);
     const start = performance.now();
     let frame: number;
 
     const tick = (now: number) => {
       const elapsed = now - start;
       const t = Math.min(elapsed / DURATION_MS, 1);
-      const next = from + (to - from) * easeOutCubic(t);
+      const raw = from + (to - from) * easeOutCubic(t);
+      const next = integerTween ? Math.round(raw) : raw;
       displayRef.current = next;
       setDisplay(next);
 

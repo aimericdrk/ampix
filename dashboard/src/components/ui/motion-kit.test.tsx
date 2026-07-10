@@ -70,5 +70,27 @@ describe('AnimatedNumber', () => {
       act(() => frames.pop()?.(1200));
       expect(screen.getByText('200')).toBeInTheDocument();
     });
+
+    it('rounds intermediate frames of an integer tween so full-precision formatters never flicker decimals', () => {
+      vi.stubEnv('MODE', 'development');
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', () => {});
+      vi.stubGlobal('performance', { ...performance, now: () => 0 });
+
+      // A full-precision formatter with no fraction cap (the formatExactNumber shape KPI tiles
+      // pass): without integer rounding, the mid-tween frame below would render "539.875".
+      const format = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 3 });
+      const { container } = render(<AnimatedNumber value={617} format={format} />);
+
+      // Halfway through the 800ms tween 0 -> 617: eased = 0.875 -> raw 539.875 -> rounded 540.
+      act(() => frames.shift()?.(400));
+      expect(container.textContent).toBe('540');
+      expect(container.textContent).not.toContain('.');
+
+      // And the tween still lands exactly on the integer target.
+      act(() => frames.shift()?.(800));
+      expect(screen.getByText('617')).toBeInTheDocument();
+    });
   });
 });
