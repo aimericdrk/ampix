@@ -16,7 +16,7 @@ export function LoginPage() {
       <div className="relative flex flex-col items-center gap-6">
         <span className="text-gradient-brand font-display text-2xl font-bold">MyAmpix</span>
         <GlowCard outerClassName="w-full max-w-sm" className="w-full p-8">
-          <h1 className="mb-6 text-center text-lg font-semibold">Log in to MyAmpix</h1>
+          <h1 className="mb-6 text-center font-display text-lg font-semibold">Log in to MyAmpix</h1>
           <LoginForm />
           <p className="mt-4 text-center text-sm text-text-muted">
             No account?{' '}
