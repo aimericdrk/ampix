@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
+import { PageShell } from '../../../components/layout/PageShell';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
@@ -9,14 +10,20 @@ import { Skeleton } from '../../../components/ui/Skeleton';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { changePassword, getMe, ME_QUERY_KEY, updateName } from '../api';
+import { TwoFactorSection } from './SecuritySettingsPage';
 
+/**
+ * The merged account + security page (`/account`; `/settings/security` redirects here — see
+ * `router.tsx`). Mirrors `ProjectDetailPage`'s settings layout: titled cards in a two-column
+ * grid, one `Reveal` per section. The two-factor section lives in `SecuritySettingsPage.tsx`
+ * (kept there as the natural home for its own sub-flows) and shares this page's single `getMe`
+ * query, so loading/error states are handled once for the whole page.
+ */
 export function AccountPage() {
   const query = useQuery({ queryKey: ME_QUERY_KEY, queryFn: getMe });
 
   return (
-    <section className="flex max-w-lg flex-col gap-6">
-      <h1 className="font-display text-2xl font-semibold">Account</h1>
-
+    <PageShell title="Account" description="Profile, password, and security settings.">
       {query.isPending && (
         <div role="status" className="space-y-4">
           <span className="sr-only">Loading…</span>
@@ -31,7 +38,7 @@ export function AccountPage() {
       )}
 
       {query.data && (
-        <>
+        <div className="grid gap-6 lg:grid-cols-2">
           <Reveal index={0}>
             <Card>
               <CardHeader>
@@ -53,9 +60,15 @@ export function AccountPage() {
               </CardContent>
             </Card>
           </Reveal>
-        </>
+
+          {/* Wide: holds the enable-2FA form (QR code + OTP input) or the disable form, which
+              need more breathing room than the single-column Profile/Password forms above. */}
+          <Reveal index={2} className="lg:col-span-2">
+            <TwoFactorSection twoFactorEnabled={query.data.two_factor_enabled} />
+          </Reveal>
+        </div>
       )}
-    </section>
+    </PageShell>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Badge } from '../../../components/ui/badge';
 import { Banner } from '../../../components/ui/banner';
@@ -6,49 +6,27 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
-import { Reveal } from '../../../components/ui/reveal';
-import { Skeleton } from '../../../components/ui/Skeleton';
 import { ApiError } from '../../../lib/api/problem';
 import type { Setup2faResponse } from '../../../lib/api/types';
-import { activate2fa, disable2fa, getMe, ME_QUERY_KEY, setup2fa } from '../api';
+import { activate2fa, disable2fa, ME_QUERY_KEY, setup2fa } from '../api';
 
-export function SecuritySettingsPage() {
-  const query = useQuery({ queryKey: ME_QUERY_KEY, queryFn: getMe });
-
+/**
+ * Two-factor authentication section, rendered as a card inside `AccountPage` (the merged
+ * account + security page — `/settings/security` used to be its own route and now redirects to
+ * `/account`). `AccountPage` owns the single `getMe` query for the whole page, including its
+ * loading/error states, so this section only needs the resolved `two_factor_enabled` flag.
+ */
+export function TwoFactorSection({ twoFactorEnabled }: { twoFactorEnabled: boolean }) {
   return (
-    <section className="max-w-lg">
-      <h1 className="mb-6 font-display text-2xl font-semibold">Security</h1>
-      <Reveal>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <CardTitle>Two-factor authentication</CardTitle>
-            {query.data && (
-              <Badge variant={query.data.two_factor_enabled ? 'success' : 'outline'}>
-                {query.data.two_factor_enabled ? 'Enabled' : 'Disabled'}
-              </Badge>
-            )}
-          </CardHeader>
-          <CardContent>
-            {query.isPending && (
-              <div role="status" className="space-y-3">
-                <span className="sr-only">Loading…</span>
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-10 w-32" />
-              </div>
-            )}
-            {query.error && (
-              <p role="alert" className="text-sm text-danger">
-                {query.error instanceof ApiError
-                  ? query.error.problem.title
-                  : 'Failed to load security settings'}
-              </p>
-            )}
-            {query.data &&
-              (query.data.two_factor_enabled ? <DisableTwoFactor /> : <EnableTwoFactor />)}
-          </CardContent>
-        </Card>
-      </Reveal>
-    </section>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <CardTitle>Two-factor authentication</CardTitle>
+        <Badge variant={twoFactorEnabled ? 'success' : 'outline'}>
+          {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+        </Badge>
+      </CardHeader>
+      <CardContent>{twoFactorEnabled ? <DisableTwoFactor /> : <EnableTwoFactor />}</CardContent>
+    </Card>
   );
 }
 

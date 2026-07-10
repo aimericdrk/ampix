@@ -227,7 +227,6 @@ export function AppLayout() {
             />
           )}
           <SidebarLink to="/account" icon="account" label="Account" />
-          <SidebarLink to="/settings/security" icon="settings" label="Security" />
           <ThemeToggle />
           <div className="truncate px-3 pt-1 text-xs text-text-muted">{user?.email}</div>
           <Button

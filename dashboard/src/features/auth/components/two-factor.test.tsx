@@ -62,8 +62,10 @@ describe('2FA login step-up', () => {
 describe('Security settings — enable 2FA', () => {
   it('walks through setup and activation, revealing recovery codes once', async () => {
     authState.refreshValid = true; // authenticated as TEST_USER (2FA off) via refresh cookie
-    renderApp('/settings/security');
-    await screen.findByRole('heading', { name: 'Security' });
+    // /settings/security redirects to /account, where the two-factor section now lives.
+    const { router } = renderApp('/settings/security');
+    await screen.findByRole('heading', { name: 'Account' });
+    expect(router.state.location.pathname).toBe('/account');
     expect(await screen.findByRole('button', { name: 'Enable 2FA' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Enable 2FA' }));
@@ -89,8 +91,10 @@ describe('Security settings — reflects 2FA state and disables it', () => {
   it('shows the MFA fixture as already enabled, rejects a bad code, then disables with a valid one', async () => {
     authStore.setSession(MFA_ACCESS_TOKEN, MFA_USER);
     authState.refreshValid = true;
-    renderApp('/settings/security');
-    await screen.findByRole('heading', { name: 'Security' });
+    // /settings/security redirects to /account, where the two-factor section now lives.
+    const { router } = renderApp('/settings/security');
+    await screen.findByRole('heading', { name: 'Account' });
+    expect(router.state.location.pathname).toBe('/account');
 
     expect(await screen.findByRole('button', { name: 'Disable 2FA' })).toBeInTheDocument();
 
