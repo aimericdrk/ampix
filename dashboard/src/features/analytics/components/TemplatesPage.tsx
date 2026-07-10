@@ -1,8 +1,11 @@
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { PageShell } from '../../../components/layout/PageShell';
+import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import type { ReportKind, TemplateId, TemplateKindCounts } from '../../../lib/api/types';
@@ -14,6 +17,9 @@ const KIND_LABELS: Record<ReportKind, { one: string; many: string }> = {
   retention: { one: 'retention report', many: 'retention reports' },
   flows: { one: 'paths report', many: 'paths reports' },
 };
+
+/** Max Reveal stagger index for a grid of tiles — later tiles all fire together at the cap. */
+const MAX_REVEAL_INDEX = 5;
 
 function kindChips(counts: TemplateKindCounts): string[] {
   return (Object.entries(counts) as [ReportKind, number][])
@@ -62,7 +68,27 @@ export function TemplatesPage() {
       description="Start from a ready-made analysis. Applying a template creates its reports and a dashboard in this project."
       breadcrumbs={[{ label: 'Templates' }]}
     >
-      {templates.isPending && <p role="status">Loading templates…</p>}
+      {templates.isPending && (
+        <ul
+          role="status"
+          aria-label="Loading templates"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          {Array.from({ length: 6 }, (_, i) => (
+            <li key={i}>
+              <Card className="flex h-full flex-col">
+                <CardHeader>
+                  <Skeleton className="h-5 w-2/3" />
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col gap-4">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
       {templates.isError && (
         <p role="alert" className="text-danger">
           {templates.error instanceof ApiError
@@ -73,38 +99,37 @@ export function TemplatesPage() {
 
       {templates.data && (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {templates.data.templates.map((template) => {
+          {templates.data.templates.map((template, index) => {
             const isApplying = applyingId === template.id;
             const chips = kindChips(template.kind_counts);
             return (
               <li key={template.id}>
-                <Card className="flex h-full flex-col">
-                  <CardHeader>
-                    <CardTitle>{template.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-1 flex-col gap-4">
-                    <p className="flex-1 text-sm text-text-muted">{template.description}</p>
-                    {chips.length > 0 && (
-                      <ul className="flex flex-wrap gap-1.5" aria-label={`${template.name} contents`}>
-                        {chips.map((chip) => (
-                          <li
-                            key={chip}
-                            className="rounded-full border border-border bg-bg px-2 py-0.5 text-xs text-text-muted"
-                          >
-                            {chip}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <Button
-                      className="w-full"
-                      disabled={applyTemplate.isPending}
-                      onClick={() => handleApply(template.id)}
-                    >
-                      {isApplying ? 'Applying…' : 'Apply'}
-                    </Button>
-                  </CardContent>
-                </Card>
+                <Reveal index={Math.min(index, MAX_REVEAL_INDEX)} className="h-full">
+                  <Card className="flex h-full flex-col">
+                    <CardHeader>
+                      <CardTitle>{template.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-1 flex-col gap-4">
+                      <p className="flex-1 text-sm text-text-muted">{template.description}</p>
+                      {chips.length > 0 && (
+                        <ul className="flex flex-wrap gap-1.5" aria-label={`${template.name} contents`}>
+                          {chips.map((chip) => (
+                            <li key={chip}>
+                              <Badge variant="outline">{chip}</Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <Button
+                        className="w-full"
+                        disabled={applyTemplate.isPending}
+                        onClick={() => handleApply(template.id)}
+                      >
+                        {isApplying ? 'Applying…' : 'Apply'}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Reveal>
               </li>
             );
           })}

@@ -7,8 +7,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../../../components/ui/dialog';
-import { Input } from '../../../components/ui/input';
+import { fieldLook, Input } from '../../../components/ui/input';
 import { useToast } from '../../../components/ui/toast';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type { AnalysisDefinition, CreateTileRequest, ReportKind } from '../../../lib/api/types';
 import { useCreateDashboard, useCreateTile, useDashboard, useDashboards } from '../api';
@@ -137,7 +138,6 @@ function AddToDashboardForm({
     // submitTile/dashboardName intentionally omitted: this must run exactly once per pending add,
     // keyed only on the id landing — re-including them would risk a second dispatch on any
     // unrelated re-render while pendingAdd briefly stays true.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAdd, dashboardId]);
 
   const handleDashboardChange = (value: string) => {
@@ -192,7 +192,7 @@ function AddToDashboardForm({
           id="add-to-dashboard-picker"
           value={mode === 'new' ? NEW_DASHBOARD_VALUE : dashboardId}
           onChange={(e) => handleDashboardChange(e.target.value)}
-          className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm"
+          className={cn(fieldLook, 'w-full')}
         >
           <option value="">Select a dashboard…</option>
           {dashboardList.map((dashboard) => (

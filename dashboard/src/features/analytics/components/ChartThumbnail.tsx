@@ -1,3 +1,4 @@
+import { Skeleton } from '../../../components/ui/Skeleton';
 import type { AnalysisResult, ReportKind } from '../../../lib/api/types';
 import { ReportChart } from './ReportChart';
 
@@ -29,7 +30,7 @@ export function ChartThumbnail({
       className="pointer-events-none h-28 overflow-hidden rounded-md border border-border bg-chart-surface"
     >
       {state === 'loading' && (
-        <div className="h-full w-full animate-pulse bg-border/40" data-testid="chart-thumbnail-skeleton" />
+        <Skeleton className="h-full w-full rounded-none" data-testid="chart-thumbnail-skeleton" />
       )}
 
       {state === 'error' && (

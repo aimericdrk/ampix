@@ -1,3 +1,4 @@
+import { Link2 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useToast } from '../../../components/ui/toast';
 
@@ -23,19 +24,7 @@ export function CopyLinkButton() {
 
   return (
     <Button type="button" variant="secondary" onClick={copyLink} className="gap-1.5">
-      <svg
-        aria-hidden="true"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.5-1.5" />
-      </svg>
+      <Link2 aria-hidden="true" size={14} />
       Copy link
     </Button>
   );

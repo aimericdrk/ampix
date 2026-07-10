@@ -59,7 +59,7 @@ export function AnnotationsManager({ annotations, onAdd, onRemove }: Annotations
           id={panelId}
           role="region"
           aria-label="Chart annotations"
-          className="absolute right-0 top-full z-30 mt-2 w-72 rounded-lg border border-border bg-surface p-3 shadow-lg"
+          className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-border bg-surface-raised p-3 shadow-lift"
         >
           <form onSubmit={handleAdd} className="flex flex-col gap-2">
             <div className="flex gap-2">

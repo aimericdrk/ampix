@@ -1,6 +1,10 @@
 import { Link, useParams } from '@tanstack/react-router';
+import { Inbox } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { ApiError } from '../../../lib/api/problem';
 import type { ReportKind, SavedReportSummary } from '../../../lib/api/types';
 import { REPORT_KINDS } from '../../../lib/api/types';
@@ -18,6 +22,9 @@ const KIND_LABELS: Record<ReportKind, string> = {
   flows: 'Flows',
 };
 
+/** Max Reveal stagger index for a grid of tiles — later tiles all fire together at the cap. */
+const MAX_REVEAL_INDEX = 5;
+
 export function ReportsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/reports' });
   const reports = useReports(projectId);
@@ -34,7 +41,22 @@ export function ReportsPage() {
       description="Your saved analyses, ready to re-run or add to a dashboard."
       breadcrumbs={[{ label: 'Saved' }, { label: 'Reports' }]}
     >
-      {reports.isPending && <p role="status">Loading reports…</p>}
+      {reports.isPending && (
+        <div role="status" aria-label="Loading reports" className="flex flex-col gap-6">
+          {Array.from({ length: 2 }, (_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-5 w-24" />
+              </CardHeader>
+              <CardContent className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+                {Array.from({ length: 3 }, (_, j) => (
+                  <Skeleton key={j} className="h-28 w-full" />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
       {reports.error && (
         <p role="alert" className="text-danger">
           {reports.error instanceof ApiError ? reports.error.problem.title : 'Failed to load reports'}
@@ -42,38 +64,42 @@ export function ReportsPage() {
       )}
 
       {reports.data && reports.data.reports.length === 0 && (
-        <p className="text-text-muted">
-          No saved reports yet. Build an analysis, then choose “Save as report”.
-        </p>
+        <EmptyState
+          icon={Inbox}
+          title="No saved reports yet."
+          description="Build an analysis, then choose “Save as report”."
+        />
       )}
 
       {reports.data && reports.data.reports.length > 0 && (
         <div className="flex flex-col gap-6">
-          {REPORT_KINDS.map((kind) => {
+          {REPORT_KINDS.map((kind, kindIndex) => {
             const group = byKind(kind);
             if (group.length === 0) return null;
             return (
-              <Card key={kind}>
-                <CardHeader>
-                  <CardTitle>{KIND_LABELS[kind]}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-                    {group.map((report) => (
-                      <ReportCard
-                        key={report.id}
-                        projectId={projectId}
-                        report={report}
-                        onDelete={() => deleteReport.mutate(report.id)}
-                        isFavorite={favorites.isFavorite('report', report.id)}
-                        onToggleFavorite={() =>
-                          favorites.toggle({ type: 'report', id: report.id, name: report.name })
-                        }
-                      />
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+              <Reveal key={kind} index={Math.min(kindIndex, MAX_REVEAL_INDEX)}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{KIND_LABELS[kind]}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+                      {group.map((report) => (
+                        <ReportCard
+                          key={report.id}
+                          projectId={projectId}
+                          report={report}
+                          onDelete={() => deleteReport.mutate(report.id)}
+                          isFavorite={favorites.isFavorite('report', report.id)}
+                          onToggleFavorite={() =>
+                            favorites.toggle({ type: 'report', id: report.id, name: report.name })
+                          }
+                        />
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </Reveal>
             );
           })}
         </div>
@@ -109,27 +135,29 @@ function ReportCard({
   else state = 'ready';
 
   return (
-    <li className="flex flex-col gap-2 rounded-md border border-border p-2">
-      <ChartThumbnail kind={report.kind} result={preview.data} state={state} />
-      <div className="flex items-center gap-2">
-        <Link
-          to="/projects/$projectId/reports/$reportId"
-          params={{ projectId, reportId: report.id }}
-          className="flex-1 truncate text-sm font-medium text-accent underline"
-        >
-          {report.name}
-        </Link>
-        <FavoriteButton name={report.name} isFavorite={isFavorite} onToggle={onToggleFavorite} />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={`Delete ${report.name}`}
-          onClick={onDelete}
-        >
-          Delete
-        </Button>
-      </div>
+    <li>
+      <Card interactive className="flex h-full flex-col gap-2 p-2">
+        <ChartThumbnail kind={report.kind} result={preview.data} state={state} />
+        <div className="flex items-center gap-2">
+          <Link
+            to="/projects/$projectId/reports/$reportId"
+            params={{ projectId, reportId: report.id }}
+            className="flex-1 truncate text-sm font-medium text-accent underline"
+          >
+            {report.name}
+          </Link>
+          <FavoriteButton name={report.name} isFavorite={isFavorite} onToggle={onToggleFavorite} />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Delete ${report.name}`}
+            onClick={onDelete}
+          >
+            Delete
+          </Button>
+        </div>
+      </Card>
     </li>
   );
 }

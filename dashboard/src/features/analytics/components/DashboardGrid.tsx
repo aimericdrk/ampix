@@ -1,5 +1,7 @@
+import { GripVertical, Inbox } from 'lucide-react';
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { Button } from '../../../components/ui/button';
+import { EmptyState } from '../../../components/ui/empty-state';
 import type { AnalysisResult, ReportKind } from '../../../lib/api/types';
 import { isTileError } from '../../../lib/api/types';
 import { analysisResultIsEmpty, ReportChart } from './ReportChart';
@@ -103,9 +105,7 @@ export function DashboardGrid({
   };
 
   if (tiles.length === 0) {
-    return (
-      <p className="text-text-muted">No tiles yet — add one from a saved report.</p>
-    );
+    return <EmptyState icon={Inbox} title="No tiles yet." description="Add one from a saved report." />;
   }
 
   return (
@@ -126,7 +126,7 @@ export function DashboardGrid({
             key={tile.id}
             data-tile-id={tile.id}
             aria-label={tile.title}
-            className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-sm"
+            className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition-all duration-250"
             style={{
               gridColumn: `${placed.x + 1} / span ${placed.w}`,
               gridRow: `span ${placed.h}`,
@@ -143,7 +143,7 @@ export function DashboardGrid({
                   className="cursor-grab rounded px-1 text-text-muted hover:bg-border/40"
                   title="Drag to reorder"
                 >
-                  ⠿
+                  <GripVertical aria-hidden="true" size={14} />
                 </button>
               )}
               <span className="flex-1 truncate text-sm font-medium">{tile.title}</span>

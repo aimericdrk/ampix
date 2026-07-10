@@ -1,5 +1,9 @@
+import { Inbox } from 'lucide-react';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Button } from '../../../components/ui/button';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { fieldLook } from '../../../components/ui/input';
+import { cn } from '../../../lib/cn';
 import type { AnalysisResult } from '../../../lib/api/types';
 import { DashboardGrid, type GridTile } from './DashboardGrid';
 
@@ -72,7 +76,6 @@ export function PresentationMode({
       restoreFocusRef.current?.focus();
     };
     // Mount/unmount only — `onClose`/`restoreFocusRef` are stable for the overlay's lifetime.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Live clock (`aria-hidden`, decorative): only starts ticking from an effect — never in render —
@@ -120,7 +123,7 @@ export function PresentationMode({
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex items-baseline gap-4">
-          <h1 className="text-2xl font-semibold">{dashboardName}</h1>
+          <h1 className="font-display text-2xl font-semibold">{dashboardName}</h1>
           <span aria-hidden="true" className="font-mono text-xl tabular-nums text-text-muted">
             {now ? formatClock(now) : ''}
           </span>
@@ -138,7 +141,7 @@ export function PresentationMode({
                 const option = REFRESH_OPTIONS.find((o) => o.value === e.target.value);
                 setRefreshMs(option ? option.ms : null);
               }}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+              className={cn(fieldLook, 'h-9 w-auto')}
             >
               {REFRESH_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -165,9 +168,12 @@ export function PresentationMode({
 
       <div className="min-h-0 flex-1">
         {tiles.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-text-muted">
-            <p className="text-lg font-medium">No tiles yet</p>
-            <p className="text-sm">Add tiles to this dashboard to present them here.</p>
+          <div className="flex h-full items-center justify-center">
+            <EmptyState
+              icon={Inbox}
+              title="No tiles yet"
+              description="Add tiles to this dashboard to present them here."
+            />
           </div>
         ) : (
           <DashboardGrid

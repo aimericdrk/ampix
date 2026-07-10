@@ -2,6 +2,8 @@ import { useParams } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { ApiError } from '../../../lib/api/problem';
 import type { ReportKind, RetentionInterval } from '../../../lib/api/types';
 import { useReport, useRunReport } from '../api';
@@ -82,7 +84,12 @@ export function ReportDetailPage() {
         )
       }
     >
-      {report.isPending && <p role="status">Loading report…</p>}
+      {report.isPending && (
+        <div role="status" aria-label="Loading report" className="flex flex-col gap-2">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      )}
       {report.error && (
         <p role="alert" className="text-danger">
           {report.error instanceof ApiError ? report.error.problem.title : 'Failed to load report'}
@@ -90,39 +97,47 @@ export function ReportDetailPage() {
       )}
 
       {report.data && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Run</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-end gap-4">
-            {report.data.kind !== 'flows' && (
-              <CohortSelect
-                projectId={projectId}
-                value={cohortId}
-                onChange={setCohortId}
-                id="report-cohort-filter"
-                label="Cohort filter (optional)"
-              />
-            )}
-            <Button onClick={handleRun} disabled={runReport.isPending}>
-              {runReport.isPending ? 'Running…' : 'Run report'}
-            </Button>
-          </CardContent>
-        </Card>
+        <Reveal index={0}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Run</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-end gap-4">
+              {report.data.kind !== 'flows' && (
+                <CohortSelect
+                  projectId={projectId}
+                  value={cohortId}
+                  onChange={setCohortId}
+                  id="report-cohort-filter"
+                  label="Cohort filter (optional)"
+                />
+              )}
+              <Button onClick={handleRun} disabled={runReport.isPending}>
+                {runReport.isPending ? 'Running…' : 'Run report'}
+              </Button>
+            </CardContent>
+          </Card>
+        </Reveal>
       )}
 
       {runReport.isError && (
-        <p role="alert" className="text-danger">
-          {runReport.error instanceof ApiError ? runReport.error.problem.title : 'Failed to run the report'}
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            {runReport.error instanceof ApiError ? runReport.error.problem.title : 'Failed to run the report'}
+          </p>
+        </Reveal>
       )}
 
       {kind && result && analysisResultIsEmpty(kind, result) && (
-        <p className="text-text-muted">No data for this report yet.</p>
+        <Reveal index={1}>
+          <p className="text-text-muted">No data for this report yet.</p>
+        </Reveal>
       )}
 
       {kind && result && !analysisResultIsEmpty(kind, result) && (
-        <ReportChart kind={kind} result={result} interval={interval} eventOrder={eventOrder} />
+        <Reveal index={1}>
+          <ReportChart kind={kind} result={result} interval={interval} eventOrder={eventOrder} />
+        </Reveal>
       )}
     </PageShell>
   );
