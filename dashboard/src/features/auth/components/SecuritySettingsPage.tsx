@@ -1,8 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { Badge } from '../../../components/ui/badge';
+import { Banner } from '../../../components/ui/banner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { ApiError } from '../../../lib/api/problem';
 import type { Setup2faResponse } from '../../../lib/api/types';
 import { activate2fa, disable2fa, getMe, ME_QUERY_KEY, setup2fa } from '../api';
@@ -12,24 +17,37 @@ export function SecuritySettingsPage() {
 
   return (
     <section className="max-w-lg">
-      <h1 className="mb-6 text-2xl font-semibold">Security</h1>
-      <Card>
-        <CardHeader>
-          <CardTitle>Two-factor authentication</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {query.isPending && <p role="status">Loading…</p>}
-          {query.error && (
-            <p role="alert" className="text-danger">
-              {query.error instanceof ApiError
-                ? query.error.problem.title
-                : 'Failed to load security settings'}
-            </p>
-          )}
-          {query.data &&
-            (query.data.two_factor_enabled ? <DisableTwoFactor /> : <EnableTwoFactor />)}
-        </CardContent>
-      </Card>
+      <h1 className="mb-6 font-display text-2xl font-semibold">Security</h1>
+      <Reveal>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <CardTitle>Two-factor authentication</CardTitle>
+            {query.data && (
+              <Badge variant={query.data.two_factor_enabled ? 'success' : 'outline'}>
+                {query.data.two_factor_enabled ? 'Enabled' : 'Disabled'}
+              </Badge>
+            )}
+          </CardHeader>
+          <CardContent>
+            {query.isPending && (
+              <div role="status" className="space-y-3">
+                <span className="sr-only">Loading…</span>
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-10 w-32" />
+              </div>
+            )}
+            {query.error && (
+              <p role="alert" className="text-sm text-danger">
+                {query.error instanceof ApiError
+                  ? query.error.problem.title
+                  : 'Failed to load security settings'}
+              </p>
+            )}
+            {query.data &&
+              (query.data.two_factor_enabled ? <DisableTwoFactor /> : <EnableTwoFactor />)}
+          </CardContent>
+        </Card>
+      </Reveal>
     </section>
   );
 }
@@ -73,11 +91,11 @@ function EnableTwoFactor() {
   if (recoveryCodes) {
     return (
       <div className="space-y-4">
-        <p className="text-sm">
-          Save these recovery codes somewhere safe. Each one can be used once if you lose access to
-          your authenticator app. They will not be shown again.
-        </p>
-        <ul className="grid grid-cols-2 gap-2 rounded-md border border-border bg-bg p-3 font-mono text-sm">
+        <Banner variant="warning">
+          Save these recovery codes somewhere safe. Each one can be used once if you lose access
+          to your authenticator app. They will not be shown again.
+        </Banner>
+        <ul className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-bg p-3 font-mono text-sm">
           {recoveryCodes.map((recoveryCode) => (
             <li key={recoveryCode}>{recoveryCode}</li>
           ))}
@@ -106,22 +124,23 @@ function EnableTwoFactor() {
           alt="2FA setup QR code"
           width={200}
           height={200}
-          className="rounded-md border border-border"
+          className="rounded-lg border border-border"
         />
         <div>
           <span className="mb-1 block text-sm font-medium">Manual entry secret</span>
-          <code className="block break-all rounded-md bg-bg p-2 text-sm">{setupData.secret}</code>
+          <code className="block break-all rounded-lg bg-bg p-2 text-sm">{setupData.secret}</code>
         </div>
         <div>
-          <label htmlFor="activate-code" className="mb-1 block text-sm font-medium">
+          <Label htmlFor="activate-code" className="mb-1 block">
             Enter the 6-digit code
-          </label>
+          </Label>
           <Input
             id="activate-code"
             inputMode="numeric"
             autoComplete="one-time-code"
             value={code}
             aria-invalid={Boolean(activateProblem)}
+            className="font-display text-center text-lg tracking-[0.3em]"
             onChange={(e) => {
               setCode(e.target.value);
               activateMutation.reset();
@@ -181,19 +200,20 @@ function DisableTwoFactor() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
-      <p className="text-sm text-text-muted">
+      <Banner variant="warning">
         Two-factor authentication is currently enabled. Enter a current code to turn it off.
-      </p>
+      </Banner>
       <div>
-        <label htmlFor="disable-code" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="disable-code" className="mb-1 block">
           Authentication code
-        </label>
+        </Label>
         <Input
           id="disable-code"
           inputMode="numeric"
           autoComplete="one-time-code"
           value={code}
           aria-invalid={Boolean(problem)}
+          className="font-display text-center text-lg tracking-[0.3em]"
           onChange={(e) => {
             setCode(e.target.value);
             mutation.reset();

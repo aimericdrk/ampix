@@ -3,6 +3,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { changePassword, getMe, ME_QUERY_KEY, updateName } from '../api';
@@ -11,35 +14,45 @@ export function AccountPage() {
   const query = useQuery({ queryKey: ME_QUERY_KEY, queryFn: getMe });
 
   return (
-    <section className="max-w-lg space-y-6">
-      <h1 className="text-2xl font-semibold">Account</h1>
+    <section className="flex max-w-lg flex-col gap-6">
+      <h1 className="font-display text-2xl font-semibold">Account</h1>
 
-      {query.isPending && <p role="status">Loading…</p>}
+      {query.isPending && (
+        <div role="status" className="space-y-4">
+          <span className="sr-only">Loading…</span>
+          <Skeleton className="h-36 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </div>
+      )}
       {query.error && (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-sm text-danger">
           {query.error instanceof ApiError ? query.error.problem.title : 'Failed to load account'}
         </p>
       )}
 
       {query.data && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <NameForm currentName={query.data.user.name} email={query.data.user.email} />
-            </CardContent>
-          </Card>
+          <Reveal index={0}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Profile</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <NameForm currentName={query.data.user.name} email={query.data.user.email} />
+              </CardContent>
+            </Card>
+          </Reveal>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Password</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PasswordForm />
-            </CardContent>
-          </Card>
+          <Reveal index={1}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Password</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PasswordForm />
+              </CardContent>
+            </Card>
+          </Reveal>
         </>
       )}
     </section>
@@ -84,9 +97,9 @@ function NameForm({ currentName, email }: { currentName: string; email: string }
         <p className="text-sm text-text-muted">{email}</p>
       </div>
       <div>
-        <label htmlFor="account-name" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="account-name" className="mb-1 block">
           Display name
-        </label>
+        </Label>
         <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <Button type="submit" disabled={mutation.isPending || !name.trim()}>
@@ -133,9 +146,9 @@ function PasswordForm() {
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div>
-        <label htmlFor="current-password" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="current-password" className="mb-1 block">
           Current password
-        </label>
+        </Label>
         <Input
           id="current-password"
           type="password"
@@ -148,9 +161,9 @@ function PasswordForm() {
         />
       </div>
       <div>
-        <label htmlFor="new-password" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="new-password" className="mb-1 block">
           New password
-        </label>
+        </Label>
         <Input
           id="new-password"
           type="password"

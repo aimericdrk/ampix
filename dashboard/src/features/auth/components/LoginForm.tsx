@@ -3,6 +3,7 @@ import { useRouter, useSearch } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { isMfaRequired } from '../../../lib/api/types';
@@ -68,9 +69,9 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div>
-        <label htmlFor="login-email" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="login-email" className="mb-1 block">
           Email
-        </label>
+        </Label>
         <Input
           id="login-email"
           type="email"
@@ -86,9 +87,9 @@ export function LoginForm() {
         )}
       </div>
       <div>
-        <label htmlFor="login-password" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="login-password" className="mb-1 block">
           Password
-        </label>
+        </Label>
         <Input
           id="login-password"
           type="password"

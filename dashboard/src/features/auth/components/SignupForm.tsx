@@ -3,6 +3,7 @@ import { useRouter, useSearch } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { signup } from '../api';
@@ -54,9 +55,9 @@ export function SignupForm() {
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div>
-        <label htmlFor="signup-name" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="signup-name" className="mb-1 block">
           Name
-        </label>
+        </Label>
         <Input
           id="signup-name"
           autoComplete="name"
@@ -71,9 +72,9 @@ export function SignupForm() {
         )}
       </div>
       <div>
-        <label htmlFor="signup-email" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="signup-email" className="mb-1 block">
           Email
-        </label>
+        </Label>
         <Input
           id="signup-email"
           type="email"
@@ -89,9 +90,9 @@ export function SignupForm() {
         )}
       </div>
       <div>
-        <label htmlFor="signup-password" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="signup-password" className="mb-1 block">
           Password
-        </label>
+        </Label>
         <Input
           id="signup-password"
           type="password"
