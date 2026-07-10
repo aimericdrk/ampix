@@ -243,7 +243,11 @@ function EventPropertiesList({
   isError: boolean;
 }) {
   if (isPending) return <p role="status">Loading properties…</p>;
-  if (isError) return <p className="text-danger">Failed to load properties</p>;
+  if (isError) return (
+    <p role="alert" className="text-danger">
+      Failed to load properties
+    </p>
+  );
   if (properties.length === 0) return <EmptyState icon={Inbox} title="No known properties." />;
 
   return (

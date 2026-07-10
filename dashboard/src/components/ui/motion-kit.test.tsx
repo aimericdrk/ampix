@@ -1,8 +1,24 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useMotionSafe } from '../../lib/motion';
 import { AnimatedNumber } from './animated-number';
 import { Reveal } from './reveal';
+
+describe('main.tsx LazyMotion feature bundle', () => {
+  // `layoutId` shared-layout animations (sidebar nav indicator, tabs pill, segmented highlight)
+  // need motion's `domMax` feature bundle — `domAnimation` silently drops layout animations with
+  // no error, so a behavioral test can't tell the two apart. This pins the regression by reading
+  // main.tsx's actual bootstrap source and asserting it wires up `domMax`, not `domAnimation`.
+  it('wires LazyMotion up with domMax, not domAnimation', () => {
+    const mainTsxPath = resolve(import.meta.dirname, '../../main.tsx');
+    const source = readFileSync(mainTsxPath, 'utf-8');
+
+    expect(source).toContain('domMax');
+    expect(source).not.toContain('features={domAnimation}');
+  });
+});
 
 describe('Reveal', () => {
   it('renders children', () => {

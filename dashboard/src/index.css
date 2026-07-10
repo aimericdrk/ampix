@@ -144,11 +144,36 @@
 }
 
 /* Per-section accent re-pointing: any subtree opts into a signature hue. */
-[data-accent='violet'] { --accent: var(--accent-violet); }
-[data-accent='cyan'] { --accent: var(--accent-cyan); }
-[data-accent='lime'] { --accent: var(--accent-lime); }
-[data-accent='amber'] { --accent: var(--accent-amber); }
-[data-accent='pink'] { --accent: var(--accent-pink); }
+[data-accent='violet'] {
+  --accent: var(--accent-violet);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --shadow-glow: 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent),
+    0 4px 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+[data-accent='cyan'] {
+  --accent: var(--accent-cyan);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --shadow-glow: 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent),
+    0 4px 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+[data-accent='lime'] {
+  --accent: var(--accent-lime);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --shadow-glow: 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent),
+    0 4px 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+[data-accent='amber'] {
+  --accent: var(--accent-amber);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --shadow-glow: 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent),
+    0 4px 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+[data-accent='pink'] {
+  --accent: var(--accent-pink);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --shadow-glow: 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent),
+    0 4px 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
+}
 
 @theme inline {
   --color-bg: var(--bg);

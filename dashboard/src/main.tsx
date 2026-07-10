@@ -2,7 +2,7 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/space-grotesk';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LazyMotion, domAnimation } from 'motion/react';
+import { LazyMotion, domMax } from 'motion/react';
 import './index.css';
 import { App } from './App';
 
@@ -17,7 +17,7 @@ async function bootstrap(): Promise<void> {
 
   createRoot(container).render(
     <StrictMode>
-      <LazyMotion features={domAnimation} strict>
+      <LazyMotion features={domMax} strict>
         <App />
       </LazyMotion>
     </StrictMode>,

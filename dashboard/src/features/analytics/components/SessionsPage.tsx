@@ -20,6 +20,7 @@ import { useSessionsSummary } from '../api';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { PageShell } from '../../../components/layout/PageShell';
 import { ChartCard } from './charts/ChartCard';
+import { useChartAnimationProps } from './charts/chart-theme';
 import { KpiTile } from './charts/KpiTile';
 
 const BY_DAY_COLUMNS: Array<DataTableColumn<SessionsByDay>> = [
@@ -66,6 +67,7 @@ export function SessionsPage() {
     to,
     mergeGlobalFilters([], globalFilters),
   );
+  const animation = useChartAnimationProps();
 
   return (
     <PageShell
@@ -154,6 +156,7 @@ export function SessionsPage() {
                           stroke: 'var(--chart-surface)',
                           strokeWidth: 2,
                         }}
+                        {...animation}
                       />
                     </LineChart>
                   </ResponsiveContainer>
