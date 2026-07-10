@@ -208,4 +208,68 @@ describe('Command', () => {
     await userEvent.type(input, 'zzz');
     expect(await screen.findByText('No results')).toBeInTheDocument();
   });
+
+  it('hides a group heading when the query filters out all of its items', async () => {
+    render(
+      <Command>
+        <CommandInput aria-label="Search food" />
+        <CommandList>
+          <CommandGroup heading="Fruit">
+            <CommandItem value="Apple">Apple</CommandItem>
+          </CommandGroup>
+          <CommandGroup heading="Vegetables">
+            <CommandItem value="Carrot">Carrot</CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </Command>,
+    );
+
+    const input = screen.getByRole('combobox', { name: 'Search food' });
+    await userEvent.type(input, 'car');
+    expect(screen.queryByText('Fruit')).not.toBeInTheDocument();
+    expect(screen.getByText('Vegetables')).toBeInTheDocument();
+
+    await userEvent.clear(input);
+    expect(screen.getByText('Fruit')).toBeInTheDocument();
+    expect(screen.getByText('Vegetables')).toBeInTheDocument();
+  });
+
+  it('keeps arrow-key traversal in visual order after items are filtered out and back in', async () => {
+    // Stable handlers on purpose: with per-render (inline) handlers every item re-registers on
+    // every keystroke in mount order, which masks registry-order drift. With stable handlers only
+    // re-mounting items re-register, so a registry that appends re-entrants to the tail would put
+    // Apple/Cherry AFTER Banana and desync ArrowDown from the visual order.
+    const selected: string[] = [];
+    const pick = (fruit: string) => () => selected.push(fruit);
+    const [pickApple, pickBanana, pickCherry] = [pick('Apple'), pick('Banana'), pick('Cherry')];
+    render(
+      <Command>
+        <CommandInput aria-label="Search fruit" />
+        <CommandList>
+          <CommandItem value="Apple" onSelect={pickApple}>
+            Apple
+          </CommandItem>
+          <CommandItem value="Banana" onSelect={pickBanana}>
+            Banana
+          </CommandItem>
+          <CommandItem value="Cherry" onSelect={pickCherry}>
+            Cherry
+          </CommandItem>
+        </CommandList>
+      </Command>,
+    );
+
+    const input = screen.getByRole('combobox', { name: 'Search fruit' });
+    await userEvent.type(input, 'ban');
+    expect(screen.getByRole('option', { name: 'Banana' })).toHaveAttribute('aria-selected', 'true');
+
+    await userEvent.clear(input);
+    expect(screen.getByRole('option', { name: 'Banana' })).toHaveAttribute('aria-selected', 'true');
+
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: 'Cherry' })).toHaveAttribute('aria-selected', 'true');
+
+    await userEvent.keyboard('{Enter}');
+    expect(selected).toEqual(['Cherry']);
+  });
 });

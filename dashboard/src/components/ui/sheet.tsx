@@ -8,15 +8,13 @@ export const SheetTrigger = DialogPrimitive.Trigger;
 export const SheetClose = DialogPrimitive.Close;
 
 const sheetVariants = cva(
-  [
-    'fixed z-50 flex flex-col gap-4 border-border bg-surface-raised p-6 shadow-lift',
-    'data-[state=open]:animate-[slide-in-right_250ms_var(--ease-out-expo)]',
-  ],
+  'fixed z-50 flex flex-col gap-4 border-border bg-surface-raised p-6 shadow-lift',
   {
     variants: {
       side: {
-        right: 'inset-y-0 right-0 h-full w-full max-w-md border-l',
-        left: 'inset-y-0 left-0 h-full w-full max-w-md border-r',
+        right:
+          'inset-y-0 right-0 h-full w-full max-w-md border-l data-[state=open]:animate-[slide-in-right_250ms_var(--ease-out-expo)]',
+        left: 'inset-y-0 left-0 h-full w-full max-w-md border-r data-[state=open]:animate-[slide-in-left_250ms_var(--ease-out-expo)]',
       },
     },
     defaultVariants: { side: 'right' },

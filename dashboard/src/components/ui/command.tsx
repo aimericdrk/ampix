@@ -1,10 +1,23 @@
 import {
   createContext, forwardRef, useCallback, useContext, useEffect, useId, useMemo, useRef, useState,
-  type ComponentPropsWithoutRef, type ReactNode,
+  type ComponentPropsWithoutRef, type MutableRefObject, type ReactNode,
 } from 'react';
 import { cn } from '../../lib/cn';
 
-type CommandItemEntry = { id: string; label: string; onSelect?: () => void };
+/** `onSelect` lives in a ref so unstable (per-render) handlers never force re-registration —
+ * registration order must stay stable or keyboard traversal desyncs from the visual order. */
+type CommandItemEntry = { id: string; label: string; onSelectRef: MutableRefObject<(() => void) | undefined> };
+
+/** Sort registered entries by their rendered DOM position so ArrowUp/Down always follows what the
+ * user sees, regardless of the order effects (re-)registered the items in. */
+function byDomOrder(entries: CommandItemEntry[]): CommandItemEntry[] {
+  return [...entries].sort((a, b) => {
+    const elA = document.getElementById(a.id);
+    const elB = document.getElementById(b.id);
+    if (!elA || !elB) return 0;
+    return elA.compareDocumentPosition(elB) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+}
 
 interface CommandContextValue {
   query: string; setQuery: (value: string) => void;
@@ -24,6 +37,10 @@ function useCommandContext(component: string): CommandContextValue {
   return context;
 }
 
+/** Lets `CommandGroup` know which of its descendant items are visible for the current filter,
+ * so a fully filtered-out group hides its heading. Returns an unsubscribe. */
+const CommandGroupContext = createContext<((id: string, visible: boolean) => () => void) | null>(null);
+
 /** Dependency-free combobox-list primitive (no `cmdk`): filter input over a `role="listbox"` of
  * `role="option"` rows, arrow-key/Enter nav via `aria-activedescendant`. Glass panel styling is
  * the consumer's job (see `CommandPalette`). */
@@ -39,14 +56,15 @@ export const Command = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'
       (label: string) => label.toLowerCase().includes(query.trim().toLowerCase()),
       [query],
     );
-    const visibleItems = useMemo(
-      () => itemsRef.current.filter((item) => matches(item.label)),
-      [matches, version],
-    );
+    // Items only register while visible, so the registry IS the visible set; `version` invalidates.
+    const visibleCount = useMemo(() => {
+      void version;
+      return itemsRef.current.length;
+    }, [version]);
     useEffect(() => {
-      if (activeId && visibleItems.some((item) => item.id === activeId)) return;
-      setActiveIdState(visibleItems[0]?.id ?? null);
-    }, [visibleItems, activeId]);
+      if (activeId && itemsRef.current.some((item) => item.id === activeId)) return;
+      setActiveIdState(byDomOrder(itemsRef.current)[0]?.id ?? null);
+    }, [version, activeId]);
     const register = useCallback((entry: CommandItemEntry) => {
       itemsRef.current = [...itemsRef.current.filter((item) => item.id !== entry.id), entry];
       setVersion((v) => v + 1);
@@ -57,22 +75,23 @@ export const Command = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'
     }, []);
     const moveActive = useCallback(
       (direction: 1 | -1) => {
-        if (visibleItems.length === 0) return;
-        const index = visibleItems.findIndex((item) => item.id === activeId);
-        const next = (index + direction + visibleItems.length) % visibleItems.length;
-        setActiveIdState(visibleItems[next]?.id ?? null);
+        const ordered = byDomOrder(itemsRef.current);
+        if (ordered.length === 0) return;
+        const index = ordered.findIndex((item) => item.id === activeId);
+        const next = (index + direction + ordered.length) % ordered.length;
+        setActiveIdState(ordered[next]?.id ?? null);
       },
-      [visibleItems, activeId],
+      [activeId],
     );
     const selectActive = useCallback(() => {
-      itemsRef.current.find((item) => item.id === activeId)?.onSelect?.();
+      itemsRef.current.find((item) => item.id === activeId)?.onSelectRef.current?.();
     }, [activeId]);
     const value = useMemo<CommandContextValue>(
       () => ({
         query, setQuery, activeId, setActiveId: setActiveIdState, listId, inputId, matches,
-        register, moveActive, selectActive, hasVisibleItems: visibleItems.length > 0,
+        register, moveActive, selectActive, hasVisibleItems: visibleCount > 0,
       }),
-      [query, activeId, listId, inputId, matches, register, moveActive, selectActive, visibleItems.length],
+      [query, activeId, listId, inputId, matches, register, moveActive, selectActive, visibleCount],
     );
 
     return (
@@ -131,12 +150,31 @@ CommandList.displayName = 'CommandList';
 export interface CommandGroupProps extends ComponentPropsWithoutRef<'div'> { heading?: ReactNode }
 
 export const CommandGroup = forwardRef<HTMLDivElement, CommandGroupProps>(
-  ({ heading, className, children, ...props }, ref) => (
-    <div ref={ref} role="group" className={cn('py-1', className)} {...props}>
-      {heading && <div className="px-2 py-1.5 text-xs uppercase tracking-wide text-text-muted">{heading}</div>}
-      {children}
-    </div>
-  ),
+  ({ heading, className, children, ...props }, ref) => {
+    // Children stay mounted (they render null while filtered out) and report visibility here, so
+    // the group can drop its heading — and hide its wrapper — once every item is filtered out.
+    const [visibility, setVisibility] = useState<Record<string, boolean>>({});
+    const report = useCallback((id: string, visible: boolean) => {
+      setVisibility((map) => (map[id] === visible ? map : { ...map, [id]: visible }));
+      return () => setVisibility((map) => {
+        const next = { ...map };
+        delete next[id];
+        return next;
+      });
+    }, []);
+    const ids = Object.keys(visibility);
+    const hidden = ids.length > 0 && ids.every((id) => !visibility[id]);
+    return (
+      <CommandGroupContext.Provider value={report}>
+        <div ref={ref} role="group" hidden={hidden} className={cn('py-1', className)} {...props}>
+          {!hidden && heading && (
+            <div className="px-2 py-1.5 text-xs uppercase tracking-wide text-text-muted">{heading}</div>
+          )}
+          {children}
+        </div>
+      </CommandGroupContext.Provider>
+    );
+  },
 );
 CommandGroup.displayName = 'CommandGroup';
 
@@ -160,15 +198,20 @@ export interface CommandItemProps extends Omit<ComponentPropsWithoutRef<'div'>, 
 export const CommandItem = forwardRef<HTMLDivElement, CommandItemProps>(
   ({ value, onSelect, className, children, ...props }, ref) => {
     const ctx = useCommandContext('CommandItem');
+    const reportToGroup = useContext(CommandGroupContext);
     const id = useId();
     const label = value ?? (typeof children === 'string' ? children : '');
     const visible = ctx.matches(label);
 
+    const onSelectRef = useRef(onSelect);
+    onSelectRef.current = onSelect;
+
     const register = ctx.register;
     useEffect(() => {
       if (!visible) return undefined;
-      return register({ id, label, onSelect });
-    }, [visible, id, label, onSelect, register]);
+      return register({ id, label, onSelectRef });
+    }, [visible, id, label, register]);
+    useEffect(() => reportToGroup?.(id, visible), [reportToGroup, id, visible]);
 
     if (!visible) return null;
     const active = ctx.activeId === id;
