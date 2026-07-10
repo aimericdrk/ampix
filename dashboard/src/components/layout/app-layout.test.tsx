@@ -59,6 +59,26 @@ describe('AppLayout', () => {
     );
   });
 
+  it('renders every section heading in the sidebar', async () => {
+    authState.refreshValid = true;
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    expect(within(nav).getByText('Explore')).toBeInTheDocument();
+    expect(within(nav).getByText('Audience')).toBeInTheDocument();
+    expect(within(nav).getByText('Saved')).toBeInTheDocument();
+  });
+
+  it('tints the main content region with the active section accent', async () => {
+    authState.refreshValid = true;
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+
+    // Insights lives in the "Explore" group, mapped to the cyan accent.
+    expect(document.getElementById('main-content')).toHaveAttribute('data-accent', 'cyan');
+  });
+
   it('leaves a project that belongs to another org when the workspace changes', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     currentOrgStore.setCurrentOrg(TEST_ORG_ID);

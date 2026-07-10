@@ -1,4 +1,5 @@
-import { Link, Outlet, useNavigate, useParams, useRouter } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useParams, useRouter, useRouterState } from '@tanstack/react-router';
+import { m } from 'motion/react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { DateRangeProvider } from '../../features/analytics/date-range';
 import { GlobalFilterBar } from '../../features/analytics/components/GlobalFilterBar';
@@ -11,29 +12,84 @@ import { useProjects } from '../../features/projects/api';
 import { useKeyboardShortcuts } from '../../features/shortcuts/keyboard-shortcuts';
 import { ShortcutsHelp } from '../../features/shortcuts/ShortcutsHelp';
 import { cn } from '../../lib/cn';
+import { springTransition, useReducedMotion } from '../../lib/motion';
 import { Button } from '../ui/button';
-import { projectGroups, type NavItem } from './nav-model';
-import { NavIcon } from './NavIcon';
+import { Kbd } from '../ui/kbd';
+import { projectGroups, type NavAccent, type NavItem } from './nav-model';
+import { NavIcon, type IconName } from './NavIcon';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV_LINK_BASE =
-  'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text-muted transition-colors hover:bg-border/40 hover:text-text';
-const NAV_LINK_ACTIVE = 'bg-border/50 font-medium text-text';
+  'relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text-muted transition-colors hover:bg-surface-raised hover:text-text';
+const NAV_LINK_ACTIVE = 'bg-accent-soft text-accent font-medium';
+const NAV_INDICATOR_CLASS = 'absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-accent';
+
+/** Resolve a route pattern (e.g. `/projects/$projectId/insights`) against real param values, so it can
+ * be compared with the router's current pathname — the same substitution `Link` does internally. */
+function resolveHref(to: string, params?: Record<string, string | undefined>): string {
+  if (!params) return to;
+  return Object.entries(params).reduce(
+    (href, [key, value]) => (value ? href.replaceAll(`$${key}`, value) : href),
+    to,
+  );
+}
+
+/** Mirrors `activeOptions.exact` semantics: exact requires an identical pathname, otherwise the
+ * current route matching `href` or one of its descendants counts as active. */
+function isHrefActive(pathname: string, href: string, exact: boolean): boolean {
+  if (exact) return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Sliding accent indicator — a shared `layoutId` so it glides between whichever sidebar link is
+ * active, instead of popping. Renders as a plain bar (no layout animation) under reduced motion. */
+function NavIndicator() {
+  const reducedMotion = useReducedMotion();
+  if (reducedMotion) return <span className={NAV_INDICATOR_CLASS} />;
+  return <m.span layoutId="nav-indicator" className={NAV_INDICATOR_CLASS} transition={springTransition} />;
+}
+
+function SidebarLink({
+  to,
+  params,
+  exact = false,
+  icon,
+  label,
+}: {
+  to: string;
+  params?: Record<string, string | undefined>;
+  exact?: boolean;
+  icon: IconName;
+  label: string;
+}) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const active = isHrefActive(pathname, resolveHref(to, params), exact);
+
+  return (
+    <Link
+      to={to}
+      params={params}
+      className={cn(NAV_LINK_BASE, active && NAV_LINK_ACTIVE)}
+      aria-current={active ? 'page' : undefined}
+    >
+      {active && <NavIndicator />}
+      <NavIcon name={icon} />
+      <span>{label}</span>
+    </Link>
+  );
+}
 
 function NavLink({ item, projectId }: { item: NavItem; projectId?: string }) {
   return (
-    <Link
+    <SidebarLink
       to={item.to}
       params={projectId ? { projectId } : undefined}
-      activeOptions={{ exact: item.exact ?? false }}
-      className={NAV_LINK_BASE}
-      activeProps={{ className: NAV_LINK_ACTIVE, 'aria-current': 'page' }}
-    >
-      <NavIcon name={item.icon} />
-      <span>{item.label}</span>
-    </Link>
+      exact={item.exact ?? false}
+      icon={item.icon}
+      label={item.label}
+    />
   );
 }
 
@@ -81,6 +137,17 @@ export function AppLayout() {
   };
 
   const groups = projectId ? projectGroups() : [];
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const activeGroupAccent: NavAccent =
+    groups.find((group) =>
+      group.items.some((item) =>
+        isHrefActive(
+          pathname,
+          resolveHref(item.to, projectId ? { projectId } : undefined),
+          item.exact ?? false,
+        ),
+      ),
+    )?.accent ?? 'violet';
 
   return (
     <div className="flex min-h-screen">
@@ -93,7 +160,7 @@ export function AppLayout() {
 
       {/* Compact top bar on small screens: brand + a menu toggle for the collapsible sidebar. */}
       <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-border bg-surface px-4 py-2 md:hidden">
-        <span className="text-lg font-semibold">MyAmpix</span>
+        <span className="font-display text-lg font-bold text-gradient-brand">MyAmpix</span>
         <Button
           variant="secondary"
           size="sm"
@@ -115,7 +182,9 @@ export function AppLayout() {
         )}
       >
         <div className="flex shrink-0 flex-col gap-3 p-4">
-          <div className="hidden text-lg font-semibold md:block">MyAmpix</div>
+          <div className="hidden md:block">
+            <span className="font-display text-lg font-bold text-gradient-brand">MyAmpix</span>
+          </div>
           <OrgSwitcher />
           <ProjectSwitcher />
           {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
@@ -127,18 +196,14 @@ export function AppLayout() {
           className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
           onClickCapture={() => setMobileOpen(false)}
         >
-          <Link
-            to="/projects"
-            activeOptions={{ exact: true }}
-            className={NAV_LINK_BASE}
-            activeProps={{ className: NAV_LINK_ACTIVE, 'aria-current': 'page' }}
-          >
-            <NavIcon name="projects" />
-            <span>Projects</span>
-          </Link>
+          <SidebarLink to="/projects" exact icon="projects" label="Projects" />
 
           {groups.map((group, index) => (
-            <NavSection key={group.heading ?? `group-${index}`} heading={group.heading}>
+            <NavSection
+              key={group.heading ?? `group-${index}`}
+              heading={group.heading}
+              accent={group.accent}
+            >
               {group.items.map((item) => (
                 <NavLink key={item.to} item={item} projectId={projectId} />
               ))}
@@ -154,32 +219,15 @@ export function AppLayout() {
 
         <div className="mt-auto shrink-0 space-y-1 border-t border-border p-4">
           {currentOrgId && (
-            <Link
+            <SidebarLink
               to="/orgs/$orgId/settings"
               params={{ orgId: currentOrgId }}
-              className={NAV_LINK_BASE}
-              activeProps={{ className: NAV_LINK_ACTIVE, 'aria-current': 'page' }}
-            >
-              <NavIcon name="org" />
-              <span>Organization settings</span>
-            </Link>
+              icon="org"
+              label="Organization settings"
+            />
           )}
-          <Link
-            to="/account"
-            className={NAV_LINK_BASE}
-            activeProps={{ className: NAV_LINK_ACTIVE, 'aria-current': 'page' }}
-          >
-            <NavIcon name="account" />
-            <span>Account</span>
-          </Link>
-          <Link
-            to="/settings/security"
-            className={NAV_LINK_BASE}
-            activeProps={{ className: NAV_LINK_ACTIVE, 'aria-current': 'page' }}
-          >
-            <NavIcon name="settings" />
-            <span>Security</span>
-          </Link>
+          <SidebarLink to="/account" icon="account" label="Account" />
+          <SidebarLink to="/settings/security" icon="settings" label="Security" />
           <ThemeToggle />
           <div className="truncate px-3 pt-1 text-xs text-text-muted">{user?.email}</div>
           <Button
@@ -196,14 +244,18 @@ export function AppLayout() {
             onClick={() => setHelpOpen(true)}
             className="w-full truncate px-3 pt-1 text-left text-xs text-text-muted/70 transition-colors hover:text-text-muted"
           >
-            Press <kbd className="rounded border border-border px-1 py-0.5">?</kbd> for shortcuts
+            Press <Kbd>?</Kbd> for shortcuts
           </button>
         </div>
       </aside>
 
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
 
-      <main id="main-content" className="flex min-h-screen flex-1 flex-col p-6 pt-16 md:p-8 md:pt-8">
+      <main
+        id="main-content"
+        data-accent={activeGroupAccent}
+        className="flex min-h-screen flex-1 flex-col p-6 pt-16 md:p-8 md:pt-8"
+      >
         {/* Made available app-wide now; pages migrate onto `useDateRange` in a later phase. Scoped
             to a stable key even off project routes, so the provider never needs to unmount. */}
         <DateRangeProvider projectId={projectId ?? 'no-project'}>
@@ -221,11 +273,19 @@ export function AppLayout() {
   );
 }
 
-function NavSection({ heading, children }: { heading?: string; children: ReactNode }) {
+function NavSection({
+  heading,
+  accent,
+  children,
+}: {
+  heading?: string;
+  accent?: NavAccent;
+  children: ReactNode;
+}) {
   return (
-    <div className="mt-4">
+    <div className="mt-4" data-accent={accent}>
       {heading && (
-        <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted/80">
+        <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted/70">
           {heading}
         </p>
       )}
