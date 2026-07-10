@@ -10,7 +10,7 @@ import type {
   ListProjectMembersResponse,
   ListProjectsResponse,
   ListTokensResponse,
-  ProjectMember,
+  UpdatedProjectMember,
   UpdateProjectMemberRoleRequest,
   UpdateProjectRequest,
   UpdateProjectResponse,
@@ -122,7 +122,7 @@ export function useAddProjectMember(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: AddProjectMemberRequest) =>
-      apiFetch<ProjectMember>(`/api/v1/projects/${projectId}/members`, {
+      apiFetch<UpdatedProjectMember>(`/api/v1/projects/${projectId}/members`, {
         method: 'POST',
         body: input,
       }),
@@ -136,7 +136,7 @@ export function useUpdateProjectMemberRole(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, role }: { userId: string } & UpdateProjectMemberRoleRequest) =>
-      apiFetch<void>(`/api/v1/projects/${projectId}/members/${userId}`, {
+      apiFetch<UpdatedProjectMember>(`/api/v1/projects/${projectId}/members/${userId}`, {
         method: 'PATCH',
         body: { role },
       }),

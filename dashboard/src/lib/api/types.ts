@@ -186,6 +186,16 @@ export interface UpdateProjectMemberRoleRequest {
   role: ProjectRole;
 }
 
+/**
+ * `POST /projects/:projectId/members` and `PATCH /projects/:projectId/members/:userId` response —
+ * flat `{ user_id, role }` (NOT the nested `ProjectMember`), mirroring the backend
+ * `UpdatedProjectMember` in `project-members.types.ts`.
+ */
+export interface UpdatedProjectMember {
+  user_id: string;
+  role: ProjectRole;
+}
+
 export interface UpdateMemberRoleRequest {
   role: OrgRole;
 }
