@@ -3,19 +3,10 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import type { HistogramBucket } from '../../../../lib/api/types';
 import { colorForIndex } from '../../palette';
 import { formatCurrency, formatDurationMs, formatExactNumber, formatPercent } from '../../format';
+import { ChartTooltip, axisProps, chartAnimationProps, gridProps } from './chart-theme';
 
 /** How a bucket's `lower`/`upper` bounds (and the summary KPIs) should be formatted (feat-09 §3.2). */
 export type HistogramUnit = 'number' | 'duration' | 'currency';
-
-const TOOLTIP_STYLE = {
-  backgroundColor: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 13,
-};
-
-const AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
 
 const CHART_MARGIN = { top: 8, right: 16, left: 0, bottom: 8 };
 
@@ -65,6 +56,7 @@ export function HistogramChart({
     [buckets, unit],
   );
   const total = useMemo(() => buckets.reduce((sum, bucket) => sum + bucket.count, 0), [buckets]);
+  const animation = chartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4">
@@ -75,16 +67,14 @@ export function HistogramChart({
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={CHART_MARGIN}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
-            <XAxis dataKey="range" tick={AXIS_TICK} stroke="var(--border)" />
-            <YAxis tick={AXIS_TICK} stroke="var(--border)" allowDecimals={false} />
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="range" {...axisProps} />
+            <YAxis {...axisProps} allowDecimals={false} />
             <Tooltip
-              contentStyle={TOOLTIP_STYLE}
-              labelStyle={{ color: 'var(--text-muted)' }}
+              content={<ChartTooltip formatter={(value) => formatExactNumber(Number(value))} />}
               cursor={{ fill: 'var(--border)', opacity: 0.3 }}
-              formatter={(value) => formatExactNumber(Number(value))}
             />
-            <Bar dataKey="count" name="Count" isAnimationActive={false} fill={colorForIndex(0)} />
+            <Bar dataKey="count" name="Count" {...animation} fill={colorForIndex(0)} />
           </BarChart>
         </ResponsiveContainer>
       </div>

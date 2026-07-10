@@ -23,6 +23,7 @@ export function ChartCard({
   emptyText = 'No data for this range.',
   errorText = 'Something went wrong loading this chart.',
   exportImageName,
+  accent = false,
   children,
 }: {
   title: string;
@@ -35,6 +36,9 @@ export function ChartCard({
   /** When set, renders an "Export PNG" button that downloads the chart's SVG as
    * `${exportImageName}.png`. Omit to keep the card exactly as before. */
   exportImageName?: string;
+  /** Shows a small `bg-accent` dot beside the title — an optional emphasis marker, e.g. for the
+   * chart the user is currently drilled into. Omit for the plain title (the default). */
+  accent?: boolean;
   children: ReactNode;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -60,7 +64,10 @@ export function ChartCard({
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="flex items-center gap-2 font-display text-sm font-semibold">
+            {accent && <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-accent" />}
+            {title}
+          </CardTitle>
           {description && <p className="text-sm text-text-muted">{description}</p>}
         </div>
         <div className="flex items-center gap-2">

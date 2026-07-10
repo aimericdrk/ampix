@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatExactNumber, formatPercent } from '../../format';
 import type { PieSlice } from './CompositionPieChart';
+import { ChartTooltip, chartAnimationProps } from './chart-theme';
 
 /** Synthetic top-N rollup buckets (feat-03 §4) — never selectable. */
 function isSyntheticLabel(label: string): boolean {
@@ -53,6 +54,7 @@ export function DonutChart({
   selectedValue?: string;
 }) {
   const total = useMemo(() => slices.reduce((sum, s) => sum + s.value, 0), [slices]);
+  const animation = chartAnimationProps();
 
   const centerDisplay =
     centerValue === undefined
@@ -77,20 +79,17 @@ export function DonutChart({
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Tooltip
-              contentStyle={{
-                backgroundColor: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                color: 'var(--text)',
-                fontSize: 13,
-              }}
-              formatter={(value, name) => {
-                const n = Number(value);
-                return [
-                  `${formatExactNumber(n)} (${total > 0 ? formatPercent(n / total) : '0%'})`,
-                  name,
-                ];
-              }}
+              content={
+                <ChartTooltip
+                  formatter={(value, name) => {
+                    const n = Number(value);
+                    return [
+                      `${formatExactNumber(n)} (${total > 0 ? formatPercent(n / total) : '0%'})`,
+                      name as string,
+                    ];
+                  }}
+                />
+              }
             />
             <Pie
               data={slices}
@@ -99,9 +98,9 @@ export function DonutChart({
               innerRadius="70%"
               outerRadius="90%"
               paddingAngle={1}
-              stroke="var(--chart-surface)"
+              stroke="var(--surface)"
               strokeWidth={2}
-              isAnimationActive={false}
+              {...animation}
             >
               {slices.map((slice) => {
                 const selectable = Boolean(onSelectValue) && !isSyntheticLabel(slice.label);
@@ -110,7 +109,7 @@ export function DonutChart({
                   <Cell
                     key={slice.key}
                     fill={colorFor(slice.key)}
-                    stroke={isSelected ? 'var(--text)' : 'var(--chart-surface)'}
+                    stroke={isSelected ? 'var(--text)' : 'var(--surface)'}
                     strokeWidth={isSelected ? 3 : 2}
                     className={selectable ? SELECTABLE_MARK_CLASS : undefined}
                     onClick={selectable ? () => onSelectValue!(slice.label) : undefined}

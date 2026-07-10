@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import {
   Area,
   CartesianGrid,
@@ -15,6 +16,14 @@ import type { Anomaly } from '../../anomaly';
 import type { Annotation } from '../../annotations';
 import { colorForIndex, SERIES_OTHER_COLOR_VAR } from '../../palette';
 import { formatExactNumber } from '../../format';
+import {
+  ChartTooltip,
+  SeriesGradient,
+  axisProps,
+  chartAnimationProps,
+  gridProps,
+  seriesGradientId,
+} from './chart-theme';
 
 export interface ComparisonTrendPoint {
   [key: string]: string | number;
@@ -44,16 +53,6 @@ export interface ComparisonTrendProps {
    * backward compatible. */
   annotations?: Annotation[];
 }
-
-const TOOLTIP_STYLE = {
-  backgroundColor: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 13,
-};
-
-const AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
@@ -146,9 +145,12 @@ export function ComparisonTrend({
   anomalies,
   annotations,
 }: ComparisonTrendProps) {
+  const chartId = useId();
+  const currentGradientId = seriesGradientId(chartId, 0);
   const hasPrevious = !!previous && previous.length > 0;
   const hasAnomalies = !!anomalies && anomalies.length > 0;
   const currentColor = colorForIndex(0);
+  const animation = chartAnimationProps();
 
   const rows = current.map((row, index) => ({
     x: row[xKey],
@@ -173,10 +175,13 @@ export function ComparisonTrend({
       >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
-            <XAxis dataKey="x" tick={AXIS_TICK} stroke="var(--border)" />
-            <YAxis tick={AXIS_TICK} stroke="var(--border)" />
-            <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: 'var(--text-muted)' }} />
+            <defs>
+              <SeriesGradient id={currentGradientId} color={currentColor} />
+            </defs>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="x" {...axisProps} />
+            <YAxis {...axisProps} />
+            <Tooltip content={<ChartTooltip />} />
             {hasPrevious && <Legend wrapperStyle={{ color: 'var(--text)', fontSize: 13 }} />}
             <Area
               type="monotone"
@@ -184,10 +189,10 @@ export function ComparisonTrend({
               name="Current"
               stroke={currentColor}
               strokeWidth={2}
-              fill={currentColor}
-              fillOpacity={0.18}
-              isAnimationActive={false}
+              fill={`url(#${currentGradientId})`}
+              fillOpacity={1}
               activeDot={{ r: 4, stroke: 'var(--chart-surface)', strokeWidth: 2 }}
+              {...animation}
             />
             {hasPrevious && (
               <Line
@@ -199,7 +204,7 @@ export function ComparisonTrend({
                 strokeDasharray="6 4"
                 dot={false}
                 connectNulls
-                isAnimationActive={false}
+                {...animation}
               />
             )}
             {hasAnomalies &&
