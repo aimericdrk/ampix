@@ -13,7 +13,16 @@ enum Role {
   viewer
 }
 
-/** §16 — the four analysis kinds a saved report / dashboard tile can hold. */
+enum ProjectRole {
+  owner
+  admin
+  analyst
+  viewer
+}
+
+/**
+ * §16 — the four analysis kinds a saved report / dashboard tile can hold.
+ */
 enum ReportKind {
   insights
   funnel
@@ -33,19 +42,21 @@ model Organization {
 }
 
 model User {
-  id               String                  @id @default(uuid(7)) @db.Uuid
-  email            String                  @unique
-  passwordHash     String                  @map("password_hash")
-  name             String
-  totpSecret       String?                 @map("totp_secret")
-  twoFactorEnabled Boolean                 @default(false) @map("two_factor_enabled")
-  createdAt        DateTime                @default(now()) @map("created_at")
-  memberships      Membership[]
-  refreshTokens    RefreshToken[]
-  recoveryCodes    TwoFactorRecoveryCode[]
-  cohorts          Cohort[]
-  savedReports     SavedReport[]
-  dashboards       Dashboard[]
+  id                 String                  @id @default(uuid(7)) @db.Uuid
+  email              String                  @unique
+  passwordHash       String                  @map("password_hash")
+  name               String
+  totpSecret         String?                 @map("totp_secret")
+  twoFactorEnabled   Boolean                 @default(false) @map("two_factor_enabled")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  memberships        Membership[]
+  refreshTokens      RefreshToken[]
+  recoveryCodes      TwoFactorRecoveryCode[]
+  cohorts            Cohort[]
+  savedReports       SavedReport[]
+  dashboards         Dashboard[]
+  projectMemberships ProjectMembership[]
+  createdProjects    Project[]               @relation("ProjectCreatedBy")
 
   @@map("users")
 }
@@ -76,17 +87,20 @@ model Invitation {
 }
 
 model Project {
-  id        String       @id @default(uuid(7)) @db.Uuid
-  orgId     String       @map("org_id") @db.Uuid
-  name      String
-  timezone  String       @default("UTC")
-  createdAt DateTime     @default(now()) @map("created_at")
-  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  sdkTokens SdkToken[]
-  cohorts   Cohort[]
-  savedReports SavedReport[]
-  dashboards Dashboard[]
-  screenCaptures ScreenCapture[]
+  id                 String              @id @default(uuid(7)) @db.Uuid
+  orgId              String              @map("org_id") @db.Uuid
+  name               String
+  timezone           String              @default("UTC")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  org                Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sdkTokens          SdkToken[]
+  cohorts            Cohort[]
+  savedReports       SavedReport[]
+  dashboards         Dashboard[]
+  screenCaptures     ScreenCapture[]
+  createdById        String?             @map("created_by") @db.Uuid
+  createdBy          User?               @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  projectMemberships ProjectMembership[]
 
   @@map("projects")
 }
@@ -170,7 +184,9 @@ model SavedReport {
   @@map("saved_reports")
 }
 
-/** §16 — a named grid of tiles (12-column layout), each tile backed by a saved report or inline def. */
+/**
+ * §16 — a named grid of tiles (12-column layout), each tile backed by a saved report or inline def.
+ */
 model Dashboard {
   id        String   @id @default(uuid(7)) @db.Uuid
   projectId String   @map("project_id") @db.Uuid
@@ -209,6 +225,20 @@ model DashboardTile {
 
   @@index([dashboardId, position])
   @@map("dashboard_tiles")
+}
+
+model ProjectMembership {
+  userId    String      @map("user_id") @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  role      ProjectRole
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([projectId])
+  @@map("project_memberships")
 }
 
 /**
