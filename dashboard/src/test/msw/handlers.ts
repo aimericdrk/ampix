@@ -90,6 +90,7 @@ export const TEST_PROJECT: Project = {
   name: 'Demo App',
   timezone: 'UTC',
   ingest_token: 'mam_0123456789abcdef0123456789abcdef',
+  role: 'owner',
 };
 
 /** Deterministic sample for GET /projects/:projectId/events/summary (contracts §12). */
@@ -710,6 +711,7 @@ function toProject(record: ProjectRecord): Project {
     name: record.name,
     timezone: record.timezone,
     ingest_token: ingestTokenFor(record.id),
+    role: 'owner',
   };
 }
 
