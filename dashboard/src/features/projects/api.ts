@@ -1,13 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api/client';
 import type {
+  AddProjectMemberRequest,
   CreateProjectRequest,
   CreatedProject,
   CreatedToken,
   CreateTokenRequest,
   EventSummaryResponse,
+  ListProjectMembersResponse,
   ListProjectsResponse,
   ListTokensResponse,
+  ProjectMember,
+  UpdateProjectMemberRoleRequest,
   UpdateProjectRequest,
   UpdateProjectResponse,
 } from '../../lib/api/types';
@@ -19,6 +23,13 @@ export function useProjects() {
     queryKey: PROJECTS_QUERY_KEY,
     queryFn: () => apiFetch<ListProjectsResponse>('/api/v1/projects'),
   });
+}
+
+/** The caller's role in a given project, once the projects list has loaded — undefined until then. */
+export function useProjectRole(projectId: string | undefined) {
+  const { data } = useProjects();
+  if (!projectId || !data) return undefined;
+  return data.projects.find((project) => project.id === projectId)?.role;
 }
 
 /** All-time event summary for a project (contracts §12) — no client recomputation, use the totals as-is. */
@@ -94,6 +105,54 @@ export function useRevokeToken(projectId: string) {
       apiFetch<void>(`/api/v1/projects/${projectId}/tokens/${tokenId}`, { method: 'DELETE' }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tokens'] });
+    },
+  });
+}
+
+// --- Per-project members (per-project-roles) ---
+
+export function useProjectMembers(projectId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'members'],
+    queryFn: () => apiFetch<ListProjectMembersResponse>(`/api/v1/projects/${projectId}/members`),
+  });
+}
+
+export function useAddProjectMember(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AddProjectMemberRequest) =>
+      apiFetch<ProjectMember>(`/api/v1/projects/${projectId}/members`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'members'] });
+    },
+  });
+}
+
+export function useUpdateProjectMemberRole(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string } & UpdateProjectMemberRoleRequest) =>
+      apiFetch<void>(`/api/v1/projects/${projectId}/members/${userId}`, {
+        method: 'PATCH',
+        body: { role },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'members'] });
+    },
+  });
+}
+
+export function useRemoveProjectMember(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<void>(`/api/v1/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'members'] });
     },
   });
 }

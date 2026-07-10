@@ -50,6 +50,8 @@ export interface Project {
   timezone: string;
   /** Added by contracts §12 — included because the requester owns this project. */
   ingest_token: string;
+  /** The caller's role in this project (per-project-roles). */
+  role: ProjectRole;
 }
 
 export interface ListProjectsResponse {
@@ -151,6 +153,37 @@ export interface OrgMember {
 
 export interface ListMembersResponse {
   members: OrgMember[];
+}
+
+// --- Per-project roles & membership ---
+
+/** Role matrix (per-project-roles): owner > admin > analyst > viewer. */
+export type ProjectRole = 'owner' | 'admin' | 'analyst' | 'viewer';
+
+export const PROJECT_ROLES: ProjectRole[] = ['owner', 'admin', 'analyst', 'viewer'];
+
+export interface ProjectMemberUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export interface ProjectMember {
+  user: ProjectMemberUser;
+  role: ProjectRole;
+}
+
+export interface ListProjectMembersResponse {
+  members: ProjectMember[];
+}
+
+export interface AddProjectMemberRequest {
+  userId: string;
+  role: ProjectRole;
+}
+
+export interface UpdateProjectMemberRoleRequest {
+  role: ProjectRole;
 }
 
 export interface UpdateMemberRoleRequest {
