@@ -138,13 +138,8 @@ describe('MembersService (real Postgres)', () => {
       });
     });
 
-    it('404s for a malformed (non-UUID-shaped) userId without querying Postgres', async () => {
-      const org = await seedOrg();
-
-      await expect(service.changeRole(org.id, 'not-a-uuid', 'admin')).rejects.toMatchObject({
-        problem: { status: 404 },
-      });
-    });
+    // The malformed-userId "no DB touched" guarantee (changeRole + remove) is verified with spies
+    // in members.service.unit.spec.ts — a real Prisma client has no clean hook for that assertion.
 
     it(
       'is atomic under a genuine Postgres write-skew race — SECURITY-CRITICAL: two concurrent ' +
@@ -221,13 +216,8 @@ describe('MembersService (real Postgres)', () => {
       });
     });
 
-    it('404s for a malformed (non-UUID-shaped) userId without querying Postgres', async () => {
-      const org = await seedOrg();
-
-      await expect(service.remove(org.id, 'not-a-uuid')).rejects.toMatchObject({
-        problem: { status: 404 },
-      });
-    });
+    // Malformed-userId "no DB touched" guarantee for remove() is verified in
+    // members.service.unit.spec.ts (see the changeRole note above).
 
     it(
       'is atomic under a genuine Postgres write-skew race — SECURITY-CRITICAL: two concurrent ' +
