@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatExactNumber, formatPercent } from '../../format';
 import type { PieSlice } from './CompositionPieChart';
-import { ChartTooltip, chartAnimationProps } from './chart-theme';
+import { ChartTooltip, useChartAnimationProps } from './chart-theme';
 
 /** Synthetic top-N rollup buckets (feat-03 §4) — never selectable. */
 function isSyntheticLabel(label: string): boolean {
@@ -54,7 +54,7 @@ export function DonutChart({
   selectedValue?: string;
 }) {
   const total = useMemo(() => slices.reduce((sum, s) => sum + s.value, 0), [slices]);
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
 
   const centerDisplay =
     centerValue === undefined

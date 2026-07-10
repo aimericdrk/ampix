@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { colorForIndex } from '../../palette';
 import { formatExactNumber } from '../../format';
-import { ChartTooltip, axisProps, chartAnimationProps, gridProps } from './chart-theme';
+import { ChartTooltip, axisProps, useChartAnimationProps, gridProps } from './chart-theme';
 
 /** A single label→value bar for the non-stacked variant. */
 export interface BreakdownDatum {
@@ -140,7 +140,7 @@ function SingleBreakdownChart({
   selectedValue?: string;
 }) {
   const sorted = useMemo(() => [...data].sort((a, b) => b.value - a.value), [data]);
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4">
@@ -286,7 +286,7 @@ function StackedBreakdownChart({
       }),
     [data],
   );
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4">

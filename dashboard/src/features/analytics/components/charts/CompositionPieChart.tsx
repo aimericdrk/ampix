@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatExactNumber, formatPercent } from '../../format';
-import { ChartTooltip, chartAnimationProps } from './chart-theme';
+import { ChartTooltip, useChartAnimationProps } from './chart-theme';
 
 export interface PieSlice {
   key: string;
@@ -33,7 +33,7 @@ export function CompositionPieChart({
   legendLabel?: string;
 }) {
   const total = useMemo(() => slices.reduce((sum, s) => sum + s.value, 0), [slices]);
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">

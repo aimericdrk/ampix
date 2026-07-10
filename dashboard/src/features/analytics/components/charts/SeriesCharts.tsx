@@ -15,7 +15,7 @@ import {
   ChartTooltip,
   SeriesGradient,
   axisProps,
-  chartAnimationProps,
+  useChartAnimationProps,
   gridProps,
   seriesGradientId,
 } from './chart-theme';
@@ -44,7 +44,7 @@ export function AreaTrendChart({ rows, keys, labels, colorFor, ariaLabel, height
   const chartId = useId();
   const showLegend = keys.length > 1;
   const stacked = keys.length > 1;
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
   return (
     <div role="img" aria-label={ariaLabel} style={{ width: '100%', height, backgroundColor: 'var(--chart-surface)' }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -84,7 +84,7 @@ export function AreaTrendChart({ rows, keys, labels, colorFor, ariaLabel, height
 /** Composition over time — one stacked bar per bucket, a 2px surface gap between segments. */
 export function StackedBarChart({ rows, keys, labels, colorFor, ariaLabel, height = 320 }: SeriesChartProps) {
   const showLegend = keys.length > 1;
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
   return (
     <div role="img" aria-label={ariaLabel} style={{ width: '100%', height, backgroundColor: 'var(--chart-surface)' }}>
       <ResponsiveContainer width="100%" height="100%">

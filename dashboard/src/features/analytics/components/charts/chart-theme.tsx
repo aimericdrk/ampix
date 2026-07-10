@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useMotionSafe } from '../../../../lib/motion';
 
 /**
  * Shared Recharts theming for the "MyAmpix Neon" chart kit: a glass tooltip, gradient area
@@ -147,23 +148,13 @@ export const noAnimation = {
 } as const;
 
 /**
- * Whether the environment has POSITIVELY declared it's fine with motion. Deliberately queries
- * `no-preference` (the affirmative value) rather than negating `reduce`: in a real browser the
- * two are exact complements (the media feature has exactly two values), but in jsdom the
- * `matchMedia` stub (`src/test/setup.ts`) returns `matches: false` for every query — so tests
- * fall into `noAnimation`, which matters because Recharts 3 draws animated bar/pie paths only
- * after animation frames tick, and jsdom never ticks them (DOM-presence assertions would see an
- * empty chart). Environments with no `matchMedia` at all also default to no motion.
+ * `animationProps` or `noAnimation`, chosen reactively — the one-liner every chart spreads onto
+ * its marks. Built on `useMotionSafe` (`lib/motion.ts`), the reactive sibling of
+ * `useReducedMotion`, so a live OS reduced-motion toggle re-renders charts just like every other
+ * animated surface (see that hook's comment for why it queries the affirmative `no-preference`
+ * form — the jsdom stub must resolve to "no motion" or animated Recharts marks render nothing in
+ * tests).
  */
-export function prefersReducedMotion(): boolean {
-  try {
-    return !window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
-  } catch {
-    return true;
-  }
-}
-
-/** `animationProps` or `noAnimation`, chosen for the caller — the one-liner every chart spreads onto its marks. */
-export function chartAnimationProps(): typeof animationProps | typeof noAnimation {
-  return prefersReducedMotion() ? noAnimation : animationProps;
+export function useChartAnimationProps(): typeof animationProps | typeof noAnimation {
+  return useMotionSafe() ? animationProps : noAnimation;
 }

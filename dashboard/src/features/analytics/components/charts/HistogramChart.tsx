@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import type { HistogramBucket } from '../../../../lib/api/types';
 import { colorForIndex } from '../../palette';
 import { formatCurrency, formatDurationMs, formatExactNumber, formatPercent } from '../../format';
-import { ChartTooltip, axisProps, chartAnimationProps, gridProps } from './chart-theme';
+import { ChartTooltip, axisProps, useChartAnimationProps, gridProps } from './chart-theme';
 
 /** How a bucket's `lower`/`upper` bounds (and the summary KPIs) should be formatted (feat-09 §3.2). */
 export type HistogramUnit = 'number' | 'duration' | 'currency';
@@ -56,7 +56,7 @@ export function HistogramChart({
     [buckets, unit],
   );
   const total = useMemo(() => buckets.reduce((sum, bucket) => sum + bucket.count, 0), [buckets]);
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4">

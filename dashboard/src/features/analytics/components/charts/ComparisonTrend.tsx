@@ -20,7 +20,7 @@ import {
   ChartTooltip,
   SeriesGradient,
   axisProps,
-  chartAnimationProps,
+  useChartAnimationProps,
   gridProps,
   seriesGradientId,
 } from './chart-theme';
@@ -150,7 +150,7 @@ export function ComparisonTrend({
   const hasPrevious = !!previous && previous.length > 0;
   const hasAnomalies = !!anomalies && anomalies.length > 0;
   const currentColor = colorForIndex(0);
-  const animation = chartAnimationProps();
+  const animation = useChartAnimationProps();
 
   const rows = current.map((row, index) => ({
     x: row[xKey],

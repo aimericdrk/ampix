@@ -1,5 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useMotionSafe } from '../../lib/motion';
 import { AnimatedNumber } from './animated-number';
 import { Reveal } from './reveal';
 
@@ -11,6 +12,20 @@ describe('Reveal', () => {
       </Reveal>,
     );
     expect(screen.getByText('Hello')).toBeInTheDocument();
+  });
+});
+
+describe('useMotionSafe', () => {
+  function MotionProbe() {
+    return <p>{useMotionSafe() ? 'motion-safe' : 'motion-off'}</p>;
+  }
+
+  it('returns false under the jsdom matchMedia stub, so charts render static in tests', () => {
+    // The setup.ts stub answers `matches: false` for every query, including the affirmative
+    // `(prefers-reduced-motion: no-preference)` — useMotionSafe must treat that as "no motion",
+    // which is what lets animated Recharts marks render synchronously in the chart tests.
+    render(<MotionProbe />);
+    expect(screen.getByText('motion-off')).toBeInTheDocument();
   });
 });
 
