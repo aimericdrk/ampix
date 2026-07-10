@@ -426,6 +426,109 @@ describe('Tenancy management (e2e, contracts §13)', () => {
     });
   });
 
+  /**
+   * Per-project visibility (contracts §16): `GET /api/v1/projects` and project-scoped routes are
+   * gated by `ProjectMembership`, not by org membership. An org member — even an org admin —
+   * who was never granted a `ProjectMembership` must neither see the project in their listing
+   * nor be able to read it directly; once the project owner adds them via
+   * `POST /api/v1/projects/:projectId/members`, both open up at the granted role.
+   */
+  describe('per-project visibility: ProjectMembership gates access, not org membership', () => {
+    it(
+      'creator sees their project (auto-owner); a second org member with no ' +
+        'ProjectMembership sees neither the project nor its data, and gains both only after ' +
+        'being explicitly added',
+      async () => {
+        const http = stack.app.getHttpServer();
+
+        const owner = await signup(stack, uniqueEmail());
+        const orgRes = await request(http)
+          .post('/api/v1/orgs')
+          .set('Authorization', auth(owner.accessToken))
+          .send({ name: 'Visibility Org' })
+          .expect(201);
+        const visOrgId = orgRes.body.id as string;
+
+        const projectRes = await request(http)
+          .post(`/api/v1/orgs/${visOrgId}/projects`)
+          .set('Authorization', auth(owner.accessToken))
+          .send({ name: 'Restricted Project' })
+          .expect(201);
+        const visProjectId = projectRes.body.id as string;
+
+        // The creator is auto-granted `owner` and sees the project in their own listing.
+        const ownerProjects = await request(http)
+          .get('/api/v1/projects')
+          .set('Authorization', auth(owner.accessToken))
+          .expect(200);
+        const ownerEntry = ownerProjects.body.projects.find(
+          (p: { id: string }) => p.id === visProjectId,
+        );
+        expect(ownerEntry).toMatchObject({ id: visProjectId, role: 'owner' });
+
+        // Invite a SECOND user into the org as ORG ADMIN — deliberately a high org role, to
+        // prove org role alone (even admin) is not sufficient for project access.
+        const invite = await request(http)
+          .post(`/api/v1/orgs/${visOrgId}/invitations`)
+          .set('Authorization', auth(owner.accessToken))
+          .send({ role: 'admin' })
+          .expect(201);
+        const second = await signup(stack, uniqueEmail());
+        await request(http)
+          .post(`/api/v1/invitations/${invite.body.token}/accept`)
+          .set('Authorization', auth(second.accessToken))
+          .expect(200);
+
+        // Org membership alone: the project is ABSENT from the second user's listing.
+        const secondProjectsBefore = await request(http)
+          .get('/api/v1/projects')
+          .set('Authorization', auth(second.accessToken))
+          .expect(200);
+        expect(
+          secondProjectsBefore.body.projects.some((p: { id: string }) => p.id === visProjectId),
+        ).toBe(false);
+
+        // ...and direct project-scoped access is 403, not just absent from the list.
+        await request(http)
+          .get(`/api/v1/projects/${visProjectId}/events/summary`)
+          .set('Authorization', auth(second.accessToken))
+          .expect(403);
+        await request(http)
+          .get(`/api/v1/projects/${visProjectId}/dashboards`)
+          .set('Authorization', auth(second.accessToken))
+          .expect(403);
+
+        // The owner explicitly adds the second user to THIS project as 'analyst'.
+        const addRes = await request(http)
+          .post(`/api/v1/projects/${visProjectId}/members`)
+          .set('Authorization', auth(owner.accessToken))
+          .send({ userId: second.userId, role: 'analyst' })
+          .expect(201);
+        expect(addRes.body).toEqual({ user_id: second.userId, role: 'analyst' });
+
+        // Now the project appears in their listing, at the granted role...
+        const secondProjectsAfter = await request(http)
+          .get('/api/v1/projects')
+          .set('Authorization', auth(second.accessToken))
+          .expect(200);
+        const secondEntry = secondProjectsAfter.body.projects.find(
+          (p: { id: string }) => p.id === visProjectId,
+        );
+        expect(secondEntry).toMatchObject({ id: visProjectId, role: 'analyst' });
+
+        // ...and direct project-scoped reads succeed at that role.
+        await request(http)
+          .get(`/api/v1/projects/${visProjectId}/events/summary`)
+          .set('Authorization', auth(second.accessToken))
+          .expect(200);
+        await request(http)
+          .get(`/api/v1/projects/${visProjectId}/dashboards`)
+          .set('Authorization', auth(second.accessToken))
+          .expect(200);
+      },
+    );
+  });
+
   describe('non-members and unknown ids', () => {
     it('a non-member gets 403 on org-scoped routes (not 404 — the org exists)', async () => {
       const owner = await signup(stack, uniqueEmail());
