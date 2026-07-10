@@ -22,30 +22,33 @@ import { Separator } from '../../../components/ui/separator';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import type { SdkToken } from '../../../lib/api/types';
-import { useOrgRole } from '../../orgs/api';
 import {
   useCreateToken,
   useDeleteProject,
   useEventSummary,
+  useProjectRole,
   useProjects,
   useRevokeToken,
   useTokens,
   useUpdateProject,
 } from '../api';
+import { ProjectMembersSection } from './ProjectMembersSection';
 
 /**
  * Project settings screen (sidebar "Project settings" → /projects/$projectId).
- * Organized into clearly titled sections: General, SDK tokens, SDK log level, Data, Danger zone.
- * Read-only info (ingest token, data, facts) is visible to every member; mutations (rename, token
- * create/rotate/revoke, delete) are gated behind the caller's admin role in the owning org.
+ * Organized into clearly titled sections: General, Members, SDK tokens, SDK log level, Data,
+ * Danger zone. Read-only info (ingest token, data, facts) is visible to every member; mutations
+ * (rename, token create/rotate/revoke) are gated behind the caller's project role being admin+;
+ * deleting the project is owner-only (per-project-roles).
  */
 export function ProjectDetailPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId' });
   const router = useRouter();
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
-  const role = useOrgRole(project?.org_id);
-  const isAdmin = role === 'admin';
+  const role = useProjectRole(project?.id);
+  const isAdmin = role === 'admin' || role === 'owner';
+  const isOwner = role === 'owner';
 
   return (
     <PageShell
@@ -67,12 +70,18 @@ export function ProjectDetailPage() {
           </Reveal>
         )}
 
-        <Reveal index={1}>
+        {project && (
+          <Reveal index={1} className="lg:col-span-2">
+            <ProjectMembersSection projectId={project.id} orgId={project.org_id} />
+          </Reveal>
+        )}
+
+        <Reveal index={2}>
           <LogLevelSection />
         </Reveal>
 
         {project && (
-          <Reveal index={2} className="lg:col-span-2">
+          <Reveal index={3} className="lg:col-span-2">
             <TokensSection
               projectId={project.id}
               ingestToken={project.ingest_token}
@@ -81,12 +90,12 @@ export function ProjectDetailPage() {
           </Reveal>
         )}
 
-        <Reveal index={3} className="lg:col-span-2">
+        <Reveal index={4} className="lg:col-span-2">
           <DataSection projectId={projectId} project={project} />
         </Reveal>
 
-        {project && isAdmin && (
-          <Reveal index={4} className="lg:col-span-2">
+        {project && isOwner && (
+          <Reveal index={5} className="lg:col-span-2">
             <DangerZoneSection
               projectId={project.id}
               onDeleted={() => router.history.push('/projects')}
