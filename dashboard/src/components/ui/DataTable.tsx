@@ -135,7 +135,9 @@ export function DataTable<T>({
                   scope="col"
                   aria-sort={ariaSort}
                   className={cn(
-                    'sticky top-0 z-10 bg-surface/80 py-2 text-xs font-medium uppercase tracking-wide text-text-muted backdrop-blur',
+                    // top-12 (48px) clears the mobile fixed topbar in AppLayout (py-2 + h-8
+                    // button) on <md screens; z-10 stays above rows, below the topbar's z-30.
+                    'sticky top-12 z-10 bg-surface/80 py-2 text-xs font-medium uppercase tracking-wide text-text-muted backdrop-blur md:top-0',
                     column.align === 'right' && 'text-right',
                   )}
                 >
@@ -172,8 +174,8 @@ export function DataTable<T>({
               <tr
                 key={rowKey(row)}
                 className={cn(
-                  'border-b border-border transition-colors hover:bg-accent-soft/50',
-                  onRowClick && 'cursor-pointer',
+                  'border-b border-border transition-colors',
+                  onRowClick && 'cursor-pointer hover:bg-accent-soft/50',
                 )}
                 tabIndex={onRowClick ? 0 : undefined}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
