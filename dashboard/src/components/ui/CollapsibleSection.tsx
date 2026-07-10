@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 
@@ -29,20 +30,22 @@ export function CollapsibleSection({
   const regionId = id ?? generatedId;
 
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
+    <div className={cn('overflow-hidden rounded-xl border border-border bg-surface', className)}>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={regionId}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 text-left text-lg font-semibold"
+        className="flex w-full items-center gap-2 px-4 py-3 text-left text-lg font-semibold transition-colors hover:bg-surface-raised"
       >
-        <span aria-hidden className="text-text-muted">
-          {open ? '▾' : '▸'}
-        </span>
+        <ChevronDown
+          aria-hidden="true"
+          size={18}
+          className={cn('shrink-0 text-text-muted transition-transform duration-200', open && 'rotate-180')}
+        />
         {title}
       </button>
-      <div id={regionId} hidden={!open}>
+      <div id={regionId} hidden={!open} className="px-4 pb-4">
         {children}
       </div>
     </div>

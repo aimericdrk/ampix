@@ -134,13 +134,16 @@ export function DataTable<T>({
                   key={column.key}
                   scope="col"
                   aria-sort={ariaSort}
-                  className={cn('py-2 font-medium', column.align === 'right' && 'text-right')}
+                  className={cn(
+                    'sticky top-0 z-10 bg-surface/80 py-2 text-xs font-medium uppercase tracking-wide text-text-muted backdrop-blur',
+                    column.align === 'right' && 'text-right',
+                  )}
                 >
                   {column.sortable ? (
                     <button
                       type="button"
                       onClick={() => toggleSort(column)}
-                      className="inline-flex items-center gap-1 font-medium"
+                      className="inline-flex items-center gap-1"
                     >
                       {column.header}
                       {isSorted && (
@@ -169,8 +172,8 @@ export function DataTable<T>({
               <tr
                 key={rowKey(row)}
                 className={cn(
-                  'border-b border-border',
-                  onRowClick && 'cursor-pointer hover:bg-border/20',
+                  'border-b border-border transition-colors hover:bg-accent-soft/50',
+                  onRowClick && 'cursor-pointer',
                 )}
                 tabIndex={onRowClick ? 0 : undefined}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
