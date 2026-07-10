@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { useCloseComboboxOnOutsideClick } from '../../../components/ui/combobox';
@@ -64,15 +65,13 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
       className="relative mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2"
     >
       {filters.length === 0 && !open && (
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
           onClick={openAdd}
-          className="font-normal text-text-muted hover:text-text"
+          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
         >
           <span aria-hidden="true">＋</span> Add a filter to scope the whole workspace
-        </Button>
+        </button>
       )}
 
       {filters.map((filter, index) => {
@@ -80,25 +79,29 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
         return (
           <span
             key={`${filter.property}-${filter.op}-${filter.value ?? ''}-${index}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg/60 px-3 py-1 text-xs"
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent"
           >
             {label}
             <button
               type="button"
               aria-label={`Remove filter ${label}`}
               onClick={() => removeFilter(index)}
-              className="text-text-muted hover:text-text"
+              className="text-accent/70 hover:text-accent"
             >
-              <span aria-hidden="true">✕</span>
+              <X aria-hidden="true" size={12} />
             </button>
           </span>
         );
       })}
 
       {filters.length > 0 && (
-        <Button type="button" variant="ghost" size="sm" onClick={openAdd}>
+        <button
+          type="button"
+          onClick={openAdd}
+          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+        >
           <span aria-hidden="true">＋</span> Add filter
-        </Button>
+        </button>
       )}
 
       {filters.length > 0 && (

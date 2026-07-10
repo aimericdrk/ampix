@@ -1,5 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { type ReactNode } from 'react';
+import { PageHeader } from '../ui/page-header';
+import { Reveal } from '../ui/reveal';
 
 export interface Breadcrumb {
   label: string;
@@ -39,50 +41,47 @@ export function PageShell({
   }
   if (breadcrumbs) crumbs.push(...breadcrumbs);
 
+  const breadcrumbNav =
+    crumbs.length > 0 ? (
+      <nav aria-label="Breadcrumb">
+        <ol className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
+          {crumbs.map((crumb, index) => {
+            const isLast = index === crumbs.length - 1;
+            return (
+              <li key={`${crumb.label}-${index}`} className="flex items-center gap-1.5">
+                {crumb.to && !isLast ? (
+                  <Link
+                    to={crumb.to}
+                    params={crumb.params}
+                    className="hover:text-text hover:underline"
+                  >
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span aria-current={isLast ? 'page' : undefined} className={isLast ? 'text-text' : undefined}>
+                    {crumb.label}
+                  </span>
+                )}
+                {!isLast && <span aria-hidden="true">/</span>}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+    ) : undefined;
+
+  const headerActions =
+    dateRangeControl || actions ? (
+      <>
+        {dateRangeControl}
+        {actions}
+      </>
+    ) : undefined;
+
   return (
     <section className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        {crumbs.length > 0 && (
-          <nav aria-label="Breadcrumb">
-            <ol className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
-              {crumbs.map((crumb, index) => {
-                const isLast = index === crumbs.length - 1;
-                return (
-                  <li key={`${crumb.label}-${index}`} className="flex items-center gap-1.5">
-                    {crumb.to && !isLast ? (
-                      <Link
-                        to={crumb.to}
-                        params={crumb.params}
-                        className="hover:text-text hover:underline"
-                      >
-                        {crumb.label}
-                      </Link>
-                    ) : (
-                      <span aria-current={isLast ? 'page' : undefined} className={isLast ? 'text-text' : undefined}>
-                        {crumb.label}
-                      </span>
-                    )}
-                    {!isLast && <span aria-hidden="true">/</span>}
-                  </li>
-                );
-              })}
-            </ol>
-          </nav>
-        )}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            {description && <p className="mt-1 max-w-2xl text-sm text-text-muted">{description}</p>}
-          </div>
-          {(dateRangeControl || actions) && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {dateRangeControl}
-              {actions}
-            </div>
-          )}
-        </div>
-      </div>
-      {children}
+      <PageHeader title={title} description={description} breadcrumbs={breadcrumbNav} actions={headerActions} />
+      <Reveal delay={0.05}>{children}</Reveal>
     </section>
   );
 }
