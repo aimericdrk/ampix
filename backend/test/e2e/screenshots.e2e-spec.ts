@@ -43,6 +43,7 @@ describe('automatic screenshots (e2e, contracts §18)', () => {
   let accessToken: string;
   let ingestToken: string;
   let projectId: string;
+  let orgId: string;
 
   beforeAll(async () => {
     stack = await startTestStack({
@@ -63,6 +64,7 @@ describe('automatic screenshots (e2e, contracts §18)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     projectId = projects.body.projects[0].id;
+    orgId = projects.body.projects[0].org_id;
     ingestToken = projects.body.projects[0].ingest_token;
   }, 180_000);
 
@@ -175,6 +177,35 @@ describe('automatic screenshots (e2e, contracts §18)', () => {
 
     await listScreens(outsiderToken).expect(403);
     await getImage('home', {}, outsiderToken).expect(403);
+  });
+
+  it('the destructive DELETE rejects an org member who has no ProjectMembership (403)', async () => {
+    // Wiring proof for the project-role guard on DELETE :screenName (analyst+). The outsider is an
+    // ADMIN of the project's org — under the OLD org guard admin >= analyst would have DELETEd
+    // (204) — but was never added to the project, so ProjectRolesGuard rejects with 403. This would
+    // fail (return 204) if the guard were dropped or still resolved the org role.
+    const invite = await request(server)
+      .post(`/api/v1/orgs/${orgId}/invitations`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ role: 'admin' })
+      .expect(201);
+
+    const outsider = await request(server)
+      .post('/api/v1/auth/signup')
+      .send({ email: uniqueEmail(), password: 'password123', name: 'Org Admin, No Project' })
+      .expect(200);
+    const outsiderToken = outsider.body.access_token;
+
+    // Accept the org invite → org admin Membership only; NEVER a ProjectMembership.
+    await request(server)
+      .post(`/api/v1/invitations/${invite.body.token}/accept`)
+      .set('Authorization', `Bearer ${outsiderToken}`)
+      .expect(200);
+
+    await request(server)
+      .delete(`/api/v1/projects/${projectId}/screens/home`)
+      .set('Authorization', `Bearer ${outsiderToken}`)
+      .expect(403);
   });
 
   it('404 when the requested screen has no capture', async () => {

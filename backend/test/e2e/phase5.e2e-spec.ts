@@ -82,6 +82,7 @@ describe('Cohorts, saved reports & dashboards (e2e, contracts §16)', () => {
   let stack: TestStack;
   let accessToken: string;
   let projectId: string;
+  let orgId: string;
   let cohortId: string;
   let reportId: string;
 
@@ -102,6 +103,7 @@ describe('Cohorts, saved reports & dashboards (e2e, contracts §16)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     projectId = projectsRes.body.projects[0].id;
+    orgId = projectsRes.body.projects[0].org_id;
     const ingestToken = projectsRes.body.projects[0].ingest_token;
 
     await request(stack.app.getHttpServer())
@@ -245,6 +247,56 @@ describe('Cohorts, saved reports & dashboards (e2e, contracts §16)', () => {
       await auth('delete', `dashboards/${dashboardId}/tiles/${inlineTileId}`).expect(204);
       const afterDelete = await auth('get', `dashboards/${dashboardId}`).expect(200);
       expect(afterDelete.body.tiles).toHaveLength(1);
+    });
+  });
+
+  /**
+   * Project-role guard wiring proof (§16 CRUD controllers): these routes are gated by the PROJECT
+   * role guard, not the org guard. The outsider here is an ADMIN of the project's org — so under the
+   * old org guard they'd have satisfied the viewer-level read requirement and gotten 200 — but was
+   * never granted a ProjectMembership, so `ProjectRolesGuard` rejects them with 403. This would fail
+   * (return 200) if the guard were dropped or still resolved the org role.
+   */
+  describe('an org member with no ProjectMembership is 403 on project-role-gated reads', () => {
+    let outsiderToken: string;
+
+    beforeAll(async () => {
+      const http = stack.app.getHttpServer();
+      const invite = await request(http)
+        .post(`/api/v1/orgs/${orgId}/invitations`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ role: 'admin' })
+        .expect(201);
+
+      const outsider = await request(http)
+        .post('/api/v1/auth/signup')
+        .send({ email: uniqueEmail(), password: 'password123', name: 'Org Admin, No Project' })
+        .expect(200);
+      outsiderToken = outsider.body.access_token;
+
+      // Accept the org invite → org admin Membership only; NEVER a ProjectMembership.
+      await request(http)
+        .post(`/api/v1/invitations/${invite.body.token}/accept`)
+        .set('Authorization', `Bearer ${outsiderToken}`)
+        .expect(200);
+    });
+
+    function outsiderGet(path: string) {
+      return request(stack.app.getHttpServer())
+        .get(`/api/v1/projects/${projectId}/${path}`)
+        .set('Authorization', `Bearer ${outsiderToken}`);
+    }
+
+    it('403 on GET dashboards', async () => {
+      await outsiderGet('dashboards').expect(403);
+    });
+
+    it('403 on GET cohorts', async () => {
+      await outsiderGet('cohorts').expect(403);
+    });
+
+    it('403 on GET reports', async () => {
+      await outsiderGet('reports').expect(403);
     });
   });
 });
