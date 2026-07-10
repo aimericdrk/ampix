@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useEffect } from 'react';
+import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
+import { Badge } from '../../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '../../../components/ui/dialog';
@@ -64,16 +66,7 @@ function formatValue(value: unknown): ReactNode {
     return <span className="text-text-muted">—</span>;
   }
   if (typeof value === 'boolean') {
-    return (
-      <span
-        className={cn(
-          'rounded-full px-2 py-0.5 text-xs font-medium',
-          value ? 'bg-accent/15 text-accent' : 'bg-chart-surface text-text-muted',
-        )}
-      >
-        {value ? 'true' : 'false'}
-      </span>
-    );
+    return <Badge variant={value ? 'accent' : 'default'}>{value ? 'true' : 'false'}</Badge>;
   }
   if (typeof value === 'number') {
     return <span className="tabular-nums">{value.toLocaleString()}</span>;
@@ -170,12 +163,11 @@ export function UserProfileModal({
         {/* Header: monogram + id + at-a-glance stats, with favorite + close on the right. */}
         <header className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
           <div className="flex min-w-0 items-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-accent/15 text-sm font-semibold text-accent"
-            >
-              {monogram(distinctId)}
-            </span>
+            <Avatar size="lg" aria-hidden className="flex-none">
+              <AvatarFallback className="text-sm font-semibold">
+                {monogram(distinctId)}
+              </AvatarFallback>
+            </Avatar>
             <div className="min-w-0">
               <DialogTitle className="truncate font-mono text-base font-semibold">
                 {distinctId}
@@ -281,9 +273,9 @@ export function UserProfileModal({
                                   →
                                 </span>
                               )}
-                              <span className="rounded-full border border-border bg-chart-surface px-2.5 py-1 font-medium">
+                              <Badge variant="outline" className="px-2.5 py-1 text-sm font-medium">
                                 {name}
-                              </span>
+                              </Badge>
                             </li>
                           ))}
                         </ol>
@@ -346,9 +338,7 @@ export function UserProfileModal({
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-medium">{event.event}</span>
                                     {event.screen_name && (
-                                      <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
-                                        {event.screen_name}
-                                      </span>
+                                      <Badge variant="outline">{event.screen_name}</Badge>
                                     )}
                                   </div>
                                   <div className="text-xs text-text-muted">
@@ -399,11 +389,7 @@ function EventDetail({ event }: { event: UserRecentEvent }) {
           <span className="rounded-md bg-accent/15 px-2 py-0.5 text-sm font-semibold text-accent">
             {event.event}
           </span>
-          {event.screen_name && (
-            <span className="rounded-full border border-border bg-chart-surface px-2 py-0.5 text-xs text-text-muted">
-              {event.screen_name}
-            </span>
-          )}
+          {event.screen_name && <Badge variant="outline">{event.screen_name}</Badge>}
         </div>
         <p className="mt-1 text-xs text-text-muted">{new Date(event.timestamp).toLocaleString()}</p>
       </CardHeader>

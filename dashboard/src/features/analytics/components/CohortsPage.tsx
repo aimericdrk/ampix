@@ -1,8 +1,11 @@
 import { useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
+import { Inbox } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
-import { Input } from '../../../components/ui/input';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { fieldLook, Input } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
@@ -223,6 +226,7 @@ export function CohortsPage() {
         </Button>
       }
     >
+      <Reveal index={0}>
       <Card>
         <CardHeader>
           <CardTitle>Saved cohorts</CardTitle>
@@ -235,14 +239,14 @@ export function CohortsPage() {
             </p>
           )}
           {cohorts.data && cohorts.data.cohorts.length === 0 && (
-            <p className="text-text-muted">No cohorts yet.</p>
+            <EmptyState icon={Inbox} title="No cohorts yet." />
           )}
           {cohorts.data && cohorts.data.cohorts.length > 0 && (
             <ul className="flex flex-col gap-2">
               {cohorts.data.cohorts.map((cohort) => (
                 <li
                   key={cohort.id}
-                  className="flex items-center gap-2 rounded-md border border-border p-2"
+                  className="flex items-center gap-2 rounded-lg border border-border p-2"
                 >
                   <span className="flex-1 text-sm font-medium">{cohort.name}</span>
                   <FavoriteButton
@@ -282,7 +286,9 @@ export function CohortsPage() {
           )}
         </CardContent>
       </Card>
+      </Reveal>
 
+      <Reveal index={1}>
       <Card>
         <CardHeader>
           <CardTitle>{currentCohortId ? 'Edit cohort' : 'New cohort'}</CardTitle>
@@ -325,7 +331,7 @@ export function CohortsPage() {
           )}
 
           {/* Live preview: updates on its own as the definition changes, before any save. */}
-          <div className="rounded-md border border-border p-4" aria-live="polite">
+          <Card className="bg-surface-raised/40 p-4" aria-live="polite">
             {!runnable && (
               <p className="text-sm text-text-muted">
                 Pick an event to preview how many users match.
@@ -355,7 +361,7 @@ export function CohortsPage() {
                 )}
               </div>
             )}
-          </div>
+          </Card>
 
           {saveError && (
             <p role="alert" className="text-danger">
@@ -394,7 +400,7 @@ export function CohortsPage() {
                   id="cohort-match"
                   value={match}
                   onChange={(e) => setMatch(e.target.value as CohortMatch)}
-                  className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                  className={cn(fieldLook, 'w-auto')}
                 >
                   {COHORT_MATCHES.map((value) => (
                     <option key={value} value={value}>
@@ -437,6 +443,7 @@ export function CohortsPage() {
           )}
         </CardContent>
       </Card>
+      </Reveal>
     </PageShell>
   );
 }
@@ -508,7 +515,7 @@ function ConditionRow({
 }) {
   const n = index + 1;
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+    <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
       <div className="flex items-center gap-2">
         <label className="sr-only" htmlFor={`condition-${index}-type`}>
           Condition {n} type
@@ -517,7 +524,7 @@ function ConditionRow({
           id={`condition-${index}-type`}
           value={condition.type}
           onChange={(e) => onType(e.target.value as CohortConditionType)}
-          className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+          className={cn(fieldLook, 'h-9 w-auto')}
         >
           {COHORT_CONDITION_TYPES.map((type) => (
             <option key={type} value={type}>
@@ -621,7 +628,7 @@ function BehaviorFields({
             aria-label={`Condition ${n} count comparison`}
             value={condition.op}
             onChange={(e) => onChange({ ...condition, op: e.target.value as CohortCountOp })}
-            className="h-10 rounded-md border border-border bg-surface px-2 text-sm"
+            className={cn(fieldLook, 'w-auto')}
           >
             {COHORT_COUNT_OPS.map((op) => (
               <option key={op} value={op}>
@@ -638,7 +645,7 @@ function BehaviorFields({
             id={`condition-${index}-count`}
             value={condition.count}
             onChange={(e) => onChange({ ...condition, count: Number(e.target.value) })}
-            className="h-10 rounded-md border border-border bg-surface px-2 text-sm"
+            className={cn(fieldLook, 'w-auto')}
           >
             {COUNT_OPTIONS.map((value) => (
               <option key={value} value={value}>
@@ -688,7 +695,7 @@ function PropertyFields({
         id={`condition-${index}-property`}
         value={condition.property}
         onChange={(e) => onChange({ ...condition, property: e.target.value })}
-        className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+        className={cn(fieldLook, 'h-9 w-auto')}
       >
         {propertyNames.map((propertyName) => (
           <option key={propertyName} value={propertyName}>
@@ -703,7 +710,7 @@ function PropertyFields({
         id={`condition-${index}-operator`}
         value={condition.op}
         onChange={(e) => onChange({ ...condition, op: e.target.value as InsightsFilterOp })}
-        className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+        className={cn(fieldLook, 'h-9 w-auto')}
       >
         {INSIGHTS_FILTER_OPS.map((op) => (
           <option key={op} value={op}>
@@ -750,7 +757,7 @@ function WithinDaysField({
         id={`condition-${index}-within-days`}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-10 rounded-md border border-border bg-surface px-2 text-sm"
+        className={cn(fieldLook, 'w-auto')}
       >
         {options.map((days) => (
           <option key={days} value={days}>

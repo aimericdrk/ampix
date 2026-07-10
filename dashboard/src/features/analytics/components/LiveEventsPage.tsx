@@ -1,9 +1,15 @@
 import { useParams } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Inbox } from 'lucide-react';
 import { PageShell } from '../../../components/layout/PageShell';
+import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
+import { cn } from '../../../lib/cn';
+import { useReducedMotion } from '../../../lib/motion';
 import { ApiError } from '../../../lib/api/problem';
 import type { LiveEvent } from '../../../lib/api/types';
 import { useLiveEvents } from '../api';
@@ -42,15 +48,18 @@ function eventsPerMinuteSeries(events: LiveEvent[]): number[] {
     .map((bucket) => counts.get(bucket)!);
 }
 
-/** A small "is this live" dot: pulses (via `animate-ping`) while streaming, sits still when paused. */
+/** A small "is this live" dot: pulses (via `animate-ping`) while streaming, sits still when paused
+ * or when the visitor prefers reduced motion. */
 function LivePulse({ paused }: { paused: boolean }) {
+  const reducedMotion = useReducedMotion();
+  const pulsing = !paused && !reducedMotion;
   return (
-    <span className="relative inline-flex h-2.5 w-2.5" aria-hidden="true">
-      {!paused && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
+    <span className="relative flex size-2" aria-hidden="true">
+      {pulsing && (
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-accent opacity-75" />
       )}
       <span
-        className={`relative inline-flex h-2.5 w-2.5 rounded-full ${paused ? 'bg-text-muted' : 'bg-accent'}`}
+        className={cn('relative inline-flex size-2 rounded-full', paused ? 'bg-text-muted' : 'bg-accent')}
       />
     </span>
   );
@@ -89,6 +98,25 @@ export function LiveEventsPage() {
   const activeUsers = useMemo(() => new Set(events.map((e) => e.distinct_id)).size, [events]);
   const perMinuteSeries = useMemo(() => eventsPerMinuteSeries(events), [events]);
 
+  // New-row entrance (feat-18): the stream already keys rows by `insert_id`, so a lightweight
+  // `animate-fade-up` class is all a freshly-arrived row needs — no re-keying or reordering. `null`
+  // on first render means "just mounted", so the initial page of events doesn't all entrance at
+  // once; once committed, `previousIdsRef` tracks what's already been seen so only genuinely new
+  // arrivals (the next poll tick) get the class.
+  const previousIdsRef = useRef<Set<string> | null>(null);
+  const newEventIds = useMemo(() => {
+    const seen = previousIdsRef.current;
+    if (!seen) return new Set<string>();
+    const next = new Set<string>();
+    for (const event of events) {
+      if (!seen.has(event.insert_id)) next.add(event.insert_id);
+    }
+    return next;
+  }, [events]);
+  useEffect(() => {
+    previousIdsRef.current = new Set(events.map((event) => event.insert_id));
+  }, [events]);
+
   return (
     <PageShell
       projectId={projectId}
@@ -96,26 +124,35 @@ export function LiveEventsPage() {
       description="Real-time event stream and a few live stats — watch events arrive as your app sends them."
       breadcrumbs={[{ label: 'Audience' }, { label: 'Live' }]}
       actions={
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          aria-pressed={paused}
-          onClick={() => setPaused((prev) => !prev)}
-        >
-          {paused ? 'Resume' : 'Pause'}
-        </Button>
+        <>
+          <LivePulse paused={paused} />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-pressed={paused}
+            onClick={() => setPaused((prev) => !prev)}
+          >
+            {paused ? 'Resume' : 'Pause'}
+          </Button>
+        </>
       }
     >
-      {isPending && <p role="status">Loading live events…</p>}
+      {isPending && (
+        <Reveal index={0}>
+          <p role="status">Loading live events…</p>
+        </Reveal>
+      )}
       {isError && (
-        <p role="alert" className="text-danger">
-          {error instanceof ApiError ? error.problem.title : 'Failed to load live events'}
-        </p>
+        <Reveal index={0}>
+          <p role="alert" className="text-danger">
+            {error instanceof ApiError ? error.problem.title : 'Failed to load live events'}
+          </p>
+        </Reveal>
       )}
 
       {!isPending && !isError && (
-        <>
+        <Reveal index={1} className="flex flex-col gap-6">
           <SectionGrid>
             <StatTile
               label="Events (recent)"
@@ -137,17 +174,14 @@ export function LiveEventsPage() {
 
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <LivePulse paused={paused} />
-                Event stream
-              </CardTitle>
+              <CardTitle>Event stream</CardTitle>
               {paused && (
                 <span className="text-xs text-text-muted">Paused — new events are held back</span>
               )}
             </CardHeader>
             <CardContent>
               {events.length === 0 ? (
-                <p className="text-text-muted">Waiting for events…</p>
+                <EmptyState icon={Inbox} title="Waiting for events…" />
               ) : (
                 <ol
                   role="log"
@@ -158,10 +192,13 @@ export function LiveEventsPage() {
                   {events.map((event) => (
                     <li
                       key={event.insert_id}
-                      className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                      className={cn(
+                        'flex flex-wrap items-center justify-between gap-2 py-2 text-sm',
+                        newEventIds.has(event.insert_id) && 'animate-fade-up',
+                      )}
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <span className="font-medium">{event.event}</span>
+                        <Badge variant="accent">{event.event}</Badge>
                         <span
                           className="truncate font-mono text-xs text-text-muted"
                           title={event.distinct_id}
@@ -192,7 +229,7 @@ export function LiveEventsPage() {
               )}
             </CardContent>
           </Card>
-        </>
+        </Reveal>
       )}
     </PageShell>
   );
