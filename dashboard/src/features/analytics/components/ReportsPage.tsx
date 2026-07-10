@@ -135,29 +135,35 @@ function ReportCard({
   else state = 'ready';
 
   return (
-    <li>
-      <Card interactive className="flex h-full flex-col gap-2 p-2">
-        <ChartThumbnail kind={report.kind} result={preview.data} state={state} />
-        <div className="flex items-center gap-2">
-          <Link
-            to="/projects/$projectId/reports/$reportId"
-            params={{ projectId, reportId: report.id }}
-            className="flex-1 truncate text-sm font-medium text-accent underline"
-          >
+    // Mirrors DashboardsPage's card pattern: the WHOLE card sits inside the navigation Link (so the
+    // `interactive` hover-lift honestly means "click anywhere to open"), while the star and Delete
+    // are absolutely-positioned SIBLINGS of the Link — interactive controls never nest inside an
+    // <a>, and DOM order keeps focus sane (link, then favorite, then delete).
+    <li className="relative">
+      <Link
+        to="/projects/$projectId/reports/$reportId"
+        params={{ projectId, reportId: report.id }}
+        className="block h-full rounded-xl focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <Card interactive className="flex h-full flex-col gap-2 p-2">
+          <ChartThumbnail kind={report.kind} result={preview.data} state={state} />
+          <span className="block min-h-8 content-center truncate pr-28 text-sm font-medium text-accent underline">
             {report.name}
-          </Link>
-          <FavoriteButton name={report.name} isFavorite={isFavorite} onToggle={onToggleFavorite} />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label={`Delete ${report.name}`}
-            onClick={onDelete}
-          >
-            Delete
-          </Button>
-        </div>
-      </Card>
+          </span>
+        </Card>
+      </Link>
+      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
+        <FavoriteButton name={report.name} isFavorite={isFavorite} onToggle={onToggleFavorite} />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={`Delete ${report.name}`}
+          onClick={onDelete}
+        >
+          Delete
+        </Button>
+      </div>
     </li>
   );
 }

@@ -105,7 +105,7 @@ export function DashboardGrid({
   };
 
   if (tiles.length === 0) {
-    return <EmptyState icon={Inbox} title="No tiles yet." description="Add one from a saved report." />;
+    return <EmptyState icon={Inbox} title="No tiles yet — add one from a saved report." />;
   }
 
   return (
