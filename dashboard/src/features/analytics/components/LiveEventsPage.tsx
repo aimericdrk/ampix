@@ -123,19 +123,17 @@ export function LiveEventsPage() {
       title="Live"
       description="Real-time event stream and a few live stats — watch events arrive as your app sends them."
       breadcrumbs={[{ label: 'Audience' }, { label: 'Live' }]}
+      titleAdornment={<LivePulse paused={paused} />}
       actions={
-        <>
-          <LivePulse paused={paused} />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            aria-pressed={paused}
-            onClick={() => setPaused((prev) => !prev)}
-          >
-            {paused ? 'Resume' : 'Pause'}
-          </Button>
-        </>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          aria-pressed={paused}
+          onClick={() => setPaused((prev) => !prev)}
+        >
+          {paused ? 'Resume' : 'Pause'}
+        </Button>
       }
     >
       {isPending && (

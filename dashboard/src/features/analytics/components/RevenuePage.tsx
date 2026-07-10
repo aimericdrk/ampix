@@ -70,11 +70,17 @@ export function RevenuePage() {
       breadcrumbs={[{ label: 'Explore' }, { label: 'Revenue' }]}
       dateRangeControl={<DateRangeControl />}
     >
-      {revenue.isPending && <p role="status">Loading revenue summary…</p>}
+      {revenue.isPending && (
+        <Reveal index={0}>
+          <p role="status">Loading revenue summary…</p>
+        </Reveal>
+      )}
       {revenue.isError && (
-        <p role="alert" className="text-danger">
-          Failed to load revenue summary
-        </p>
+        <Reveal index={0}>
+          <p role="alert" className="text-danger">
+            Failed to load revenue summary
+          </p>
+        </Reveal>
       )}
 
       {data && !hasPurchases && (
@@ -82,7 +88,11 @@ export function RevenuePage() {
           <EmptyState
             icon={Inbox}
             title="No revenue yet"
-            description="No in-app purchases ($in_app_purchase) recorded in the selected range."
+            description={
+              <>
+                No in-app purchases (<code>$in_app_purchase</code>) recorded in the selected range.
+              </>
+            }
           />
         </Reveal>
       )}

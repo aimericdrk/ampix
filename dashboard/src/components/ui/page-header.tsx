@@ -6,6 +6,10 @@ import { Reveal } from './reveal';
 export interface PageHeaderProps {
   icon?: LucideIcon;
   title: string;
+  /** Rendered inline right after the title text (e.g. a live-status dot) — distinct from `actions`,
+   * which sits right-aligned on the opposite side of the header row. Opt-in; omitting it changes
+   * nothing for existing pages. */
+  titleAdornment?: ReactNode;
   description?: ReactNode;
   breadcrumbs?: ReactNode;
   actions?: ReactNode;
@@ -14,7 +18,15 @@ export interface PageHeaderProps {
 
 /** Standalone page-level heading: icon tile, title, description, breadcrumbs, and right-aligned
  * actions. Rendered by `PageShell` as every page's frame; also usable directly. */
-export function PageHeader({ icon: Icon, title, description, breadcrumbs, actions, className }: PageHeaderProps) {
+export function PageHeader({
+  icon: Icon,
+  title,
+  titleAdornment,
+  description,
+  breadcrumbs,
+  actions,
+  className,
+}: PageHeaderProps) {
   return (
     <Reveal className={cn('flex flex-col gap-3', className)}>
       {breadcrumbs ? <div className="text-sm text-text-muted">{breadcrumbs}</div> : null}
@@ -26,7 +38,10 @@ export function PageHeader({ icon: Icon, title, description, breadcrumbs, action
             </div>
           ) : null}
           <div>
-            <h1 className="font-display text-2xl font-semibold">{title}</h1>
+            <h1 className="flex items-center gap-2 font-display text-2xl font-semibold">
+              {title}
+              {titleAdornment}
+            </h1>
             {description ? <p className="mt-1 max-w-2xl text-sm text-text-muted">{description}</p> : null}
           </div>
         </div>

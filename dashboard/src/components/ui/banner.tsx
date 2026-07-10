@@ -37,7 +37,7 @@ export function Banner({ variant = 'info', title, children, className, role }: B
       role={role ?? defaultRole}
       className={cn('flex gap-2.5 rounded-lg border-l-2 p-3.5 text-sm', classes, className)}
     >
-      <Icon className="mt-0.5 size-4 shrink-0" />
+      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <div className="min-w-0">
         {title ? <p className="font-medium">{title}</p> : null}
         <div>{children}</div>

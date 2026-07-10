@@ -329,150 +329,150 @@ export function FunnelsPage() {
       actions={<CopyLinkButton />}
     >
       <Reveal index={0}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Funnel builder</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <div>
-            <span className="mb-1 block text-sm font-medium">Steps (2–{MAX_STEPS}, in order)</span>
+        <Card>
+          <CardHeader>
+            <CardTitle>Funnel builder</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <div>
+              <span className="mb-1 block text-sm font-medium">Steps (2–{MAX_STEPS}, in order)</span>
 
-            {steps.length > 0 && (
-              <ul className="mt-3 flex flex-col gap-3">
-                {steps.map((step, index) => (
-                  <li
-                    key={`${step.event}-${index}`}
-                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="flex-1 text-sm font-medium">
-                        {index + 1}. {step.event}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Move step ${index + 1} up`}
-                        disabled={index === 0}
-                        onClick={() => moveStep(index, -1)}
-                      >
-                        Up
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Move step ${index + 1} down`}
-                        disabled={index === steps.length - 1}
-                        onClick={() => moveStep(index, 1)}
-                      >
-                        Down
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Remove step ${index + 1}`}
-                        onClick={() => removeStep(index)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                    <FilterRows
-                      idPrefix={`funnel-step-${index}-filter`}
-                      ariaLabel={`Step ${index + 1} filter`}
-                      filters={step.filters}
-                      onChange={(filters) => setStepFilters(index, filters)}
-                      propertyNames={propertyNames}
-                      projectId={projectId}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
+              {steps.length > 0 && (
+                <ul className="mt-3 flex flex-col gap-3">
+                  {steps.map((step, index) => (
+                    <li
+                      key={`${step.event}-${index}`}
+                      className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1 text-sm font-medium">
+                          {index + 1}. {step.event}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Move step ${index + 1} up`}
+                          disabled={index === 0}
+                          onClick={() => moveStep(index, -1)}
+                        >
+                          Up
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Move step ${index + 1} down`}
+                          disabled={index === steps.length - 1}
+                          onClick={() => moveStep(index, 1)}
+                        >
+                          Down
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Remove step ${index + 1}`}
+                          onClick={() => removeStep(index)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      <FilterRows
+                        idPrefix={`funnel-step-${index}-filter`}
+                        ariaLabel={`Step ${index + 1} filter`}
+                        filters={step.filters}
+                        onChange={(filters) => setStepFilters(index, filters)}
+                        propertyNames={propertyNames}
+                        projectId={projectId}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
 
-            <div className="mt-3">
-              <EventPicker
-                options={eventOptions}
-                onSelect={addStep}
-                isLoading={metaEvents.isPending}
-                disabled={steps.length >= MAX_STEPS}
-                comboLabel="Add step"
-                triggerLabel="Add step"
+              <div className="mt-3">
+                <EventPicker
+                  options={eventOptions}
+                  onSelect={addStep}
+                  isLoading={metaEvents.isPending}
+                  disabled={steps.length >= MAX_STEPS}
+                  comboLabel="Add step"
+                  triggerLabel="Add step"
+                />
+              </div>
+              {steps.length < 2 && (
+                <p className="mt-2 text-xs text-text-muted">Add at least two steps to run a funnel.</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label htmlFor="funnel-window" className="mb-1 block text-sm font-medium">
+                  Conversion window (days)
+                </label>
+                <Input
+                  id="funnel-window"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={windowDays}
+                  onChange={(e) => setWindowDaysFromInput(Number(e.target.value))}
+                  className="w-32"
+                />
+              </div>
+              <div>
+                <label htmlFor="funnel-order" className="mb-1 block text-sm font-medium">
+                  Step order
+                </label>
+                <select
+                  id="funnel-order"
+                  value={order}
+                  onChange={(e) => setOrderFromInput(e.target.value as FunnelOrder)}
+                  className={cn(fieldLook, 'w-auto')}
+                >
+                  {FUNNEL_ORDERS.map((value) => (
+                    <option key={value} value={value}>
+                      {ORDER_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="funnel-breakdown" className="mb-1 block text-sm font-medium">
+                  Breakdown (optional)
+                </label>
+                <select
+                  id="funnel-breakdown"
+                  value={breakdownProperty}
+                  onChange={(e) => setBreakdownPropertyFromInput(e.target.value)}
+                  className={cn(fieldLook, 'w-auto')}
+                >
+                  <option value="">No breakdown</option>
+                  {propertyNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <SegmentPicker projectId={projectId} value={segmentId} onChange={setSegmentIdFromInput} />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={handleRun} disabled={!canRun}>
+                {runFunnels.isPending ? 'Running…' : 'Run'}
+              </Button>
+              <SaveAsReportButton
+                projectId={projectId}
+                kind="funnel"
+                definition={queryDefinition}
+                disabled={steps.length < 2}
               />
             </div>
-            {steps.length < 2 && (
-              <p className="mt-2 text-xs text-text-muted">Add at least two steps to run a funnel.</p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <label htmlFor="funnel-window" className="mb-1 block text-sm font-medium">
-                Conversion window (days)
-              </label>
-              <Input
-                id="funnel-window"
-                type="number"
-                min={1}
-                max={365}
-                value={windowDays}
-                onChange={(e) => setWindowDaysFromInput(Number(e.target.value))}
-                className="w-32"
-              />
-            </div>
-            <div>
-              <label htmlFor="funnel-order" className="mb-1 block text-sm font-medium">
-                Step order
-              </label>
-              <select
-                id="funnel-order"
-                value={order}
-                onChange={(e) => setOrderFromInput(e.target.value as FunnelOrder)}
-                className={cn(fieldLook, 'w-auto')}
-              >
-                {FUNNEL_ORDERS.map((value) => (
-                  <option key={value} value={value}>
-                    {ORDER_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="funnel-breakdown" className="mb-1 block text-sm font-medium">
-                Breakdown (optional)
-              </label>
-              <select
-                id="funnel-breakdown"
-                value={breakdownProperty}
-                onChange={(e) => setBreakdownPropertyFromInput(e.target.value)}
-                className={cn(fieldLook, 'w-auto')}
-              >
-                <option value="">No breakdown</option>
-                {propertyNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <SegmentPicker projectId={projectId} value={segmentId} onChange={setSegmentIdFromInput} />
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleRun} disabled={!canRun}>
-              {runFunnels.isPending ? 'Running…' : 'Run'}
-            </Button>
-            <SaveAsReportButton
-              projectId={projectId}
-              kind="funnel"
-              definition={queryDefinition}
-              disabled={steps.length < 2}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       </Reveal>
 
       {runFunnels.isError && (

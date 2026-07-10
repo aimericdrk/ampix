@@ -5,7 +5,8 @@ import {
   filterOptions,
   useCloseComboboxOnOutsideClick,
 } from '../../../components/ui/combobox';
-import { Input } from '../../../components/ui/input';
+import { fieldLook, Input } from '../../../components/ui/input';
+import { cn } from '../../../lib/cn';
 import type { InsightsFilter, InsightsFilterOp } from '../../../lib/api/types';
 import { INSIGHTS_FILTER_OPS } from '../../../lib/api/types';
 import { useMetaPropertyValues } from '../api';
@@ -226,7 +227,7 @@ export function FilterValueInput({
         }}
       />
       {open && hasSuggestions && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-48 rounded-lg border border-border bg-surface p-2 shadow-lg">
+        <div className="absolute left-0 top-full z-30 mt-1 w-48 rounded-xl border border-border bg-surface-raised p-2 shadow-lift">
           <ComboboxListbox
             listId={listId}
             comboLabel={ariaLabel}
@@ -293,7 +294,7 @@ export function FilterRows({
               id={`${idPrefix}-property-${index}`}
               value={filter.property}
               onChange={(e) => updateFilter(index, { property: e.target.value })}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+              className={cn(fieldLook, 'h-9 w-auto')}
             >
               {propertyNames.map((name) => (
                 <option key={name} value={name}>
@@ -308,7 +309,7 @@ export function FilterRows({
               id={`${idPrefix}-op-${index}`}
               value={filter.op}
               onChange={(e) => updateFilter(index, { op: e.target.value as InsightsFilterOp })}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+              className={cn(fieldLook, 'h-9 w-auto')}
             >
               {INSIGHTS_FILTER_OPS.map((op) => (
                 <option key={op} value={op}>

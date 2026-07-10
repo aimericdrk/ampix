@@ -5,6 +5,7 @@ import { Badge } from '../../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '../../../components/ui/dialog';
+import { fieldLook } from '../../../components/ui/input';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
@@ -480,7 +481,7 @@ function UserTapHeatmap({
           id="user-heatmap-screen"
           value={selectedScreen}
           onChange={(e) => onSelectScreen(e.target.value)}
-          className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+          className={cn(fieldLook, 'w-auto')}
         >
           <option value="">Select a screen…</option>
           {screenList.map((screen) => (

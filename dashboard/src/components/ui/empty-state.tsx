@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 export interface EmptyStateProps {
   icon?: LucideIcon;
   title: string;
-  description?: string;
+  description?: ReactNode;
   action?: ReactNode;
 }
 
@@ -16,7 +16,7 @@ export function EmptyState({ icon: Icon, title, description, action }: EmptyStat
         <div className="absolute size-24 rounded-full bg-gradient-brand opacity-20 blur-2xl" />
         {Icon ? (
           <div className="relative flex size-12 items-center justify-center rounded-xl bg-accent-soft text-accent [&_svg]:size-6">
-            <Icon />
+            <Icon aria-hidden="true" />
           </div>
         ) : null}
       </div>

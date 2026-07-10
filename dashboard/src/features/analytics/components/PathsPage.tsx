@@ -1,5 +1,5 @@
 import { useParams } from '@tanstack/react-router';
-import { Route } from 'lucide-react';
+import { Inbox } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -307,95 +307,95 @@ export function PathsPage() {
       actions={<CopyLinkButton />}
     >
       <Reveal index={0}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Path builder</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <EventSelectField
-            label="Anchor screen"
-            value={anchorScreen}
-            onChange={setAnchorScreenFromInput}
-            options={screenOptions}
-            isLoading={screens.isPending}
-            noun="screen"
-            placeholder="Any entry screen"
-            emptyLabel="No screens captured yet."
-            allowClear
-          />
+        <Card>
+          <CardHeader>
+            <CardTitle>Path builder</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <EventSelectField
+              label="Anchor screen"
+              value={anchorScreen}
+              onChange={setAnchorScreenFromInput}
+              options={screenOptions}
+              isLoading={screens.isPending}
+              noun="screen"
+              placeholder="Any entry screen"
+              emptyLabel="No screens captured yet."
+              allowClear
+            />
 
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <label htmlFor="paths-direction" className="mb-1 block text-sm font-medium">
-                Direction
-              </label>
-              <select
-                id="paths-direction"
-                value={direction}
-                onChange={(e) => setDirectionFromInput(e.target.value as FlowsDirection)}
-                className={cn(fieldLook, 'w-auto')}
-              >
-                {FLOWS_DIRECTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {DIRECTION_LABELS[value]}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label htmlFor="paths-direction" className="mb-1 block text-sm font-medium">
+                  Direction
+                </label>
+                <select
+                  id="paths-direction"
+                  value={direction}
+                  onChange={(e) => setDirectionFromInput(e.target.value as FlowsDirection)}
+                  className={cn(fieldLook, 'w-auto')}
+                >
+                  {FLOWS_DIRECTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {DIRECTION_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="paths-unit" className="mb-1 block text-sm font-medium">
+                  Unit
+                </label>
+                <select
+                  id="paths-unit"
+                  value={unit}
+                  onChange={(e) => setUnitFromInput(e.target.value as FlowsUnit)}
+                  className={cn(fieldLook, 'w-auto')}
+                >
+                  {FLOWS_UNITS.map((value) => (
+                    <option key={value} value={value}>
+                      {UNIT_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="paths-steps" className="mb-1 block text-sm font-medium">
+                  Steps (hops)
+                </label>
+                <Input
+                  id="paths-steps"
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={steps}
+                  onChange={(e) => setStepsFromInput(Number(e.target.value))}
+                  className="w-32"
+                />
+              </div>
+              <div>
+                <label htmlFor="paths-max-nodes" className="mb-1 block text-sm font-medium">
+                  Max screens per step
+                </label>
+                <Input
+                  id="paths-max-nodes"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={maxNodesPerStep}
+                  onChange={(e) => setMaxNodesPerStepFromInput(Number(e.target.value))}
+                  className="w-32"
+                />
+              </div>
             </div>
-            <div>
-              <label htmlFor="paths-unit" className="mb-1 block text-sm font-medium">
-                Unit
-              </label>
-              <select
-                id="paths-unit"
-                value={unit}
-                onChange={(e) => setUnitFromInput(e.target.value as FlowsUnit)}
-                className={cn(fieldLook, 'w-auto')}
-              >
-                {FLOWS_UNITS.map((value) => (
-                  <option key={value} value={value}>
-                    {UNIT_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="paths-steps" className="mb-1 block text-sm font-medium">
-                Steps (hops)
-              </label>
-              <Input
-                id="paths-steps"
-                type="number"
-                min={1}
-                max={5}
-                value={steps}
-                onChange={(e) => setStepsFromInput(Number(e.target.value))}
-                className="w-32"
-              />
-            </div>
-            <div>
-              <label htmlFor="paths-max-nodes" className="mb-1 block text-sm font-medium">
-                Max screens per step
-              </label>
-              <Input
-                id="paths-max-nodes"
-                type="number"
-                min={1}
-                max={20}
-                value={maxNodesPerStep}
-                onChange={(e) => setMaxNodesPerStepFromInput(Number(e.target.value))}
-                className="w-32"
-              />
-            </div>
-          </div>
 
-          <div>
-            <Button onClick={handleRun} disabled={!canRun}>
-              {runScreenPaths.isPending ? 'Running…' : 'Run'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div>
+              <Button onClick={handleRun} disabled={!canRun}>
+                {runScreenPaths.isPending ? 'Running…' : 'Run'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </Reveal>
 
       {runScreenPaths.isError && (
@@ -411,7 +411,7 @@ export function PathsPage() {
       {result && result.nodes.length === 0 && (
         <Reveal index={1}>
           <EmptyState
-            icon={Route}
+            icon={Inbox}
             title="No paths yet"
             description="No screen-path data for this query yet."
           />

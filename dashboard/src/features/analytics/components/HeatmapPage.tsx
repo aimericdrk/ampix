@@ -70,55 +70,55 @@ export function HeatmapPage() {
       dateRangeControl={<DateRangeControl />}
     >
       <Reveal index={0}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Heatmap builder</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <div>
-            <label htmlFor="heatmap-screen" className="mb-1 block text-sm font-medium">
-              Screen
-            </label>
-            <select
-              id="heatmap-screen"
-              value={selectedScreen}
-              onChange={(e) => onSelectScreen(e.target.value)}
-              className={cn(fieldLook, 'w-auto')}
-            >
-              <option value="">Select a screen…</option>
-              {screenList.map((screen) => (
-                <option key={screen.screen_name} value={screen.screen_name}>
-                  {screen.screen_name}
-                </option>
-              ))}
-            </select>
-            {screens.isSuccess && screenList.length === 0 && (
-              <p className="mt-2 text-sm text-text-muted">No screens captured yet.</p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-end gap-4">
-            <Button onClick={() => run(selectedScreen)} disabled={!selectedScreen || runHeatmap.isPending}>
-              {runHeatmap.isPending ? 'Running…' : 'Run'}
-            </Button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Heatmap builder</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
             <div>
-              <label htmlFor="heatmap-opacity" className="mb-1 block text-sm font-medium">
-                Heatmap opacity
+              <label htmlFor="heatmap-screen" className="mb-1 block text-sm font-medium">
+                Screen
               </label>
-              <input
-                id="heatmap-opacity"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={opacity}
-                onChange={(e) => setOpacity(Number(e.target.value))}
-                className="accent-[var(--accent)]"
-              />
+              <select
+                id="heatmap-screen"
+                value={selectedScreen}
+                onChange={(e) => onSelectScreen(e.target.value)}
+                className={cn(fieldLook, 'w-auto')}
+              >
+                <option value="">Select a screen…</option>
+                {screenList.map((screen) => (
+                  <option key={screen.screen_name} value={screen.screen_name}>
+                    {screen.screen_name}
+                  </option>
+                ))}
+              </select>
+              {screens.isSuccess && screenList.length === 0 && (
+                <p className="mt-2 text-sm text-text-muted">No screens captured yet.</p>
+              )}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+
+            <div className="flex flex-wrap items-end gap-4">
+              <Button onClick={() => run(selectedScreen)} disabled={!selectedScreen || runHeatmap.isPending}>
+                {runHeatmap.isPending ? 'Running…' : 'Run'}
+              </Button>
+              <div>
+                <label htmlFor="heatmap-opacity" className="mb-1 block text-sm font-medium">
+                  Heatmap opacity
+                </label>
+                <input
+                  id="heatmap-opacity"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={opacity}
+                  onChange={(e) => setOpacity(Number(e.target.value))}
+                  className="accent-[var(--accent)]"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </Reveal>
 
       {runHeatmap.isError && (

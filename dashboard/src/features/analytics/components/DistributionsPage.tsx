@@ -173,11 +173,17 @@ export function DistributionsPage() {
         </Reveal>
       )}
 
-      {enabled && histogram.isPending && <p role="status">Loading distribution…</p>}
+      {enabled && histogram.isPending && (
+        <Reveal index={1}>
+          <p role="status">Loading distribution…</p>
+        </Reveal>
+      )}
       {enabled && histogram.isError && (
-        <p role="alert" className="text-danger">
-          Failed to load distribution
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            Failed to load distribution
+          </p>
+        </Reveal>
       )}
 
       {enabled && isEmpty && (

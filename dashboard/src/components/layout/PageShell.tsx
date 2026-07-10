@@ -19,6 +19,7 @@ export interface Breadcrumb {
 export function PageShell({
   projectId,
   title,
+  titleAdornment,
   description,
   breadcrumbs,
   dateRangeControl,
@@ -27,6 +28,9 @@ export function PageShell({
 }: {
   projectId?: string;
   title: string;
+  /** Rendered inline right after the title text (e.g. a live-status dot) — distinct from `actions`,
+   * which stays right-aligned. Opt-in; omitting it changes nothing for existing pages. */
+  titleAdornment?: ReactNode;
   description?: ReactNode;
   breadcrumbs?: Breadcrumb[];
   /** An optional header-area control (e.g. the global `DateRangeControl`), rendered ahead of
@@ -80,7 +84,13 @@ export function PageShell({
 
   return (
     <section className="flex flex-col gap-6">
-      <PageHeader title={title} description={description} breadcrumbs={breadcrumbNav} actions={headerActions} />
+      <PageHeader
+        title={title}
+        titleAdornment={titleAdornment}
+        description={description}
+        breadcrumbs={breadcrumbNav}
+        actions={headerActions}
+      />
       <Reveal delay={0.05}>{children}</Reveal>
     </section>
   );

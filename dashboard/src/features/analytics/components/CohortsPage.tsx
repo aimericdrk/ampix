@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { EmptyState } from '../../../components/ui/empty-state';
 import { fieldLook, Input } from '../../../components/ui/input';
 import { Reveal } from '../../../components/ui/reveal';
+import { Segmented } from '../../../components/ui/segmented';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
@@ -227,222 +228,222 @@ export function CohortsPage() {
       }
     >
       <Reveal index={0}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Saved cohorts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {cohorts.isPending && <p role="status">Loading cohorts…</p>}
-          {cohorts.error && (
-            <p role="alert" className="text-danger">
-              {cohorts.error instanceof ApiError ? cohorts.error.problem.title : 'Failed to load cohorts'}
-            </p>
-          )}
-          {cohorts.data && cohorts.data.cohorts.length === 0 && (
-            <EmptyState icon={Inbox} title="No cohorts yet." />
-          )}
-          {cohorts.data && cohorts.data.cohorts.length > 0 && (
-            <ul className="flex flex-col gap-2">
-              {cohorts.data.cohorts.map((cohort) => (
-                <li
-                  key={cohort.id}
-                  className="flex items-center gap-2 rounded-lg border border-border p-2"
-                >
-                  <span className="flex-1 text-sm font-medium">{cohort.name}</span>
-                  <FavoriteButton
-                    name={cohort.name}
-                    isFavorite={favorites.isFavorite('cohort', cohort.id)}
-                    onToggle={() =>
-                      favorites.toggle({ type: 'cohort', id: cohort.id, name: cohort.name })
-                    }
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Edit ${cohort.name}`}
-                    onClick={() => setEditId(cohort.id)}
+        <Card>
+          <CardHeader>
+            <CardTitle>Saved cohorts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {cohorts.isPending && <p role="status">Loading cohorts…</p>}
+            {cohorts.error && (
+              <p role="alert" className="text-danger">
+                {cohorts.error instanceof ApiError ? cohorts.error.problem.title : 'Failed to load cohorts'}
+              </p>
+            )}
+            {cohorts.data && cohorts.data.cohorts.length === 0 && (
+              <EmptyState icon={Inbox} title="No cohorts yet." />
+            )}
+            {cohorts.data && cohorts.data.cohorts.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {cohorts.data.cohorts.map((cohort) => (
+                  <li
+                    key={cohort.id}
+                    className="flex items-center gap-2 rounded-lg border border-border p-2"
                   >
-                    Edit
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Delete ${cohort.name}`}
-                    onClick={() =>
-                      deleteCohort.mutate(cohort.id, {
-                        onSuccess: () => {
-                          if (currentCohortId === cohort.id) resetBuilder();
-                        },
-                      })
-                    }
-                  >
-                    Delete
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                    <span className="flex-1 text-sm font-medium">{cohort.name}</span>
+                    <FavoriteButton
+                      name={cohort.name}
+                      isFavorite={favorites.isFavorite('cohort', cohort.id)}
+                      onToggle={() =>
+                        favorites.toggle({ type: 'cohort', id: cohort.id, name: cohort.name })
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Edit ${cohort.name}`}
+                      onClick={() => setEditId(cohort.id)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Delete ${cohort.name}`}
+                      onClick={() =>
+                        deleteCohort.mutate(cohort.id, {
+                          onSuccess: () => {
+                            if (currentCohortId === cohort.id) resetBuilder();
+                          },
+                        })
+                      }
+                    >
+                      Delete
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </Reveal>
 
       <Reveal index={1}>
-      <Card>
-        <CardHeader>
-          <CardTitle>{currentCohortId ? 'Edit cohort' : 'New cohort'}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <div>
-            <label htmlFor="cohort-name" className="mb-1 block text-sm font-medium">
-              Cohort name
-            </label>
-            <Input
-              id="cohort-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Recent buyers"
-            />
-          </div>
-
-          {/* Quick builder: "who did <event> in the last N days" — no raw typing. */}
-          {primary?.type === 'behavior' ? (
-            <div className="flex flex-wrap items-end gap-6">
-              <EventSelectField
-                label="Event"
-                value={primary.event}
-                onChange={(value) => setConditionAt(0, { ...primary, event: value })}
-                options={eventOptions}
-                isLoading={metaEvents.isPending}
-                noun="event"
-                placeholder="Select an event…"
-                emptyLabel="No events tracked yet."
-              />
-              <WithinDaysPresets
-                value={primary.within_days}
-                onChange={(within_days) => setConditionAt(0, { ...primary, within_days })}
+        <Card>
+          <CardHeader>
+            <CardTitle>{currentCohortId ? 'Edit cohort' : 'New cohort'}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <div>
+              <label htmlFor="cohort-name" className="mb-1 block text-sm font-medium">
+                Cohort name
+              </label>
+              <Input
+                id="cohort-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Recent buyers"
               />
             </div>
-          ) : (
-            <p className="text-sm text-text-muted">
-              Your first condition is configured in the advanced section below.
-            </p>
-          )}
 
-          {/* Live preview: updates on its own as the definition changes, before any save. */}
-          <Card className="bg-surface-raised/40 p-4" aria-live="polite">
-            {!runnable && (
+            {/* Quick builder: "who did <event> in the last N days" — no raw typing. */}
+            {primary?.type === 'behavior' ? (
+              <div className="flex flex-wrap items-end gap-6">
+                <EventSelectField
+                  label="Event"
+                  value={primary.event}
+                  onChange={(value) => setConditionAt(0, { ...primary, event: value })}
+                  options={eventOptions}
+                  isLoading={metaEvents.isPending}
+                  noun="event"
+                  placeholder="Select an event…"
+                  emptyLabel="No events tracked yet."
+                />
+                <WithinDaysPresets
+                  value={primary.within_days}
+                  onChange={(within_days) => setConditionAt(0, { ...primary, within_days })}
+                />
+              </div>
+            ) : (
               <p className="text-sm text-text-muted">
-                Pick an event to preview how many users match.
+                Your first condition is configured in the advanced section below.
               </p>
             )}
-            {runnable && previewCohort.isError && (
-              <p role="alert" className="text-danger">
-                {previewCohort.error instanceof ApiError
-                  ? previewCohort.error.problem.title
-                  : 'Failed to preview the cohort'}
-              </p>
-            )}
-            {runnable && previewCohort.isPending && !previewResult && <p role="status">Computing…</p>}
-            {runnable && previewResult && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm text-text-muted">Cohort size</p>
-                  {previewCohort.isPending && (
-                    <span role="status" className="text-xs text-text-muted">
-                      Computing…
-                    </span>
+
+            {/* Live preview: updates on its own as the definition changes, before any save. */}
+            <Card className="bg-surface-raised/40 p-4" aria-live="polite">
+              {!runnable && (
+                <p className="text-sm text-text-muted">
+                  Pick an event to preview how many users match.
+                </p>
+              )}
+              {runnable && previewCohort.isError && (
+                <p role="alert" className="text-danger">
+                  {previewCohort.error instanceof ApiError
+                    ? previewCohort.error.problem.title
+                    : 'Failed to preview the cohort'}
+                </p>
+              )}
+              {runnable && previewCohort.isPending && !previewResult && <p role="status">Computing…</p>}
+              {runnable && previewResult && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-text-muted">Cohort size</p>
+                    {previewCohort.isPending && (
+                      <span role="status" className="text-xs text-text-muted">
+                        Computing…
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-3xl font-semibold tabular-nums">{previewResult.count}</p>
+                  {previewResult.sample.length > 0 && (
+                    <p className="text-xs text-text-muted">Sample: {previewResult.sample.join(', ')}</p>
                   )}
                 </div>
-                <p className="text-3xl font-semibold tabular-nums">{previewResult.count}</p>
-                {previewResult.sample.length > 0 && (
-                  <p className="text-xs text-text-muted">Sample: {previewResult.sample.join(', ')}</p>
-                )}
+              )}
+            </Card>
+
+            {saveError && (
+              <p role="alert" className="text-danger">
+                {saveError}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={handleSave} disabled={!canSave}>
+                {createCohort.isPending || updateCohort.isPending
+                  ? 'Saving…'
+                  : currentCohortId
+                    ? 'Save changes'
+                    : 'Save cohort'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-expanded={showAdvanced}
+                onClick={() => setShowAdvanced((value) => !value)}
+                className="border border-dashed border-border font-normal text-text-muted hover:text-text"
+              >
+                <span aria-hidden="true">+</span>{' '}
+                {showAdvanced ? 'Hide advanced' : 'Add conditions & filters'}
+              </Button>
+            </div>
+
+            {showAdvanced && (
+              <div className="flex flex-col gap-4 border-t border-border pt-5">
+                <div>
+                  <label htmlFor="cohort-match" className="mb-1 block text-sm font-medium">
+                    Match
+                  </label>
+                  <select
+                    id="cohort-match"
+                    value={match}
+                    onChange={(e) => setMatch(e.target.value as CohortMatch)}
+                    className={cn(fieldLook, 'w-auto')}
+                  >
+                    {COHORT_MATCHES.map((value) => (
+                      <option key={value} value={value}>
+                        {MATCH_LABELS[value]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Conditions ({conditions.length}/{MAX_CONDITIONS})
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={addCondition}
+                    disabled={conditions.length >= MAX_CONDITIONS}
+                  >
+                    Add condition
+                  </Button>
+                </div>
+                {conditions.map((condition, index) => (
+                  <ConditionRow
+                    key={index}
+                    index={index}
+                    condition={condition}
+                    eventOptions={eventOptions}
+                    eventsLoading={metaEvents.isPending}
+                    propertyNames={propertyNames}
+                    projectId={projectId}
+                    canRemove={conditions.length > 1}
+                    onType={(type) => changeConditionType(index, type)}
+                    onChange={(next) => setConditionAt(index, next)}
+                    onRemove={() => removeCondition(index)}
+                  />
+                ))}
               </div>
             )}
-          </Card>
-
-          {saveError && (
-            <p role="alert" className="text-danger">
-              {saveError}
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleSave} disabled={!canSave}>
-              {createCohort.isPending || updateCohort.isPending
-                ? 'Saving…'
-                : currentCohortId
-                  ? 'Save changes'
-                  : 'Save cohort'}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-expanded={showAdvanced}
-              onClick={() => setShowAdvanced((value) => !value)}
-              className="border border-dashed border-border font-normal text-text-muted hover:text-text"
-            >
-              <span aria-hidden="true">+</span>{' '}
-              {showAdvanced ? 'Hide advanced' : 'Add conditions & filters'}
-            </Button>
-          </div>
-
-          {showAdvanced && (
-            <div className="flex flex-col gap-4 border-t border-border pt-5">
-              <div>
-                <label htmlFor="cohort-match" className="mb-1 block text-sm font-medium">
-                  Match
-                </label>
-                <select
-                  id="cohort-match"
-                  value={match}
-                  onChange={(e) => setMatch(e.target.value as CohortMatch)}
-                  className={cn(fieldLook, 'w-auto')}
-                >
-                  {COHORT_MATCHES.map((value) => (
-                    <option key={value} value={value}>
-                      {MATCH_LABELS[value]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  Conditions ({conditions.length}/{MAX_CONDITIONS})
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={addCondition}
-                  disabled={conditions.length >= MAX_CONDITIONS}
-                >
-                  Add condition
-                </Button>
-              </div>
-              {conditions.map((condition, index) => (
-                <ConditionRow
-                  key={index}
-                  index={index}
-                  condition={condition}
-                  eventOptions={eventOptions}
-                  eventsLoading={metaEvents.isPending}
-                  propertyNames={propertyNames}
-                  projectId={projectId}
-                  canRemove={conditions.length > 1}
-                  onType={(type) => changeConditionType(index, type)}
-                  onChange={(next) => setConditionAt(index, next)}
-                  onRemove={() => removeCondition(index)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       </Reveal>
     </PageShell>
   );
@@ -459,33 +460,13 @@ function WithinDaysPresets({
   return (
     <div>
       <span className="mb-1 block text-sm font-medium">In the last</span>
-      <div
-        role="radiogroup"
+      <Segmented
         aria-label="In the last"
-        className="inline-flex w-fit flex-wrap gap-0.5 rounded-lg border border-border bg-surface p-0.5"
-      >
-        {WITHIN_DAYS_PRESETS.map((days) => {
-          const active = value === days;
-          return (
-            <button
-              key={days}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(days)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-sm transition-colors',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-                active
-                  ? 'bg-accent font-medium text-accent-fg'
-                  : 'text-text-muted hover:bg-border/40 hover:text-text',
-              )}
-            >
-              {days} days
-            </button>
-          );
-        })}
-      </div>
+        value={String(value)}
+        onValueChange={(next) => onChange(Number(next))}
+        options={WITHIN_DAYS_PRESETS.map((days) => ({ value: String(days), label: `${days} days` }))}
+        className="w-fit flex-wrap"
+      />
     </div>
   );
 }

@@ -62,7 +62,10 @@ export const AskBar = forwardRef<HTMLInputElement, AskBarProps>(function AskBar(
     <form
       onSubmit={handleSubmit}
       role="search"
-      className="flex items-center gap-2 rounded-full border border-border bg-overlay p-1.5 pl-4 backdrop-blur-md"
+      className={cn(
+        'flex items-center gap-2 rounded-full border border-border bg-overlay p-1.5 pl-4 backdrop-blur-md',
+        'transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]',
+      )}
     >
       <Sparkles aria-hidden="true" size={16} className="shrink-0 text-accent" />
       <label htmlFor="ask-data-input" className="sr-only">
@@ -79,7 +82,7 @@ export const AskBar = forwardRef<HTMLInputElement, AskBarProps>(function AskBar(
         className={cn(
           fieldLook,
           'h-8 flex-1 rounded-full border-0 bg-transparent px-1 text-text shadow-none',
-          'focus:shadow-[0_0_0_3px_var(--accent-soft)]',
+          'focus:shadow-none focus:outline-none',
         )}
       />
       <Button
