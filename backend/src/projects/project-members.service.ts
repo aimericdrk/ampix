@@ -50,7 +50,16 @@ export class ProjectMembersService {
       where: { userId_projectId: { userId: targetUserId, projectId } },
     });
     if (existing) throw this.alreadyMember();
-    await this.prisma.projectMembership.create({ data: { userId: targetUserId, projectId, role } });
+    // The pre-check above gives the clean 409 in the common case, but it and the create() below
+    // are not atomic: two concurrent adds of the same (userId, projectId) both pass the check,
+    // then one loses the PK unique constraint (Prisma P2002). Map that to the same 409 so the
+    // race surfaces as a Conflict rather than a raw 500.
+    try {
+      await this.prisma.projectMembership.create({ data: { userId: targetUserId, projectId, role } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw this.alreadyMember();
+      throw err;
+    }
     return { user_id: targetUserId, role };
   }
 

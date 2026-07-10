@@ -123,6 +123,29 @@ describe('ProjectMembersService (real Postgres)', () => {
         service.changeRole(project.id, 'owner', target.id, 'admin'),
       ).resolves.toEqual({ user_id: target.id, role: 'admin' });
     });
+
+    it('allows an owner actor to mint a NEW owner via changeRole', async () => {
+      const { org, project } = await seedOrgAndProject();
+      await seedMember(org.id, project.id, 'owner@acme.test', 'admin', 'owner');
+      const analyst = await seedMember(org.id, project.id, 'analyst@acme.test', 'analyst', 'analyst');
+
+      await expect(
+        service.changeRole(project.id, 'owner', analyst.id, 'owner'),
+      ).resolves.toEqual({ user_id: analyst.id, role: 'owner' });
+    });
+
+    it('allows an owner actor to mint a NEW owner via add', async () => {
+      const { org, project } = await seedOrgAndProject();
+      await seedMember(org.id, project.id, 'owner@acme.test', 'admin', 'owner');
+      const newOrgMember = await seedUser('newbie@acme.test');
+      await prisma.membership.create({
+        data: { userId: newOrgMember.id, orgId: org.id, role: 'admin' },
+      });
+
+      await expect(
+        service.add(project.id, 'owner', newOrgMember.id, 'owner'),
+      ).resolves.toEqual({ user_id: newOrgMember.id, role: 'owner' });
+    });
   });
 
   describe('last-owner invariant', () => {
@@ -244,6 +267,37 @@ describe('ProjectMembersService (real Postgres)', () => {
         service.add(project.id, 'owner', newOrgMember.id, 'analyst'),
       ).resolves.toEqual({ user_id: newOrgMember.id, role: 'analyst' });
     });
+
+    it(
+      'maps a duplicate-add race (create() hits the PK unique constraint, Prisma P2002) to 409 ' +
+        '— SECURITY/ROBUSTNESS: the loser of two concurrent adds gets a Conflict, not a raw 500',
+      async () => {
+        const { org, project } = await seedOrgAndProject();
+        await seedMember(org.id, project.id, 'owner@acme.test', 'admin', 'owner');
+        // Existing project member — this is the row create() will collide with.
+        const existingMember = await seedMember(
+          org.id,
+          project.id,
+          'analyst@acme.test',
+          'analyst',
+          'analyst',
+        );
+        // Simulate the race window: force the pre-check to miss the existing row (as it would if
+        // the other transaction hasn't committed yet at read time) so control reaches create(),
+        // which then hits the real PK unique constraint in Postgres.
+        const findUniqueSpy = jest
+          .spyOn(prisma.projectMembership, 'findUnique')
+          .mockResolvedValueOnce(null);
+
+        await expect(
+          service.add(project.id, 'owner', existingMember.id, 'viewer'),
+        ).rejects.toMatchObject({
+          problem: { status: 409, detail: 'User is already a member of this project' },
+        });
+
+        findUniqueSpy.mockRestore();
+      },
+    );
   });
 
   describe('malformed userId', () => {
