@@ -134,13 +134,18 @@ export function DataTable<T>({
                   key={column.key}
                   scope="col"
                   aria-sort={ariaSort}
-                  className={cn('py-2 font-medium', column.align === 'right' && 'text-right')}
+                  className={cn(
+                    // top-12 (48px) clears the mobile fixed topbar in AppLayout (py-2 + h-8
+                    // button) on <md screens; z-10 stays above rows, below the topbar's z-30.
+                    'sticky top-12 z-10 bg-surface/80 py-2 text-xs font-medium uppercase tracking-wide text-text-muted backdrop-blur md:top-0',
+                    column.align === 'right' && 'text-right',
+                  )}
                 >
                   {column.sortable ? (
                     <button
                       type="button"
                       onClick={() => toggleSort(column)}
-                      className="inline-flex items-center gap-1 font-medium"
+                      className="inline-flex items-center gap-1"
                     >
                       {column.header}
                       {isSorted && (
@@ -169,8 +174,8 @@ export function DataTable<T>({
               <tr
                 key={rowKey(row)}
                 className={cn(
-                  'border-b border-border',
-                  onRowClick && 'cursor-pointer hover:bg-border/20',
+                  'border-b border-border transition-colors',
+                  onRowClick && 'cursor-pointer hover:bg-accent-soft/50',
                 )}
                 tabIndex={onRowClick ? 0 : undefined}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}

@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { colorForIndex } from '../../palette';
 import { formatExactNumber } from '../../format';
+import { ChartTooltip, axisProps, useChartAnimationProps, gridProps } from './chart-theme';
 
 /** A single label→value bar for the non-stacked variant. */
 export interface BreakdownDatum {
@@ -61,16 +62,6 @@ export type BreakdownChartProps = {
       data: StackedBreakdownDatum[];
     }
 );
-
-const TOOLTIP_STYLE = {
-  backgroundColor: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 13,
-};
-
-const AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
 
 const CHART_MARGIN = { top: 8, right: 48, left: 8, bottom: 8 };
 
@@ -149,6 +140,7 @@ function SingleBreakdownChart({
   selectedValue?: string;
 }) {
   const sorted = useMemo(() => [...data].sort((a, b) => b.value - a.value), [data]);
+  const animation = useChartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4">
@@ -159,16 +151,14 @@ function SingleBreakdownChart({
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={sorted} layout="vertical" margin={CHART_MARGIN}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="0" horizontal={false} />
-            <XAxis type="number" tick={AXIS_TICK} stroke="var(--border)" />
-            <YAxis type="category" dataKey="label" tick={AXIS_TICK} stroke="var(--border)" width={110} />
+            <CartesianGrid {...gridProps} vertical horizontal={false} />
+            <XAxis type="number" {...axisProps} />
+            <YAxis type="category" dataKey="label" {...axisProps} width={110} />
             <Tooltip
-              contentStyle={TOOLTIP_STYLE}
-              labelStyle={{ color: 'var(--text-muted)' }}
+              content={<ChartTooltip formatter={(value) => formatExactNumber(Number(value))} />}
               cursor={{ fill: 'var(--border)', opacity: 0.3 }}
-              formatter={(value) => formatExactNumber(Number(value))}
             />
-            <Bar dataKey="value" isAnimationActive={false} maxBarSize={28} fill={colorForIndex(0)}>
+            <Bar dataKey="value" {...animation} maxBarSize={28} fill={colorForIndex(0)}>
               {onSelectValue &&
                 sorted.map((row) => {
                   const { selectable, isSelected } = selectableCellState(
@@ -296,6 +286,7 @@ function StackedBreakdownChart({
       }),
     [data],
   );
+  const animation = useChartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4">
@@ -306,14 +297,10 @@ function StackedBreakdownChart({
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} layout="vertical" margin={CHART_MARGIN}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="0" horizontal={false} />
-            <XAxis type="number" tick={AXIS_TICK} stroke="var(--border)" />
-            <YAxis type="category" dataKey="label" tick={AXIS_TICK} stroke="var(--border)" width={110} />
-            <Tooltip
-              contentStyle={TOOLTIP_STYLE}
-              labelStyle={{ color: 'var(--text-muted)' }}
-              cursor={{ fill: 'var(--border)', opacity: 0.3 }}
-            />
+            <CartesianGrid {...gridProps} vertical horizontal={false} />
+            <XAxis type="number" {...axisProps} />
+            <YAxis type="category" dataKey="label" {...axisProps} width={110} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--border)', opacity: 0.3 }} />
             <Legend wrapperStyle={{ color: 'var(--text)', fontSize: 13 }} />
             {segmentKeys.map((key, index) => (
               <Bar
@@ -322,7 +309,7 @@ function StackedBreakdownChart({
                 name={capitalize(key)}
                 stackId="stack"
                 fill={colorForIndex(index)}
-                isAnimationActive={false}
+                {...animation}
               >
                 {onSelectValue &&
                   rows.map((row) => {

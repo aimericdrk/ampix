@@ -1,0 +1,112 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useMotionSafe } from '../../lib/motion';
+import { AnimatedNumber } from './animated-number';
+import { Reveal } from './reveal';
+
+describe('main.tsx LazyMotion feature bundle', () => {
+  // `layoutId` shared-layout animations (sidebar nav indicator, tabs pill, segmented highlight)
+  // need motion's `domMax` feature bundle — `domAnimation` silently drops layout animations with
+  // no error, so a behavioral test can't tell the two apart. This pins the regression by reading
+  // main.tsx's actual bootstrap source and asserting it wires up `domMax`, not `domAnimation`.
+  it('wires LazyMotion up with domMax, not domAnimation', () => {
+    const mainTsxPath = resolve(import.meta.dirname, '../../main.tsx');
+    const source = readFileSync(mainTsxPath, 'utf-8');
+
+    expect(source).toContain('domMax');
+    expect(source).not.toContain('features={domAnimation}');
+  });
+});
+
+describe('Reveal', () => {
+  it('renders children', () => {
+    render(
+      <Reveal>
+        <p>Hello</p>
+      </Reveal>,
+    );
+    expect(screen.getByText('Hello')).toBeInTheDocument();
+  });
+});
+
+describe('useMotionSafe', () => {
+  function MotionProbe() {
+    return <p>{useMotionSafe() ? 'motion-safe' : 'motion-off'}</p>;
+  }
+
+  it('returns false under the jsdom matchMedia stub, so charts render static in tests', () => {
+    // The setup.ts stub answers `matches: false` for every query, including the affirmative
+    // `(prefers-reduced-motion: no-preference)` — useMotionSafe must treat that as "no motion",
+    // which is what lets animated Recharts marks render synchronously in the chart tests.
+    render(<MotionProbe />);
+    expect(screen.getByText('motion-off')).toBeInTheDocument();
+  });
+});
+
+describe('AnimatedNumber', () => {
+  it('renders the formatted final value in test mode', () => {
+    render(<AnimatedNumber value={1234} format={(n) => n.toLocaleString('en-US')} />);
+    expect(screen.getByText('1,234')).toBeInTheDocument();
+  });
+
+  describe('animated path (rAF driven manually)', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    });
+
+    it('retargets a mid-flight value change from the currently displayed value, not a stale origin', () => {
+      // Defeat the test-mode shortcut so the rAF tween actually runs, then drive the
+      // frames by hand with controlled timestamps (jsdom has no real rAF timing).
+      vi.stubEnv('MODE', 'development');
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', () => {});
+      let now = 0;
+      vi.stubGlobal('performance', { ...performance, now: () => now });
+
+      const format = (n: number) => String(Math.round(n));
+      const { rerender } = render(<AnimatedNumber value={100} format={format} />);
+
+      // Halfway through the 800ms tween 0 -> 100: eased = 1 - 0.5^3 = 0.875 -> 87.5.
+      act(() => frames.shift()?.(400));
+      expect(screen.getByText('88')).toBeInTheDocument();
+
+      // Retarget mid-flight. The new tween must start from the displayed 87.5, so its
+      // first frame (elapsed 0) still shows 88 — with a stale origin it would jump
+      // back to 0 (initial) or 100 (previous target).
+      now = 400;
+      rerender(<AnimatedNumber value={200} format={format} />);
+      act(() => frames.pop()?.(400));
+      expect(screen.getByText('88')).toBeInTheDocument();
+
+      // And the tween completes at the new target.
+      act(() => frames.pop()?.(1200));
+      expect(screen.getByText('200')).toBeInTheDocument();
+    });
+
+    it('rounds intermediate frames of an integer tween so full-precision formatters never flicker decimals', () => {
+      vi.stubEnv('MODE', 'development');
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', () => {});
+      vi.stubGlobal('performance', { ...performance, now: () => 0 });
+
+      // A full-precision formatter with no fraction cap (the formatExactNumber shape KPI tiles
+      // pass): without integer rounding, the mid-tween frame below would render "539.875".
+      const format = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 3 });
+      const { container } = render(<AnimatedNumber value={617} format={format} />);
+
+      // Halfway through the 800ms tween 0 -> 617: eased = 0.875 -> raw 539.875 -> rounded 540.
+      act(() => frames.shift()?.(400));
+      expect(container.textContent).toBe('540');
+      expect(container.textContent).not.toContain('.');
+
+      // And the tween still lands exactly on the integer target.
+      act(() => frames.shift()?.(800));
+      expect(screen.getByText('617')).toBeInTheDocument();
+    });
+  });
+});

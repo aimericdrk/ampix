@@ -7,8 +7,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../../../components/ui/dialog';
-import { Input } from '../../../components/ui/input';
+import { fieldLook, Input } from '../../../components/ui/input';
 import { useToast } from '../../../components/ui/toast';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type { AnalysisDefinition, CreateReportRequest, ReportKind } from '../../../lib/api/types';
 import { useCohorts, useCreateReport } from '../api';
@@ -142,7 +143,7 @@ export function CohortSelect({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+        className={cn(fieldLook, 'w-auto')}
       >
         <option value="">All users (no cohort)</option>
         {(cohorts.data?.cohorts ?? []).map((cohort) => (

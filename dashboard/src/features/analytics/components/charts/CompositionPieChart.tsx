@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatExactNumber, formatPercent } from '../../format';
+import { ChartTooltip, useChartAnimationProps } from './chart-theme';
 
 export interface PieSlice {
   key: string;
@@ -32,6 +33,7 @@ export function CompositionPieChart({
   legendLabel?: string;
 }) {
   const total = useMemo(() => slices.reduce((sum, s) => sum + s.value, 0), [slices]);
+  const animation = useChartAnimationProps();
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -43,20 +45,17 @@ export function CompositionPieChart({
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Tooltip
-              contentStyle={{
-                backgroundColor: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                color: 'var(--text)',
-                fontSize: 13,
-              }}
-              formatter={(value, name) => {
-                const n = Number(value);
-                return [
-                  `${formatExactNumber(n)} (${total > 0 ? formatPercent(n / total) : '0%'})`,
-                  name,
-                ];
-              }}
+              content={
+                <ChartTooltip
+                  formatter={(value, name) => {
+                    const n = Number(value);
+                    return [
+                      `${formatExactNumber(n)} (${total > 0 ? formatPercent(n / total) : '0%'})`,
+                      name as string,
+                    ];
+                  }}
+                />
+              }
             />
             <Pie
               data={slices}
@@ -65,9 +64,9 @@ export function CompositionPieChart({
               innerRadius={donut ? '55%' : 0}
               outerRadius="90%"
               paddingAngle={1}
-              stroke="var(--chart-surface)"
+              stroke="var(--surface)"
               strokeWidth={2}
-              isAnimationActive={false}
+              {...animation}
             >
               {slices.map((slice) => (
                 <Cell key={slice.key} fill={colorFor(slice.key)} />

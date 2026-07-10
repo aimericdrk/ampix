@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
+import { Inbox } from 'lucide-react';
 import { PageShell } from '../../../components/layout/PageShell';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
+import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
+import { EmptyState } from '../../../components/ui/empty-state';
 import { Input } from '../../../components/ui/input';
-import { cn } from '../../../lib/cn';
+import { Reveal } from '../../../components/ui/reveal';
 import type { EventSummaryResponse, MetaEventsResponse, MetaProperty } from '../../../lib/api/types';
 import { useMetaEvents, useMetaProperties } from '../api';
 import { useEventSummary } from '../../projects/api';
@@ -40,20 +43,9 @@ function buildCatalog(
   }));
 }
 
-/** The "$ auto" / "manual" pill — same rounded-pill styling as the profile timeline's chips. */
+/** The "$ auto" / "manual" pill. */
 function EventKindBadge({ isAuto }: { isAuto: boolean }) {
-  return (
-    <span
-      className={cn(
-        'rounded-full border px-2 py-0.5 text-xs font-medium',
-        isAuto
-          ? 'border-accent/40 bg-accent/10 text-accent'
-          : 'border-border bg-chart-surface text-text-muted',
-      )}
-    >
-      {isAuto ? '$ auto' : 'manual'}
-    </span>
-  );
+  return <Badge variant={isAuto ? 'accent' : 'outline'}>{isAuto ? '$ auto' : 'manual'}</Badge>;
 }
 
 /**
@@ -173,17 +165,27 @@ export function EventCatalogPage() {
       description="Every event this project tracks — its volume, whether it's autocaptured or manual, and a shared description of what it means."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Events' }]}
     >
-      {isPending && <p role="status">Loading events…</p>}
+      {isPending && (
+        <Reveal index={0}>
+          <p role="status">Loading events…</p>
+        </Reveal>
+      )}
       {isError && (
-        <p role="alert" className="text-danger">
-          Failed to load events
-        </p>
+        <Reveal index={0}>
+          <p role="alert" className="text-danger">
+            Failed to load events
+          </p>
+        </Reveal>
       )}
 
-      {isEmpty && <p className="text-sm text-text-muted">No events tracked yet.</p>}
+      {isEmpty && (
+        <Reveal index={0}>
+          <EmptyState icon={Inbox} title="No events tracked yet." />
+        </Reveal>
+      )}
 
       {!isPending && !isError && !isEmpty && (
-        <>
+        <Reveal index={1} className="flex flex-col gap-6">
           <SectionGrid>
             <KpiTile label="Distinct events" value={distinctCount} />
             <KpiTile label="Autocaptured" value={autoCount} />
@@ -213,17 +215,19 @@ export function EventCatalogPage() {
               exportFilename="events"
             />
           </ChartCard>
+        </Reveal>
+      )}
 
-          {expandedEvent && (
-            <ChartCard title={`Properties for ${expandedEvent}`}>
-              <EventPropertiesList
-                properties={metaProperties.data?.properties ?? []}
-                isPending={metaProperties.isPending}
-                isError={metaProperties.isError}
-              />
-            </ChartCard>
-          )}
-        </>
+      {expandedEvent && (
+        <Reveal index={2}>
+          <ChartCard title={`Properties for ${expandedEvent}`}>
+            <EventPropertiesList
+              properties={metaProperties.data?.properties ?? []}
+              isPending={metaProperties.isPending}
+              isError={metaProperties.isError}
+            />
+          </ChartCard>
+        </Reveal>
       )}
     </PageShell>
   );
@@ -239,8 +243,12 @@ function EventPropertiesList({
   isError: boolean;
 }) {
   if (isPending) return <p role="status">Loading properties…</p>;
-  if (isError) return <p className="text-danger">Failed to load properties</p>;
-  if (properties.length === 0) return <p className="text-sm text-text-muted">No known properties.</p>;
+  if (isError) return (
+    <p role="alert" className="text-danger">
+      Failed to load properties
+    </p>
+  );
+  if (properties.length === 0) return <EmptyState icon={Inbox} title="No known properties." />;
 
   return (
     <ul className="flex flex-col gap-1.5 text-sm">

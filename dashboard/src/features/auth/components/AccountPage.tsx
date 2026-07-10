@@ -1,48 +1,74 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
+import { PageShell } from '../../../components/layout/PageShell';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { changePassword, getMe, ME_QUERY_KEY, updateName } from '../api';
+import { TwoFactorSection } from './SecuritySettingsPage';
 
+/**
+ * The merged account + security page (`/account`; `/settings/security` redirects here — see
+ * `router.tsx`). Mirrors `ProjectDetailPage`'s settings layout: titled cards in a two-column
+ * grid, one `Reveal` per section. The two-factor section lives in `SecuritySettingsPage.tsx`
+ * (kept there as the natural home for its own sub-flows) and shares this page's single `getMe`
+ * query, so loading/error states are handled once for the whole page.
+ */
 export function AccountPage() {
   const query = useQuery({ queryKey: ME_QUERY_KEY, queryFn: getMe });
 
   return (
-    <section className="max-w-lg space-y-6">
-      <h1 className="text-2xl font-semibold">Account</h1>
-
-      {query.isPending && <p role="status">Loading…</p>}
+    <PageShell title="Account" description="Profile, password, and security settings.">
+      {query.isPending && (
+        <div role="status" className="space-y-4">
+          <span className="sr-only">Loading…</span>
+          <Skeleton className="h-36 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </div>
+      )}
       {query.error && (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-sm text-danger">
           {query.error instanceof ApiError ? query.error.problem.title : 'Failed to load account'}
         </p>
       )}
 
       {query.data && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <NameForm currentName={query.data.user.name} email={query.data.user.email} />
-            </CardContent>
-          </Card>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Reveal index={0}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Profile</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <NameForm currentName={query.data.user.name} email={query.data.user.email} />
+              </CardContent>
+            </Card>
+          </Reveal>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Password</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PasswordForm />
-            </CardContent>
-          </Card>
-        </>
+          <Reveal index={1}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Password</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PasswordForm />
+              </CardContent>
+            </Card>
+          </Reveal>
+
+          {/* Wide: holds the enable-2FA form (QR code + OTP input) or the disable form, which
+              need more breathing room than the single-column Profile/Password forms above. */}
+          <Reveal index={2} className="lg:col-span-2">
+            <TwoFactorSection twoFactorEnabled={query.data.two_factor_enabled} />
+          </Reveal>
+        </div>
       )}
-    </section>
+    </PageShell>
   );
 }
 
@@ -84,9 +110,9 @@ function NameForm({ currentName, email }: { currentName: string; email: string }
         <p className="text-sm text-text-muted">{email}</p>
       </div>
       <div>
-        <label htmlFor="account-name" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="account-name" className="mb-1 block">
           Display name
-        </label>
+        </Label>
         <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <Button type="submit" disabled={mutation.isPending || !name.trim()}>
@@ -133,9 +159,9 @@ function PasswordForm() {
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div>
-        <label htmlFor="current-password" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="current-password" className="mb-1 block">
           Current password
-        </label>
+        </Label>
         <Input
           id="current-password"
           type="password"
@@ -148,9 +174,9 @@ function PasswordForm() {
         />
       </div>
       <div>
-        <label htmlFor="new-password" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="new-password" className="mb-1 block">
           New password
-        </label>
+        </Label>
         <Input
           id="new-password"
           type="password"

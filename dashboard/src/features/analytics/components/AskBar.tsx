@@ -1,8 +1,9 @@
+import { Sparkles } from 'lucide-react';
 import { forwardRef, useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
-import { IconSparkle } from '../../../components/ui/icons';
-import { Input } from '../../../components/ui/input';
+import { fieldLook } from '../../../components/ui/input';
 import { useToast } from '../../../components/ui/toast';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type { InsightsQueryDefinition } from '../../../lib/api/types';
 import { useAskData } from '../api';
@@ -58,27 +59,38 @@ export const AskBar = forwardRef<HTMLInputElement, AskBarProps>(function AskBar(
   };
 
   return (
-    <form onSubmit={handleSubmit} role="search" className="flex items-center gap-2">
-      <div className="relative flex-1">
-        <label htmlFor="ask-data-input" className="sr-only">
-          Ask your data
-        </label>
-        <IconSparkle
-          aria-hidden="true"
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-        />
-        <Input
-          ref={ref}
-          id="ask-data-input"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          placeholder="Ask your data…"
-          disabled={askData.isPending}
-          maxLength={MAX_QUESTION_LENGTH}
-          className="pl-9"
-        />
-      </div>
-      <Button type="submit" disabled={askData.isPending || trimmedIsEmpty(question)}>
+    <form
+      onSubmit={handleSubmit}
+      role="search"
+      className={cn(
+        'flex items-center gap-2 rounded-full border border-border bg-overlay p-1.5 pl-4 backdrop-blur-md',
+        'transition-colors focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-soft)]',
+      )}
+    >
+      <Sparkles aria-hidden="true" size={16} className="shrink-0 text-accent" />
+      <label htmlFor="ask-data-input" className="sr-only">
+        Ask your data
+      </label>
+      <input
+        ref={ref}
+        id="ask-data-input"
+        value={question}
+        onChange={(event) => setQuestion(event.target.value)}
+        placeholder="Ask your data…"
+        disabled={askData.isPending}
+        maxLength={MAX_QUESTION_LENGTH}
+        className={cn(
+          fieldLook,
+          'h-8 flex-1 rounded-full border-0 bg-transparent px-1 text-text shadow-none',
+          'focus:shadow-none focus:outline-none',
+        )}
+      />
+      <Button
+        type="submit"
+        size="sm"
+        disabled={askData.isPending || trimmedIsEmpty(question)}
+        className="rounded-full"
+      >
         {askData.isPending ? 'Thinking…' : 'Ask'}
       </Button>
     </form>

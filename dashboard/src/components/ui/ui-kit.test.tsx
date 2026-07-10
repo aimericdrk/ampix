@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './dialog';
+import { IconButton } from './icon-button';
 import { Input } from './input';
 import { ToastProvider, useToast } from './toast';
 
@@ -32,6 +33,25 @@ describe('Button', () => {
   it('applies variant classes', () => {
     render(<Button variant="danger">Delete</Button>);
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveClass('bg-danger');
+  });
+
+  it('applies the gradient-brand background for the primary variant', () => {
+    render(<Button variant="primary">Save</Button>);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass('bg-gradient-brand');
+  });
+});
+
+describe('IconButton', () => {
+  it('renders with an accessible name and fires clicks', async () => {
+    const onClick = vi.fn();
+    render(
+      <IconButton aria-label="Close" onClick={onClick}>
+        <svg data-testid="icon" />
+      </IconButton>,
+    );
+    const button = screen.getByRole('button', { name: 'Close' });
+    await userEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });
 

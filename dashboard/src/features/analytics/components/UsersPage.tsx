@@ -1,13 +1,17 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
+import { Inbox } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { EmptyState } from '../../../components/ui/empty-state';
 import { Input } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import { ApiError } from '../../../lib/api/problem';
 import type { UserListItem } from '../../../lib/api/types';
 import { formatExactNumber } from '../format';
 import { useUsersList } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { ChartCard } from './charts/ChartCard';
 import { UserProfileModal } from './UserProfileModal';
 
 const columns: Array<DataTableColumn<UserListItem>> = [
@@ -92,56 +96,69 @@ export function UsersPage() {
       description="Search and browse the people behind your events."
       breadcrumbs={[{ label: 'Audience' }, { label: 'Users' }]}
     >
-      <form onSubmit={handleSearchSubmit} className="flex max-w-sm items-end gap-2">
-        <div className="flex-1">
-          <label htmlFor="user-search" className="mb-1 block text-sm font-medium">
-            Search by name, email, or ID
-          </label>
-          <Input
-            id="user-search"
-            placeholder="e.g. Alex or user-001"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </div>
-        <Button type="submit" size="sm">
-          Search
-        </Button>
-      </form>
+      <Reveal index={0}>
+        <form onSubmit={handleSearchSubmit} className="flex max-w-sm items-end gap-2">
+          <div className="flex-1">
+            <label htmlFor="user-search" className="mb-1 block text-sm font-medium">
+              Search by name, email, or ID
+            </label>
+            <Input
+              id="user-search"
+              placeholder="e.g. Alex or user-001"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+          </div>
+          <Button type="submit" size="sm">
+            Search
+          </Button>
+        </form>
+      </Reveal>
 
-      {isPending && <p role="status">Loading users…</p>}
+      {isPending && (
+        <Reveal index={1}>
+          <p role="status">Loading users…</p>
+        </Reveal>
+      )}
       {isError && (
-        <p role="alert" className="text-danger">
-          {error instanceof ApiError ? error.problem.title : 'Failed to load users'}
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            {error instanceof ApiError ? error.problem.title : 'Failed to load users'}
+          </p>
+        </Reveal>
       )}
 
       {!isPending && !isError && users.length === 0 && (
-        <p className="text-text-muted">No users found.</p>
+        <Reveal index={1}>
+          <EmptyState icon={Inbox} title="No users found." />
+        </Reveal>
       )}
 
       {users.length > 0 && (
-        <>
-          <DataTable
-            columns={columns}
-            rows={users}
-            caption="Users"
-            rowKey={(user) => user.distinct_id}
-            onRowClick={openProfile}
-            exportFilename="users"
-          />
+        <Reveal index={1} className="flex flex-col gap-4">
+          <ChartCard title="Users">
+            <DataTable
+              columns={columns}
+              rows={users}
+              caption="Users"
+              rowKey={(user) => user.distinct_id}
+              onRowClick={openProfile}
+              exportFilename="users"
+            />
 
-          {hasNextPage && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void fetchNextPage()}
-              disabled={isFetchingNextPage}
-            >
-              {isFetchingNextPage ? 'Loading…' : 'Load more'}
-            </Button>
-          )}
-        </>
+            {hasNextPage && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-3"
+                onClick={() => void fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? 'Loading…' : 'Load more'}
+              </Button>
+            )}
+          </ChartCard>
+        </Reveal>
       )}
 
       {openDistinctId && (

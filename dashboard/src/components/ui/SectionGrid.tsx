@@ -20,7 +20,7 @@ export function SectionGrid({
   };
 
   return (
-    <div className={cn('grid gap-4', className)} style={style}>
+    <div className={cn('grid gap-6', className)} style={style}>
       {children}
     </div>
   );

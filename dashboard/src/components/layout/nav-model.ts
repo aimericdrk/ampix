@@ -8,9 +8,13 @@ export interface NavItem {
   exact?: boolean;
 }
 
+/** One of the fixed section hues (`data-accent` re-points `--accent` for everything the group wraps). */
+export type NavAccent = 'violet' | 'cyan' | 'lime' | 'amber' | 'pink';
+
 export interface NavGroup {
   heading?: string;
   items: NavItem[];
+  accent?: NavAccent;
 }
 
 /**
@@ -24,9 +28,11 @@ export function projectGroups(): NavGroup[] {
   return [
     {
       items: [{ label: 'Home', to: p('/home'), icon: 'home' }],
+      accent: 'violet',
     },
     {
       heading: 'Explore',
+      accent: 'cyan',
       items: [
         { label: 'Insights', to: p('/insights'), icon: 'insights' },
         { label: 'Funnels', to: p('/funnels'), icon: 'funnel' },
@@ -42,6 +48,7 @@ export function projectGroups(): NavGroup[] {
     },
     {
       heading: 'Audience',
+      accent: 'pink',
       items: [
         { label: 'Cohorts', to: p('/cohorts'), icon: 'cohorts' },
         { label: 'Users', to: p('/users'), icon: 'users' },
@@ -51,6 +58,7 @@ export function projectGroups(): NavGroup[] {
     },
     {
       heading: 'Saved',
+      accent: 'amber',
       items: [
         { label: 'Dashboards', to: p('/dashboards'), icon: 'dashboards' },
         { label: 'Reports', to: p('/reports'), icon: 'reports' },
@@ -59,6 +67,7 @@ export function projectGroups(): NavGroup[] {
     },
     {
       items: [{ label: 'Project settings', to: p(''), icon: 'settings', exact: true }],
+      accent: 'lime',
     },
   ];
 }

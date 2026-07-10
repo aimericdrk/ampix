@@ -43,6 +43,7 @@ export function OrgSwitcher() {
     <>
       <Menu
         label="Switch workspace"
+        triggerClassName="rounded-lg border border-border bg-surface-raised px-2.5 py-1.5 text-sm hover:border-border-strong transition-colors w-full"
         trigger={
           <span className="flex flex-col">
             <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">

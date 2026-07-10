@@ -1,9 +1,12 @@
 import { Link, useParams } from '@tanstack/react-router';
+import { Inbox } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { PageShell } from '../../../components/layout/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Reveal } from '../../../components/ui/reveal';
 import {
   isTileError,
   type AnalysisResult,
@@ -36,6 +39,7 @@ import {
   installsByCountry,
   pctDelta,
   previousRange,
+  seriesTrendRows,
   sumSeries,
   type CountryInstallRow,
 } from '../derive';
@@ -182,12 +186,13 @@ export function HomePage() {
       ? pctDelta(dauLatest, dauPreviousLatest)
       : undefined;
 
-  const wauLatest = sortByT(weekEngagement.data?.active.filter((p) => p.metric === 'wau') ?? []).at(-1)
-    ?.value;
-  const mauLatest = sortByT(monthEngagement.data?.active.filter((p) => p.metric === 'mau') ?? []).at(-1)
-    ?.value;
+  const wauActive = sortByT(weekEngagement.data?.active.filter((p) => p.metric === 'wau') ?? []);
+  const wauLatest = wauActive.at(-1)?.value;
+  const mauActive = sortByT(monthEngagement.data?.active.filter((p) => p.metric === 'mau') ?? []);
+  const mauLatest = mauActive.at(-1)?.value;
 
-  const stickinessLatest = sortByT(dayEngagement.data?.stickiness ?? []).at(-1)?.value;
+  const stickinessSeries = sortByT(dayEngagement.data?.stickiness ?? []);
+  const stickinessLatest = stickinessSeries.at(-1)?.value;
   const stickinessPreviousLatest = sortByT(dayEngagementPrevious.data?.stickiness ?? []).at(-1)?.value;
   const stickinessDelta =
     stickinessLatest !== undefined && stickinessPreviousLatest !== undefined
@@ -249,6 +254,18 @@ export function HomePage() {
   );
 
   // --- Chart data ---
+
+  // KPI sparklines (enrichment): every series here is data HomePage already fetched for the
+  // headline numbers above — no extra API calls, just reusing the same responses' per-bucket
+  // values as a magnitude-over-time backdrop (KpiTile no-ops below 2 points, e.g. a single-bucket
+  // MAU window).
+  const totalEventsSpark = totalsCurrent.data
+    ? seriesTrendRows(totalsCurrent.data.series).map((row) => row.value)
+    : undefined;
+  const dauSpark = dauActive.map((p) => p.value);
+  const wauSpark = wauActive.map((p) => p.value);
+  const mauSpark = mauActive.map((p) => p.value);
+  const stickinessSpark = stickinessSeries.map((p) => p.value);
 
   const activeTrendCurrent = dauActive.map((p) => ({ t: p.t, value: p.value }));
   const activeTrendPrevious = dauPreviousActive.map((p) => ({ t: p.t, value: p.value }));
@@ -312,256 +329,289 @@ export function HomePage() {
     >
       {totalEvents === 0 ? (
         <Card>
-          <CardHeader>
-            <CardTitle>No events yet</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-text-muted">
-            Send your first events using this project&apos;s ingest token, then your metrics will
-            appear here.{' '}
-            <Link to="/projects/$projectId" params={{ projectId }} className="text-accent underline">
-              View ingest token
-            </Link>
+          <CardContent>
+            <EmptyState
+              icon={Inbox}
+              title="No events yet"
+              description="Send your first events using this project's ingest token, then your metrics will appear here."
+              action={
+                <Link
+                  to="/projects/$projectId"
+                  params={{ projectId }}
+                  className="text-sm text-accent underline"
+                >
+                  View ingest token
+                </Link>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
         <>
-          <HomeHighlights highlights={highlights} />
+          <Reveal index={0}>
+            <HomeHighlights highlights={highlights} />
+          </Reveal>
 
-          <SectionGrid>
-            <KpiTile
-              label="Top-5 events"
-              value={totalEventsCurrent}
-              hint="Sum of the 5 most-frequent event types, selected range"
-              delta={totalEventsDelta !== undefined ? { pct: totalEventsDelta } : undefined}
-              loading={totalsCurrent.isPending}
-            />
-            <KpiTile
-              label="DAU"
-              value={dauLatest ?? 0}
-              hint="Daily active users"
-              delta={dauDelta !== undefined ? { pct: dauDelta } : undefined}
-              loading={dayEngagement.isPending}
-            />
-            <KpiTile
-              label="WAU"
-              value={wauLatest ?? 0}
-              hint="Weekly active users"
-              loading={weekEngagement.isPending}
-            />
-            <KpiTile
-              label="MAU"
-              value={mauLatest ?? 0}
-              hint="Monthly active users"
-              loading={monthEngagement.isPending}
-            />
-            <KpiTile
-              label="Sessions"
-              value={sessionsCurrent.data?.sessions ?? 0}
-              hint="Selected range"
-              spark={sessionsSpark}
-              delta={sessionsDelta !== undefined ? { pct: sessionsDelta } : undefined}
-              loading={sessionsCurrent.isPending}
-            />
-            <KpiTile
-              label="Avg. session"
-              value={formatDurationMs(sessionsCurrent.data?.avg_duration_ms ?? 0)}
-              spark={avgSessionSpark}
-              delta={avgSessionDelta !== undefined ? { pct: avgSessionDelta } : undefined}
-              loading={sessionsCurrent.isPending}
-            />
-            <KpiTile
-              label="Stickiness"
-              value={stickinessLatest !== undefined ? formatPercent(stickinessLatest) : '—'}
-              hint="DAU ÷ active-range ratio"
-              delta={stickinessDelta !== undefined ? { pct: stickinessDelta } : undefined}
-              loading={dayEngagement.isPending}
-            />
-          </SectionGrid>
+          <Reveal index={1}>
+            <SectionGrid>
+              <KpiTile
+                label="Top-5 events"
+                value={totalEventsCurrent}
+                hint="Sum of the 5 most-frequent event types, selected range"
+                spark={totalEventsSpark}
+                delta={totalEventsDelta !== undefined ? { pct: totalEventsDelta } : undefined}
+                loading={totalsCurrent.isPending}
+              />
+              <KpiTile
+                label="DAU"
+                value={dauLatest ?? 0}
+                hint="Daily active users"
+                spark={dauSpark}
+                delta={dauDelta !== undefined ? { pct: dauDelta } : undefined}
+                loading={dayEngagement.isPending}
+              />
+              <KpiTile
+                label="WAU"
+                value={wauLatest ?? 0}
+                hint="Weekly active users"
+                spark={wauSpark}
+                loading={weekEngagement.isPending}
+              />
+              <KpiTile
+                label="MAU"
+                value={mauLatest ?? 0}
+                hint="Monthly active users"
+                spark={mauSpark}
+                loading={monthEngagement.isPending}
+              />
+              <KpiTile
+                label="Sessions"
+                value={sessionsCurrent.data?.sessions ?? 0}
+                hint="Selected range"
+                spark={sessionsSpark}
+                delta={sessionsDelta !== undefined ? { pct: sessionsDelta } : undefined}
+                loading={sessionsCurrent.isPending}
+              />
+              <KpiTile
+                label="Avg. session"
+                value={formatDurationMs(sessionsCurrent.data?.avg_duration_ms ?? 0)}
+                spark={avgSessionSpark}
+                delta={avgSessionDelta !== undefined ? { pct: avgSessionDelta } : undefined}
+                loading={sessionsCurrent.isPending}
+              />
+              <KpiTile
+                label="Stickiness"
+                value={stickinessLatest !== undefined ? formatPercent(stickinessLatest) : '—'}
+                hint="DAU ÷ active-range ratio"
+                spark={stickinessSpark}
+                delta={stickinessDelta !== undefined ? { pct: stickinessDelta } : undefined}
+                loading={dayEngagement.isPending}
+              />
+            </SectionGrid>
+          </Reveal>
 
           {/* Users by country/OS (feat-18): distinct users grouped by their `country`/`os` super
               property, over `$app_open`. A world map + by-country table + by-OS breakdown. */}
-          <SectionGrid>
-            <KpiTile
-              label="Total users"
-              value={installsData.total}
-              hint="Distinct users (by country), selected range"
-              loading={installsCountry.isPending}
-            />
-            <KpiTile
-              label="Countries"
-              value={installsData.countryCount}
-              hint="Distinct countries with users"
-              loading={installsCountry.isPending}
-            />
-            {topInstallsCountry && (
+          <Reveal index={2}>
+            <SectionGrid>
               <KpiTile
-                label="Top country"
-                value={topInstallsCountry.name}
-                hint={`${formatPercent(topInstallsCountry.share)} of users`}
+                label="Total users"
+                value={installsData.total}
+                hint="Distinct users (by country), selected range"
                 loading={installsCountry.isPending}
               />
-            )}
-          </SectionGrid>
-
-          <ChartCard
-            title="Users by country"
-            description="Distinct users by resolved country (from the app's `country` super property), selected range."
-            state={chartState(installsCountry.isPending, installsCountry.isError, installsCountryEmpty)}
-            emptyText="No users with a country yet — set a `country` super property in your app: `MyAmpix.instance.registerSuperProperties({'country': 'US'})`. It attaches to events sent afterward (the map reads `$app_open`)."
-          >
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <WorldChoropleth
-                data={installsData.mapData}
-                ariaLabel="Users by country"
-                valueLabel="users"
+              <KpiTile
+                label="Countries"
+                value={installsData.countryCount}
+                hint="Distinct countries with users"
+                loading={installsCountry.isPending}
               />
-              <DataTable
-                columns={installsCountryColumns}
-                rows={installsData.rows}
-                caption="Users by country"
-                initialSort={{ key: 'count', dir: 'desc' }}
-                rowKey={(row) => row.iso3 ?? 'unknown'}
-                exportFilename="users-by-country"
-              />
-            </div>
-          </ChartCard>
-
-          <ChartCard
-            title="Users by OS"
-            state={chartState(installsOs.isPending, installsOs.isError, installsOsBars.length === 0)}
-          >
-            <BreakdownChart data={installsOsBars} ariaLabel="Users by OS" />
-          </ChartCard>
-
-          <ChartCard
-            title="Active users"
-            description="Daily active users vs. the previous period."
-            state={chartState(dayEngagement.isPending, dayEngagement.isError, activeTrendCurrent.length === 0)}
-            exportImageName="active-users-trend"
-            action={
-              <AnnotationsManager
-                annotations={annotations}
-                onAdd={addAnnotation}
-                onRemove={removeAnnotation}
-              />
-            }
-          >
-            <ComparisonTrend
-              current={activeTrendCurrent}
-              previous={activeTrendPrevious}
-              xKey="t"
-              valueKey="value"
-              label="Active users"
-              ariaLabel="Active users trend"
-              anomalies={activeTrendAnomalies}
-              annotations={annotations}
-            />
-            <AnomalyCallout anomalies={activeTrendAnomalies} />
-          </ChartCard>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <ChartCard title="Events by type" state={eventSlices.length === 0 ? 'empty' : 'ready'}>
-              <DonutChart
-                slices={eventSlices}
-                colorFor={(key) => sliceColor.get(key) ?? 'var(--series-1)'}
-                ariaLabel="Events by type composition"
-                centerLabel="All-time total"
-                centerValue={totalEvents}
-              />
-            </ChartCard>
-
-            <ChartCard title="Top events">
-              <DataTable
-                columns={topEventsColumns}
-                rows={byEvent}
-                caption="Top events by count"
-                initialSort={{ key: 'count', dir: 'desc' }}
-                rowKey={(row) => row.event}
-                exportFilename="top-events"
-              />
-            </ChartCard>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <ChartCard
-              title="By OS"
-              state={chartState(osInsights.isPending, osInsights.isError, osBars.length === 0)}
-              exportImageName="events-by-os"
-            >
-              <BreakdownChart
-                data={osBars}
-                ariaLabel="Events by OS"
-                onSelectValue={(value) => toggleGlobalFilter({ property: 'os', op: 'eq', value })}
-                selectedValue={activeOsFilter}
-              />
-            </ChartCard>
-            <ChartCard
-              title="By app version"
-              state={chartState(
-                versionInsights.isPending,
-                versionInsights.isError,
-                versionBars.length === 0,
+              {topInstallsCountry && (
+                <KpiTile
+                  label="Top country"
+                  value={topInstallsCountry.name}
+                  hint={`${formatPercent(topInstallsCountry.share)} of users`}
+                  loading={installsCountry.isPending}
+                />
               )}
+            </SectionGrid>
+          </Reveal>
+
+          <Reveal index={3}>
+            <ChartCard
+              title="Users by country"
+              description="Distinct users by resolved country (from the app's `country` super property), selected range."
+              state={chartState(installsCountry.isPending, installsCountry.isError, installsCountryEmpty)}
+              emptyText="No users with a country yet — set a `country` super property in your app: `MyAmpix.instance.registerSuperProperties({'country': 'US'})`. It attaches to events sent afterward (the map reads `$app_open`)."
             >
-              <BreakdownChart
-                data={versionBars}
-                ariaLabel="Events by app version"
-                onSelectValue={(value) =>
-                  toggleGlobalFilter({ property: 'app_version', op: 'eq', value })
-                }
-                selectedValue={activeVersionFilter}
-              />
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <WorldChoropleth
+                  data={installsData.mapData}
+                  ariaLabel="Users by country"
+                  valueLabel="users"
+                />
+                <DataTable
+                  columns={installsCountryColumns}
+                  rows={installsData.rows}
+                  caption="Users by country"
+                  initialSort={{ key: 'count', dir: 'desc' }}
+                  rowKey={(row) => row.iso3 ?? 'unknown'}
+                  exportFilename="users-by-country"
+                />
+              </div>
             </ChartCard>
-          </div>
+          </Reveal>
+
+          <Reveal index={4}>
+            <ChartCard
+              title="Users by OS"
+              state={chartState(installsOs.isPending, installsOs.isError, installsOsBars.length === 0)}
+            >
+              <BreakdownChart data={installsOsBars} ariaLabel="Users by OS" />
+            </ChartCard>
+          </Reveal>
+
+          <Reveal index={5}>
+            <ChartCard
+              title="Active users"
+              description="Daily active users vs. the previous period."
+              state={chartState(dayEngagement.isPending, dayEngagement.isError, activeTrendCurrent.length === 0)}
+              exportImageName="active-users-trend"
+              action={
+                <AnnotationsManager
+                  annotations={annotations}
+                  onAdd={addAnnotation}
+                  onRemove={removeAnnotation}
+                />
+              }
+            >
+              <ComparisonTrend
+                current={activeTrendCurrent}
+                previous={activeTrendPrevious}
+                xKey="t"
+                valueKey="value"
+                label="Active users"
+                ariaLabel="Active users trend"
+                anomalies={activeTrendAnomalies}
+                annotations={annotations}
+              />
+              <AnomalyCallout anomalies={activeTrendAnomalies} />
+            </ChartCard>
+          </Reveal>
+
+          <Reveal index={5}>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <ChartCard title="Events by type" state={eventSlices.length === 0 ? 'empty' : 'ready'}>
+                <DonutChart
+                  slices={eventSlices}
+                  colorFor={(key) => sliceColor.get(key) ?? 'var(--series-1)'}
+                  ariaLabel="Events by type composition"
+                  centerLabel="All-time total"
+                  centerValue={totalEvents}
+                />
+              </ChartCard>
+
+              <ChartCard title="Top events">
+                <DataTable
+                  columns={topEventsColumns}
+                  rows={byEvent}
+                  caption="Top events by count"
+                  initialSort={{ key: 'count', dir: 'desc' }}
+                  rowKey={(row) => row.event}
+                  exportFilename="top-events"
+                />
+              </ChartCard>
+            </div>
+          </Reveal>
+
+          <Reveal index={5}>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <ChartCard
+                title="By OS"
+                state={chartState(osInsights.isPending, osInsights.isError, osBars.length === 0)}
+                exportImageName="events-by-os"
+              >
+                <BreakdownChart
+                  data={osBars}
+                  ariaLabel="Events by OS"
+                  onSelectValue={(value) => toggleGlobalFilter({ property: 'os', op: 'eq', value })}
+                  selectedValue={activeOsFilter}
+                />
+              </ChartCard>
+              <ChartCard
+                title="By app version"
+                state={chartState(
+                  versionInsights.isPending,
+                  versionInsights.isError,
+                  versionBars.length === 0,
+                )}
+              >
+                <BreakdownChart
+                  data={versionBars}
+                  ariaLabel="Events by app version"
+                  onSelectValue={(value) =>
+                    toggleGlobalFilter({ property: 'app_version', op: 'eq', value })
+                  }
+                  selectedValue={activeVersionFilter}
+                />
+              </ChartCard>
+            </div>
+          </Reveal>
 
           {/* Acquisition: skip entirely once loaded with nothing to show, rather than showing an
               empty chart card for a property that may not be tracked at all. */}
           {(utmInsights.isPending || utmBars.length > 0) && (
-            <ChartCard
-              title="Acquisition · UTM source"
-              state={chartState(utmInsights.isPending, utmInsights.isError, utmBars.length === 0)}
-            >
-              <BreakdownChart data={utmBars} ariaLabel="Acquisition by UTM source" />
-            </ChartCard>
+            <Reveal index={5}>
+              <ChartCard
+                title="Acquisition · UTM source"
+                state={chartState(utmInsights.isPending, utmInsights.isError, utmBars.length === 0)}
+              >
+                <BreakdownChart data={utmBars} ariaLabel="Acquisition by UTM source" />
+              </ChartCard>
+            </Reveal>
           )}
         </>
       )}
 
       {/* Favorites & Recently viewed (feat-13 §3): quick access to starred and last-visited
           entities, ahead of the per-kind recent-work lists below. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <FavItemList
-          title="Favorites"
-          emptyText="Star a report, dashboard, cohort, or user to pin it here."
-          items={favorites.list}
-          projectId={projectId}
-          onUnstar={(item) => favorites.toggle(item)}
-        />
-        <FavItemList
-          title="Recently viewed"
-          emptyText="Reports, dashboards, and user profiles you open will show up here."
-          items={recents.list}
-          projectId={projectId}
-        />
-      </div>
+      <Reveal index={5}>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <FavItemList
+            title="Favorites"
+            emptyText="Star a report, dashboard, cohort, or user to pin it here."
+            items={favorites.list}
+            projectId={projectId}
+            onUnstar={(item) => favorites.toggle(item)}
+          />
+          <FavItemList
+            title="Recently viewed"
+            emptyText="Reports, dashboards, and user profiles you open will show up here."
+            items={recents.list}
+            projectId={projectId}
+          />
+        </div>
+      </Reveal>
 
       {/* Recent work */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <RecentList
-          title="Recent reports"
-          emptyText="No saved reports yet — build one in Insights."
-          items={reportItems}
-          seeAllTo="/projects/$projectId/reports"
-          projectId={projectId}
-        />
-        <RecentList
-          title="Recent dashboards"
-          emptyText="No dashboards yet — create one to pin your charts."
-          items={dashboardItems}
-          seeAllTo="/projects/$projectId/dashboards"
-          projectId={projectId}
-        />
-      </div>
+      <Reveal index={5}>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <RecentList
+            title="Recent reports"
+            emptyText="No saved reports yet — build one in Insights."
+            items={reportItems}
+            seeAllTo="/projects/$projectId/reports"
+            projectId={projectId}
+          />
+          <RecentList
+            title="Recent dashboards"
+            emptyText="No dashboards yet — create one to pin your charts."
+            items={dashboardItems}
+            seeAllTo="/projects/$projectId/dashboards"
+            projectId={projectId}
+          />
+        </div>
+      </Reveal>
     </PageShell>
   );
 }

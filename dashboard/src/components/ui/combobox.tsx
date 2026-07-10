@@ -63,7 +63,10 @@ export function ComboboxListbox({
       id={listId}
       role="listbox"
       aria-label={comboLabel}
-      className={cn('mt-2 max-h-56 overflow-auto', className)}
+      className={cn(
+        'mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-surface-raised p-1 shadow-lift',
+        className,
+      )}
     >
       {isLoading ? (
         <li className="px-2 py-1.5 text-sm text-text-muted">Loading {noun}s…</li>
@@ -84,7 +87,7 @@ export function ComboboxListbox({
             onClick={() => onChoose(name)}
             className={cn(
               'cursor-pointer truncate rounded px-2 py-1.5 text-sm',
-              index === activeIndex ? 'bg-accent text-accent-fg' : 'text-text hover:bg-border/40',
+              index === activeIndex ? 'bg-accent-soft text-accent' : 'text-text hover:bg-border/40',
             )}
           >
             {name}

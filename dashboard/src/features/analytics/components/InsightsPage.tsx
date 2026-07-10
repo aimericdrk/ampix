@@ -1,4 +1,5 @@
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Inbox } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
@@ -11,7 +12,10 @@ import {
 } from 'recharts';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { fieldLook } from '../../../components/ui/input';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import {
   INSIGHTS_FILTER_OPS,
@@ -42,6 +46,7 @@ import { AskBar } from './AskBar';
 import { CompareControl, type CompareRange } from './CompareControl';
 import { AnomalyCallout } from './charts/AnomalyCallout';
 import { ChartCard } from './charts/ChartCard';
+import { ChartTooltip, axisProps, gridProps, useChartAnimationProps } from './charts/chart-theme';
 import { ComparisonTrend } from './charts/ComparisonTrend';
 import { CopyLinkButton } from './CopyLinkButton';
 import { FormulaControl, FORMULA_OPERATOR_SYMBOLS } from './FormulaControl';
@@ -236,16 +241,6 @@ function buildFormulaRows(
   }));
 }
 
-const FORMULA_TOOLTIP_STYLE = {
-  backgroundColor: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 13,
-};
-
-const FORMULA_AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
-
 /** The single derived line for Formula mode. Recharts' `Line` breaks (never interpolates through)
  * a `null` point by default, so a ratio's divide-by-zero bucket renders as a genuine gap. */
 function FormulaTrendChart({
@@ -258,24 +253,26 @@ function FormulaTrendChart({
   ariaLabel: string;
 }) {
   const color = colorForIndex(0);
+  const animation = useChartAnimationProps();
   return (
     <div role="img" aria-label={ariaLabel} style={{ width: '100%', height: 320, backgroundColor: 'var(--chart-surface)' }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-          <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
-          <XAxis dataKey="t" tick={FORMULA_AXIS_TICK} stroke="var(--border)" />
+          <CartesianGrid {...gridProps} />
+          <XAxis dataKey="t" {...axisProps} />
           <YAxis
-            tick={FORMULA_AXIS_TICK}
-            stroke="var(--border)"
+            {...axisProps}
             tickFormatter={(value: number) => (asPercent ? `${value}%` : formatExactNumber(value))}
           />
           <Tooltip
-            contentStyle={FORMULA_TOOLTIP_STYLE}
-            labelStyle={{ color: 'var(--text-muted)' }}
-            formatter={(value: unknown) => [
-              typeof value === 'number' ? formatFormulaValue(value, asPercent) : String(value ?? '—'),
-              'Formula',
-            ]}
+            content={
+              <ChartTooltip
+                formatter={(value) => [
+                  typeof value === 'number' ? formatFormulaValue(value, asPercent) : String(value ?? '—'),
+                  'Formula',
+                ]}
+              />
+            }
           />
           <Line
             type="monotone"
@@ -285,7 +282,7 @@ function FormulaTrendChart({
             strokeWidth={2}
             dot={{ r: 4, fill: color, stroke: 'var(--chart-surface)', strokeWidth: 2 }}
             connectNulls={false}
-            isAnimationActive={false}
+            {...animation}
           />
         </LineChart>
       </ResponsiveContainer>
@@ -880,12 +877,11 @@ export function InsightsPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           {projectHasNoEvents ? (
-            <div className="rounded-lg border border-dashed border-border p-8 text-center">
-              <p className="text-sm font-medium">No events tracked yet</p>
-              <p className="mt-1 text-sm text-text-muted">
-                Once your app sends events they’ll appear here, ready to explore.
-              </p>
-            </div>
+            <EmptyState
+              icon={Inbox}
+              title="No events tracked yet"
+              description="Once your app sends events they'll appear here, ready to explore."
+            />
           ) : (
             <>
               {events.length > 0 && (
@@ -910,7 +906,7 @@ export function InsightsPage() {
                         onChange={(e) =>
                           updateMeasure(ev.name, e.target.value as InsightsAggregation)
                         }
-                        className="h-8 rounded-md border border-border bg-surface px-2 text-sm"
+                        className={cn(fieldLook, 'h-8 w-auto px-2 text-sm')}
                       >
                         <option value="total">{MEASURE_LABELS.total}</option>
                         <option value="unique_users">{MEASURE_LABELS.unique_users}</option>
@@ -955,7 +951,7 @@ export function InsightsPage() {
                     aria-label="Show by"
                     value={interval}
                     onChange={(e) => setIntervalFromInput(e.target.value as InsightsInterval)}
-                    className="h-8 rounded-md border border-border bg-surface px-2 text-sm"
+                    className={cn(fieldLook, 'h-8 w-auto px-2 text-sm')}
                   >
                     {INTERVAL_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1021,7 +1017,7 @@ export function InsightsPage() {
                       aria-label="Group by"
                       value={breakdownProperty}
                       onChange={(e) => setBreakdownPropertyFromInput(e.target.value)}
-                      className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+                      className={cn(fieldLook, 'h-9 w-auto px-2 text-sm')}
                     >
                       <option value="">No group</option>
                       {propertyNames.map((name) => (

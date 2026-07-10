@@ -10,8 +10,9 @@ import { cn } from '../../lib/cn';
 
 /** Shared item styling so every menu row reads as one control set. */
 export const MENU_ITEM_CLASS =
-  'flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-sm text-text transition-colors ' +
-  'hover:bg-border/50 focus:bg-border/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent';
+  'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-text transition-colors ' +
+  'hover:bg-accent-soft hover:text-accent focus:bg-accent-soft focus:text-accent ' +
+  'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent';
 
 function ChevronDown({ open }: { open: boolean }) {
   return (
@@ -138,7 +139,7 @@ export function Menu({ label, trigger, triggerClassName, children }: MenuProps) 
         onKeyDown={handleTriggerKeyDown}
         className={cn(
           'flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-left transition-colors',
-          'hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+          'hover:border-border-strong hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
           triggerClassName,
         )}
       >
@@ -153,7 +154,7 @@ export function Menu({ label, trigger, triggerClassName, children }: MenuProps) 
           role="menu"
           aria-label={label}
           onKeyDown={handleMenuKeyDown}
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-[60vh] overflow-y-auto rounded-md border border-border bg-surface p-1 shadow-lg"
+          className="absolute inset-x-0 top-full z-50 mt-1 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-surface-raised p-1 shadow-lift animate-scale-in"
         >
           {children({ close })}
         </div>

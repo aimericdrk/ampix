@@ -26,7 +26,7 @@ describe('UserProfilePage', () => {
 
     const timeline = (
       await screen.findByRole('button', { name: 'Activity timeline' })
-    ).closest('.rounded-lg')!;
+    ).closest('.rounded-xl')!;
     const items = within(timeline as HTMLElement).getAllByRole('listitem');
     // One timeline entry per recent event.
     expect(items).toHaveLength(USER_PROFILE_FIXTURE.recent_events.length);
@@ -44,7 +44,7 @@ describe('UserProfilePage', () => {
     // Scope to the timeline card: the selected event's name also appears in the detail panel.
     const timeline = (
       await screen.findByRole('button', { name: 'Activity timeline' })
-    ).closest('.rounded-lg')! as HTMLElement;
+    ).closest('.rounded-xl')! as HTMLElement;
     const toggle = within(timeline).getByRole('button', { name: 'Activity timeline' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(within(timeline).getByText('checkout_completed')).toBeVisible();
@@ -62,7 +62,7 @@ describe('UserProfilePage', () => {
     // Screen path is collapsed by default now — expand it before reading its pills.
     const toggle = await screen.findByRole('button', { name: 'Screen path' });
     await userEvent.click(toggle);
-    const pathCard = toggle.closest('.rounded-lg')!;
+    const pathCard = toggle.closest('.rounded-xl')!;
     const pills = within(pathCard as HTMLElement).getAllByRole('listitem');
     // recent_events (newest-first) has screen views cart, catalog, catalog, home → reversed to
     // home, catalog, catalog, cart → consecutive dupes collapsed to home → catalog → cart.

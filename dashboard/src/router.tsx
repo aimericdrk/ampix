@@ -11,7 +11,6 @@ import { RouteErrorPage } from './components/RouteErrorPage';
 import { AccountPage } from './features/auth/components/AccountPage';
 import { InvitePage } from './features/auth/components/InvitePage';
 import { LoginPage } from './features/auth/components/LoginPage';
-import { SecuritySettingsPage } from './features/auth/components/SecuritySettingsPage';
 import { SignupPage } from './features/auth/components/SignupPage';
 import { authStore } from './features/auth/store';
 import { HomePage } from './features/analytics/components/HomePage';
@@ -290,10 +289,14 @@ const eventsRoute = createRoute({
   component: EventCatalogPage,
 });
 
+// Security (2FA) is now a section of the merged Account page — this deep link redirects there
+// rather than rendering its own page, so there is one canonical URL for account+security.
 const securitySettingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/settings/security',
-  component: SecuritySettingsPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/account' });
+  },
 });
 
 const accountRoute = createRoute({

@@ -111,7 +111,7 @@ export function PathMap({
         role="group"
         aria-label="Interactive user path map"
         className={cn(
-          'relative w-full cursor-grab touch-none overflow-hidden rounded-lg border border-border bg-chart-surface active:cursor-grabbing',
+          'relative w-full cursor-grab touch-none overflow-hidden rounded-xl border border-border bg-chart-surface active:cursor-grabbing',
           fullHeight ? 'h-full flex-1' : 'h-[560px]',
         )}
         onPointerDown={onPointerDown}
@@ -181,13 +181,16 @@ function PathNodeCard({
     <div
       data-testid="path-node"
       className={cn(
-        'absolute flex flex-col overflow-hidden rounded-lg border shadow-sm',
+        'absolute flex flex-col overflow-hidden rounded-xl border shadow-sm',
         synthetic ? 'border-dashed border-border bg-surface/60' : 'border-border bg-surface',
       )}
       style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
     >
       {synthetic ? (
-        <div className="flex flex-1 items-center justify-center bg-chart-surface text-3xl text-text-muted">
+        <div
+          aria-hidden="true"
+          className="flex flex-1 items-center justify-center bg-chart-surface text-3xl text-text-muted"
+        >
           {node.event === '$end' ? '⤓' : '…'}
         </div>
       ) : (

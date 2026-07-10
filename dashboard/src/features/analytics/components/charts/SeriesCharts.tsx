@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import {
   Area,
   AreaChart,
@@ -10,6 +11,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import {
+  ChartTooltip,
+  SeriesGradient,
+  axisProps,
+  useChartAnimationProps,
+  gridProps,
+  seriesGradientId,
+} from './chart-theme';
 
 /**
  * Time-series chart primitives shared by the Insights chart-type picker and dashboards. Both take an
@@ -30,30 +39,27 @@ export interface SeriesChartProps {
   height?: number;
 }
 
-const TOOLTIP_STYLE = {
-  backgroundColor: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 13,
-};
-
-const AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
-
 /** Change-over-time as filled area. Multiple series stack (composition of the whole over time). */
 export function AreaTrendChart({ rows, keys, labels, colorFor, ariaLabel, height = 320 }: SeriesChartProps) {
+  const chartId = useId();
   const showLegend = keys.length > 1;
   const stacked = keys.length > 1;
+  const animation = useChartAnimationProps();
   return (
     <div role="img" aria-label={ariaLabel} style={{ width: '100%', height, backgroundColor: 'var(--chart-surface)' }}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-          <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
-          <XAxis dataKey="t" tick={AXIS_TICK} stroke="var(--border)" />
-          <YAxis tick={AXIS_TICK} stroke="var(--border)" />
-          <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: 'var(--text-muted)' }} />
+          <defs>
+            {keys.map((key, index) => (
+              <SeriesGradient key={key} id={seriesGradientId(chartId, index)} color={colorFor(key)} />
+            ))}
+          </defs>
+          <CartesianGrid {...gridProps} />
+          <XAxis dataKey="t" {...axisProps} />
+          <YAxis {...axisProps} />
+          <Tooltip content={<ChartTooltip />} />
           {showLegend && <Legend wrapperStyle={{ color: 'var(--text)', fontSize: 13 }} />}
-          {keys.map((key) => (
+          {keys.map((key, index) => (
             <Area
               key={key}
               type="monotone"
@@ -62,10 +68,11 @@ export function AreaTrendChart({ rows, keys, labels, colorFor, ariaLabel, height
               stackId={stacked ? 'stack' : undefined}
               stroke={colorFor(key)}
               strokeWidth={2}
-              fill={colorFor(key)}
-              fillOpacity={stacked ? 0.55 : 0.18}
+              fill={`url(#${seriesGradientId(chartId, index)})`}
+              fillOpacity={1}
               // A 2px surface line between stacked fills keeps segments separable (dataviz spacer).
               activeDot={{ r: 4, stroke: 'var(--chart-surface)', strokeWidth: 2 }}
+              {...animation}
             />
           ))}
         </AreaChart>
@@ -77,18 +84,15 @@ export function AreaTrendChart({ rows, keys, labels, colorFor, ariaLabel, height
 /** Composition over time — one stacked bar per bucket, a 2px surface gap between segments. */
 export function StackedBarChart({ rows, keys, labels, colorFor, ariaLabel, height = 320 }: SeriesChartProps) {
   const showLegend = keys.length > 1;
+  const animation = useChartAnimationProps();
   return (
     <div role="img" aria-label={ariaLabel} style={{ width: '100%', height, backgroundColor: 'var(--chart-surface)' }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-          <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
-          <XAxis dataKey="t" tick={AXIS_TICK} stroke="var(--border)" />
-          <YAxis tick={AXIS_TICK} stroke="var(--border)" />
-          <Tooltip
-            contentStyle={TOOLTIP_STYLE}
-            labelStyle={{ color: 'var(--text-muted)' }}
-            cursor={{ fill: 'var(--border)', opacity: 0.3 }}
-          />
+          <CartesianGrid {...gridProps} />
+          <XAxis dataKey="t" {...axisProps} />
+          <YAxis {...axisProps} />
+          <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--border)', opacity: 0.3 }} />
           {showLegend && <Legend wrapperStyle={{ color: 'var(--text)', fontSize: 13 }} />}
           {keys.map((key) => (
             <Bar
@@ -100,6 +104,7 @@ export function StackedBarChart({ rows, keys, labels, colorFor, ariaLabel, heigh
               stroke="var(--chart-surface)"
               strokeWidth={2}
               maxBarSize={40}
+              {...animation}
             />
           ))}
         </BarChart>

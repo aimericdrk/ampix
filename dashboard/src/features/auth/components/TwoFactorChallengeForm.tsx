@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
 import { ApiError } from '../../../lib/api/problem';
 import { verify2fa } from '../api';
 
@@ -37,9 +38,9 @@ export function TwoFactorChallengeForm({ mfaToken, onVerified }: TwoFactorChalle
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div>
-        <label htmlFor="mfa-code" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="mfa-code" className="mb-1 block">
           Authentication code
-        </label>
+        </Label>
         <p className="mb-2 text-sm text-text-muted">
           Enter the 6-digit code from your authenticator app, or a recovery code.
         </p>
@@ -49,6 +50,7 @@ export function TwoFactorChallengeForm({ mfaToken, onVerified }: TwoFactorChalle
           autoComplete="one-time-code"
           value={code}
           aria-invalid={Boolean(showRequiredError || problem)}
+          className="font-display text-center text-lg tracking-[0.3em]"
           onChange={(e) => {
             setCode(e.target.value);
             mutation.reset();

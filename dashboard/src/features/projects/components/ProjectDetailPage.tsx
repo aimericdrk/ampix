@@ -1,15 +1,24 @@
 import { useParams, useRouter } from '@tanstack/react-router';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Check, Copy, Inbox } from 'lucide-react';
 import { PageShell } from '../../../components/layout/PageShell';
+import { Badge } from '../../../components/ui/badge';
+import { Banner } from '../../../components/ui/banner';
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
+import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from '../../../components/ui/dialog';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { IconButton } from '../../../components/ui/icon-button';
 import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { Reveal } from '../../../components/ui/reveal';
+import { Separator } from '../../../components/ui/separator';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import type { SdkToken } from '../../../lib/api/types';
@@ -47,46 +56,70 @@ export function ProjectDetailPage() {
         { label: project?.name ?? 'Project' },
       ]}
     >
-      {project && isAdmin && (
-        <GeneralSection
-          projectId={project.id}
-          currentName={project.name}
-          currentTimezone={project.timezone}
-        />
-      )}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {project && isAdmin && (
+          <Reveal index={0}>
+            <GeneralSection
+              projectId={project.id}
+              currentName={project.name}
+              currentTimezone={project.timezone}
+            />
+          </Reveal>
+        )}
 
-      {project && (
-        <TokensSection projectId={project.id} ingestToken={project.ingest_token} isAdmin={isAdmin} />
-      )}
+        <Reveal index={1}>
+          <LogLevelSection />
+        </Reveal>
 
-      <LogLevelSection />
+        {project && (
+          <Reveal index={2} className="lg:col-span-2">
+            <TokensSection
+              projectId={project.id}
+              ingestToken={project.ingest_token}
+              isAdmin={isAdmin}
+            />
+          </Reveal>
+        )}
 
-      <DataSection projectId={projectId} project={project} />
+        <Reveal index={3} className="lg:col-span-2">
+          <DataSection projectId={projectId} project={project} />
+        </Reveal>
 
-      {project && isAdmin && (
-        <DangerZoneSection
-          projectId={project.id}
-          onDeleted={() => router.history.push('/projects')}
-        />
-      )}
+        {project && isAdmin && (
+          <Reveal index={4} className="lg:col-span-2">
+            <DangerZoneSection
+              projectId={project.id}
+              onDeleted={() => router.history.push('/projects')}
+            />
+          </Reveal>
+        )}
+      </div>
     </PageShell>
   );
 }
 
-/** A Copy button that briefly flips to "Copied!" — reused for the ingest token and reveal panels. */
-function CopyButton({ value }: { value: string }) {
+/** A Copy icon-button that briefly flips to a check mark — reused for token/key blocks. */
+function CopyIconButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     if (!navigator.clipboard) return;
     navigator.clipboard
       .writeText(value)
-      .then(() => setCopied(true))
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      })
       .catch(() => {});
   };
   return (
-    <Button type="button" variant="secondary" size="sm" onClick={handleCopy}>
-      {copied ? 'Copied!' : 'Copy'}
-    </Button>
+    <IconButton
+      variant="secondary"
+      size="sm"
+      aria-label={copied ? `Copied ${label}` : `Copy ${label}`}
+      onClick={handleCopy}
+    >
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+    </IconButton>
   );
 }
 
@@ -102,9 +135,10 @@ function GeneralSection({
   currentTimezone: string;
 }) {
   return (
-    <Card className="max-w-lg">
+    <Card>
       <CardHeader>
         <CardTitle>General</CardTitle>
+        <CardDescription>Rename the project or change its timezone.</CardDescription>
       </CardHeader>
       <CardContent>
         <RenameProjectForm
@@ -153,15 +187,15 @@ function RenameProjectForm({
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div>
-        <label htmlFor="project-name" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="project-name" className="mb-1 block">
           Name
-        </label>
+        </Label>
         <Input id="project-name" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div>
-        <label htmlFor="project-timezone" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="project-timezone" className="mb-1 block">
           Timezone
-        </label>
+        </Label>
         <Input
           id="project-timezone"
           value={timezone}
@@ -187,27 +221,35 @@ function TokensSection({
   isAdmin: boolean;
 }) {
   return (
-    <Card className="max-w-lg">
+    <Card>
       <CardHeader>
         <CardTitle>SDK tokens</CardTitle>
+        <CardDescription>Use these tokens to send events from your app.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div role="group" aria-label="Primary ingest token">
-          <p className="mb-2 text-sm text-text-muted">
-            Use this token to send events from your app.
-          </p>
+      <CardContent className="space-y-4">
+        <div
+          role="group"
+          aria-label="Primary ingest token"
+          className="flex flex-wrap items-center justify-between gap-4"
+        >
+          <span className="text-sm font-medium">Primary ingest token</span>
           <div className="flex items-center gap-2">
-            <code className="flex-1 break-all rounded bg-bg px-3 py-2 font-mono text-sm">
+            <code className="max-w-full break-all rounded-lg bg-surface-raised px-3 py-2 font-mono text-xs">
               {ingestToken}
             </code>
-            <CopyButton value={ingestToken} />
+            <CopyIconButton value={ingestToken} label="ingest token" />
           </div>
         </div>
 
         {/* Listing/creating/rotating/revoking named tokens is an admin-only mutation surface; the
             list endpoint itself is admin-only server-side, so it is only mounted for admins. Every
             member still sees the primary ingest token above, read-only. */}
-        {isAdmin && <ManagedTokens projectId={projectId} />}
+        {isAdmin && (
+          <>
+            <Separator />
+            <ManagedTokens projectId={projectId} />
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -294,13 +336,49 @@ function ManagedTokens({ projectId }: { projectId: string }) {
 
   const rotating = createToken.isPending || revokeToken.isPending;
 
+  const columns: Array<DataTableColumn<SdkToken>> = [
+    { key: 'label', header: 'Label' },
+    {
+      key: 'token',
+      header: 'Token',
+      render: (token) => (
+        <code className="break-all rounded-lg bg-surface-raised px-2 py-1 font-mono text-xs">
+          {token.token}
+        </code>
+      ),
+    },
+    {
+      key: 'created_at',
+      header: 'Created',
+      sortable: true,
+      render: (token) => (
+        <span className="whitespace-nowrap text-text-muted">{formatDate(token.created_at)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (token) => (
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setPendingRotate(token)}>
+            Rotate
+          </Button>
+          <Button variant="danger" size="sm" onClick={() => setPendingRevokeId(token.id)}>
+            Revoke
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <form onSubmit={handleCreate} className="flex items-end gap-2">
         <div className="flex-1">
-          <label htmlFor="token-label" className="mb-1 block text-sm font-medium">
+          <Label htmlFor="token-label" className="mb-1 block">
             Label (optional)
-          </label>
+          </Label>
           <Input
             id="token-label"
             value={label}
@@ -314,13 +392,15 @@ function ManagedTokens({ projectId }: { projectId: string }) {
       </form>
 
       {newToken && (
-        <div className="rounded-md border border-border bg-bg p-3">
-          <p className="mb-2 text-sm text-text-muted">
+        <div className="space-y-2 rounded-lg border border-border bg-bg p-3">
+          <p className="text-sm text-text-muted">
             Copy this token now — it won&apos;t be shown again in full.
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 break-all font-mono text-sm">{newToken}</code>
-            <CopyButton value={newToken} />
+            <code className="flex-1 break-all rounded-lg bg-surface-raised px-3 py-2 font-mono text-xs">
+              {newToken}
+            </code>
+            <CopyIconButton value={newToken} label="new token" />
           </div>
         </div>
       )}
@@ -333,50 +413,14 @@ function ManagedTokens({ projectId }: { projectId: string }) {
       )}
 
       {data && data.tokens.length > 0 && (
-        <table className="w-full border-collapse text-left text-sm">
-          <caption className="sr-only">Ingest tokens</caption>
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className="py-2 font-medium">
-                Label
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                Token
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                Created
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.tokens.map((token) => (
-              <tr key={token.id} className="border-b border-border">
-                <td className="py-2 pr-2">{token.label}</td>
-                <td className="py-2 pr-2">
-                  <code className="break-all font-mono text-xs">{token.token}</code>
-                </td>
-                <td className="py-2 pr-2 whitespace-nowrap text-text-muted">
-                  {formatDate(token.created_at)}
-                </td>
-                <td className="py-2 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => setPendingRotate(token)}>
-                      Rotate
-                    </Button>
-                    <Button variant="danger" size="sm" onClick={() => setPendingRevokeId(token.id)}>
-                      Revoke
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          caption="Ingest tokens"
+          columns={columns}
+          rows={data.tokens}
+          rowKey={(token) => token.id}
+        />
       )}
-      {data && data.tokens.length === 0 && <p className="text-text-muted">No tokens.</p>}
+      {data && data.tokens.length === 0 && <EmptyState title="No tokens." />}
 
       <Dialog
         open={pendingRevokeId !== null}
@@ -431,22 +475,24 @@ const LOG_LEVELS = ['none', 'error', 'warn', 'info', 'debug'] as const;
 /** Read-only guidance: the log level is an SDK-side config, not a server setting. */
 function LogLevelSection() {
   return (
-    <Card className="max-w-lg">
+    <Card>
       <CardHeader>
         <CardTitle>SDK log level</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-text-muted">
-          <span className="mr-2 rounded bg-bg px-1.5 py-0.5 text-xs font-medium text-text">
+          <Badge variant="outline" className="mr-2 align-middle">
             SDK-side
-          </span>
+          </Badge>
           Controls how much the MyAmpix SDK logs in your app. It is set in your app&apos;s config, not
           here — there is no server setting to change.
         </p>
         <div className="flex flex-wrap items-center gap-1.5 text-sm">
           {LOG_LEVELS.map((level, index) => (
             <span key={level} className="flex items-center gap-1.5">
-              <code className="rounded bg-bg px-1.5 py-0.5 font-mono text-xs">{level}</code>
+              <code className="rounded-lg bg-surface-raised px-1.5 py-0.5 font-mono text-xs">
+                {level}
+              </code>
               {index < LOG_LEVELS.length - 1 && <span aria-hidden="true">·</span>}
             </span>
           ))}
@@ -454,7 +500,7 @@ function LogLevelSection() {
         <p className="text-xs text-text-muted">
           Ascending verbosity, left to right. Default is <code className="font-mono">none</code>.
         </p>
-        <pre className="overflow-x-auto rounded bg-bg px-3 py-2 font-mono text-xs">
+        <pre className="overflow-x-auto rounded-lg bg-surface-raised px-3 py-2 font-mono text-xs">
           <code>MyAmpixConfig(logLevel: MyAmpixLogLevel.warn)</code>
         </pre>
       </CardContent>
@@ -463,6 +509,15 @@ function LogLevelSection() {
 }
 
 // --- 4) Data ------------------------------------------------------------------
+
+function FactRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm font-medium">{label}</span>
+      <span className="text-sm text-text-muted">{value}</span>
+    </div>
+  );
+}
 
 function DataSection({
   projectId,
@@ -474,11 +529,12 @@ function DataSection({
   const { data: summary, isPending, error } = useEventSummary(projectId);
 
   return (
-    <Card className="max-w-lg">
+    <Card>
       <CardHeader>
         <CardTitle>Data</CardTitle>
+        <CardDescription>Event volume and project facts.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {isPending && <p role="status">Loading event summary…</p>}
         {error && (
           <p role="alert" className="text-danger">
@@ -490,46 +546,37 @@ function DataSection({
           <div className="space-y-4">
             <div>
               <p className="text-sm text-text-muted">Total events</p>
-              <p className="text-3xl font-semibold">{summary.total}</p>
+              <p className="font-display text-3xl font-semibold tabular-nums">{summary.total}</p>
             </div>
 
             {summary.total === 0 ? (
-              <p className="text-text-muted">No events yet — send some from your app</p>
+              <EmptyState icon={Inbox} title="No events yet — send some from your app" />
             ) : (
-              <table className="w-full border-collapse text-left text-sm">
-                <caption className="sr-only">Events by name</caption>
-                <thead>
-                  <tr className="border-b border-border">
-                    <th scope="col" className="py-2 font-medium">
-                      Event
-                    </th>
-                    <th scope="col" className="py-2 font-medium">
-                      Count
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.by_event.map((row) => (
-                    <tr key={row.event} className="border-b border-border">
-                      <td className="py-2">{row.event}</td>
-                      <td className="py-2">{row.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                caption="Events by name"
+                columns={[
+                  { key: 'event', header: 'Event', sortable: true },
+                  { key: 'count', header: 'Count', align: 'right', sortable: true },
+                ]}
+                rows={summary.by_event}
+                rowKey={(row) => row.event}
+              />
             )}
           </div>
         )}
 
         {project && (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-border pt-4 text-sm">
-            <dt className="text-text-muted">Organization</dt>
-            <dd>{project.org_name}</dd>
-            <dt className="text-text-muted">Timezone</dt>
-            <dd>{project.timezone}</dd>
-            <dt className="text-text-muted">Project ID</dt>
-            <dd className="break-all font-mono text-xs">{project.id}</dd>
-          </dl>
+          <div className="space-y-3">
+            <Separator />
+            <FactRow label="Organization" value={project.org_name} />
+            <Separator />
+            <FactRow label="Timezone" value={project.timezone} />
+            <Separator />
+            <FactRow
+              label="Project ID"
+              value={<code className="font-mono text-xs">{project.id}</code>}
+            />
+          </div>
         )}
       </CardContent>
     </Card>
@@ -567,36 +614,38 @@ function DangerZoneSection({
   };
 
   return (
-    <Card className="max-w-lg border-danger/50">
+    <Card className="border-danger/40">
       <CardHeader>
         <CardTitle>Danger zone</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <p className="text-sm text-text-muted">
-            Deleting a project revokes its tokens. Event data already ingested is kept.
-          </p>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <Button variant="danger" onClick={() => setDialogOpen(true)}>
-              Delete project
-            </Button>
-            <DialogContent>
-              <DialogTitle>Delete project</DialogTitle>
-              <DialogDescription>
-                This permanently deletes the project and revokes all of its tokens. This cannot be
-                undone.
-              </DialogDescription>
-              <div className="mt-4 flex justify-end gap-2">
-                <Button variant="secondary" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button variant="danger" disabled={deleteProject.isPending} onClick={handleDelete}>
-                  {deleteProject.isPending ? 'Deleting…' : 'Delete'}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+        {/* Permanently-visible framing, not a transient alert — role="note" avoids colliding
+            with real role="alert" fetch errors elsewhere on the page. */}
+        <Banner variant="danger" role="note">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p>Deleting a project revokes its tokens. Event data already ingested is kept.</p>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <Button variant="danger" onClick={() => setDialogOpen(true)}>
+                Delete project
+              </Button>
+              <DialogContent>
+                <DialogTitle>Delete project</DialogTitle>
+                <DialogDescription>
+                  This permanently deletes the project and revokes all of its tokens. This cannot be
+                  undone.
+                </DialogDescription>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button variant="danger" disabled={deleteProject.isPending} onClick={handleDelete}>
+                    {deleteProject.isPending ? 'Deleting…' : 'Delete'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </Banner>
       </CardContent>
     </Card>
   );

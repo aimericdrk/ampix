@@ -1,7 +1,15 @@
 import { useMemo } from 'react';
+import { Badge } from '../../../components/ui/badge';
 import { formatExactNumber, formatPercent } from '../format';
 import { assignSeriesColors, seriesKey } from '../palette';
 import type { FunnelBreakdownResult, FunnelResultStep } from '../../../lib/api/types';
+
+/** The single (non-breakdown) funnel's bar fill: an accent gradient rather than a fixed
+ * `--series-N` swatch, since there is exactly one series here — nothing is being color-encoded
+ * against anything else, so the section's brand accent reads better than an arbitrary categorical
+ * color. Breakdown funnels keep their real per-value `--series-N` colors (a genuine data encoding)
+ * via {@link FunnelChart}'s `colorFor`. */
+const SINGLE_FUNNEL_GRADIENT = 'linear-gradient(90deg, var(--accent), var(--accent-soft))';
 
 /**
  * Funnel = magnitude over ordered steps → one horizontal bar per step (bar length = users reaching
@@ -63,13 +71,13 @@ export function FunnelChart({
                 key={b.value}
                 title={b.value}
                 steps={b.steps}
-                color={colorFor(b.value)}
+                fill={colorFor(b.value)}
               />
             ))}
           </div>
         </>
       ) : (
-        <FunnelBars steps={steps} color="var(--series-1)" />
+        <FunnelBars steps={steps} fill={SINGLE_FUNNEL_GRADIENT} />
       )}
 
       <FunnelTable steps={steps} breakdowns={breakdowns} />
@@ -79,11 +87,13 @@ export function FunnelChart({
 
 function FunnelBars({
   steps,
-  color,
+  fill,
   title,
 }: {
   steps: FunnelResultStep[];
-  color: string;
+  /** CSS `background` value for the filled bar — a solid `--series-N` color for a real breakdown
+   * value (data encoding, untouched) or the shared accent gradient for a single-series funnel. */
+  fill: string;
   title?: string;
 }) {
   const topCount = steps[0]?.count ?? 0;
@@ -97,15 +107,15 @@ function FunnelBars({
       {steps.map((step, index) => {
         const widthPct = topCount > 0 ? (step.count / topCount) * 100 : 0;
         return (
-          <div key={`${step.event}-${index}`} className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="font-medium">
+          <div key={`${step.event}-${index}`} className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="font-medium text-text">
                 {index + 1}. {step.event}
               </span>
-              <span className="tabular-nums text-text-muted">
-                <span className="font-semibold text-text">{formatExactNumber(step.count)}</span>{' '}
-                users · {formatPercent(step.conversion_from_prev)} from prev ·{' '}
-                {formatPercent(step.conversion_from_top)} from top
+              <span className="flex flex-wrap items-center gap-1.5 tabular-nums">
+                <span className="font-semibold text-text">{formatExactNumber(step.count)} users</span>
+                <Badge variant="outline">{formatPercent(step.conversion_from_prev)} from prev</Badge>
+                <Badge variant="accent">{formatPercent(step.conversion_from_top)} from top</Badge>
               </span>
             </div>
             {/* Recessive full-width track; the filled bar is anchored to the left baseline with a
@@ -113,7 +123,7 @@ function FunnelBars({
             <div className="h-6 w-full overflow-hidden rounded-sm bg-border/40">
               <div
                 className="h-full rounded-sm"
-                style={{ width: `${widthPct}%`, backgroundColor: color }}
+                style={{ width: `${widthPct}%`, background: fill }}
                 title={`${step.event}: ${formatExactNumber(step.count)} users`}
               />
             </div>
@@ -175,10 +185,10 @@ function FunnelTable({
               <td className="py-2">{step.event}</td>
               <td className="py-2 text-right tabular-nums">{formatExactNumber(step.count)}</td>
               <td className="py-2 text-right tabular-nums">
-                {formatPercent(step.conversion_from_prev)}
+                <Badge variant="outline">{formatPercent(step.conversion_from_prev)}</Badge>
               </td>
               <td className="py-2 text-right tabular-nums">
-                {formatPercent(step.conversion_from_top)}
+                <Badge variant="accent">{formatPercent(step.conversion_from_top)}</Badge>
               </td>
             </tr>
           ))}

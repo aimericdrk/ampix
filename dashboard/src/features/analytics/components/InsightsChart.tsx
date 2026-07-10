@@ -12,9 +12,11 @@ import {
   YAxis,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Segmented } from '../../../components/ui/segmented';
 import { formatCompactNumber, formatExactNumber } from '../format';
 import { assignSeriesColors, seriesKey, seriesLabel } from '../palette';
 import type { InsightsSeries } from '../../../lib/api/types';
+import { ChartTooltip, axisProps, gridProps, useChartAnimationProps } from './charts/chart-theme';
 import { AreaTrendChart, StackedBarChart } from './charts/SeriesCharts';
 import { CompositionPieChart, type PieSlice } from './charts/CompositionPieChart';
 
@@ -64,14 +66,6 @@ function pivot(series: InsightsSeries[]): {
   return { rows, keys, labels };
 }
 
-const TOOLTIP_STYLE = {
-  backgroundColor: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 13,
-};
-
 /**
  * Renders an insights result set with a chart-type picker (line · bar · area · stacked · pie ·
  * number · table) over the primary visualization, plus an ALWAYS-visible raw data table underneath.
@@ -101,6 +95,7 @@ export function InsightsChart({
   const { rows, keys, labels } = useMemo(() => pivot(series), [series]);
   const showLegend = keys.length > 1;
   const colorFor = (key: string) => colors.get(key) ?? 'var(--series-1)';
+  const animation = useChartAnimationProps();
 
   const pieSlices: PieSlice[] = useMemo(
     () =>
@@ -114,24 +109,13 @@ export function InsightsChart({
 
   return (
     <div className="flex flex-col gap-6">
-      <div role="radiogroup" aria-label="Chart type" className="flex flex-wrap gap-1">
-        {INSIGHTS_CHART_TYPES.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={chartType === option.value}
-            onClick={() => setChartType(option.value)}
-            className={`rounded-md border px-3 py-1.5 text-sm ${
-              chartType === option.value
-                ? 'border-accent bg-accent text-accent-fg'
-                : 'border-border bg-surface text-text hover:bg-bg'
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        aria-label="Chart type"
+        className="flex-wrap"
+        options={INSIGHTS_CHART_TYPES}
+        value={chartType}
+        onValueChange={(next) => setChartType(next as InsightsChartType)}
+      />
 
       {(chartType === 'line' || chartType === 'bar') && (
         <div
@@ -142,14 +126,10 @@ export function InsightsChart({
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'line' ? (
               <LineChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
-                <XAxis
-                  dataKey="t"
-                  tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-                  stroke="var(--border)"
-                />
-                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 12 }} stroke="var(--border)" />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: 'var(--text-muted)' }} />
+                <CartesianGrid {...gridProps} />
+                <XAxis dataKey="t" {...axisProps} />
+                <YAxis {...axisProps} />
+                <Tooltip content={<ChartTooltip />} />
                 {showLegend && <Legend wrapperStyle={{ color: 'var(--text)', fontSize: 13 }} />}
                 {keys.map((key) => (
                   <Line
@@ -165,23 +145,16 @@ export function InsightsChart({
                       stroke: 'var(--chart-surface)',
                       strokeWidth: 2,
                     }}
+                    {...animation}
                   />
                 ))}
               </LineChart>
             ) : (
               <BarChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                <CartesianGrid stroke="var(--border)" strokeDasharray="0" vertical={false} />
-                <XAxis
-                  dataKey="t"
-                  tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-                  stroke="var(--border)"
-                />
-                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 12 }} stroke="var(--border)" />
-                <Tooltip
-                  contentStyle={TOOLTIP_STYLE}
-                  labelStyle={{ color: 'var(--text-muted)' }}
-                  cursor={{ fill: 'var(--border)', opacity: 0.3 }}
-                />
+                <CartesianGrid {...gridProps} />
+                <XAxis dataKey="t" {...axisProps} />
+                <YAxis {...axisProps} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--border)', opacity: 0.3 }} />
                 {showLegend && <Legend wrapperStyle={{ color: 'var(--text)', fontSize: 13 }} />}
                 {keys.map((key) => (
                   <Bar
@@ -191,6 +164,7 @@ export function InsightsChart({
                     fill={colorFor(key)}
                     radius={[4, 4, 0, 0]}
                     maxBarSize={24}
+                    {...animation}
                   />
                 ))}
               </BarChart>

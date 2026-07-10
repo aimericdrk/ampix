@@ -4,6 +4,7 @@ import type { SankeyNodeProps } from 'recharts';
 import { formatCompactNumber, formatExactNumber } from '../format';
 import { assignSeriesColors, seriesKey } from '../palette';
 import type { FlowLink, FlowNode } from '../../../lib/api/types';
+import { useChartAnimationProps } from './charts/chart-theme';
 
 /** Synthetic nodes ($other = folded tail, $end = drop-off) get a muted token, never a categorical hue. */
 function isSynthetic(event: string): boolean {
@@ -33,6 +34,7 @@ const TOOLTIP_STYLE = {
  * present pair of data tables (nodes + links) is the accessible view.
  */
 export function FlowsChart({ nodes, links }: { nodes: FlowNode[]; links: FlowLink[] }) {
+  const animation = useChartAnimationProps();
   const colorByEvent = useMemo(() => {
     const realEvents: string[] = [];
     for (const n of nodes) {
@@ -101,6 +103,7 @@ export function FlowsChart({ nodes, links }: { nodes: FlowNode[]; links: FlowLin
             link={{ stroke: 'none', fill: 'var(--series-other)', fillOpacity: 0.3 }}
             node={(nodeProps: SankeyNodeProps) => <FlowSankeyNode {...nodeProps} />}
             margin={{ top: 12, right: 140, bottom: 12, left: 12 }}
+            {...animation}
           >
             <Tooltip contentStyle={TOOLTIP_STYLE} />
           </Sankey>

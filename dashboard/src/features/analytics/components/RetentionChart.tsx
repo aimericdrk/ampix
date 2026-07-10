@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { cn } from '../../../lib/cn';
 import { formatExactNumber, formatPercent } from '../format';
 import type {
   RetentionAveragePoint,
@@ -53,21 +54,25 @@ export function RetentionChart({
       <div className="overflow-x-auto">
         <table
           aria-label="Retention cohort heatmap"
-          className="border-collapse text-right text-sm"
+          className="border-separate border-spacing-[1px] text-right text-sm"
         >
           <caption className="sr-only">
             Retention by cohort and {columnLabel.toLowerCase()} period
           </caption>
           <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className="px-3 py-2 text-left font-medium">
+            <tr>
+              <th scope="col" className="border-b border-border px-3 py-2 text-left font-medium">
                 Cohort
               </th>
-              <th scope="col" className="px-3 py-2 font-medium">
+              <th scope="col" className="border-b border-border px-3 py-2 font-medium">
                 Size
               </th>
               {periodColumns.map((period) => (
-                <th key={period} scope="col" className="px-3 py-2 font-medium">
+                <th
+                  key={period}
+                  scope="col"
+                  className="border-b border-border px-3 py-2 font-medium"
+                >
                   {columnLabel} {period}
                 </th>
               ))}
@@ -77,16 +82,24 @@ export function RetentionChart({
             {cohorts.map((cohort) => {
               const byPeriod = new Map(cohort.periods.map((p) => [p.period, p]));
               return (
-                <tr key={cohort.cohort} className="border-b border-border">
-                  <th scope="row" className="px-3 py-2 text-left font-medium tabular-nums">
+                <tr key={cohort.cohort}>
+                  <th
+                    scope="row"
+                    className="rounded border-b border-border px-3 py-2 text-left font-medium tabular-nums"
+                  >
                     {cohort.cohort}
                   </th>
-                  <td className="px-3 py-2 tabular-nums">{formatExactNumber(cohort.size)}</td>
+                  <td className="rounded border-b border-border px-3 py-2 tabular-nums">
+                    {formatExactNumber(cohort.size)}
+                  </td>
                   {periodColumns.map((period) => {
                     const cell = byPeriod.get(period);
                     if (!cell) {
                       return (
-                        <td key={period} className="px-3 py-2 text-text-muted">
+                        <td
+                          key={period}
+                          className="rounded border-b border-border px-3 py-2 text-text-muted"
+                        >
                           —
                         </td>
                       );
@@ -94,7 +107,7 @@ export function RetentionChart({
                     return (
                       <td
                         key={period}
-                        className="px-3 py-2 tabular-nums"
+                        className="rounded border-b border-border px-3 py-2 tabular-nums transition-shadow hover:ring-1 hover:ring-accent"
                         style={cellStyle(cell.rate)}
                         title={`${formatExactNumber(cell.count)} users`}
                       >
@@ -107,16 +120,21 @@ export function RetentionChart({
             })}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-border">
-              <th scope="row" className="px-3 py-2 text-left font-medium">
+            <tr>
+              <th scope="row" className="rounded border-t-2 border-border px-3 py-2 text-left font-medium">
                 Average
               </th>
-              <td className="px-3 py-2 tabular-nums">{formatExactNumber(totalSize)}</td>
+              <td className="rounded border-t-2 border-border px-3 py-2 tabular-nums">
+                {formatExactNumber(totalSize)}
+              </td>
               {periodColumns.map((period) => {
                 const rate = averageByPeriod.get(period);
                 if (rate === undefined) {
                   return (
-                    <td key={period} className="px-3 py-2 text-text-muted">
+                    <td
+                      key={period}
+                      className="rounded border-t-2 border-border px-3 py-2 text-text-muted"
+                    >
                       —
                     </td>
                   );
@@ -124,7 +142,10 @@ export function RetentionChart({
                 return (
                   <td
                     key={period}
-                    className="px-3 py-2 font-medium tabular-nums"
+                    className={cn(
+                      'rounded border-t-2 border-border px-3 py-2 font-medium tabular-nums',
+                      'transition-shadow hover:ring-1 hover:ring-accent',
+                    )}
                     style={cellStyle(rate)}
                   >
                     {formatPercent(rate)}
@@ -145,11 +166,11 @@ function RampLegend() {
   return (
     <div className="flex items-center gap-2 text-xs text-text-muted">
       <span>Low</span>
-      <div className="flex" aria-hidden="true">
+      <div className="flex gap-px" aria-hidden="true">
         {levels.map((level) => (
           <span
             key={level}
-            className="inline-block h-3 w-4"
+            className="inline-block h-3 w-4 rounded-sm"
             style={{ backgroundColor: `var(--retention-${level}-bg)` }}
           />
         ))}

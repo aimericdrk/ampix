@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { fieldLook } from '../../../components/ui/input';
+import { cn } from '../../../lib/cn';
 import { shiftRange, type CompareUnit } from '../range-compare';
 import { DateRangeFields } from './builder-controls';
 
@@ -77,7 +79,7 @@ export function CompareControl({
           aria-label="Compare"
           value={mode}
           onChange={(e) => setMode(e.target.value as CompareMode)}
-          className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+          className={cn(fieldLook, 'h-9 w-auto')}
         >
           {COMPARE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

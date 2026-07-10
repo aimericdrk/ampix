@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
+import { Inbox, MousePointerClick } from 'lucide-react';
 import { PageShell } from '../../../components/layout/PageShell';
+import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
-import { cn } from '../../../lib/cn';
+import { Segmented } from '../../../components/ui/segmented';
 import type { HistogramQuery } from '../../../lib/api/types';
 import { useHistogram, useMetaEvents, useMetaProperties } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
@@ -52,52 +56,6 @@ const PRESETS: HistogramPreset[] = [
 
 const CUSTOM_PRESET_ID = 'custom';
 const BIN_OPTIONS = [10, 20, 50] as const;
-
-/** A "Metric"/"Bins" segmented radiogroup — same visual pattern as `DateRangePresets`. */
-function SegmentedControl<T extends string | number>({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: Array<{ id: T; label: string }>;
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div>
-      <span className="mb-1 block text-sm font-medium">{label}</span>
-      <div
-        role="radiogroup"
-        aria-label={label}
-        className="inline-flex w-fit flex-wrap gap-0.5 rounded-lg border border-border bg-surface p-0.5"
-      >
-        {options.map((option) => {
-          const active = option.id === value;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(option.id)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-sm transition-colors',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-                active
-                  ? 'bg-accent font-medium text-accent-fg'
-                  : 'text-text-muted hover:bg-border/40 hover:text-text',
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The Distributions page (feat-09 §3.2) — see the *shape* of a metric, not just its average: a
@@ -151,64 +109,95 @@ export function DistributionsPage() {
       breadcrumbs={[{ label: 'Explore' }, { label: 'Distributions' }]}
       dateRangeControl={<DateRangeControl />}
     >
-      <div className="flex flex-col gap-4">
-        <SegmentedControl
-          label="Metric"
-          value={presetId}
-          onChange={setPresetId}
-          options={[
-            ...PRESETS.map((preset) => ({ id: preset.id, label: preset.label })),
-            { id: CUSTOM_PRESET_ID, label: 'Custom…' },
-          ]}
-        />
+      <Reveal index={0}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Metric</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div>
+              <span className="mb-1 block text-sm font-medium">Metric</span>
+              <Segmented
+                aria-label="Metric"
+                value={presetId}
+                onValueChange={setPresetId}
+                options={[
+                  ...PRESETS.map((preset) => ({ value: preset.id, label: preset.label })),
+                  { value: CUSTOM_PRESET_ID, label: 'Custom…' },
+                ]}
+                className="w-fit flex-wrap"
+              />
+            </div>
 
-        {isCustom && (
-          <div className="flex flex-wrap gap-4">
-            <EventSelectField
-              label="Event"
-              value={customEvent}
-              onChange={setCustomEvent}
-              options={metaEvents.data?.events ?? []}
-              isLoading={metaEvents.isPending}
-            />
-            <EventSelectField
-              label="Property"
-              value={customProperty}
-              onChange={setCustomProperty}
-              options={metaProperties.data?.properties.map((property) => property.name) ?? []}
-              isLoading={metaProperties.isPending}
-              noun="property"
-            />
-          </div>
-        )}
+            {isCustom && (
+              <div className="flex flex-wrap gap-4">
+                <EventSelectField
+                  label="Event"
+                  value={customEvent}
+                  onChange={setCustomEvent}
+                  options={metaEvents.data?.events ?? []}
+                  isLoading={metaEvents.isPending}
+                />
+                <EventSelectField
+                  label="Property"
+                  value={customProperty}
+                  onChange={setCustomProperty}
+                  options={metaProperties.data?.properties.map((property) => property.name) ?? []}
+                  isLoading={metaProperties.isPending}
+                  noun="property"
+                />
+              </div>
+            )}
 
-        <SegmentedControl
-          label="Bins"
-          value={bins}
-          onChange={setBins}
-          options={BIN_OPTIONS.map((option) => ({ id: option, label: String(option) }))}
-        />
-      </div>
+            <div>
+              <span className="mb-1 block text-sm font-medium">Bins</span>
+              <Segmented
+                aria-label="Bins"
+                value={String(bins)}
+                onValueChange={(value) => setBins(Number(value))}
+                options={BIN_OPTIONS.map((option) => ({ value: String(option), label: String(option) }))}
+                className="w-fit"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </Reveal>
 
       {!enabled && (
-        <p className="text-sm text-text-muted">
-          Choose an event and a numeric property to see its distribution.
-        </p>
+        <Reveal index={1}>
+          <EmptyState
+            icon={MousePointerClick}
+            title="Pick a metric"
+            description="Choose an event and a numeric property to see its distribution."
+          />
+        </Reveal>
       )}
 
-      {enabled && histogram.isPending && <p role="status">Loading distribution…</p>}
+      {enabled && histogram.isPending && (
+        <Reveal index={1}>
+          <p role="status">Loading distribution…</p>
+        </Reveal>
+      )}
       {enabled && histogram.isError && (
-        <p role="alert" className="text-danger">
-          Failed to load distribution
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            Failed to load distribution
+          </p>
+        </Reveal>
       )}
 
       {enabled && isEmpty && (
-        <p className="text-sm text-text-muted">No numeric data for this property.</p>
+        <Reveal index={1}>
+          <EmptyState
+            icon={Inbox}
+            title="No numeric data"
+            description="No numeric data for this property."
+          />
+        </Reveal>
       )}
 
       {enabled && data && !isEmpty && (
-        <>
+        <Reveal index={2} className="flex flex-col gap-6">
           <SectionGrid>
             <KpiTile label="Total" value={data.total} />
             <KpiTile label="Mean" value={formatHistogramValue(data.mean, unit)} />
@@ -227,7 +216,7 @@ export function DistributionsPage() {
               unit={unit}
             />
           </ChartCard>
-        </>
+        </Reveal>
       )}
     </PageShell>
   );

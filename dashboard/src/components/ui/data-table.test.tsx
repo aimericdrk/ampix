@@ -105,6 +105,30 @@ describe('DataTable', () => {
     expect(onRowClick).toHaveBeenCalledTimes(2);
   });
 
+  it('does not apply the accent hover treatment to rows without onRowClick', () => {
+    render(<DataTable columns={columns} rows={rows} caption="Top events" rowKey={(r) => r.id} />);
+    const bananaRow = screen.getByText('Banana').closest('tr');
+    if (!bananaRow) throw new Error('expected a <tr> ancestor');
+    expect(bananaRow).not.toHaveClass('hover:bg-accent-soft/50');
+    expect(bananaRow).not.toHaveClass('cursor-pointer');
+  });
+
+  it('applies the accent hover treatment to rows when onRowClick is provided', () => {
+    render(
+      <DataTable
+        columns={columns}
+        rows={rows}
+        caption="Top events"
+        rowKey={(r) => r.id}
+        onRowClick={() => {}}
+      />,
+    );
+    const bananaRow = screen.getByText('Banana').closest('tr');
+    if (!bananaRow) throw new Error('expected a <tr> ancestor');
+    expect(bananaRow).toHaveClass('hover:bg-accent-soft/50');
+    expect(bananaRow).toHaveClass('cursor-pointer');
+  });
+
   it('respects an initialSort prop', () => {
     const { container } = render(
       <DataTable

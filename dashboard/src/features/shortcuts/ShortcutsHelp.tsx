@@ -1,19 +1,15 @@
 import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
+import { Kbd } from '../../components/ui/kbd';
 import { SHORTCUT_ROUTES } from './keyboard-shortcuts';
 
-/** A single shortcut row: one or more `<kbd>` chips plus a description. */
+/** A single shortcut row: one or more `Kbd` chips plus a description. */
 function ShortcutRow({ keys, description }: { keys: string[]; description: string }) {
   return (
     <li className="flex items-center justify-between gap-4 py-1.5 text-sm">
       <span className="text-text">{description}</span>
       <span className="flex shrink-0 items-center gap-1">
         {keys.map((key, index) => (
-          <kbd
-            key={`${key}-${index}`}
-            className="rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] font-medium text-text-muted"
-          >
-            {key}
-          </kbd>
+          <Kbd key={`${key}-${index}`}>{key}</Kbd>
         ))}
       </span>
     </li>
@@ -33,7 +29,7 @@ export function ShortcutsHelp({ open, onClose }: { open: boolean; onClose: () =>
         <DialogTitle>Keyboard shortcuts</DialogTitle>
 
         <div className="mt-4">
-          <p className="pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted/80">
+          <p className="pb-1 text-xs uppercase tracking-wide text-text-muted">
             Navigation
           </p>
           <ul>
@@ -44,7 +40,7 @@ export function ShortcutsHelp({ open, onClose }: { open: boolean; onClose: () =>
         </div>
 
         <div className="mt-4">
-          <p className="pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted/80">
+          <p className="pb-1 text-xs uppercase tracking-wide text-text-muted">
             General
           </p>
           <ul>

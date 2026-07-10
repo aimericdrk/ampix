@@ -1,4 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router';
+import { Inbox } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -9,7 +10,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../../../components/ui/dialog';
+import { EmptyState } from '../../../components/ui/empty-state';
 import { Input } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import type { AnalysisResult, DashboardSummary } from '../../../lib/api/types';
@@ -20,6 +24,9 @@ import { FavoriteButton } from '../../favorites/FavoriteButton';
 import { useFavorites } from '../../favorites/favorites';
 import { analysisResultIsEmpty } from './ReportChart';
 import { ChartThumbnail, type ChartThumbnailState } from './ChartThumbnail';
+
+/** Max Reveal stagger index for a grid of tiles — later tiles all fire together at the cap. */
+const MAX_REVEAL_INDEX = 5;
 
 export function DashboardsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/dashboards' });
@@ -46,7 +53,21 @@ export function DashboardsPage() {
         </Dialog>
       }
     >
-      {dashboards.isPending && <p role="status">Loading dashboards…</p>}
+      {dashboards.isPending && (
+        <div role="status" aria-label="Loading dashboards" className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+          {Array.from({ length: 3 }, (_, i) => (
+            <Card key={i} className="h-full">
+              <CardHeader>
+                <Skeleton className="h-5 w-2/3" />
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                <Skeleton className="h-28 w-full" />
+                <Skeleton className="h-4 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
       {dashboards.error && (
         <p role="alert" className="text-danger">
           {dashboards.error instanceof ApiError
@@ -56,41 +77,48 @@ export function DashboardsPage() {
       )}
 
       {dashboards.data && dashboards.data.dashboards.length === 0 && (
-        <p className="text-text-muted">No dashboards yet.</p>
+        <EmptyState
+          icon={Inbox}
+          title="No dashboards yet."
+          description="Create one to start pinning charts together."
+          action={<Button onClick={() => setDialogOpen(true)}>New dashboard</Button>}
+        />
       )}
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-        {dashboards.data?.dashboards.map((dashboard) => (
-          // The star sits as a sibling overlay, not nested inside the card-wide `Link` (an <a>
-          // can't validly contain a <button>) — `relative`/`absolute` positions it top-right
-          // without shrinking the Link's clickable area.
-          <div key={dashboard.id} className="relative">
-            <Link
-              to="/projects/$projectId/dashboards/$dashboardId"
-              params={{ projectId, dashboardId: dashboard.id }}
-              className="block rounded-lg focus-visible:outline-2 focus-visible:outline-accent"
-            >
-              <Card className="h-full transition-colors hover:border-accent">
-                <CardHeader>
-                  <CardTitle className="pr-8">{dashboard.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                  <DashboardCardThumbnail projectId={projectId} dashboard={dashboard} />
-                  <p className="text-sm text-text-muted">
-                    {dashboard.tile_count} {dashboard.tile_count === 1 ? 'tile' : 'tiles'}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-            <FavoriteButton
-              name={dashboard.name}
-              isFavorite={favorites.isFavorite('dashboard', dashboard.id)}
-              onToggle={() =>
-                favorites.toggle({ type: 'dashboard', id: dashboard.id, name: dashboard.name })
-              }
-              className="absolute right-2 top-2"
-            />
-          </div>
+        {dashboards.data?.dashboards.map((dashboard, index) => (
+          <Reveal key={dashboard.id} index={Math.min(index, MAX_REVEAL_INDEX)}>
+            {/* The star sits as a sibling overlay, not nested inside the card-wide `Link` (an <a>
+                can't validly contain a <button>) — `relative`/`absolute` positions it top-right
+                without shrinking the Link's clickable area. */}
+            <div className="relative">
+              <Link
+                to="/projects/$projectId/dashboards/$dashboardId"
+                params={{ projectId, dashboardId: dashboard.id }}
+                className="block rounded-xl focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                <Card interactive className="h-full">
+                  <CardHeader>
+                    <CardTitle className="pr-8">{dashboard.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-2">
+                    <DashboardCardThumbnail projectId={projectId} dashboard={dashboard} />
+                    <p className="text-sm text-text-muted">
+                      {dashboard.tile_count} {dashboard.tile_count === 1 ? 'tile' : 'tiles'}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+              <FavoriteButton
+                name={dashboard.name}
+                isFavorite={favorites.isFavorite('dashboard', dashboard.id)}
+                onToggle={() =>
+                  favorites.toggle({ type: 'dashboard', id: dashboard.id, name: dashboard.name })
+                }
+                className="absolute right-2 top-2"
+              />
+            </div>
+          </Reveal>
         ))}
       </div>
     </PageShell>

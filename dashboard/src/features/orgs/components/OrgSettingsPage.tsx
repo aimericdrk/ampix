@@ -1,15 +1,24 @@
 import { useParams } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
+import { Check, Copy } from 'lucide-react';
+import { PageShell } from '../../../components/layout/PageShell';
+import { Badge, type BadgeProps } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from '../../../components/ui/dialog';
-import { Input } from '../../../components/ui/input';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { fieldLook, Input } from '../../../components/ui/input';
+import { IconButton } from '../../../components/ui/icon-button';
+import { Label } from '../../../components/ui/label';
+import { Reveal } from '../../../components/ui/reveal';
 import { useToast } from '../../../components/ui/toast';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import { ORG_ROLES, type Invitation, type OrgMember, type OrgRole } from '../../../lib/api/types';
 import {
@@ -24,6 +33,38 @@ import {
   useUpdateMemberRole,
 } from '../api';
 
+/** Role → Badge variant, roughly by privilege level (admin highest, viewer lowest). */
+function roleBadgeVariant(role: OrgRole): BadgeProps['variant'] {
+  if (role === 'admin') return 'accent';
+  if (role === 'analyst') return 'info';
+  return 'default';
+}
+
+/** A Copy icon-button that briefly flips to a check mark — reused for the invite link. */
+function CopyIconButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    if (!navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
+  };
+  return (
+    <IconButton
+      variant="secondary"
+      size="sm"
+      aria-label={copied ? `Copied ${label}` : `Copy ${label}`}
+      onClick={handleCopy}
+    >
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+    </IconButton>
+  );
+}
+
 export function OrgSettingsPage() {
   const { orgId } = useParams({ from: '/private/orgs/$orgId/settings' });
   const { data: orgsData } = useOrgs();
@@ -32,45 +73,51 @@ export function OrgSettingsPage() {
   const isAdmin = role === 'admin';
 
   return (
-    <section className="flex max-w-3xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">{org?.name ?? 'Organization settings'}</h1>
-        {role && <p className="text-sm text-text-muted">Your role: {role}</p>}
+    <PageShell
+      title={org?.name ?? 'Organization settings'}
+      description={role ? `Your role: ${role}` : undefined}
+    >
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Reveal index={0}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization name</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {org ? (
+                <RenameOrgForm orgId={orgId} currentName={org.name} disabled={!isAdmin} />
+              ) : (
+                <p role="status">Loading…</p>
+              )}
+            </CardContent>
+          </Card>
+        </Reveal>
+
+        <Reveal index={1} className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Members</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MembersSection orgId={orgId} isAdmin={isAdmin} />
+            </CardContent>
+          </Card>
+        </Reveal>
+
+        {isAdmin && (
+          <Reveal index={2} className="lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Invitations</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <InvitationsSection orgId={orgId} />
+              </CardContent>
+            </Card>
+          </Reveal>
+        )}
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Organization name</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {org ? (
-            <RenameOrgForm orgId={orgId} currentName={org.name} disabled={!isAdmin} />
-          ) : (
-            <p role="status">Loading…</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MembersSection orgId={orgId} isAdmin={isAdmin} />
-        </CardContent>
-      </Card>
-
-      {isAdmin && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Invitations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <InvitationsSection orgId={orgId} />
-          </CardContent>
-        </Card>
-      )}
-    </section>
+    </PageShell>
   );
 }
 
@@ -108,9 +155,9 @@ function RenameOrgForm({
   return (
     <form onSubmit={handleSubmit} noValidate className="flex items-end gap-2">
       <div className="flex-1">
-        <label htmlFor="org-name" className="mb-1 block text-sm font-medium">
+        <Label htmlFor="org-name" className="mb-1 block">
           Name
-        </label>
+        </Label>
         <Input
           id="org-name"
           value={name}
@@ -176,65 +223,67 @@ function MembersSection({ orgId, isAdmin }: { orgId: string; isAdmin: boolean })
     });
   };
 
+  const columns: Array<DataTableColumn<OrgMember>> = [
+    {
+      key: 'name',
+      header: 'Name',
+      sortable: true,
+      sortValue: (member) => member.user.name,
+      render: (member) => member.user.name,
+    },
+    { key: 'email', header: 'Email', render: (member) => member.user.email },
+    {
+      key: 'role',
+      header: 'Role',
+      render: (member) =>
+        isAdmin ? (
+          <label>
+            <span className="sr-only">Role for {member.user.name}</span>
+            <select
+              className={cn(fieldLook, 'h-8 w-auto px-2 text-sm')}
+              value={member.role}
+              onChange={(e) => handleRoleChange(member, e.target.value as OrgRole)}
+            >
+              {ORG_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <Badge variant={roleBadgeVariant(member.role)}>{member.role}</Badge>
+        ),
+    },
+    ...(isAdmin
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            align: 'right' as const,
+            render: (member: OrgMember) => (
+              <div className="flex justify-end">
+                <Button variant="danger" size="sm" onClick={() => setPendingRemoval(member)}>
+                  Remove
+                </Button>
+              </div>
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
-      <table className="w-full border-collapse text-left text-sm">
-        <caption className="sr-only">Organization members</caption>
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className="py-2 font-medium">
-              Name
-            </th>
-            <th scope="col" className="py-2 font-medium">
-              Email
-            </th>
-            <th scope="col" className="py-2 font-medium">
-              Role
-            </th>
-            {isAdmin && (
-              <th scope="col" className="py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {data?.members.map((member) => (
-            <tr key={member.user.id} className="border-b border-border">
-              <td className="py-2">{member.user.name}</td>
-              <td className="py-2">{member.user.email}</td>
-              <td className="py-2">
-                {isAdmin ? (
-                  <label>
-                    <span className="sr-only">Role for {member.user.name}</span>
-                    <select
-                      className="h-8 rounded-md border border-border bg-surface px-2 text-sm"
-                      value={member.role}
-                      onChange={(e) => handleRoleChange(member, e.target.value as OrgRole)}
-                    >
-                      {ORG_ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  member.role
-                )}
-              </td>
-              {isAdmin && (
-                <td className="py-2 text-right">
-                  <Button variant="danger" size="sm" onClick={() => setPendingRemoval(member)}>
-                    Remove
-                  </Button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {data?.members.length === 0 && <p className="text-text-muted">No members.</p>}
+      {data && data.members.length > 0 && (
+        <DataTable
+          caption="Organization members"
+          columns={columns}
+          rows={data.members}
+          rowKey={(member) => member.user.id}
+        />
+      )}
+      {data?.members.length === 0 && <EmptyState title="No members." />}
 
       <Dialog
         open={pendingRemoval !== null}
@@ -271,7 +320,6 @@ function InvitationsSection({ orgId }: { orgId: string }) {
   const { toast } = useToast();
   const [role, setRole] = useState<OrgRole>('analyst');
   const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const handleCreate = (event: FormEvent) => {
     event.preventDefault();
@@ -280,7 +328,6 @@ function InvitationsSection({ orgId }: { orgId: string }) {
       {
         onSuccess: (invitation) => {
           setInviteLink(`${window.location.origin}${invitation.invite_path}`);
-          setCopied(false);
         },
         onError: (mutationError) => {
           toast({
@@ -292,14 +339,6 @@ function InvitationsSection({ orgId }: { orgId: string }) {
         },
       },
     );
-  };
-
-  const handleCopy = () => {
-    if (!inviteLink || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(inviteLink)
-      .then(() => setCopied(true))
-      .catch(() => {});
   };
 
   const handleRevoke = (invitation: Invitation) => {
@@ -314,16 +353,47 @@ function InvitationsSection({ orgId }: { orgId: string }) {
     });
   };
 
+  const columns: Array<DataTableColumn<Invitation>> = [
+    {
+      key: 'role',
+      header: 'Role',
+      render: (invitation) => <Badge variant={roleBadgeVariant(invitation.role)}>{invitation.role}</Badge>,
+    },
+    {
+      key: 'expires_at',
+      header: 'Expires',
+      sortable: true,
+      render: (invitation) => new Date(invitation.expires_at).toLocaleDateString(),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (invitation) => (
+        <div className="flex justify-end">
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={revokeInvitation.isPending}
+            onClick={() => handleRevoke(invitation)}
+          >
+            Revoke
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <form onSubmit={handleCreate} className="flex items-end gap-2">
         <div>
-          <label htmlFor="invite-role" className="mb-1 block text-sm font-medium">
+          <Label htmlFor="invite-role" className="mb-1 block">
             Role
-          </label>
+          </Label>
           <select
             id="invite-role"
-            className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+            className={cn(fieldLook, 'h-9 w-auto px-2 text-sm')}
             value={role}
             onChange={(e) => setRole(e.target.value as OrgRole)}
           >
@@ -340,13 +410,13 @@ function InvitationsSection({ orgId }: { orgId: string }) {
       </form>
 
       {inviteLink && (
-        <div className="rounded-md border border-border bg-bg p-3">
-          <p className="mb-2 text-sm text-text-muted">Share this link with the invitee:</p>
+        <div className="space-y-2 rounded-lg border border-border bg-bg p-3">
+          <p className="text-sm text-text-muted">Share this link with the invitee:</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 break-all font-mono text-sm">{inviteLink}</code>
-            <Button type="button" variant="secondary" size="sm" onClick={handleCopy}>
-              {copied ? 'Copied!' : 'Copy'}
-            </Button>
+            <code className="flex-1 break-all rounded-lg bg-surface-raised px-3 py-2 font-mono text-xs">
+              {inviteLink}
+            </code>
+            <CopyIconButton value={inviteLink} label="invite link" />
           </div>
         </div>
       )}
@@ -359,44 +429,14 @@ function InvitationsSection({ orgId }: { orgId: string }) {
       )}
 
       {data && data.invitations.length > 0 && (
-        <table className="w-full border-collapse text-left text-sm">
-          <caption className="sr-only">Pending invitations</caption>
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className="py-2 font-medium">
-                Role
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                Expires
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.invitations.map((invitation) => (
-              <tr key={invitation.id} className="border-b border-border">
-                <td className="py-2">{invitation.role}</td>
-                <td className="py-2">{new Date(invitation.expires_at).toLocaleDateString()}</td>
-                <td className="py-2 text-right">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    disabled={revokeInvitation.isPending}
-                    onClick={() => handleRevoke(invitation)}
-                  >
-                    Revoke
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          caption="Pending invitations"
+          columns={columns}
+          rows={data.invitations}
+          rowKey={(invitation) => invitation.id}
+        />
       )}
-      {data && data.invitations.length === 0 && (
-        <p className="text-text-muted">No pending invitations.</p>
-      )}
+      {data && data.invitations.length === 0 && <EmptyState title="No pending invitations." />}
     </div>
   );
 }

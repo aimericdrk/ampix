@@ -8,8 +8,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../../../components/ui/dialog';
-import { Input } from '../../../components/ui/input';
+import { fieldLook, Input } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { useToast } from '../../../components/ui/toast';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type { AnalysisResult, CreateTileRequest, LayoutTile } from '../../../lib/api/types';
 import {
@@ -155,7 +158,12 @@ export function DashboardViewPage() {
         </>
       }
     >
-      {dashboard.isPending && <p role="status">Loading dashboard…</p>}
+      {dashboard.isPending && (
+        <div role="status" aria-label="Loading dashboard" className="grid grid-cols-12 gap-4">
+          <Skeleton className="col-span-6 h-64" />
+          <Skeleton className="col-span-6 h-64" />
+        </div>
+      )}
       {dashboard.error && (
         <p role="alert" className="text-danger">
           {dashboard.error instanceof ApiError
@@ -165,14 +173,16 @@ export function DashboardViewPage() {
       )}
 
       {dashboard.data && (
-        <DashboardGrid
-          tiles={layout}
-          results={results}
-          loading={data.isPending}
-          onReorder={handleReorder}
-          onResize={handleResize}
-          onRemove={handleRemove}
-        />
+        <Reveal index={0}>
+          <DashboardGrid
+            tiles={layout}
+            results={results}
+            loading={data.isPending}
+            onReorder={handleReorder}
+            onResize={handleResize}
+            onRemove={handleRemove}
+          />
+        </Reveal>
       )}
 
       {isPresenting && dashboard.data && (
@@ -281,7 +291,7 @@ function AddTileForm({
           id="add-tile-report"
           value={reportId}
           onChange={(e) => setReportId(e.target.value)}
-          className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm"
+          className={cn(fieldLook, 'w-full')}
         >
           <option value="">Select a report…</option>
           {reportList.map((report) => (

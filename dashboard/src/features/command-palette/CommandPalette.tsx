@@ -3,6 +3,7 @@ import { IconSparkle } from '../../components/ui/icons';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
 import { IconSearch } from '../../components/ui/icons';
+import { Kbd } from '../../components/ui/kbd';
 import { useToast } from '../../components/ui/toast';
 import { projectGroups } from '../../components/layout/nav-model';
 import { NavIcon, type IconName } from '../../components/layout/NavIcon';
@@ -342,9 +343,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
       >
         <IconSearch size={14} />
         <span className="flex-1 text-left">Search</span>
-        <kbd className="rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium">
-          ⌘K
-        </kbd>
+        <Kbd>⌘K</Kbd>
       </button>
 
       {hasQuery && (
@@ -362,7 +361,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
           else close();
         }}
       >
-        <DialogContent className="top-24 max-w-xl -translate-y-0 gap-0 overflow-hidden p-0">
+        <DialogContent className="top-24 max-w-xl -translate-y-0 gap-0 overflow-hidden border-border bg-overlay p-0 shadow-lift backdrop-blur-md">
           <DialogTitle className="sr-only">Command palette</DialogTitle>
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <IconSearch className="shrink-0 text-text-muted" size={16} />
@@ -390,7 +389,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
             ) : (
               groups.map((group) => (
                 <li key={group.heading} className="mb-2 last:mb-0">
-                  <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted/80">
+                  <p className="px-2 pb-1 text-xs uppercase tracking-wide text-text-muted">
                     {group.heading}
                   </p>
                   <ul>
@@ -405,9 +404,9 @@ export function CommandPalette({ projectId }: { projectId: string }) {
                           onPointerEnter={() => setActiveIndex(index)}
                           onClick={() => item.onSelect()}
                           className={cn(
-                            'flex cursor-pointer items-center gap-2.5 truncate rounded px-2 py-1.5 text-sm',
+                            'flex cursor-pointer items-center gap-2.5 truncate rounded-md px-2 py-1.5 text-sm',
                             index === clampedIndex
-                              ? 'bg-accent text-accent-fg'
+                              ? 'bg-accent-soft text-accent'
                               : 'text-text hover:bg-border/40',
                           )}
                         >

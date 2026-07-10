@@ -2,7 +2,9 @@ import { useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { fieldLook, Input } from '../../../components/ui/input';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   FlowsDirection,
@@ -337,7 +339,7 @@ export function FlowsPage() {
                 id="flows-direction"
                 value={direction}
                 onChange={(e) => setDirectionFromInput(e.target.value as FlowsDirection)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                className={cn(fieldLook, 'w-auto')}
               >
                 {FLOWS_DIRECTIONS.map((value) => (
                   <option key={value} value={value}>
@@ -354,7 +356,7 @@ export function FlowsPage() {
                 id="flows-unit"
                 value={unit}
                 onChange={(e) => setUnitFromInput(e.target.value as FlowsUnit)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
+                className={cn(fieldLook, 'w-auto')}
               >
                 {FLOWS_UNITS.map((value) => (
                   <option key={value} value={value}>
@@ -367,28 +369,28 @@ export function FlowsPage() {
               <label htmlFor="flows-steps" className="mb-1 block text-sm font-medium">
                 Steps (hops)
               </label>
-              <input
+              <Input
                 id="flows-steps"
                 type="number"
                 min={1}
                 max={5}
                 value={steps}
                 onChange={(e) => setStepsFromInput(Number(e.target.value))}
-                className="h-10 w-32 rounded-md border border-border bg-surface px-3 text-sm"
+                className="w-32"
               />
             </div>
             <div>
               <label htmlFor="flows-max-nodes" className="mb-1 block text-sm font-medium">
                 Max nodes per step
               </label>
-              <input
+              <Input
                 id="flows-max-nodes"
                 type="number"
                 min={1}
                 max={20}
                 value={maxNodesPerStep}
                 onChange={(e) => setMaxNodesPerStepFromInput(Number(e.target.value))}
-                className="h-10 w-32 rounded-md border border-border bg-surface px-3 text-sm"
+                className="w-32"
               />
             </div>
           </div>

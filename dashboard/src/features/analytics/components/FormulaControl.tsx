@@ -1,4 +1,7 @@
 import { Button } from '../../../components/ui/button';
+import { Checkbox } from '../../../components/ui/checkbox';
+import { fieldLook } from '../../../components/ui/input';
+import { cn } from '../../../lib/cn';
 import type { InsightsAggregation, InsightsEventQuery } from '../../../lib/api/types';
 import type { FormulaOperator } from '../formula';
 import { EventPicker } from './explore-controls';
@@ -65,7 +68,7 @@ function FormulaMetricField({
           aria-label={`Measure for ${label}`}
           value={metric.aggregation}
           onChange={(e) => onChange({ ...metric, aggregation: e.target.value as InsightsAggregation })}
-          className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+          className={cn(fieldLook, 'h-9 w-auto')}
         >
           <option value="total">{MEASURE_LABELS.total}</option>
           <option value="unique_users">{MEASURE_LABELS.unique_users}</option>
@@ -106,7 +109,7 @@ export function FormulaControl({
   onRemove: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-bg/40 p-3">
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface-raised/40 p-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Formula</span>
         <Button
@@ -137,7 +140,7 @@ export function FormulaControl({
             aria-label="Operator"
             value={operator}
             onChange={(e) => onOperatorChange(e.target.value as FormulaOperator)}
-            className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+            className={cn(fieldLook, 'h-9 w-auto')}
           >
             {FORMULA_OPERATOR_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -157,10 +160,9 @@ export function FormulaControl({
 
         {operator === 'ratio' && (
           <label className="mb-1.5 flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={asPercent}
-              onChange={(e) => onAsPercentChange(e.target.checked)}
+              onCheckedChange={(checked) => onAsPercentChange(checked === true)}
             />
             As %
           </label>

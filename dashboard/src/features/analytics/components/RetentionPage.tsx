@@ -1,8 +1,13 @@
 import { useParams } from '@tanstack/react-router';
+import { Inbox } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { fieldLook, Input } from '../../../components/ui/input';
+import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
   InsightsFilter,
@@ -384,114 +389,120 @@ export function RetentionPage() {
       dateRangeControl={<DateRangeControl />}
       actions={<CopyLinkButton />}
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>Retention builder</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <div className="flex flex-col gap-2">
-            <EventSelectField
-              label="Born event"
-              value={bornEvent}
-              onChange={setBornEventFromInput}
-              options={eventOptions}
-              isLoading={metaEvents.isPending}
-              placeholder="Select event…"
-            />
-            <FilterRows
-              idPrefix="retention-born-filter"
-              ariaLabel="Born event filter"
-              filters={bornFilters}
-              onChange={setBornFiltersFromInput}
-              propertyNames={propertyNames}
-              projectId={projectId}
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <EventSelectField
-              label="Return event"
-              value={returnEvent}
-              onChange={setReturnEventFromInput}
-              options={eventOptions}
-              isLoading={metaEvents.isPending}
-              placeholder="Defaults to the born event"
-              allowClear
-            />
-            <FilterRows
-              idPrefix="retention-return-filter"
-              ariaLabel="Return event filter"
-              filters={returnFilters}
-              onChange={setReturnFiltersFromInput}
-              propertyNames={propertyNames}
-              projectId={projectId}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <label htmlFor="retention-interval" className="mb-1 block text-sm font-medium">
-                Interval
-              </label>
-              <select
-                id="retention-interval"
-                value={interval}
-                onChange={(e) => setIntervalFromInput(e.target.value as RetentionInterval)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm"
-              >
-                {RETENTION_INTERVALS.map((value) => (
-                  <option key={value} value={value}>
-                    {INTERVAL_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="retention-periods" className="mb-1 block text-sm font-medium">
-                Periods
-              </label>
-              <input
-                id="retention-periods"
-                type="number"
-                min={1}
-                max={30}
-                value={periods}
-                onChange={(e) => setPeriodsFromInput(Number(e.target.value))}
-                className="h-10 w-32 rounded-md border border-border bg-surface px-3 text-sm"
+      <Reveal index={0}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Retention builder</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <EventSelectField
+                label="Born event"
+                value={bornEvent}
+                onChange={setBornEventFromInput}
+                options={eventOptions}
+                isLoading={metaEvents.isPending}
+                placeholder="Select event…"
+              />
+              <FilterRows
+                idPrefix="retention-born-filter"
+                ariaLabel="Born event filter"
+                filters={bornFilters}
+                onChange={setBornFiltersFromInput}
+                propertyNames={propertyNames}
+                projectId={projectId}
               />
             </div>
-          </div>
 
-          <SegmentPicker projectId={projectId} value={segmentId} onChange={setSegmentIdFromInput} />
+            <div className="flex flex-col gap-2">
+              <EventSelectField
+                label="Return event"
+                value={returnEvent}
+                onChange={setReturnEventFromInput}
+                options={eventOptions}
+                isLoading={metaEvents.isPending}
+                placeholder="Defaults to the born event"
+                allowClear
+              />
+              <FilterRows
+                idPrefix="retention-return-filter"
+                ariaLabel="Return event filter"
+                filters={returnFilters}
+                onChange={setReturnFiltersFromInput}
+                propertyNames={propertyNames}
+                projectId={projectId}
+              />
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleRun} disabled={!canRun}>
-              {runRetention.isPending ? 'Running…' : 'Run'}
-            </Button>
-            <SaveAsReportButton
-              projectId={projectId}
-              kind="retention"
-              definition={queryDefinition}
-              disabled={!bornEvent.trim()}
-            />
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label htmlFor="retention-interval" className="mb-1 block text-sm font-medium">
+                  Interval
+                </label>
+                <select
+                  id="retention-interval"
+                  value={interval}
+                  onChange={(e) => setIntervalFromInput(e.target.value as RetentionInterval)}
+                  className={cn(fieldLook, 'w-auto')}
+                >
+                  {RETENTION_INTERVALS.map((value) => (
+                    <option key={value} value={value}>
+                      {INTERVAL_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="retention-periods" className="mb-1 block text-sm font-medium">
+                  Periods
+                </label>
+                <Input
+                  id="retention-periods"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={periods}
+                  onChange={(e) => setPeriodsFromInput(Number(e.target.value))}
+                  className="w-32"
+                />
+              </div>
+            </div>
+
+            <SegmentPicker projectId={projectId} value={segmentId} onChange={setSegmentIdFromInput} />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={handleRun} disabled={!canRun}>
+                {runRetention.isPending ? 'Running…' : 'Run'}
+              </Button>
+              <SaveAsReportButton
+                projectId={projectId}
+                kind="retention"
+                definition={queryDefinition}
+                disabled={!bornEvent.trim()}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </Reveal>
 
       {runRetention.isError && (
-        <p role="alert" className="text-danger">
-          {runRetention.error instanceof ApiError
-            ? runRetention.error.problem.title
-            : 'Failed to run retention'}
-        </p>
+        <Reveal index={1}>
+          <p role="alert" className="text-danger">
+            {runRetention.error instanceof ApiError
+              ? runRetention.error.problem.title
+              : 'Failed to run retention'}
+          </p>
+        </Reveal>
       )}
 
       {result && result.cohorts.length === 0 && (
-        <p className="text-text-muted">No cohorts for this query yet.</p>
+        <Reveal index={2}>
+          <EmptyState icon={Inbox} title="No cohorts for this query yet." />
+        </Reveal>
       )}
 
       {result && result.cohorts.length > 0 && (
-        <div className="flex flex-col gap-6">
+        <Reveal index={2} className="flex flex-col gap-6">
           <SectionGrid min={220}>
             <KpiTile
               label="Average retention"
@@ -503,24 +514,26 @@ export function RetentionPage() {
           <ChartCard title="Retention" description="Cohort retention heatmap by period.">
             <RetentionChart cohorts={result.cohorts} averages={result.averages} interval={interval} />
           </ChartCard>
-        </div>
+        </Reveal>
       )}
 
-      <ChartCard
-        title="Stickiness (DAU/MAU)"
-        description="Daily active ÷ monthly active users over the selected range — how often users come back."
-        state={chartState(engagement.isPending, engagement.isError, stickinessRows.length === 0)}
-      >
-        <ComparisonTrend
-          current={stickinessRows}
-          xKey="t"
-          valueKey="value"
-          label="Stickiness"
-          ariaLabel="Stickiness trend"
-        />
-      </ChartCard>
+      <Reveal index={3}>
+        <ChartCard
+          title="Stickiness (DAU/MAU)"
+          description="Daily active ÷ monthly active users over the selected range — how often users come back."
+          state={chartState(engagement.isPending, engagement.isError, stickinessRows.length === 0)}
+        >
+          <ComparisonTrend
+            current={stickinessRows}
+            xKey="t"
+            valueKey="value"
+            label="Stickiness"
+            ariaLabel="Stickiness trend"
+          />
+        </ChartCard>
+      </Reveal>
 
-      <div className="flex flex-col gap-6">
+      <Reveal index={4} className="flex flex-col gap-6">
         <SectionGrid min={200}>
           <KpiTile
             label="Total active users"
@@ -550,7 +563,7 @@ export function RetentionPage() {
         >
           <LifecycleChart points={newVsReturningPoints} ariaLabel="User lifecycle trend" />
         </ChartCard>
-      </div>
+      </Reveal>
     </PageShell>
   );
 }

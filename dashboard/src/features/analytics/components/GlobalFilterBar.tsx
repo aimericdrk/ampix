@@ -1,6 +1,9 @@
+import { X } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { useCloseComboboxOnOutsideClick } from '../../../components/ui/combobox';
+import { fieldLook } from '../../../components/ui/input';
+import { cn } from '../../../lib/cn';
 import type { InsightsFilter, InsightsFilterOp } from '../../../lib/api/types';
 import { INSIGHTS_FILTER_OPS } from '../../../lib/api/types';
 import { useMetaProperties } from '../api';
@@ -64,15 +67,13 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
       className="relative mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2"
     >
       {filters.length === 0 && !open && (
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
           onClick={openAdd}
-          className="font-normal text-text-muted hover:text-text"
+          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.98]"
         >
           <span aria-hidden="true">＋</span> Add a filter to scope the whole workspace
-        </Button>
+        </button>
       )}
 
       {filters.map((filter, index) => {
@@ -80,25 +81,29 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
         return (
           <span
             key={`${filter.property}-${filter.op}-${filter.value ?? ''}-${index}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg/60 px-3 py-1 text-xs"
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent"
           >
             {label}
             <button
               type="button"
               aria-label={`Remove filter ${label}`}
               onClick={() => removeFilter(index)}
-              className="text-text-muted hover:text-text"
+              className="rounded-full text-accent/70 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
-              <span aria-hidden="true">✕</span>
+              <X aria-hidden="true" size={12} />
             </button>
           </span>
         );
       })}
 
       {filters.length > 0 && (
-        <Button type="button" variant="ghost" size="sm" onClick={openAdd}>
+        <button
+          type="button"
+          onClick={openAdd}
+          className="rounded-full border border-dashed border-border-strong px-3 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.98]"
+        >
           <span aria-hidden="true">＋</span> Add filter
-        </Button>
+        </button>
       )}
 
       {filters.length > 0 && (
@@ -112,7 +117,7 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
           id={popoverId}
           role="dialog"
           aria-label="Add global filter"
-          className="absolute left-3 top-full z-30 mt-1 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface p-3 shadow-lg"
+          className="absolute left-3 top-full z-30 mt-1 flex flex-wrap items-end gap-2 rounded-xl border border-border bg-surface-raised p-3 shadow-lift"
         >
           <div>
             <label className="sr-only" htmlFor="global-filter-property">
@@ -122,7 +127,7 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
               id="global-filter-property"
               value={draftProperty}
               onChange={(e) => setDraftProperty(e.target.value)}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+              className={cn(fieldLook, 'h-9 w-auto')}
             >
               {propertyNames.map((name) => (
                 <option key={name} value={name}>
@@ -139,7 +144,7 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
               id="global-filter-op"
               value={draftOp}
               onChange={(e) => setDraftOp(e.target.value as InsightsFilterOp)}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm"
+              className={cn(fieldLook, 'h-9 w-auto')}
             >
               {INSIGHTS_FILTER_OPS.map((op) => (
                 <option key={op} value={op}>
