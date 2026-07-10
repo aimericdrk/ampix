@@ -44,8 +44,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               if (!open) dismiss(item.id);
             }}
             className={cn(
-              'rounded-md border border-border bg-surface p-4 shadow-lg',
-              item.variant === 'error' && 'border-danger',
+              'relative flex flex-col gap-1 overflow-hidden rounded-xl border border-border bg-surface-raised py-3 pl-4 pr-4 shadow-lift',
+              'before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:content-[""]',
+              item.variant === 'error' ? 'before:bg-danger' : 'before:bg-accent',
+              'data-[state=open]:animate-[slide-in-right_250ms_var(--ease-out-expo)]',
+              'data-[state=closed]:animate-[slide-in-right_200ms_ease-in_reverse]',
+              'data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)]',
+              'data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-transform',
+              'data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)]',
             )}
           >
             <ToastPrimitive.Title className="text-sm font-medium">
