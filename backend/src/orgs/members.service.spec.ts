@@ -1,314 +1,322 @@
-import { Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { startPostgresContainer } from '../../test/integration/helpers/containers';
 import { MembersService } from './members.service';
 
-const ORG_ID = 'org-1';
-const USER_1 = '018f6b2e-0000-7000-8000-000000000001';
-const USER_2 = '018f6b2e-0000-7000-8000-000000000002';
-const UNKNOWN_USER = '018f6b2e-0000-7000-8000-0000000000ff';
+// Container pull + `prisma migrate deploy` easily exceeds Jest's 5s default — see
+// project-members.service.spec.ts for the same rationale.
+jest.setTimeout(180000);
 
-interface FakePrisma {
-  membership: {
-    findMany: jest.Mock;
-    findUnique: jest.Mock;
-    count: jest.Mock;
-    update: jest.Mock;
-    delete: jest.Mock;
-  };
-  $transaction: jest.Mock;
-}
+/**
+ * SECURITY-CRITICAL: this suite exercises the last-admin and orphan-project-ownership
+ * invariants against a REAL Postgres instance (Testcontainers) rather than mocks. Both
+ * invariants rely on `remove`/`changeRole` running under SERIALIZABLE isolation to prevent
+ * write-skew (see `runSerializable` in `members.service.ts` for the full explanation) — a mock
+ * `$transaction` can't reproduce Postgres's predicate-lock-based conflict detection, so the
+ * concurrency tests below need the genuine article to be meaningful.
+ */
+describe('MembersService (real Postgres)', () => {
+  let prisma: PrismaClient;
+  let service: MembersService;
+  let container: Awaited<ReturnType<typeof startPostgresContainer>>['container'];
 
-function makePrisma(
-  overrides: { membership?: Partial<FakePrisma['membership']> } = {},
-): FakePrisma {
-  const base = {
-    membership: {
-      findMany: jest.fn().mockResolvedValue([]),
-      findUnique: jest.fn().mockResolvedValue(null),
-      count: jest.fn().mockResolvedValue(0),
-      update: jest.fn(),
-      delete: jest.fn(),
-    },
-  } as FakePrisma;
-  if (overrides.membership) Object.assign(base.membership, overrides.membership);
-  base.$transaction = jest.fn(async (fn: (tx: FakePrisma) => unknown) => fn(base));
-  return base;
-}
+  beforeAll(async () => {
+    const started = await startPostgresContainer();
+    container = started.container;
+    prisma = new PrismaClient({ datasources: { db: { url: started.url } } });
+    service = new MembersService(prisma as unknown as PrismaService);
+  });
 
-function makeService(prisma: unknown) {
-  return new MembersService(prisma as unknown as PrismaService);
-}
+  afterAll(async () => {
+    await prisma.$disconnect();
+    await container.stop();
+  });
 
-/** A `PrismaClientKnownRequestError` shaped like the real Postgres serialization failure
- *  (SQLSTATE 40001) that Postgres raises under SERIALIZABLE isolation when it detects a
- *  write-skew conflict between two concurrent transactions. */
-function serializationFailure(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError(
-    'Transaction failed due to a write conflict or a deadlock. Please retry your transaction',
-    { code: 'P2034', clientVersion: '6.8.0' },
-  );
-}
+  afterEach(async () => {
+    // Wipe in FK order so each test starts from a clean slate.
+    await prisma.projectMembership.deleteMany();
+    await prisma.project.deleteMany();
+    await prisma.membership.deleteMany();
+    await prisma.user.deleteMany();
+    await prisma.organization.deleteMany();
+  });
 
-describe('MembersService', () => {
+  async function seedOrg() {
+    return prisma.organization.create({ data: { name: 'Acme' } });
+  }
+
+  async function seedUser(email: string) {
+    return prisma.user.create({ data: { email, passwordHash: 'x', name: email } });
+  }
+
+  /** Creates a user and makes them an org member with the given role. */
+  async function seedMember(orgId: string, email: string, role: 'admin' | 'analyst' | 'viewer') {
+    const user = await seedUser(email);
+    await prisma.membership.create({ data: { userId: user.id, orgId, role } });
+    return user;
+  }
+
+  async function seedProject(orgId: string, name = 'App') {
+    return prisma.project.create({ data: { orgId, name } });
+  }
+
+  async function addProjectMembership(
+    projectId: string,
+    userId: string,
+    role: 'owner' | 'admin' | 'analyst' | 'viewer',
+  ) {
+    await prisma.projectMembership.create({ data: { projectId, userId, role } });
+  }
+
   describe('list', () => {
     it('maps memberships -> { user, role }', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findMany: jest.fn().mockResolvedValue([
-            {
-              userId: USER_1,
-              orgId: ORG_ID,
-              role: 'admin',
-              user: { id: USER_1, email: 'a@b.com', name: 'A' },
-            },
-          ]),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const admin = await seedMember(org.id, 'a@b.com', 'admin');
 
-      const members = await service.list(ORG_ID);
+      const members = await service.list(org.id);
 
-      expect(prisma.membership.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { orgId: ORG_ID } }),
-      );
       expect(members).toEqual([
-        { user: { id: USER_1, email: 'a@b.com', name: 'A' }, role: 'admin' },
+        { user: { id: admin.id, email: admin.email, name: admin.name }, role: 'admin' },
       ]);
     });
   });
 
   describe('changeRole', () => {
     it('changes the role of a non-admin member', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findUnique: jest
-            .fn()
-            .mockResolvedValue({ userId: USER_2, orgId: ORG_ID, role: 'viewer' }),
-          count: jest.fn(),
-          update: jest.fn(),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const viewer = await seedMember(org.id, 'viewer@acme.test', 'viewer');
 
-      const result = await service.changeRole(ORG_ID, USER_2, 'analyst');
+      const result = await service.changeRole(org.id, viewer.id, 'analyst');
 
-      expect(prisma.membership.count).not.toHaveBeenCalled(); // only checked for admin targets
-      expect(prisma.membership.update).toHaveBeenCalledWith({
-        where: { userId_orgId: { userId: USER_2, orgId: ORG_ID } },
-        data: { role: 'analyst' },
+      expect(result).toEqual({ user_id: viewer.id, role: 'analyst' });
+      const updated = await prisma.membership.findUnique({
+        where: { userId_orgId: { userId: viewer.id, orgId: org.id } },
       });
-      expect(result).toEqual({ user_id: USER_2, role: 'analyst' });
+      expect(updated?.role).toBe('analyst');
     });
 
     it('allows an admin -> admin "change" even when they are the only admin (no-op role)', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findUnique: jest.fn().mockResolvedValue({ userId: USER_1, orgId: ORG_ID, role: 'admin' }),
-          count: jest.fn().mockResolvedValue(1),
-          update: jest.fn(),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const admin = await seedMember(org.id, 'admin@acme.test', 'admin');
 
-      await expect(service.changeRole(ORG_ID, USER_1, 'admin')).resolves.toEqual({
-        user_id: USER_1,
+      await expect(service.changeRole(org.id, admin.id, 'admin')).resolves.toEqual({
+        user_id: admin.id,
         role: 'admin',
       });
     });
 
     it('409s when demoting the last admin — SECURITY-CRITICAL', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findUnique: jest.fn().mockResolvedValue({ userId: USER_1, orgId: ORG_ID, role: 'admin' }),
-          count: jest.fn().mockResolvedValue(1),
-          update: jest.fn(),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const admin = await seedMember(org.id, 'admin@acme.test', 'admin');
 
-      await expect(service.changeRole(ORG_ID, USER_1, 'viewer')).rejects.toMatchObject({
+      await expect(service.changeRole(org.id, admin.id, 'viewer')).rejects.toMatchObject({
         problem: { status: 409 },
       });
-      expect(prisma.membership.update).not.toHaveBeenCalled();
+      const stillAdmin = await prisma.membership.findUnique({
+        where: { userId_orgId: { userId: admin.id, orgId: org.id } },
+      });
+      expect(stillAdmin?.role).toBe('admin');
     });
 
     it('allows demoting an admin when there is another admin', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findUnique: jest.fn().mockResolvedValue({ userId: USER_1, orgId: ORG_ID, role: 'admin' }),
-          count: jest.fn().mockResolvedValue(2),
-          update: jest.fn(),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const admin = await seedMember(org.id, 'admin1@acme.test', 'admin');
+      await seedMember(org.id, 'admin2@acme.test', 'admin');
 
-      await expect(service.changeRole(ORG_ID, USER_1, 'analyst')).resolves.toEqual({
-        user_id: USER_1,
+      await expect(service.changeRole(org.id, admin.id, 'analyst')).resolves.toEqual({
+        user_id: admin.id,
         role: 'analyst',
       });
     });
 
     it('404s when the target user is not a member of the org', async () => {
-      const service = makeService(makePrisma());
-      await expect(service.changeRole(ORG_ID, UNKNOWN_USER, 'admin')).rejects.toMatchObject({
+      const org = await seedOrg();
+      const outsider = await seedUser('outsider@acme.test');
+
+      await expect(service.changeRole(org.id, outsider.id, 'admin')).rejects.toMatchObject({
         problem: { status: 404 },
       });
     });
 
     it('404s for a malformed (non-UUID-shaped) userId without querying Postgres', async () => {
-      const prisma = makePrisma();
-      const service = makeService(prisma);
+      const org = await seedOrg();
 
-      await expect(service.changeRole(ORG_ID, 'not-a-uuid', 'admin')).rejects.toMatchObject({
+      await expect(service.changeRole(org.id, 'not-a-uuid', 'admin')).rejects.toMatchObject({
         problem: { status: 404 },
       });
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(prisma.membership.findUnique).not.toHaveBeenCalled();
     });
 
     it(
-      'is atomic under a Postgres write-skew conflict — SECURITY-CRITICAL: retries once on a ' +
-        'serialization failure and then succeeds',
+      'is atomic under a genuine Postgres write-skew race — SECURITY-CRITICAL: two concurrent ' +
+        'demotions of the two co-admins must not both succeed',
       async () => {
-        const prisma = makePrisma({
-          membership: {
-            findUnique: jest
-              .fn()
-              .mockResolvedValue({ userId: USER_1, orgId: ORG_ID, role: 'admin' }),
-            count: jest.fn().mockResolvedValue(2), // another admin exists by the time we retry
-            update: jest.fn(),
-          },
-        });
-        let attempt = 0;
-        prisma.$transaction = jest.fn(async (fn: (tx: FakePrisma) => unknown) => {
-          attempt += 1;
-          if (attempt === 1) throw serializationFailure();
-          return fn(prisma);
-        });
-        const service = makeService(prisma);
+        const org = await seedOrg();
+        const adminA = await seedMember(org.id, 'admin-a@acme.test', 'admin');
+        const adminB = await seedMember(org.id, 'admin-b@acme.test', 'admin');
 
-        await expect(service.changeRole(ORG_ID, USER_1, 'viewer')).resolves.toEqual({
-          user_id: USER_1,
-          role: 'viewer',
+        const [resultA, resultB] = await Promise.allSettled([
+          service.changeRole(org.id, adminA.id, 'viewer'),
+          service.changeRole(org.id, adminB.id, 'viewer'),
+        ]);
+
+        const outcomes = [resultA, resultB];
+        const fulfilled = outcomes.filter((o) => o.status === 'fulfilled');
+        const rejected = outcomes.filter((o) => o.status === 'rejected');
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+          problem: { status: 409 },
         });
-        expect(prisma.$transaction).toHaveBeenCalledTimes(2);
-        expect(
-          (prisma.$transaction as jest.Mock).mock.calls.every(
-            ([, options]) =>
-              options?.isolationLevel === Prisma.TransactionIsolationLevel.Serializable,
-          ),
-        ).toBe(true);
+
+        const admins = await prisma.membership.count({ where: { orgId: org.id, role: 'admin' } });
+        expect(admins).toBe(1);
       },
     );
-
-    it('does not retry more than once — a SECOND serialization failure propagates', async () => {
-      const prisma = makePrisma();
-      prisma.$transaction = jest.fn(async () => {
-        throw serializationFailure();
-      });
-      const service = makeService(prisma);
-
-      await expect(service.changeRole(ORG_ID, USER_1, 'viewer')).rejects.toBeInstanceOf(
-        Prisma.PrismaClientKnownRequestError,
-      );
-      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
-    });
   });
 
   describe('remove', () => {
     it('removes a non-admin member', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findUnique: jest
-            .fn()
-            .mockResolvedValue({ userId: USER_2, orgId: ORG_ID, role: 'viewer' }),
-          count: jest.fn(),
-          delete: jest.fn(),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const viewer = await seedMember(org.id, 'viewer@acme.test', 'viewer');
 
-      await service.remove(ORG_ID, USER_2);
+      await service.remove(org.id, viewer.id);
 
-      expect(prisma.membership.count).not.toHaveBeenCalled();
-      expect(prisma.membership.delete).toHaveBeenCalledWith({
-        where: { userId_orgId: { userId: USER_2, orgId: ORG_ID } },
+      const gone = await prisma.membership.findUnique({
+        where: { userId_orgId: { userId: viewer.id, orgId: org.id } },
       });
+      expect(gone).toBeNull();
     });
 
     it('409s when removing the last admin — SECURITY-CRITICAL', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findUnique: jest.fn().mockResolvedValue({ userId: USER_1, orgId: ORG_ID, role: 'admin' }),
-          count: jest.fn().mockResolvedValue(1),
-          delete: jest.fn(),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const admin = await seedMember(org.id, 'admin@acme.test', 'admin');
 
-      await expect(service.remove(ORG_ID, USER_1)).rejects.toMatchObject({
+      await expect(service.remove(org.id, admin.id)).rejects.toMatchObject({
         problem: { status: 409 },
       });
-      expect(prisma.membership.delete).not.toHaveBeenCalled();
+      const stillThere = await prisma.membership.findUnique({
+        where: { userId_orgId: { userId: admin.id, orgId: org.id } },
+      });
+      expect(stillThere).not.toBeNull();
     });
 
     it('allows removing an admin when there is another admin', async () => {
-      const prisma = makePrisma({
-        membership: {
-          findUnique: jest.fn().mockResolvedValue({ userId: USER_1, orgId: ORG_ID, role: 'admin' }),
-          count: jest.fn().mockResolvedValue(2),
-          delete: jest.fn(),
-        },
-      });
-      const service = makeService(prisma);
+      const org = await seedOrg();
+      const admin = await seedMember(org.id, 'admin1@acme.test', 'admin');
+      await seedMember(org.id, 'admin2@acme.test', 'admin');
 
-      await expect(service.remove(ORG_ID, USER_1)).resolves.toBeUndefined();
-      expect(prisma.membership.delete).toHaveBeenCalled();
+      await expect(service.remove(org.id, admin.id)).resolves.toBeUndefined();
+      const gone = await prisma.membership.findUnique({
+        where: { userId_orgId: { userId: admin.id, orgId: org.id } },
+      });
+      expect(gone).toBeNull();
     });
 
     it('404s when the target user is not a member of the org', async () => {
-      const service = makeService(makePrisma());
-      await expect(service.remove(ORG_ID, UNKNOWN_USER)).rejects.toMatchObject({
+      const org = await seedOrg();
+      const outsider = await seedUser('outsider@acme.test');
+
+      await expect(service.remove(org.id, outsider.id)).rejects.toMatchObject({
         problem: { status: 404 },
       });
     });
 
     it('404s for a malformed (non-UUID-shaped) userId without querying Postgres', async () => {
-      const prisma = makePrisma();
-      const service = makeService(prisma);
+      const org = await seedOrg();
 
-      await expect(service.remove(ORG_ID, 'not-a-uuid')).rejects.toMatchObject({
+      await expect(service.remove(org.id, 'not-a-uuid')).rejects.toMatchObject({
         problem: { status: 404 },
       });
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(prisma.membership.findUnique).not.toHaveBeenCalled();
     });
 
     it(
-      'is atomic under a Postgres write-skew conflict — SECURITY-CRITICAL: retries once on a ' +
-        'serialization failure and then succeeds',
+      'is atomic under a genuine Postgres write-skew race — SECURITY-CRITICAL: two concurrent ' +
+        'removals of the two co-admins must not both succeed',
       async () => {
-        const prisma = makePrisma({
-          membership: {
-            findUnique: jest
-              .fn()
-              .mockResolvedValue({ userId: USER_1, orgId: ORG_ID, role: 'admin' }),
-            count: jest.fn().mockResolvedValue(2),
-            delete: jest.fn(),
-          },
-        });
-        let attempt = 0;
-        prisma.$transaction = jest.fn(async (fn: (tx: FakePrisma) => unknown) => {
-          attempt += 1;
-          if (attempt === 1) throw serializationFailure();
-          return fn(prisma);
-        });
-        const service = makeService(prisma);
+        const org = await seedOrg();
+        const adminA = await seedMember(org.id, 'admin-a@acme.test', 'admin');
+        const adminB = await seedMember(org.id, 'admin-b@acme.test', 'admin');
 
-        await expect(service.remove(ORG_ID, USER_1)).resolves.toBeUndefined();
-        expect(prisma.$transaction).toHaveBeenCalledTimes(2);
-        expect(prisma.membership.delete).toHaveBeenCalled();
+        const [resultA, resultB] = await Promise.allSettled([
+          service.remove(org.id, adminA.id),
+          service.remove(org.id, adminB.id),
+        ]);
+
+        const outcomes = [resultA, resultB];
+        const fulfilled = outcomes.filter((o) => o.status === 'fulfilled');
+        const rejected = outcomes.filter((o) => o.status === 'rejected');
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+          problem: { status: 409 },
+        });
+
+        const admins = await prisma.membership.count({ where: { orgId: org.id, role: 'admin' } });
+        expect(admins).toBe(1);
       },
     );
+
+    describe('project-ownership orphan guard', () => {
+      it('409s removing an org member who is the SOLE owner of a project in the org, and does not delete anything', async () => {
+        const org = await seedOrg();
+        const soleOwner = await seedMember(org.id, 'owner@acme.test', 'analyst');
+        const project = await seedProject(org.id);
+        await addProjectMembership(project.id, soleOwner.id, 'owner');
+
+        await expect(service.remove(org.id, soleOwner.id)).rejects.toMatchObject({
+          problem: {
+            status: 409,
+            detail:
+              'Cannot remove this member; they are the only owner of one or more projects. Reassign ownership first.',
+          },
+        });
+
+        const orgMembership = await prisma.membership.findUnique({
+          where: { userId_orgId: { userId: soleOwner.id, orgId: org.id } },
+        });
+        expect(orgMembership).not.toBeNull();
+        const projectMembership = await prisma.projectMembership.findUnique({
+          where: { userId_projectId: { userId: soleOwner.id, projectId: project.id } },
+        });
+        expect(projectMembership).not.toBeNull();
+      });
+
+      it('allows removing a co-owner (another owner exists) and cascades their project memberships in that org', async () => {
+        const org = await seedOrg();
+        const coOwner = await seedMember(org.id, 'co-owner@acme.test', 'analyst');
+        const otherOwner = await seedMember(org.id, 'other-owner@acme.test', 'analyst');
+        const project = await seedProject(org.id);
+        await addProjectMembership(project.id, coOwner.id, 'owner');
+        await addProjectMembership(project.id, otherOwner.id, 'owner');
+
+        await expect(service.remove(org.id, coOwner.id)).resolves.toBeUndefined();
+
+        const orgMembership = await prisma.membership.findUnique({
+          where: { userId_orgId: { userId: coOwner.id, orgId: org.id } },
+        });
+        expect(orgMembership).toBeNull();
+        const projectMemberships = await prisma.projectMembership.findMany({
+          where: { userId: coOwner.id, project: { orgId: org.id } },
+        });
+        expect(projectMemberships).toEqual([]);
+        // The other owner's project membership must be untouched.
+        const otherStillOwner = await prisma.projectMembership.findUnique({
+          where: { userId_projectId: { userId: otherOwner.id, projectId: project.id } },
+        });
+        expect(otherStillOwner?.role).toBe('owner');
+      });
+
+      it('allows removing a member who owns nothing (regression of existing behavior)', async () => {
+        const org = await seedOrg();
+        const member = await seedMember(org.id, 'plain@acme.test', 'analyst');
+
+        await expect(service.remove(org.id, member.id)).resolves.toBeUndefined();
+
+        const orgMembership = await prisma.membership.findUnique({
+          where: { userId_orgId: { userId: member.id, orgId: org.id } },
+        });
+        expect(orgMembership).toBeNull();
+      });
+    });
   });
 });

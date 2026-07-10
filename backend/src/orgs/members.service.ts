@@ -61,7 +61,13 @@ export class MembersService {
 
   /**
    * 404 if `targetUserId` isn't UUID-shaped or isn't a member of `orgId`; 409 if this would
-   * remove the last admin. SECURITY-CRITICAL atomicity: see {@link runSerializable}.
+   * remove the last admin, OR if this would leave any project in the org with zero owners.
+   * On success, the target's `ProjectMembership` rows for this org's projects are cascade-deleted
+   * along with the org `Membership` itself. SECURITY-CRITICAL atomicity: see
+   * {@link runSerializable}. The orphan check and cascade run INSIDE the same serializable
+   * transaction as the last-admin check for the same write-skew-safety reason (see
+   * `runSerializable`'s doc comment) — otherwise a concurrent org-member removal and project
+   * ownership change could race past both reads and leave a project permanently unmanageable.
    */
   async remove(orgId: string, targetUserId: string): Promise<void> {
     if (!isUuidShaped(targetUserId)) throw this.notFound();
@@ -76,6 +82,19 @@ export class MembersService {
             const adminCount = await tx.membership.count({ where: { orgId, role: 'admin' } });
             if (adminCount <= 1) throw this.lastAdminConflict('remove');
           }
+
+          // Projects in this org this user owns:
+          const ownedHere = await tx.projectMembership.findMany({
+            where: { userId: targetUserId, role: 'owner', project: { orgId } },
+            select: { projectId: true },
+          });
+          for (const { projectId } of ownedHere) {
+            const owners = await tx.projectMembership.count({ where: { projectId, role: 'owner' } });
+            if (owners <= 1) throw this.soleProjectOwnerConflict();
+          }
+          // Cascade: drop their project memberships in this org before removing org membership.
+          await tx.projectMembership.deleteMany({ where: { userId: targetUserId, project: { orgId } } });
+
           await tx.membership.delete({ where: { userId_orgId: { userId: targetUserId, orgId } } });
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -124,6 +143,15 @@ export class MembersService {
       status: 409,
       title: 'Conflict',
       detail: `Cannot ${action} the last admin of this organization`,
+    });
+  }
+
+  private soleProjectOwnerConflict(): ProblemException {
+    return new ProblemException({
+      status: 409,
+      title: 'Conflict',
+      detail:
+        'Cannot remove this member; they are the only owner of one or more projects. Reassign ownership first.',
     });
   }
 }
