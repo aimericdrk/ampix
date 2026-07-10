@@ -45,4 +45,21 @@ describe('KpiTile', () => {
     render(<KpiTile label="Sessions" value={100} spark={[3]} />);
     expect(document.querySelector('svg')).toBeNull();
   });
+
+  // Task 13: KpiTile is now a thin adapter over ui/stat-tile.tsx's animated StatTile — these two
+  // guard the seam between the two implementations.
+  it('renders a delta chip for a positive delta alongside the animated value', () => {
+    render(<KpiTile label="Revenue" value={2048} delta={{ pct: 5.2 }} />);
+    expect(screen.getByText('Revenue')).toBeInTheDocument();
+    expect(screen.getByText('2,048')).toBeInTheDocument();
+    expect(screen.getByText('▲')).toBeInTheDocument();
+    expect(screen.getByText(/\+5%/)).toBeInTheDocument();
+  });
+
+  it('renders a non-numeric placeholder value without crashing (no animated number to tween)', () => {
+    render(<KpiTile label="Stickiness" value="—" hint="DAU ÷ active-range ratio" />);
+    expect(screen.getByText('Stickiness')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('DAU ÷ active-range ratio')).toBeInTheDocument();
+  });
 });

@@ -17,6 +17,15 @@ export interface StatTileProps {
   icon?: LucideIcon;
   index?: number;
   className?: string;
+  /**
+   * Extra content rendered inside the card, directly after the delta row — no wrapper element,
+   * so it stays a flat descendant of the card alongside the label/value (adapters that need a
+   * hint line, a "not filtered yet" note, etc. beyond this shape's props render them here; a few
+   * page tests scope assertions by a label's or hint's containing element and rely on this
+   * flatness). Additive slot for Task 13's chart-dir adapters — kept optional so every existing
+   * caller is unaffected.
+   */
+  children?: ReactNode;
 }
 
 /** KPI card: label, animated value, optional delta badge (up/down/flat) and deltaLabel, optional
@@ -31,18 +40,23 @@ export function StatTile({
   icon: Icon,
   index,
   className,
+  children,
 }: StatTileProps) {
   return (
     <Reveal index={index}>
       <Card interactive className={cn('relative overflow-hidden p-6', className)}>
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-text-muted">{label}</span>
-          {Icon ? (
+        {Icon ? (
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-text-muted">{label}</span>
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent [&_svg]:size-4">
               <Icon aria-hidden="true" />
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <span className="block text-xs font-medium uppercase tracking-wide text-text-muted">
+            {label}
+          </span>
+        )}
         <AnimatedNumber
           value={value}
           format={format}
@@ -66,6 +80,7 @@ export function StatTile({
             {deltaLabel ? <span className="text-xs text-text-muted">{deltaLabel}</span> : null}
           </div>
         )}
+        {children}
         {sparkline ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 opacity-40">{sparkline}</div>
         ) : null}

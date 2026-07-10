@@ -1,14 +1,26 @@
 import { type ReactNode } from 'react';
 import { Card } from '../../../../components/ui/card';
+import { Reveal } from '../../../../components/ui/reveal';
 import { Skeleton } from '../../../../components/ui/Skeleton';
+import { StatTile as UiStatTile } from '../../../../components/ui/stat-tile';
 import { formatExactNumber } from '../../format';
 import { Sparkline } from './sparkline';
+
+const LABEL_CLASS = 'block text-xs font-medium uppercase tracking-wide text-text-muted';
 
 /**
  * The headline KPI primitive for Phase 1 pages: a big, full-precision number, an optional
  * sparkline for magnitude-over-time context, and a period-over-period delta chip. The delta
  * always pairs an arrow glyph with its colour (▲ accent / ▼ danger) so meaning survives
  * grayscale/CVD viewing. `loading` swaps the value and sparkline for `Skeleton` placeholders.
+ *
+ * Thin adapter over `ui/stat-tile.tsx`'s `StatTile` (Task 13): the animated number, entrance
+ * reveal, and card chrome all come from there. This component's own props (`unit`, `hint`,
+ * `loading`, `unfiltered`) have no equivalent on the generic tile, so they're composed back in
+ * via its `children` slot instead of growing its prop surface. A pre-formatted/placeholder
+ * `value` (e.g. "4m 5s", "—") isn't a number `AnimatedNumber` can tween, so that case renders a
+ * plain, unanimated value with the same layout instead of forcing it through the ui tile.
+ *
  * See `StatTile` for the lighter-weight variant (compact-formatted value, text-only delta, no
  * loading state) used where full precision and skeleton loading aren't needed.
  */
@@ -42,32 +54,60 @@ export function KpiTile({
    */
   unfiltered?: boolean;
 }) {
-  const display = typeof value === 'number' ? formatExactNumber(value) : value;
   const hasSpark = !!spark && spark.length >= 2;
+  const sparkline = hasSpark ? <Sparkline values={spark as number[]} /> : undefined;
 
-  return (
-    <Card className="p-5">
-      <p className="text-sm font-medium text-text-muted">{label}</p>
-      {loading ? (
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <Skeleton data-testid="kpi-tile-skeleton" className="h-8 w-20" />
-          {hasSpark && <Skeleton className="h-8 w-24" />}
-        </div>
-      ) : (
-        <div className="mt-1 flex items-end justify-between gap-3">
-          <p className="text-3xl font-semibold tabular-nums leading-none">
-            {display}
-            {unit && <span className="ml-1 text-base font-normal text-text-muted">{unit}</span>}
-          </p>
-          {hasSpark && <Sparkline values={spark as number[]} />}
-        </div>
-      )}
-      {!loading && delta && <DeltaChip pct={delta.pct} />}
-      {!loading && hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
-      {!loading && unfiltered && (
+  if (loading) {
+    return (
+      <Reveal>
+        <Card interactive className="relative overflow-hidden p-6">
+          <span className={LABEL_CLASS}>{label}</span>
+          <div className="mt-2 flex items-end justify-between gap-3">
+            <Skeleton data-testid="kpi-tile-skeleton" className="h-8 w-20" />
+            {hasSpark && <Skeleton className="h-8 w-24" />}
+          </div>
+        </Card>
+      </Reveal>
+    );
+  }
+
+  const extras = (
+    <>
+      {delta && <DeltaChip pct={delta.pct} />}
+      {hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
+      {unfiltered && (
         <p className="mt-1 text-xs italic text-text-muted">Headline metrics aren&apos;t filtered yet</p>
       )}
-    </Card>
+    </>
+  );
+
+  if (typeof value === 'number') {
+    return (
+      <UiStatTile
+        label={label}
+        value={value}
+        format={(n) => `${formatExactNumber(n)}${unit ? ` ${unit}` : ''}`}
+        sparkline={sparkline}
+      >
+        {extras}
+      </UiStatTile>
+    );
+  }
+
+  return (
+    <Reveal>
+      <Card interactive className="relative overflow-hidden p-6">
+        <span className={LABEL_CLASS}>{label}</span>
+        <p className="mt-2 font-display text-3xl font-semibold tabular-nums">
+          {value}
+          {unit && <span className="ml-1 text-base font-normal text-text-muted">{unit}</span>}
+        </p>
+        {extras}
+        {sparkline ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 opacity-40">{sparkline}</div>
+        ) : null}
+      </Card>
+    </Reveal>
   );
 }
 
