@@ -619,7 +619,9 @@ function DangerZoneSection({
         <CardTitle>Danger zone</CardTitle>
       </CardHeader>
       <CardContent>
-        <Banner variant="danger">
+        {/* Permanently-visible framing, not a transient alert — role="note" avoids colliding
+            with real role="alert" fetch errors elsewhere on the page. */}
+        <Banner variant="danger" role="note">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p>Deleting a project revokes its tokens. Event data already ingested is kept.</p>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -91,7 +91,8 @@ function EnableTwoFactor() {
   if (recoveryCodes) {
     return (
       <div className="space-y-4">
-        <Banner variant="warning">
+        {/* Permanently visible while this view is shown — role="note", not a live alert. */}
+        <Banner variant="warning" role="note">
           Save these recovery codes somewhere safe. Each one can be used once if you lose access
           to your authenticator app. They will not be shown again.
         </Banner>
@@ -200,7 +201,8 @@ function DisableTwoFactor() {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
-      <Banner variant="warning">
+      {/* Permanently visible while 2FA is on — role="note", not a live alert. */}
+      <Banner variant="warning" role="note">
         Two-factor authentication is currently enabled. Enter a current code to turn it off.
       </Banner>
       <div>

@@ -146,4 +146,15 @@ describe('Banner', () => {
     expect(banner).toHaveTextContent('Something broke');
     expect(banner).toHaveTextContent('Please retry the request.');
   });
+
+  it('lets static framing content override the variant role with role=note', () => {
+    render(
+      <Banner variant="danger" role="note">
+        Deleting this project cannot be undone.
+      </Banner>,
+    );
+    const banner = screen.getByRole('note');
+    expect(banner).toHaveTextContent('Deleting this project cannot be undone.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
