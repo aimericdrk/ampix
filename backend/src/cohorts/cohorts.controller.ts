@@ -13,15 +13,16 @@ import {
 import { parseOrThrow } from '../auth/auth.schemas';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
-import { Roles } from '../authz/roles.decorator';
-import { RolesGuard } from '../authz/roles.guard';
+import { ProjectRoles } from '../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../authz/project-roles.guard';
 import { cohortDefinitionSchema, createCohortSchema, updateCohortSchema } from './cohort.schema';
 import type { CohortDetail, CohortListItem, CohortPreview } from './cohort.types';
 import { CohortsService } from './cohorts.service';
 
 /**
  * Cohorts management API (contracts §16). Mounted under `/api/v1/projects/:projectId/cohorts`.
- * JWT + RolesGuard: reads viewer+, writes analyst+ (the guard resolves the org from `:projectId`).
+ * JWT + ProjectRolesGuard: reads viewer+, writes analyst+ (the guard resolves the project role from
+ * `:projectId`).
  */
 @Controller('api/v1/projects/:projectId/cohorts')
 @UseGuards(JwtAuthGuard)
@@ -29,16 +30,16 @@ export class CohortsController {
   constructor(private readonly cohorts: CohortsService) {}
 
   @Get()
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async list(@Param('projectId') projectId: string): Promise<{ cohorts: CohortListItem[] }> {
     const cohorts = await this.cohorts.list(projectId);
     return { cohorts };
   }
 
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async create(
     @Req() req: AuthRequest,
     @Param('projectId') projectId: string,
@@ -54,8 +55,8 @@ export class CohortsController {
    * never shadows / is shadowed by `@Post()` create (path `''`) or the `:id` param routes.
    */
   @Post('preview')
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   @HttpCode(200) // a read (runs the definition), not a resource creation
   async previewDefinition(
     @Param('projectId') projectId: string,
@@ -66,8 +67,8 @@ export class CohortsController {
   }
 
   @Get(':id')
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async get(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -76,8 +77,8 @@ export class CohortsController {
   }
 
   @Get(':id/preview')
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async preview(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -86,8 +87,8 @@ export class CohortsController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async update(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -98,8 +99,8 @@ export class CohortsController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   @HttpCode(204)
   async remove(
     @Param('projectId') projectId: string,

@@ -13,8 +13,8 @@ import {
 import { parseOrThrow } from '../auth/auth.schemas';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
-import { Roles } from '../authz/roles.decorator';
-import { RolesGuard } from '../authz/roles.guard';
+import { ProjectRoles } from '../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../authz/project-roles.guard';
 import {
   createDashboardSchema,
   createTileSchema,
@@ -32,7 +32,7 @@ import { DashboardsService } from './dashboards.service';
 
 /**
  * Custom dashboards management API (contracts §16). Under `/api/v1/projects/:projectId/dashboards`.
- * Reads viewer+, writes analyst+ (RolesGuard resolves the org from `:projectId`).
+ * Reads viewer+, writes analyst+ (ProjectRolesGuard resolves the project role from `:projectId`).
  */
 @Controller('api/v1/projects/:projectId/dashboards')
 @UseGuards(JwtAuthGuard)
@@ -40,16 +40,16 @@ export class DashboardsController {
   constructor(private readonly dashboards: DashboardsService) {}
 
   @Get()
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async list(@Param('projectId') projectId: string): Promise<{ dashboards: DashboardListItem[] }> {
     const dashboards = await this.dashboards.list(projectId);
     return { dashboards };
   }
 
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async create(
     @Req() req: AuthRequest,
     @Param('projectId') projectId: string,
@@ -60,8 +60,8 @@ export class DashboardsController {
   }
 
   @Get(':id')
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async get(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -70,8 +70,8 @@ export class DashboardsController {
   }
 
   @Get(':id/data')
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async data(
     @Req() req: AuthRequest,
     @Param('projectId') projectId: string,
@@ -81,8 +81,8 @@ export class DashboardsController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async update(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -93,16 +93,16 @@ export class DashboardsController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   @HttpCode(204)
   async remove(@Param('projectId') projectId: string, @Param('id') id: string): Promise<void> {
     await this.dashboards.remove(projectId, id);
   }
 
   @Patch(':id/layout')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async saveLayout(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -113,8 +113,8 @@ export class DashboardsController {
   }
 
   @Post(':id/tiles')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async createTile(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -125,8 +125,8 @@ export class DashboardsController {
   }
 
   @Patch(':id/tiles/:tileId')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async updateTile(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -138,8 +138,8 @@ export class DashboardsController {
   }
 
   @Delete(':id/tiles/:tileId')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   @HttpCode(204)
   async removeTile(
     @Param('projectId') projectId: string,

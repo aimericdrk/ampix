@@ -13,8 +13,8 @@ import {
 import { parseOrThrow } from '../auth/auth.schemas';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
-import { Roles } from '../authz/roles.decorator';
-import { RolesGuard } from '../authz/roles.guard';
+import { ProjectRoles } from '../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../authz/project-roles.guard';
 import { createTokenSchema, updateProjectSchema } from './project-management.schemas';
 import { ProjectManagementService } from './project-management.service';
 import type { CreatedToken, SdkTokenListItem, UpdatedProject } from './project-management.types';
@@ -44,8 +44,8 @@ export class ProjectsController {
   }
 
   @Patch(':projectId')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
   async update(
     @Param('projectId') projectId: string,
     @Body() body: unknown,
@@ -55,24 +55,24 @@ export class ProjectsController {
   }
 
   @Delete(':projectId')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('owner')
   @HttpCode(204)
   async remove(@Param('projectId') projectId: string): Promise<void> {
     await this.projectManagement.remove(projectId);
   }
 
   @Get(':projectId/tokens')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
   async listTokens(@Param('projectId') projectId: string): Promise<{ tokens: SdkTokenListItem[] }> {
     const tokens = await this.projectManagement.listTokens(projectId);
     return { tokens };
   }
 
   @Post(':projectId/tokens')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
   async createToken(
     @Param('projectId') projectId: string,
     @Body() body: unknown,
@@ -82,8 +82,8 @@ export class ProjectsController {
   }
 
   @Delete(':projectId/tokens/:tokenId')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
   @HttpCode(204)
   async revokeToken(
     @Param('projectId') projectId: string,

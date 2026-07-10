@@ -14,8 +14,8 @@ import {
 import { parseOrThrow } from '../auth/auth.schemas';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
-import { Roles } from '../authz/roles.decorator';
-import { RolesGuard } from '../authz/roles.guard';
+import { ProjectRoles } from '../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../authz/project-roles.guard';
 import type { AnalysisResult } from './analysis-runner.service';
 import {
   createReportSchema,
@@ -28,8 +28,8 @@ import { ReportsService } from './reports.service';
 
 /**
  * Saved-reports management API (contracts §16). Under `/api/v1/projects/:projectId/reports`.
- * Reads viewer+, writes analyst+ (RolesGuard resolves the org from `:projectId`). `/run` is a
- * viewer+ read that executes the stored definition through the engine.
+ * Reads viewer+, writes analyst+ (ProjectRolesGuard resolves the project role from `:projectId`).
+ * `/run` is a viewer+ read that executes the stored definition through the engine.
  */
 @Controller('api/v1/projects/:projectId/reports')
 @UseGuards(JwtAuthGuard)
@@ -37,8 +37,8 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get()
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async list(
     @Param('projectId') projectId: string,
     @Query('kind') kind?: string,
@@ -49,8 +49,8 @@ export class ReportsController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async create(
     @Req() req: AuthRequest,
     @Param('projectId') projectId: string,
@@ -61,8 +61,8 @@ export class ReportsController {
   }
 
   @Get(':id')
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async get(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -72,8 +72,8 @@ export class ReportsController {
 
   @Post(':id/run')
   @HttpCode(200)
-  @UseGuards(RolesGuard)
-  @Roles('viewer')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('viewer')
   async run(
     @Req() req: AuthRequest,
     @Param('projectId') projectId: string,
@@ -85,8 +85,8 @@ export class ReportsController {
   }
 
   @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   async update(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
@@ -97,8 +97,8 @@ export class ReportsController {
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   @HttpCode(204)
   async remove(
     @Param('projectId') projectId: string,

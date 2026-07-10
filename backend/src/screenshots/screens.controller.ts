@@ -11,8 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../authz/roles.decorator';
-import { RolesGuard } from '../authz/roles.guard';
+import { ProjectRoles } from '../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../authz/project-roles.guard';
 import type { AuthRequest } from '../auth/auth.types';
 import { ScreenListItem, ScreenshotsService } from './screenshots.service';
 
@@ -56,12 +56,12 @@ export class ScreensController {
 
   /**
    * §18 retake/delete — removes a screen's reference image(s): all versions, or one when
-   * `app_version` is given. Analyst+ (destructive), via RolesGuard resolving the org from
-   * `:projectId`. `204` even if nothing matched.
+   * `app_version` is given. Analyst+ (destructive), via ProjectRolesGuard resolving the project
+   * role from `:projectId`. `204` even if nothing matched.
    */
   @Delete(':screenName')
-  @UseGuards(RolesGuard)
-  @Roles('analyst')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
   @HttpCode(204)
   async remove(
     @Param('projectId') projectId: string,
