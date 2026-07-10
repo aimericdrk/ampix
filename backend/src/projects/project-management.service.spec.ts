@@ -8,6 +8,7 @@ interface FakeProject {
   orgId: string;
   name: string;
   timezone: string;
+  createdById?: string;
 }
 
 interface FakeSdkToken {
@@ -19,9 +20,16 @@ interface FakeSdkToken {
   createdAt: Date;
 }
 
+interface FakeProjectMembership {
+  userId: string;
+  projectId: string;
+  role: string;
+}
+
 class FakePrisma {
   projects: FakeProject[] = [];
   sdkTokens: FakeSdkToken[] = [];
+  projectMemberships: FakeProjectMembership[] = [];
   private nextProjectId = 0;
   private nextTokenId = 0;
 
@@ -65,6 +73,13 @@ class FakePrisma {
     },
   };
 
+  projectMembership = {
+    create: async ({ data }: { data: FakeProjectMembership }) => {
+      this.projectMemberships.push({ ...data });
+      return data;
+    },
+  };
+
   $transaction = async <T>(fn: (tx: this) => Promise<T>): Promise<T> => fn(this);
 }
 
@@ -85,7 +100,7 @@ describe('ProjectManagementService', () => {
       const prisma = new FakePrisma();
       const { service } = makeService(prisma);
 
-      const created = await service.createForOrg('org-1', 'New App', 'Europe/Paris');
+      const created = await service.createForOrg('org-1', 'New App', 'user-1', 'Europe/Paris');
 
       expect(created).toMatchObject({ org_id: 'org-1', name: 'New App', timezone: 'Europe/Paris' });
       expect(created.ingest_token).toMatch(/^mam_[0-9a-f]{32}$/);
@@ -99,8 +114,20 @@ describe('ProjectManagementService', () => {
     it('defaults timezone to UTC when omitted', async () => {
       const prisma = new FakePrisma();
       const { service } = makeService(prisma);
-      const created = await service.createForOrg('org-1', 'New App');
+      const created = await service.createForOrg('org-1', 'New App', 'user-1');
       expect(created.timezone).toBe('UTC');
+    });
+
+    it('sets createdById to the creating user and grants them an owner ProjectMembership — otherwise the creator would be locked out under the per-project access model', async () => {
+      const prisma = new FakePrisma();
+      const { service } = makeService(prisma);
+
+      const created = await service.createForOrg('org-1', 'New App', 'user-1');
+
+      expect(prisma.projects[0].createdById).toBe('user-1');
+      expect(prisma.projectMemberships).toEqual([
+        { userId: 'user-1', projectId: created.id, role: 'owner' },
+      ]);
     });
   });
 

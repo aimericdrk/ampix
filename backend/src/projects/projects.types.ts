@@ -1,3 +1,5 @@
+import type { ProjectRole } from '@prisma/client';
+
 /** GET /api/v1/projects list item (contracts §12). */
 export interface ProjectListItem {
   id: string;
@@ -6,6 +8,7 @@ export interface ProjectListItem {
   name: string;
   timezone: string;
   ingest_token: string | null;
+  role: ProjectRole;
 }
 
 /** GET /api/v1/projects/:projectId/events/summary response (contracts §12). */

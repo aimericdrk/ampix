@@ -1,5 +1,6 @@
-import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { parseOrThrow } from '../auth/auth.schemas';
+import type { AuthRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../authz/roles.decorator';
 import { RolesGuard } from '../authz/roles.guard';
@@ -15,8 +16,12 @@ export class ProjectManagementController {
   constructor(private readonly projectManagement: ProjectManagementService) {}
 
   @Post()
-  async create(@Param('orgId') orgId: string, @Body() body: unknown): Promise<CreatedProject> {
+  async create(
+    @Param('orgId') orgId: string,
+    @Body() body: unknown,
+    @Req() req: AuthRequest,
+  ): Promise<CreatedProject> {
     const dto = parseOrThrow(createProjectSchema, body);
-    return this.projectManagement.createForOrg(orgId, dto.name, dto.timezone);
+    return this.projectManagement.createForOrg(orgId, dto.name, req.user!.id, dto.timezone);
   }
 }

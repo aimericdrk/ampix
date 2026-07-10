@@ -46,9 +46,10 @@ export class AuthService {
   /**
    * Creates the user and, in the SAME transaction (contracts §12), provisions their default
    * workspace: an Organization ("<name>'s Workspace"), an admin Membership linking the user to
-   * it, a "Default" Project (UTC), and an ingest SdkToken for that project. A brand-new account
-   * therefore always has exactly one org/project/token to instrument against. The signup
-   * RESPONSE shape (access_token + user) is unchanged by this.
+   * it, a "Default" Project (UTC) with an owner ProjectMembership for that same user (per-project
+   * access model — org membership alone no longer grants project access), and an ingest SdkToken
+   * for that project. A brand-new account therefore always has exactly one org/project/token to
+   * instrument against. The signup RESPONSE shape (access_token + user) is unchanged by this.
    */
   async signup(dto: SignupDto): Promise<Session> {
     const email = dto.email.toLowerCase();
@@ -60,7 +61,10 @@ export class AuthService {
         const org = await tx.organization.create({ data: { name: `${dto.name}'s Workspace` } });
         await tx.membership.create({ data: { userId: created.id, orgId: org.id, role: 'admin' } });
         const project = await tx.project.create({
-          data: { orgId: org.id, name: 'Default', timezone: 'UTC' },
+          data: { orgId: org.id, name: 'Default', timezone: 'UTC', createdById: created.id },
+        });
+        await tx.projectMembership.create({
+          data: { userId: created.id, projectId: project.id, role: 'owner' },
         });
         await tx.sdkToken.create({
           data: { projectId: project.id, token: generateSdkToken(), label: 'default' },

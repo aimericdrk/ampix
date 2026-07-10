@@ -30,7 +30,9 @@ class FakePrisma {
   users: User[] = [];
   organizations: { id: string; name: string }[] = [];
   memberships: { userId: string; orgId: string; role: string }[] = [];
-  projects: { id: string; orgId: string; name: string; timezone: string }[] = [];
+  projects: { id: string; orgId: string; name: string; timezone: string; createdById?: string }[] =
+    [];
+  projectMemberships: { userId: string; projectId: string; role: string }[] = [];
   sdkTokens: { id: string; projectId: string; token: string; label: string; revokedAt: null }[] =
     [];
   refreshTokens: {
@@ -86,10 +88,21 @@ class FakePrisma {
   };
 
   project = {
-    create: async ({ data }: { data: { orgId: string; name: string; timezone: string } }) => {
+    create: async ({
+      data,
+    }: {
+      data: { orgId: string; name: string; timezone: string; createdById?: string };
+    }) => {
       const project = { id: `project-${this.nextProjectId++}`, ...data };
       this.projects.push(project);
       return project;
+    },
+  };
+
+  projectMembership = {
+    create: async ({ data }: { data: { userId: string; projectId: string; role: string } }) => {
+      this.projectMemberships.push({ ...data });
+      return data;
     },
   };
 
@@ -156,7 +169,7 @@ describe('AuthService', () => {
       expect(prisma.users[0].passwordHash).not.toBe('password1');
     });
 
-    it('provisions a default workspace (org, admin membership, Default project, sdk token) — contracts §12', async () => {
+    it('provisions a default workspace (org, admin membership, Default project + owner ProjectMembership, sdk token) — contracts §12', async () => {
       const { service, prisma } = makeService();
       const session = await service.signup({
         email: 'workspace@example.com',
@@ -176,7 +189,15 @@ describe('AuthService', () => {
         orgId: prisma.organizations[0].id,
         name: 'Default',
         timezone: 'UTC',
+        createdById: session.user.id,
       });
+
+      // Per-project access model: org membership alone no longer grants project access, so the
+      // creator must also get an owner ProjectMembership — otherwise they'd be locked out of the
+      // very project signup just created for them.
+      expect(prisma.projectMemberships).toEqual([
+        { userId: session.user.id, projectId: prisma.projects[0].id, role: 'owner' },
+      ]);
 
       expect(prisma.sdkTokens).toHaveLength(1);
       expect(prisma.sdkTokens[0]).toMatchObject({

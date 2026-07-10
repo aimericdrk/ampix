@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { ProjectRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
@@ -15,7 +16,8 @@ interface ChEventCountRow {
 
 /**
  * Projects listing + minimal analytics read (contracts §12). A user may only ever see
- * orgs/projects/data for organizations they hold a Membership in.
+ * projects/data for projects they hold a ProjectMembership in — org membership alone is no
+ * longer sufficient (per-project access model).
  */
 @Injectable()
 export class ProjectsService {
@@ -24,37 +26,33 @@ export class ProjectsService {
     private readonly clickhouse: ClickHouseService,
   ) {}
 
-  /** All projects across every org the authenticated user is a member of. */
+  /** Every project the authenticated user directly holds a ProjectMembership on. */
   async listForUser(userId: string): Promise<ProjectListItem[]> {
-    const memberships = await this.prisma.membership.findMany({
+    const memberships = await this.prisma.projectMembership.findMany({
       where: { userId },
       include: {
-        org: {
+        project: {
           include: {
-            projects: {
-              include: {
-                sdkTokens: {
-                  where: { revokedAt: null },
-                  orderBy: { createdAt: 'desc' },
-                  take: 1,
-                },
-              },
+            org: true,
+            sdkTokens: {
+              where: { revokedAt: null },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
             },
           },
         },
       },
     });
 
-    return memberships.flatMap((membership) =>
-      membership.org.projects.map((project) => ({
-        id: project.id,
-        org_id: membership.org.id,
-        org_name: membership.org.name,
-        name: project.name,
-        timezone: project.timezone,
-        ingest_token: project.sdkTokens[0]?.token ?? null,
-      })),
-    );
+    return memberships.map((m) => ({
+      id: m.project.id,
+      org_id: m.project.org.id,
+      org_name: m.project.org.name,
+      name: m.project.name,
+      timezone: m.project.timezone,
+      ingest_token: m.project.sdkTokens[0]?.token ?? null,
+      role: m.role,
+    }));
   }
 
   /**
@@ -80,17 +78,16 @@ export class ProjectsService {
   }
 
   /**
-   * Throws 404 if the project doesn't exist at all; 403 if it exists but `userId` isn't a member
-   * of its org. SECURITY-CRITICAL: this is the only gate standing between a member of org A and
-   * org B's data, so it always re-derives the project's actual `orgId` from Postgres and checks
-   * membership against THAT org — never trusts a client-supplied org id.
+   * Throws 404 if the project doesn't exist at all; 403 if it exists but `userId` doesn't hold a
+   * ProjectMembership on it — org membership is no longer sufficient. SECURITY-CRITICAL: this is
+   * the only gate standing between a member of one project and another project's data (even
+   * within the SAME org), so it always re-derives the project's existence from Postgres and
+   * checks membership against THAT project — never trusts a client-supplied id.
    *
-   * Public (not private) so other read-only, viewer+-gated modules can reuse it verbatim instead
-   * of duplicating the check — e.g. AnalyticsService (contracts §14: "reuse
-   * ProjectsService.assertMembership ... for viewer+"). Any Membership row already implies
-   * viewer-or-higher access; there is no lower tier to distinguish.
+   * Returns the caller's `ProjectRole` so callers that need to distinguish roles (e.g. owner-only
+   * actions) can do so without a second query.
    */
-  async assertMembership(userId: string, projectId: string): Promise<void> {
+  async resolveProjectRole(userId: string, projectId: string): Promise<ProjectRole> {
     if (!UUID_SHAPE.test(projectId)) {
       throw this.notFound();
     }
@@ -98,12 +95,23 @@ export class ProjectsService {
     if (!project) {
       throw this.notFound();
     }
-    const membership = await this.prisma.membership.findUnique({
-      where: { userId_orgId: { userId, orgId: project.orgId } },
+    const membership = await this.prisma.projectMembership.findUnique({
+      where: { userId_projectId: { userId, projectId } },
     });
     if (!membership) {
       throw this.forbidden();
     }
+    return membership.role;
+  }
+
+  /**
+   * Public (not private) so other read-only, viewer+-gated modules can reuse it verbatim instead
+   * of duplicating the check — e.g. AnalyticsService (contracts §14: "reuse
+   * ProjectsService.assertMembership ... for viewer+"). Any ProjectMembership row already implies
+   * viewer-or-higher access; there is no lower tier to distinguish.
+   */
+  async assertMembership(userId: string, projectId: string): Promise<void> {
+    await this.resolveProjectRole(userId, projectId);
   }
 
   private notFound(): ProblemException {
@@ -114,7 +122,7 @@ export class ProjectsService {
     return new ProblemException({
       status: 403,
       title: 'Forbidden',
-      detail: 'Project belongs to an organization you are not a member of',
+      detail: 'You are not a member of this project',
     });
   }
 }

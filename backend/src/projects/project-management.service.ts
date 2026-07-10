@@ -29,15 +29,27 @@ export class ProjectManagementService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  /** Creates the project + an initial ingest SdkToken, atomically. */
-  async createForOrg(orgId: string, name: string, timezone?: string): Promise<CreatedProject> {
+  /**
+   * Creates the project + an initial ingest SdkToken, atomically, and makes `userId` (the
+   * creator) an `owner` ProjectMembership on it — otherwise an org admin who creates a project
+   * would immediately be locked out of it under the per-project access model.
+   */
+  async createForOrg(
+    orgId: string,
+    name: string,
+    userId: string,
+    timezone?: string,
+  ): Promise<CreatedProject> {
     const token = generateSdkToken();
     const project = await this.prisma.$transaction(async (tx) => {
       const created = await tx.project.create({
-        data: { orgId, name, timezone: timezone ?? 'UTC' },
+        data: { orgId, name, timezone: timezone ?? 'UTC', createdById: userId },
       });
       await tx.sdkToken.create({
         data: { projectId: created.id, token, label: DEFAULT_TOKEN_LABEL },
+      });
+      await tx.projectMembership.create({
+        data: { userId, projectId: created.id, role: 'owner' },
       });
       return created;
     });
