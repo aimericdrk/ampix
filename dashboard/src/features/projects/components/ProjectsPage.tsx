@@ -20,7 +20,7 @@ export function ProjectsPage() {
   const { data, isPending, error } = useProjects();
   const currentOrgId = useCurrentOrgId();
   const role = useOrgRole(currentOrgId ?? undefined);
-  const canCreate = role === 'admin';
+  const canCreate = role === 'admin' || role === 'owner';
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // `GET /projects` returns every project across ALL the user's orgs (each
