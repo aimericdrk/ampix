@@ -102,7 +102,7 @@ describe('ProjectMembersController', () => {
       const body = await controller.changeRole(req as any, 'project-1', 'u2', { role: 'analyst' });
 
       expect(resolver.resolveProjectRole).toHaveBeenCalledWith('actor-1', 'project-1');
-      expect(members.changeRole).toHaveBeenCalledWith('project-1', 'owner', 'u2', 'analyst');
+      expect(members.changeRole).toHaveBeenCalledWith('project-1', 'actor-1', 'owner', 'u2', 'analyst');
       expect(body).toEqual({ user_id: 'u2', role: 'analyst' });
     });
 
