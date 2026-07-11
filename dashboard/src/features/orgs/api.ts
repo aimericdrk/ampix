@@ -10,8 +10,11 @@ import type {
   ListInvitationsResponse,
   ListMembersResponse,
   ListOrgsResponse,
+  ListProjectAccessResponse,
+  OrgRole,
   RenameOrgRequest,
   RenameOrgResponse,
+  SetProjectAccessRequest,
   UpdateMemberRoleRequest,
 } from '../../lib/api/types';
 
@@ -128,5 +131,50 @@ export function getInvitationPreview(token: string): Promise<InvitationPreview> 
 export function acceptInvitation(token: string): Promise<AcceptInvitationResponse> {
   return apiFetch<AcceptInvitationResponse>(`/api/v1/invitations/${token}/accept`, {
     method: 'POST',
+  });
+}
+
+// --- Org-scoped per-project access + ownership transfer (org owner role) ---
+
+export function useMemberProjectAccess(orgId: string, userId: string | null) {
+  return useQuery({
+    queryKey: ['orgs', orgId, 'members', userId, 'project-access'],
+    enabled: userId !== null,
+    queryFn: () =>
+      apiFetch<ListProjectAccessResponse>(
+        `/api/v1/orgs/${orgId}/members/${userId}/project-access`,
+      ),
+  });
+}
+
+export function useSetMemberProjectAccess(orgId: string, userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, role }: { projectId: string } & SetProjectAccessRequest) =>
+      apiFetch<{ projectId: string; role: OrgRole | null }>(
+        `/api/v1/orgs/${orgId}/members/${userId}/project-access/${projectId}`,
+        { method: 'PUT', body: { role } },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['orgs', orgId, 'members', userId, 'project-access'],
+      });
+    },
+  });
+}
+
+/** Transfer ownership to `userId`. On success the caller drops to admin — refresh orgs + members. */
+export function useTransferOwnership(orgId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<void>(`/api/v1/orgs/${orgId}/members/${userId}`, {
+        method: 'PATCH',
+        body: { role: 'owner' },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['orgs', orgId, 'members'] });
+      void queryClient.invalidateQueries({ queryKey: ORGS_QUERY_KEY });
+    },
   });
 }

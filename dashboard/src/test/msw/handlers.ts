@@ -31,6 +31,7 @@ import type {
   InsightsQueryDefinition,
   InsightsSeries,
   ListInvitationsResponse,
+  ListProjectAccessResponse,
   ListProjectMembersResponse,
   RetentionQueryDefinition,
   RetentionResponse,
@@ -561,7 +562,7 @@ function checkCode(email: string, code: string | undefined): boolean {
 
 // --- Tenancy management fixtures (contracts §13) ---
 
-/** Ada's Workspace — TEST_USER is admin, MFA_USER is analyst. Matches TEST_PROJECT.org_id/org_name. */
+/** Ada's Workspace — TEST_USER is owner, MFA_USER is analyst. Matches TEST_PROJECT.org_id/org_name. */
 export const TEST_ORG_ID = TEST_PROJECT.org_id;
 export const TEST_ORG_NAME = TEST_PROJECT.org_name;
 
@@ -635,7 +636,7 @@ function initialOrgsState() {
       { id: INVITE_ONLY_ORG_ID, name: INVITE_ONLY_ORG_NAME },
     ] as OrgRecord[],
     memberships: [
-      { orgId: TEST_ORG_ID, user: TEST_USER, role: 'admin' as OrgRole },
+      { orgId: TEST_ORG_ID, user: TEST_USER, role: 'owner' as OrgRole },
       { orgId: TEST_ORG_ID, user: MFA_USER, role: 'analyst' as OrgRole },
       { orgId: TEST_ORG_ID, user: THIRD_ORG_USER, role: 'viewer' as OrgRole },
       { orgId: VIEWER_ORG_ID, user: TEST_USER, role: 'viewer' as OrgRole },
@@ -716,8 +717,9 @@ function roleFor(orgId: string, userId: string): OrgRole | undefined {
   return orgsState.memberships.find((m) => m.orgId === orgId && m.user.id === userId)?.role;
 }
 
-function adminCount(orgId: string): number {
-  return orgsState.memberships.filter((m) => m.orgId === orgId && m.role === 'admin').length;
+/** Rank-based admin-or-above check (owner > admin > analyst > viewer) — mirrors RolesGuard('admin'). */
+function isAdminOrOwner(role: OrgRole | undefined): boolean {
+  return role === 'admin' || role === 'owner';
 }
 
 function orgById(orgId: string): OrgRecord | undefined {
@@ -750,6 +752,17 @@ function projectRoleFor(projectId: string, orgId: string, userId: string): Proje
 function ownerCountFor(projectId: string): number {
   return orgsState.projectMemberships.filter((m) => m.projectId === projectId && m.role === 'owner')
     .length;
+}
+
+/**
+ * A target user's EXPLICIT project role only (no org-role/owner-derived fallback) — mirrors
+ * OrgProjectAccessService.list()/set(), which reason purely over ProjectMembership rows.
+ */
+function explicitProjectRole(projectId: string, userId: string): ProjectRole | null {
+  return (
+    orgsState.projectMemberships.find((m) => m.projectId === projectId && m.user.id === userId)
+      ?.role ?? null
+  );
 }
 
 function toProject(record: ProjectRecord, callerId: string): Project {
@@ -921,8 +934,8 @@ export const handlers = [
     }
     const org: OrgRecord = { id: nextId('org'), name: body.name.trim() };
     orgsState.orgs.push(org);
-    orgsState.memberships.push({ orgId: org.id, user, role: 'admin' });
-    const response: CreateOrgResponse = { id: org.id, name: org.name, role: 'admin' };
+    orgsState.memberships.push({ orgId: org.id, user, role: 'owner' });
+    const response: CreateOrgResponse = { id: org.id, name: org.name, role: 'owner' };
     return HttpResponse.json(response, { status: 201 });
   }),
 
@@ -945,7 +958,7 @@ export const handlers = [
     if (!org) return problem(404, 'Organization not found');
     const role = roleFor(orgId, user.id);
     if (!role) return problem(403, 'Not a member of this organization');
-    if (role !== 'admin') return problem(403, 'Only admins can rename the organization');
+    if (!isAdminOrOwner(role)) return problem(403, 'Only admins can rename the organization');
     const body = (await request.json()) as { name?: string };
     if (!body.name?.trim()) {
       return problem(400, 'Validation failed', { errors: { name: ['required'] } });
@@ -979,16 +992,35 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can change member roles');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can change member roles');
     const membership = orgsState.memberships.find(
       (m) => m.orgId === orgId && m.user.id === targetUserId,
     );
     if (!membership) return problem(404, 'Member not found');
     const body = (await request.json()) as { role?: OrgRole };
     if (!body.role) return problem(400, 'Validation failed', { errors: { role: ['required'] } });
-    if (membership.role === 'admin' && body.role !== 'admin' && adminCount(orgId) <= 1) {
-      return problem(409, 'Cannot demote the last admin');
+
+    if (body.role === 'owner') {
+      // Ownership transfer: only the current owner may initiate it. Atomic: target -> owner,
+      // caller -> admin. No-op (still owner) if the target already is the owner.
+      if (callerRole !== 'owner') {
+        return problem(403, 'Only the current owner can transfer ownership');
+      }
+      if (membership.role !== 'owner') {
+        const currentOwner = orgsState.memberships.find(
+          (m) => m.orgId === orgId && m.user.id === caller.id,
+        );
+        if (currentOwner) currentOwner.role = 'admin';
+        membership.role = 'owner';
+      }
+      return HttpResponse.json({ id: membership.user.id, role: membership.role });
     }
+
+    // The current owner's role can never be changed directly — transfer only.
+    if (membership.role === 'owner') {
+      return problem(409, "Cannot change the owner's role directly; transfer ownership instead");
+    }
+
     membership.role = body.role;
     // apiFetch always parses non-204 responses as JSON — an empty body would throw client-side.
     return HttpResponse.json({ id: membership.user.id, role: membership.role });
@@ -1002,19 +1034,96 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can remove members');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can remove members');
     const membership = orgsState.memberships.find(
       (m) => m.orgId === orgId && m.user.id === targetUserId,
     );
     if (!membership) return problem(404, 'Member not found');
-    if (membership.role === 'admin' && adminCount(orgId) <= 1) {
-      return problem(409, 'Cannot remove the last admin');
+    if (membership.role === 'owner') {
+      return problem(409, 'Cannot remove the organization owner; transfer ownership first');
     }
     orgsState.memberships = orgsState.memberships.filter(
       (m) => !(m.orgId === orgId && m.user.id === targetUserId),
     );
     return new HttpResponse(null, { status: 204 });
   }),
+
+  // --- Org-scoped per-project access (org owner role) ---
+
+  http.get('/api/v1/orgs/:orgId/members/:userId/project-access', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    const targetUserId = params.userId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can view project access');
+    const response: ListProjectAccessResponse = {
+      projects: orgsState.projects
+        .filter((p) => p.orgId === orgId)
+        .map((p) => ({
+          projectId: p.id,
+          name: p.name,
+          role: explicitProjectRole(p.id, targetUserId),
+        })),
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.put(
+    '/api/v1/orgs/:orgId/members/:userId/project-access/:projectId',
+    async ({ request, params }) => {
+      const caller = userForToken(bearerToken(request));
+      if (!caller) return problem(401, 'Access token invalid or expired');
+      const orgId = params.orgId as string;
+      const targetUserId = params.userId as string;
+      const projectId = params.projectId as string;
+      if (!orgById(orgId)) return problem(404, 'Organization not found');
+      const callerRole = roleFor(orgId, caller.id);
+      if (!callerRole) return problem(403, 'Not a member of this organization');
+      if (!isAdminOrOwner(callerRole)) {
+        return problem(403, 'Only admins can manage project access');
+      }
+      // Self-escalation guard: an admin can't manage their own project access; owner is exempt.
+      if (callerRole !== 'owner' && targetUserId === caller.id) {
+        return problem(403, 'Admins cannot change their own project access');
+      }
+      const record = projectRecordById(projectId);
+      if (!record || record.orgId !== orgId) return problem(404, 'Project not found');
+
+      const body = (await request.json()) as { role?: 'viewer' | 'analyst' | 'admin' | null };
+      const newRole = body.role ?? null;
+
+      const existing = orgsState.projectMemberships.find(
+        (m) => m.projectId === projectId && m.user.id === targetUserId,
+      );
+      // Project-owner rows are immutable to admin callers (owner-safety, mirrors ProjectMembersService).
+      if (existing?.role === 'owner' && callerRole !== 'owner') {
+        return problem(403, 'Only owners can change the owner role');
+      }
+
+      if (newRole === null) {
+        if (existing) {
+          orgsState.projectMemberships = orgsState.projectMemberships.filter(
+            (m) => !(m.projectId === projectId && m.user.id === targetUserId),
+          );
+        }
+        return HttpResponse.json({ projectId, role: null });
+      }
+
+      if (existing) {
+        existing.role = newRole;
+      } else {
+        const orgMembership = orgsState.memberships.find(
+          (m) => m.orgId === orgId && m.user.id === targetUserId,
+        );
+        if (!orgMembership) return problem(404, 'User is not a member of this organization');
+        orgsState.projectMemberships.push({ projectId, user: orgMembership.user, role: newRole });
+      }
+      return HttpResponse.json({ projectId, role: newRole });
+    },
+  ),
 
   // --- Invitations (contracts §13) ---
 
@@ -1025,7 +1134,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can create invitations');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create invitations');
     const body = (await request.json()) as { role?: OrgRole };
     if (!body.role) return problem(400, 'Validation failed', { errors: { role: ['required'] } });
     const invitation: InvitationRecord = {
@@ -1054,7 +1163,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can list invitations');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can list invitations');
     const now = Date.now();
     const invitations: Invitation[] = orgsState.invitations
       .filter(
@@ -1072,7 +1181,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can revoke invitations');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can revoke invitations');
     const invitationId = params.invitationId as string;
     const exists = orgsState.invitations.some(
       (inv) => inv.id === invitationId && inv.orgId === orgId,
@@ -1160,7 +1269,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can create projects');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create projects');
     const body = (await request.json()) as { name?: string; timezone?: string };
     if (!body.name?.trim()) {
       return problem(400, 'Validation failed', { errors: { name: ['required'] } });
@@ -1199,7 +1308,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can update the project');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can update the project');
     const body = (await request.json()) as { name?: string; timezone?: string };
     if (body.name?.trim()) record.name = body.name.trim();
     if (body.timezone?.trim()) record.timezone = body.timezone.trim();
@@ -1219,7 +1328,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can delete the project');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can delete the project');
     orgsState.projects = orgsState.projects.filter((p) => p.id !== projectId);
     orgsState.tokens = orgsState.tokens.filter((t) => t.projectId !== projectId);
     return new HttpResponse(null, { status: 204 });
@@ -1344,7 +1453,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can view tokens');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can view tokens');
     const response: ListTokensResponse = {
       tokens: orgsState.tokens
         .filter((t) => t.projectId === projectId && !t.revoked)
@@ -1361,7 +1470,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can create tokens');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create tokens');
     const body = (await request.json()) as { label?: string };
     const token: TokenRecord = {
       id: nextId('token'),
@@ -1384,7 +1493,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can revoke tokens');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can revoke tokens');
     const tokenId = params.tokenId as string;
     const token = orgsState.tokens.find((t) => t.id === tokenId && t.projectId === projectId);
     if (!token) return problem(404, 'Token not found');

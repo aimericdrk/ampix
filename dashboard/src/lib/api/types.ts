@@ -108,9 +108,10 @@ export interface Disable2faRequest {
 
 // --- Tenancy management (contracts §13) ---
 
-/** Role matrix (contracts §13): admin > analyst > viewer. */
-export type OrgRole = 'admin' | 'analyst' | 'viewer';
+/** Role matrix: owner > admin > analyst > viewer. `owner` is reached only via creation/transfer. */
+export type OrgRole = 'owner' | 'admin' | 'analyst' | 'viewer';
 
+/** Roles assignable via the org role dropdown / invitations — owner is NOT here (transfer only). */
 export const ORG_ROLES: OrgRole[] = ['admin', 'analyst', 'viewer'];
 
 /** An org as seen by the caller, with their own role in it. */
@@ -194,6 +195,22 @@ export interface UpdateProjectMemberRoleRequest {
 export interface UpdatedProjectMember {
   user_id: string;
   role: ProjectRole;
+}
+
+// --- Org-scoped per-project access (org owner role) ---
+
+export interface ProjectAccessItem {
+  projectId: string;
+  name: string;
+  role: ProjectRole | null;
+}
+
+export interface ListProjectAccessResponse {
+  projects: ProjectAccessItem[];
+}
+
+export interface SetProjectAccessRequest {
+  role: 'viewer' | 'analyst' | 'admin' | null;
 }
 
 export interface UpdateMemberRoleRequest {
