@@ -60,7 +60,8 @@ describe('Tenancy management (e2e, contracts §13)', () => {
         .send({ name: 'Acme' })
         .expect(201);
 
-      expect(res.body).toEqual({ id: expect.any(String), name: 'Acme', role: 'admin' });
+      // The creator becomes org `owner` (Tasks 1–2, org-owner-role plan) — ranks above `admin`.
+      expect(res.body).toEqual({ id: expect.any(String), name: 'Acme', role: 'owner' });
       orgId = res.body.id;
     });
 
@@ -70,7 +71,7 @@ describe('Tenancy management (e2e, contracts §13)', () => {
         .set('Authorization', auth(admin.accessToken))
         .expect(200);
       expect(res.body.orgs).toEqual(
-        expect.arrayContaining([{ id: orgId, name: 'Acme', role: 'admin' }]),
+        expect.arrayContaining([{ id: orgId, name: 'Acme', role: 'owner' }]),
       );
     });
 
@@ -286,8 +287,15 @@ describe('Tenancy management (e2e, contracts §13)', () => {
       30_000,
     );
 
-    describe('last-admin protection (SECURITY-CRITICAL)', () => {
-      it('cannot demote the sole admin -> 409', async () => {
+    /**
+     * `admin` in this describe block is the ORG CREATOR — per the org-owner-role plan (Tasks 1–2,
+     * already shipped), the creator's Membership role is `owner`, not `admin`. Owner protection
+     * replaces the old last-admin guard entirely (Task 4): the owner's role can never be changed
+     * or removed directly (only via an atomic ownership transfer), while a non-owner admin is now
+     * freely demotable/removable even as the org's only admin — there is no last-admin guard left.
+     */
+    describe('owner protection (SECURITY-CRITICAL)', () => {
+      it('cannot demote the owner directly -> 409 (must transfer ownership instead)', async () => {
         await request(stack.app.getHttpServer())
           .patch(`/api/v1/orgs/${orgId}/members/${admin.userId}`)
           .set('Authorization', auth(admin.accessToken))
@@ -295,92 +303,110 @@ describe('Tenancy management (e2e, contracts §13)', () => {
           .expect(409);
       });
 
-      it('cannot remove the sole admin -> 409', async () => {
+      it('cannot remove the owner -> 409', async () => {
         await request(stack.app.getHttpServer())
           .delete(`/api/v1/orgs/${orgId}/members/${admin.userId}`)
           .set('Authorization', auth(admin.accessToken))
           .expect(409);
       });
 
-      it('once a second admin exists, the first admin CAN be demoted/removed', async () => {
-        const http = stack.app.getHttpServer();
-        await request(http)
-          .patch(`/api/v1/orgs/${orgId}/members/${viewer.userId}`)
-          .set('Authorization', auth(admin.accessToken))
-          .send({ role: 'admin' })
-          .expect(200);
+      it(
+        'the owner stays immutable even once a second admin exists; that non-owner admin, by ' +
+          'contrast, CAN be freely demoted — there is no last-admin guard anymore',
+        async () => {
+          const http = stack.app.getHttpServer();
+          await request(http)
+            .patch(`/api/v1/orgs/${orgId}/members/${viewer.userId}`)
+            .set('Authorization', auth(admin.accessToken))
+            .send({ role: 'admin' })
+            .expect(200);
 
-        await request(http)
-          .patch(`/api/v1/orgs/${orgId}/members/${admin.userId}`)
-          .set('Authorization', auth(admin.accessToken))
-          .send({ role: 'viewer' })
-          .expect(200);
+          // admin.userId is this org's OWNER (the creator) — still 409, regardless of how many
+          // other admins exist.
+          await request(http)
+            .patch(`/api/v1/orgs/${orgId}/members/${admin.userId}`)
+            .set('Authorization', auth(admin.accessToken))
+            .send({ role: 'viewer' })
+            .expect(409);
 
-        // Restore: promote the original admin back so later tests in this block are unaffected.
-        await request(http)
-          .patch(`/api/v1/orgs/${orgId}/members/${admin.userId}`)
-          .set('Authorization', auth(viewer.accessToken))
-          .send({ role: 'admin' })
-          .expect(200);
-      });
+          // viewer.userId, now a plain (non-owner) admin, has no such protection.
+          await request(http)
+            .patch(`/api/v1/orgs/${orgId}/members/${viewer.userId}`)
+            .set('Authorization', auth(admin.accessToken))
+            .send({ role: 'viewer' })
+            .expect(200);
+
+          // Restore: promote back to admin so later tests in this block are unaffected.
+          await request(http)
+            .patch(`/api/v1/orgs/${orgId}/members/${viewer.userId}`)
+            .set('Authorization', auth(admin.accessToken))
+            .send({ role: 'admin' })
+            .expect(200);
+        },
+      );
 
       it(
-        'TOCTOU regression: two admins racing to demote EACH OTHER at the same instant never ' +
-          'leave the org with zero admins — exactly one demotion wins, the other 409s',
+        'TOCTOU regression: the owner racing to transfer ownership to two different members at ' +
+          'the same instant never leaves the org with zero or two owners — exactly one transfer ' +
+          'wins, the other is rejected',
         async () => {
           const http = stack.app.getHttpServer();
 
-          // Fresh org, isolated from the shared `orgId`/`admin`/`viewer` state above, with
-          // exactly two admins so the race has a real invariant to violate if unguarded.
-          const adminA = await signup(stack, uniqueEmail());
+          const raceOwner = await signup(stack, uniqueEmail());
           const raceOrg = await request(http)
             .post('/api/v1/orgs')
-            .set('Authorization', auth(adminA.accessToken))
-            .send({ name: 'Race Org' })
+            .set('Authorization', auth(raceOwner.accessToken))
+            .send({ name: 'Transfer Race Org' })
             .expect(201);
           const raceOrgId = raceOrg.body.id as string;
 
-          const invite = await request(http)
+          const inviteA = await request(http)
             .post(`/api/v1/orgs/${raceOrgId}/invitations`)
-            .set('Authorization', auth(adminA.accessToken))
+            .set('Authorization', auth(raceOwner.accessToken))
             .send({ role: 'viewer' })
             .expect(201);
-          const adminB = await signup(stack, uniqueEmail());
+          const candidateA = await signup(stack, uniqueEmail());
           await request(http)
-            .post(`/api/v1/invitations/${invite.body.token}/accept`)
-            .set('Authorization', auth(adminB.accessToken))
+            .post(`/api/v1/invitations/${inviteA.body.token}/accept`)
+            .set('Authorization', auth(candidateA.accessToken))
             .expect(200);
-          await request(http)
-            .patch(`/api/v1/orgs/${raceOrgId}/members/${adminB.userId}`)
-            .set('Authorization', auth(adminA.accessToken))
-            .send({ role: 'admin' })
-            .expect(200);
-          // Exactly two admins now: adminA, adminB.
 
-          // Fire both demotions concurrently against the SAME real Postgres — before the fix,
-          // both requests could independently observe "2 admins" and both succeed, stranding
-          // the org with zero.
+          const inviteB = await request(http)
+            .post(`/api/v1/orgs/${raceOrgId}/invitations`)
+            .set('Authorization', auth(raceOwner.accessToken))
+            .send({ role: 'viewer' })
+            .expect(201);
+          const candidateB = await signup(stack, uniqueEmail());
+          await request(http)
+            .post(`/api/v1/invitations/${inviteB.body.token}/accept`)
+            .set('Authorization', auth(candidateB.accessToken))
+            .expect(200);
+          // raceOwner is the sole owner; candidateA and candidateB are both plain viewers.
+
+          // Fire both transfers concurrently against the SAME real Postgres, both initiated by
+          // the (at-that-instant) current owner — before the fix, both could independently
+          // observe "I am the owner" and both succeed, stranding the org with two owners.
           const [resA, resB] = await Promise.all([
             request(http)
-              .patch(`/api/v1/orgs/${raceOrgId}/members/${adminA.userId}`)
-              .set('Authorization', auth(adminA.accessToken))
-              .send({ role: 'viewer' }),
+              .patch(`/api/v1/orgs/${raceOrgId}/members/${candidateA.userId}`)
+              .set('Authorization', auth(raceOwner.accessToken))
+              .send({ role: 'owner' }),
             request(http)
-              .patch(`/api/v1/orgs/${raceOrgId}/members/${adminB.userId}`)
-              .set('Authorization', auth(adminB.accessToken))
-              .send({ role: 'viewer' }),
+              .patch(`/api/v1/orgs/${raceOrgId}/members/${candidateB.userId}`)
+              .set('Authorization', auth(raceOwner.accessToken))
+              .send({ role: 'owner' }),
           ]);
 
-          expect([resA.status, resB.status].sort()).toEqual([200, 409]);
+          expect([resA.status, resB.status].sort()).toEqual([200, 403]);
+          const winner = resA.status === 200 ? candidateA : candidateB;
 
           const members = await request(http)
             .get(`/api/v1/orgs/${raceOrgId}/members`)
-            .set('Authorization', auth(adminA.accessToken))
+            .set('Authorization', auth(raceOwner.accessToken))
             .expect(200);
-          const adminCount = members.body.members.filter(
-            (m: { role: string }) => m.role === 'admin',
-          ).length;
-          expect(adminCount).toBe(1); // never 0, never 2
+          const owners = members.body.members.filter((m: { role: string }) => m.role === 'owner');
+          expect(owners).toHaveLength(1); // never 0, never 2
+          expect(owners[0].user.id).toBe(winner.userId);
         },
         30_000,
       );
@@ -525,6 +551,133 @@ describe('Tenancy management (e2e, contracts §13)', () => {
           .get(`/api/v1/projects/${visProjectId}/dashboards`)
           .set('Authorization', auth(second.accessToken))
           .expect(200);
+      },
+    );
+  });
+
+  /**
+   * Org `owner` role (Tasks 1–5): the org creator becomes org `owner`, which ranks above `admin`
+   * and carries DERIVED access to every project in the org — no `ProjectMembership` row required.
+   * Separately, an owner/admin can grant a specific member per-project access from org settings
+   * via `PUT /api/v1/orgs/:orgId/members/:userId/project-access/:projectId`.
+   */
+  describe('org owner role: derived project access + org-scoped project-access grants', () => {
+    it(
+      'an org owner reads a project they were never explicitly added to (no ProjectMembership row)',
+      async () => {
+        const http = stack.app.getHttpServer();
+
+        const owner = await signup(stack, uniqueEmail());
+        const orgRes = await request(http)
+          .post('/api/v1/orgs')
+          .set('Authorization', auth(owner.accessToken))
+          .send({ name: 'Owner Org' })
+          .expect(201);
+        expect(orgRes.body.role).toBe('owner');
+        const ownerOrgId = orgRes.body.id as string;
+
+        const projectRes = await request(http)
+          .post(`/api/v1/orgs/${ownerOrgId}/projects`)
+          .set('Authorization', auth(owner.accessToken))
+          .send({ name: 'Owner Derived Project' })
+          .expect(201);
+        const ownerProjectId = projectRes.body.id as string;
+
+        // The creator DOES get an explicit ProjectMembership row on project creation (see the
+        // per-project-visibility block above, where the creator shows up as project role
+        // 'owner'). To exercise the DERIVED-access seam specifically — an org owner reading a
+        // project they hold NO ProjectMembership row for — remove that row directly and confirm
+        // access is preserved purely via org-owner derivation.
+        await stack.prisma.projectMembership.delete({
+          where: { userId_projectId: { userId: owner.userId, projectId: ownerProjectId } },
+        });
+
+        const rows = await stack.prisma.projectMembership.findMany({
+          where: { userId: owner.userId, projectId: ownerProjectId },
+        });
+        expect(rows).toHaveLength(0);
+
+        await request(http)
+          .get(`/api/v1/projects/${ownerProjectId}/events/summary`)
+          .set('Authorization', auth(owner.accessToken))
+          .expect(200);
+      },
+    );
+
+    it(
+      'an org admin grants a member viewer access to a project via org settings, and the member ' +
+        'goes from 403 to 200 on that project',
+      async () => {
+        const http = stack.app.getHttpServer();
+
+        const owner = await signup(stack, uniqueEmail());
+        const orgRes = await request(http)
+          .post('/api/v1/orgs')
+          .set('Authorization', auth(owner.accessToken))
+          .send({ name: 'Grant Org' })
+          .expect(201);
+        const grantOrgId = orgRes.body.id as string;
+
+        const projectRes = await request(http)
+          .post(`/api/v1/orgs/${grantOrgId}/projects`)
+          .set('Authorization', auth(owner.accessToken))
+          .send({ name: 'Grant Project' })
+          .expect(201);
+        const grantProjectId = projectRes.body.id as string;
+
+        // A second org member, promoted to org ADMIN, will do the granting.
+        const adminInvite = await request(http)
+          .post(`/api/v1/orgs/${grantOrgId}/invitations`)
+          .set('Authorization', auth(owner.accessToken))
+          .send({ role: 'admin' })
+          .expect(201);
+        const admin = await signup(stack, uniqueEmail());
+        await request(http)
+          .post(`/api/v1/invitations/${adminInvite.body.token}/accept`)
+          .set('Authorization', auth(admin.accessToken))
+          .expect(200);
+
+        // A third org member — the target of the grant — has no project access yet.
+        const memberInvite = await request(http)
+          .post(`/api/v1/orgs/${grantOrgId}/invitations`)
+          .set('Authorization', auth(owner.accessToken))
+          .send({ role: 'viewer' })
+          .expect(201);
+        const member = await signup(stack, uniqueEmail());
+        await request(http)
+          .post(`/api/v1/invitations/${memberInvite.body.token}/accept`)
+          .set('Authorization', auth(member.accessToken))
+          .expect(200);
+
+        // Before the grant: 403, not just absent from the listing.
+        await request(http)
+          .get(`/api/v1/projects/${grantProjectId}/events/summary`)
+          .set('Authorization', auth(member.accessToken))
+          .expect(403);
+
+        const grantRes = await request(http)
+          .put(`/api/v1/orgs/${grantOrgId}/members/${member.userId}/project-access/${grantProjectId}`)
+          .set('Authorization', auth(admin.accessToken))
+          .send({ role: 'viewer' })
+          .expect(200);
+        expect(grantRes.body).toEqual({ projectId: grantProjectId, role: 'viewer' });
+
+        // After the grant: 200.
+        await request(http)
+          .get(`/api/v1/projects/${grantProjectId}/events/summary`)
+          .set('Authorization', auth(member.accessToken))
+          .expect(200);
+
+        // GET .../project-access reflects the grant too (admin-only listing route).
+        const listRes = await request(http)
+          .get(`/api/v1/orgs/${grantOrgId}/members/${member.userId}/project-access`)
+          .set('Authorization', auth(admin.accessToken))
+          .expect(200);
+        expect(listRes.body.projects).toEqual(
+          expect.arrayContaining([
+            { projectId: grantProjectId, name: 'Grant Project', role: 'viewer' },
+          ]),
+        );
       },
     );
   });
