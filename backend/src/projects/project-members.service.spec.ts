@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { startPostgresContainer } from '../../test/integration/helpers/containers';
 import { ProjectMembersService } from './project-members.service';
+import { MembersService } from '../orgs/members.service';
 
 // Container pull + `prisma migrate deploy` easily exceeds Jest's 5s default — see
 // project-membership-backfill.spec.ts for the same rationale.
@@ -296,6 +297,56 @@ describe('ProjectMembersService (real Postgres)', () => {
         });
 
         findUniqueSpy.mockRestore();
+      },
+    );
+
+    it(
+      'never leaves a ProjectMembership for a user whose org Membership was concurrently ' +
+        'removed — SECURITY-CRITICAL: this is the write-skew race the whole-branch review ' +
+        "flagged (add's org-check-then-create vs. the org removal's serializable cascade). " +
+        "Like the last-owner race test above, this doesn't force a specific interleaving — it " +
+        'fires both operations concurrently against the real Postgres instance and relies on ' +
+        'SSI + runSerializable retries to make the outcome deterministic either way.',
+      async () => {
+        const { org, project } = await seedOrgAndProject();
+        await seedMember(org.id, project.id, 'owner@acme.test', 'admin', 'owner');
+        // A second org admin so the removal below never trips the last-admin guard itself and
+        // the race under test stays isolated to the add/remove interleaving.
+        await seedMember(org.id, project.id, 'admin2@acme.test', 'admin', 'admin');
+        // The target is an org member but NOT yet a project member — exactly the state `add`
+        // and a concurrent org-member removal race over.
+        const target = await seedMember(org.id, project.id, 'target@acme.test', 'viewer');
+
+        const membersService = new MembersService(prisma as unknown as PrismaService);
+
+        const [addResult, removeResult] = await Promise.allSettled([
+          service.add(project.id, 'owner', target.id, 'analyst'),
+          membersService.remove(org.id, target.id),
+        ]);
+
+        // Target is neither the last admin nor a project owner, so the org removal must always
+        // succeed regardless of how it interleaves with `add`.
+        expect(removeResult.status).toBe('fulfilled');
+
+        const orgMembership = await prisma.membership.findUnique({
+          where: { userId_orgId: { userId: target.id, orgId: org.id } },
+        });
+        const projectMembership = await prisma.projectMembership.findUnique({
+          where: { userId_projectId: { userId: target.id, projectId: project.id } },
+        });
+
+        // The invariant this feature depends on: ProjectMembership implies org Membership. The
+        // org Membership is gone (removal always wins eventually), so the project membership
+        // must be gone too — whether `add` lost the race outright (404, no longer an org member
+        // once its serializable retry re-read the state) or won it and was then cascade-deleted
+        // by the removal's own serializable transaction.
+        expect(orgMembership).toBeNull();
+        expect(projectMembership).toBeNull();
+        if (addResult.status === 'rejected') {
+          expect(addResult.reason).toMatchObject({
+            problem: { status: 404, detail: 'User is not a member of this organization' },
+          });
+        }
       },
     );
   });

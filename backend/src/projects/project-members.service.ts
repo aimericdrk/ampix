@@ -35,32 +35,48 @@ export class ProjectMembersService {
     }
   }
 
+  /**
+   * SECURITY-CRITICAL atomicity: the org-membership re-check, the existing-project-member check,
+   * and the `create()` all run inside ONE Serializable transaction (see {@link runSerializable}
+   * for the write-skew rationale). Without this, `add`'s org-membership read and its `create()`
+   * are two separate READ COMMITTED statements — a concurrent org-member removal (which runs
+   * SERIALIZABLE itself and cascade-deletes ProjectMemberships, see `orgs/members.service.ts`)
+   * can commit in between: `add` reads "org member: yes", the removal deletes the org Membership
+   * and cascades away any ProjectMembership, then `add`'s `create()` commits anyway — minting a
+   * ProjectMembership for someone who is no longer an org member, violating this feature's core
+   * invariant "project member ⇒ org member". Postgres SSI only detects that conflict when BOTH
+   * sides are serializable, so `add` must be serializable too.
+   */
   async add(projectId: string, actorRole: ProjectRole, targetUserId: string, role: ProjectRole): Promise<UpdatedProjectMember> {
     if (!isUuidShaped(targetUserId)) throw this.userNotFound();
     this.assertMayTouch(actorRole, null, role);
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw this.projectNotFound();
-    const orgMembership = await this.prisma.membership.findUnique({
-      where: { userId_orgId: { userId: targetUserId, orgId: project.orgId } },
-    });
-    if (!orgMembership) throw this.notOrgMember();
-    // `add` only ADDS. Re-roling an existing member must go through changeRole so the owner /
-    // last-owner guards apply — otherwise an admin could demote an owner via this endpoint.
-    const existing = await this.prisma.projectMembership.findUnique({
-      where: { userId_projectId: { userId: targetUserId, projectId } },
-    });
-    if (existing) throw this.alreadyMember();
-    // The pre-check above gives the clean 409 in the common case, but it and the create() below
-    // are not atomic: two concurrent adds of the same (userId, projectId) both pass the check,
-    // then one loses the PK unique constraint (Prisma P2002). Map that to the same 409 so the
-    // race surfaces as a Conflict rather than a raw 500.
-    try {
-      await this.prisma.projectMembership.create({ data: { userId: targetUserId, projectId, role } });
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw this.alreadyMember();
-      throw err;
-    }
-    return { user_id: targetUserId, role };
+    return this.runSerializable(() =>
+      this.prisma.$transaction(async (tx) => {
+        const orgMembership = await tx.membership.findUnique({
+          where: { userId_orgId: { userId: targetUserId, orgId: project.orgId } },
+        });
+        if (!orgMembership) throw this.notOrgMember();
+        // `add` only ADDS. Re-roling an existing member must go through changeRole so the owner /
+        // last-owner guards apply — otherwise an admin could demote an owner via this endpoint.
+        const existing = await tx.projectMembership.findUnique({
+          where: { userId_projectId: { userId: targetUserId, projectId } },
+        });
+        if (existing) throw this.alreadyMember();
+        // The pre-check above gives the clean 409 in the common case. A concurrent same-key
+        // insert is normally caught by Postgres SSI first (surfacing as a P2034 serialization
+        // failure, retried once by runSerializable) but keep the P2002 catch too for safety —
+        // e.g. if isolation is ever weakened, or the unique-constraint race wins the timing.
+        try {
+          await tx.projectMembership.create({ data: { userId: targetUserId, projectId, role } });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw this.alreadyMember();
+          throw err;
+        }
+        return { user_id: targetUserId, role };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
   }
 
   async changeRole(projectId: string, actorRole: ProjectRole, targetUserId: string, newRole: ProjectRole): Promise<UpdatedProjectMember> {

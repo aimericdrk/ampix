@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
@@ -14,6 +15,9 @@ import type {
 } from './project-management.types';
 
 const DEFAULT_TOKEN_LABEL = 'default';
+/** Prisma's error code for a Postgres serialization failure (SQLSTATE 40001) surfaced from an
+ *  interactive transaction — see {@link ProjectManagementService.runSerializable}. */
+const SERIALIZATION_FAILURE_CODE = 'P2034';
 
 /**
  * Project + SDK-token management (contracts §13). `orgId`/`projectId` route params are assumed
@@ -33,6 +37,15 @@ export class ProjectManagementService {
    * Creates the project + an initial ingest SdkToken, atomically, and makes `userId` (the
    * creator) an `owner` ProjectMembership on it — otherwise an org admin who creates a project
    * would immediately be locked out of it under the per-project access model.
+   *
+   * SECURITY: runs Serializable (see {@link runSerializable}) for the same reason `add` in
+   * `ProjectMembersService` does — the creator has already passed the org RolesGuard in this
+   * same request, so the window is much narrower than a stale pre-check, but the theoretical race
+   * is identical in shape: a concurrent org-member removal (SERIALIZABLE, cascades
+   * ProjectMemberships) could otherwise interleave with a READ COMMITTED create and leave an
+   * `owner` ProjectMembership for a caller whose org Membership no longer exists. Serializable
+   * isolation here means Postgres SSI detects that conflict against the removal's transaction
+   * just like it does for `add`.
    */
   async createForOrg(
     orgId: string,
@@ -41,18 +54,23 @@ export class ProjectManagementService {
     timezone?: string,
   ): Promise<CreatedProject> {
     const token = generateSdkToken();
-    const project = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.project.create({
-        data: { orgId, name, timezone: timezone ?? 'UTC', createdById: userId },
-      });
-      await tx.sdkToken.create({
-        data: { projectId: created.id, token, label: DEFAULT_TOKEN_LABEL },
-      });
-      await tx.projectMembership.create({
-        data: { userId, projectId: created.id, role: 'owner' },
-      });
-      return created;
-    });
+    const project = await this.runSerializable(() =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const created = await tx.project.create({
+            data: { orgId, name, timezone: timezone ?? 'UTC', createdById: userId },
+          });
+          await tx.sdkToken.create({
+            data: { projectId: created.id, token, label: DEFAULT_TOKEN_LABEL },
+          });
+          await tx.projectMembership.create({
+            data: { userId, projectId: created.id, role: 'owner' },
+          });
+          return created;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
     return {
       id: project.id,
       org_id: project.orgId,
@@ -127,6 +145,22 @@ export class ProjectManagementService {
     } catch {
       // Cache unavailable — the guard's Postgres fallback (on cache miss) still enforces
       // revocation correctly; only the eventual-consistency window (<=60s) is affected.
+    }
+  }
+
+  /**
+   * Runs `run` (a full `$transaction(...)` call) and retries it EXACTLY ONCE if Postgres aborts
+   * it with a serialization failure — see the identical helper (and its full write-skew
+   * rationale) in `orgs/members.service.ts` and `projects/project-members.service.ts`.
+   */
+  private async runSerializable<T>(run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === SERIALIZATION_FAILURE_CODE) {
+        return run();
+      }
+      throw err;
     }
   }
 
