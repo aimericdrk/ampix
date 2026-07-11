@@ -388,7 +388,6 @@ function TransferOwnershipDialog({
 
   useEffect(() => {
     if (open) setUserId(candidates[0]?.user.id ?? '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleTransfer = () => {
