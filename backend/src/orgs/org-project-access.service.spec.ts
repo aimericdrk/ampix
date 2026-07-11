@@ -161,5 +161,17 @@ describe('OrgProjectAccessService (real Postgres)', () => {
         service.set(org.id, admin.id, 'admin', target.id, otherOrgProject.id, 'viewer'),
       ).rejects.toMatchObject({ problem: { status: 404 } });
     });
+
+    it('404s (not 500) when the projectId is malformed — short-circuits before Postgres', async () => {
+      const org = await seedOrg();
+      const admin = await seedMember(org.id, 'admin@acme.test', 'admin');
+      const target = await seedMember(org.id, 'target@acme.test', 'analyst');
+
+      // A non-uuid-shaped projectId must NOT reach Postgres (which would throw on the bad uuid
+      // literal and surface as a generic 500) — it short-circuits to a 404 via isUuidShaped.
+      await expect(
+        service.set(org.id, admin.id, 'admin', target.id, 'not-a-uuid', 'viewer'),
+      ).rejects.toMatchObject({ problem: { status: 404 } });
+    });
   });
 });
