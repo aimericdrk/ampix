@@ -64,7 +64,7 @@ describe('MembersService (unit — mocked Prisma)', () => {
       });
       const service = makeService(prisma);
 
-      await expect(service.changeRole(ORG_ID, USER_1, 'viewer')).rejects.toBeInstanceOf(
+      await expect(service.changeRole(ORG_ID, USER_1, USER_1, 'viewer')).rejects.toBeInstanceOf(
         Prisma.PrismaClientKnownRequestError,
       );
       expect(prisma.$transaction).toHaveBeenCalledTimes(2);
@@ -76,9 +76,11 @@ describe('MembersService (unit — mocked Prisma)', () => {
       const prisma = makePrisma();
       const service = makeService(prisma);
 
-      await expect(service.changeRole(ORG_ID, 'not-a-uuid', 'admin')).rejects.toMatchObject({
-        problem: { status: 404 },
-      });
+      await expect(service.changeRole(ORG_ID, USER_1, 'not-a-uuid', 'admin')).rejects.toMatchObject(
+        {
+          problem: { status: 404 },
+        },
+      );
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.membership.findUnique).not.toHaveBeenCalled();
     });

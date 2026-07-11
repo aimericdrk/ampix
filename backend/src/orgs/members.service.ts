@@ -12,9 +12,11 @@ const SERIALIZATION_FAILURE_CODE = 'P2034';
 
 /**
  * Org member listing/role-change/removal (contracts §13). `orgId` is assumed already validated
- * to exist (RolesGuard resolved it before the controller method ran). The last-admin protections
- * here are SECURITY-CRITICAL: without them an org could be left with zero admins, permanently
- * locking every member out of admin-only mutations.
+ * to exist (RolesGuard resolved it before the controller method ran). Ownership is enforced as
+ * "exactly one owner, transferable only by the current owner" — the owner's row can never be
+ * changed or removed directly, only handed off atomically via `changeRole(..., 'owner')`. There
+ * is no last-admin guard: the protected owner always outranks admin, so the org can never be
+ * locked out of admin-only mutations.
  */
 @Injectable()
 export class MembersService {
@@ -32,22 +34,48 @@ export class MembersService {
   }
 
   /**
-   * 404 if `targetUserId` isn't UUID-shaped or isn't a member of `orgId`; 409 if this would
-   * demote the last admin. SECURITY-CRITICAL atomicity: see {@link runSerializable}.
+   * 404 if `targetUserId` isn't UUID-shaped or isn't a member of `orgId`.
+   * `newRole === 'owner'` is an ATOMIC OWNERSHIP TRANSFER: only the current owner (`actorUserId`)
+   * may initiate it; the target becomes owner and the current owner is demoted to admin in one
+   * serializable transaction, preserving "exactly one owner". The current owner's row can never be
+   * changed directly (transfer only) — 409. There is no last-admin guard: a protected owner always
+   * outranks admin, so the org can't be locked out. SECURITY-CRITICAL atomicity: see runSerializable.
    */
-  async changeRole(orgId: string, targetUserId: string, newRole: Role): Promise<UpdatedMember> {
+  async changeRole(
+    orgId: string,
+    actorUserId: string,
+    targetUserId: string,
+    newRole: Role,
+  ): Promise<UpdatedMember> {
     if (!isUuidShaped(targetUserId)) throw this.notFound();
     return this.runSerializable(() =>
       this.prisma.$transaction(
         async (tx) => {
-          const membership = await tx.membership.findUnique({
+          const target = await tx.membership.findUnique({
             where: { userId_orgId: { userId: targetUserId, orgId } },
           });
-          if (!membership) throw this.notFound();
-          if (membership.role === 'admin' && newRole !== 'admin') {
-            const adminCount = await tx.membership.count({ where: { orgId, role: 'admin' } });
-            if (adminCount <= 1) throw this.lastAdminConflict('demote');
+          if (!target) throw this.notFound();
+
+          if (newRole === 'owner') {
+            // Transfer: actor must be the current owner.
+            const actor = await tx.membership.findUnique({
+              where: { userId_orgId: { userId: actorUserId, orgId } },
+            });
+            if (!actor || actor.role !== 'owner') throw this.transferForbidden();
+            if (target.role === 'owner') return { user_id: targetUserId, role: 'owner' as Role };
+            await tx.membership.update({
+              where: { userId_orgId: { userId: actorUserId, orgId } },
+              data: { role: 'admin' },
+            });
+            await tx.membership.update({
+              where: { userId_orgId: { userId: targetUserId, orgId } },
+              data: { role: 'owner' },
+            });
+            return { user_id: targetUserId, role: 'owner' as Role };
           }
+
+          // Non-transfer change: the current owner's role can't be set directly.
+          if (target.role === 'owner') throw this.ownerImmutable('change');
           await tx.membership.update({
             where: { userId_orgId: { userId: targetUserId, orgId } },
             data: { role: newRole },
@@ -61,11 +89,11 @@ export class MembersService {
 
   /**
    * 404 if `targetUserId` isn't UUID-shaped or isn't a member of `orgId`; 409 if this would
-   * remove the last admin, OR if this would leave any project in the org with zero owners.
-   * On success, the target's `ProjectMembership` rows for this org's projects are cascade-deleted
-   * along with the org `Membership` itself. SECURITY-CRITICAL atomicity: see
-   * {@link runSerializable}. The orphan check and cascade run INSIDE the same serializable
-   * transaction as the last-admin check for the same write-skew-safety reason (see
+   * remove the current owner (transfer ownership first), OR if this would leave any project in
+   * the org with zero owners. On success, the target's `ProjectMembership` rows for this org's
+   * projects are cascade-deleted along with the org `Membership` itself. SECURITY-CRITICAL
+   * atomicity: see {@link runSerializable}. The orphan check and cascade run INSIDE the same
+   * serializable transaction as the owner check for the same write-skew-safety reason (see
    * `runSerializable`'s doc comment) — otherwise a concurrent org-member removal and project
    * ownership change could race past both reads and leave a project permanently unmanageable.
    */
@@ -78,10 +106,7 @@ export class MembersService {
             where: { userId_orgId: { userId: targetUserId, orgId } },
           });
           if (!membership) throw this.notFound();
-          if (membership.role === 'admin') {
-            const adminCount = await tx.membership.count({ where: { orgId, role: 'admin' } });
-            if (adminCount <= 1) throw this.lastAdminConflict('remove');
-          }
+          if (membership.role === 'owner') throw this.ownerImmutable('remove');
 
           // Projects in this org this user owns:
           const ownedHere = await tx.projectMembership.findMany({
@@ -138,11 +163,22 @@ export class MembersService {
     return new ProblemException({ status: 404, title: 'Not Found', detail: 'Member not found' });
   }
 
-  private lastAdminConflict(action: 'demote' | 'remove'): ProblemException {
+  private transferForbidden(): ProblemException {
+    return new ProblemException({
+      status: 403,
+      title: 'Forbidden',
+      detail: 'Only the current owner can transfer ownership',
+    });
+  }
+
+  private ownerImmutable(action: 'change' | 'remove'): ProblemException {
     return new ProblemException({
       status: 409,
       title: 'Conflict',
-      detail: `Cannot ${action} the last admin of this organization`,
+      detail:
+        action === 'remove'
+          ? 'Cannot remove the organization owner; transfer ownership first'
+          : "Cannot change the owner's role directly; transfer ownership instead",
     });
   }
 

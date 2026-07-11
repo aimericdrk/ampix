@@ -1,5 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { parseOrThrow } from '../auth/auth.schemas';
+import type { AuthRequest } from '../auth/auth.types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../authz/roles.decorator';
 import { RolesGuard } from '../authz/roles.guard';
@@ -24,12 +35,13 @@ export class MembersController {
   @UseGuards(RolesGuard)
   @Roles('admin')
   async changeRole(
+    @Req() req: AuthRequest,
     @Param('orgId') orgId: string,
     @Param('userId') userId: string,
     @Body() body: unknown,
   ): Promise<UpdatedMember> {
     const dto = parseOrThrow(changeMemberRoleSchema, body);
-    return this.members.changeRole(orgId, userId, dto.role);
+    return this.members.changeRole(orgId, req.user!.id, userId, dto.role);
   }
 
   @Delete(':userId')
