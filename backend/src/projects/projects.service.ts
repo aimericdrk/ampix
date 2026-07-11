@@ -17,7 +17,8 @@ interface ChEventCountRow {
 /**
  * Projects listing + minimal analytics read (contracts §12). A user may only ever see
  * projects/data for projects they hold a ProjectMembership in — org membership alone is no
- * longer sufficient (per-project access model).
+ * longer sufficient (per-project access model), except for org owners, who get derived owner
+ * access to every project in their org (see `resolveProjectRole`).
  */
 @Injectable()
 export class ProjectsService {
@@ -86,6 +87,11 @@ export class ProjectsService {
    *
    * Returns the caller's `ProjectRole` so callers that need to distinguish roles (e.g. owner-only
    * actions) can do so without a second query.
+   *
+   * Org owners get derived owner access to every project in their org: an `owner`-rank
+   * `Membership` on the project's org resolves to `'owner'` even with no `ProjectMembership` row
+   * — no per-project row is ever minted for them. This is additive above the per-project
+   * membership model, so it's checked before the `ProjectMembership` lookup.
    */
   async resolveProjectRole(userId: string, projectId: string): Promise<ProjectRole> {
     if (!UUID_SHAPE.test(projectId)) {
@@ -94,6 +100,12 @@ export class ProjectsService {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       throw this.notFound();
+    }
+    const orgMembership = await this.prisma.membership.findUnique({
+      where: { userId_orgId: { userId, orgId: project.orgId } },
+    });
+    if (orgMembership?.role === 'owner') {
+      return 'owner';
     }
     const membership = await this.prisma.projectMembership.findUnique({
       where: { userId_projectId: { userId, projectId } },

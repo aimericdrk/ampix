@@ -10,6 +10,7 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
     project: { findUnique: jest.fn().mockResolvedValue(null) },
     sdkToken: { findUnique: jest.fn().mockResolvedValue(null) },
     projectMembership: { findUnique: jest.fn().mockResolvedValue(null) },
+    membership: { findUnique: jest.fn().mockResolvedValue(null) },
     ...overrides,
   };
 }
@@ -86,6 +87,7 @@ describe('ProjectRoleResolverService', () => {
   describe('resolveProjectRole', () => {
     it('returns the role for an existing membership', async () => {
       const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue({ id: PROJECT_ID, orgId: 'org-1' }) },
         projectMembership: {
           findUnique: jest
             .fn()
@@ -101,10 +103,57 @@ describe('ProjectRoleResolverService', () => {
     });
 
     it('403s for a non-member — SECURITY-CRITICAL', async () => {
-      const prisma = makePrisma();
+      const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue({ id: PROJECT_ID, orgId: 'org-1' }) },
+      });
       const service = makeService(prisma);
       await expect(service.resolveProjectRole(USER_ID, PROJECT_ID)).rejects.toMatchObject({
         problem: { status: 403 },
+      });
+    });
+
+    it('resolves an org owner to owner without a projectMembership row', async () => {
+      const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue({ id: PROJECT_ID, orgId: 'org-1' }) },
+        membership: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ userId: USER_ID, orgId: 'org-1', role: 'owner' }),
+        },
+        projectMembership: { findUnique: jest.fn().mockResolvedValue(null) },
+      });
+      const service = makeService(prisma);
+
+      await expect(service.resolveProjectRole(USER_ID, PROJECT_ID)).resolves.toBe('owner');
+      expect(prisma.membership.findUnique).toHaveBeenCalledWith({
+        where: { userId_orgId: { userId: USER_ID, orgId: 'org-1' } },
+      });
+      // Derived access — must not fall through to the projectMembership lookup.
+      expect(prisma.projectMembership.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('still 403s a non-owner org member with no projectMembership row', async () => {
+      const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue({ id: PROJECT_ID, orgId: 'org-1' }) },
+        membership: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ userId: USER_ID, orgId: 'org-1', role: 'analyst' }),
+        },
+        projectMembership: { findUnique: jest.fn().mockResolvedValue(null) },
+      });
+      const service = makeService(prisma);
+
+      await expect(service.resolveProjectRole(USER_ID, PROJECT_ID)).rejects.toMatchObject({
+        problem: { status: 403 },
+      });
+    });
+
+    it('404s when the project does not exist', async () => {
+      const prisma = makePrisma();
+      const service = makeService(prisma);
+      await expect(service.resolveProjectRole(USER_ID, PROJECT_ID)).rejects.toMatchObject({
+        problem: { status: 404 },
       });
     });
   });

@@ -38,7 +38,20 @@ export class ProjectRoleResolverService {
     throw new Error('ProjectRoleResolverService: route has no projectId/tokenId param');
   }
 
+  /**
+   * Org owners get derived owner access to every project in their org: an `owner`-rank org
+   * `Membership` on the project's org resolves to `'owner'` even with no `ProjectMembership` row
+   * (no per-project row is minted). This mirrors `ProjectsService.resolveProjectRole` so the
+   * `ProjectRolesGuard`-gated routes (project CRUD/tokens, dashboards, cohorts, reports,
+   * templates, screens) honour the same org-owner access as the `assertMembership` seam.
+   */
   async resolveProjectRole(userId: string, projectId: string): Promise<ProjectRole> {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw this.notFound();
+    const orgMembership = await this.prisma.membership.findUnique({
+      where: { userId_orgId: { userId, orgId: project.orgId } },
+    });
+    if (orgMembership?.role === 'owner') return 'owner';
     const membership = await this.prisma.projectMembership.findUnique({
       where: { userId_projectId: { userId, projectId } },
     });

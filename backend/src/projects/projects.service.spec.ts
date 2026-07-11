@@ -11,6 +11,9 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
     project: {
       findUnique: jest.fn().mockResolvedValue(null),
     },
+    membership: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     ...overrides,
   };
 }
@@ -278,6 +281,49 @@ describe('ProjectsService', () => {
       await expect(
         service.resolveProjectRole('user-1', '018f6b2e-0000-7000-8000-000000000001'),
       ).rejects.toMatchObject({ problem: { status: 404 } });
+    });
+
+    it('resolves an org owner to project owner without a ProjectMembership row', async () => {
+      const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue(project) },
+        membership: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ userId: 'org-owner', orgId: project.orgId, role: 'owner' }),
+        },
+        projectMembership: {
+          findMany: jest.fn(),
+          findUnique: jest.fn().mockResolvedValue(null), // no ProjectMembership row for this user
+        },
+      });
+      const service = makeService(prisma, makeClickhouse());
+
+      await expect(service.resolveProjectRole('org-owner', PROJECT_ID)).resolves.toBe('owner');
+      expect(prisma.membership.findUnique).toHaveBeenCalledWith({
+        where: { userId_orgId: { userId: 'org-owner', orgId: project.orgId } },
+      });
+      // Derived access, no per-project row minted — must not fall through to the projectMembership lookup.
+      expect(prisma.projectMembership.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('still 403s a non-owner org member with no project membership', async () => {
+      const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue(project) },
+        membership: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ userId: 'plain-org-member', orgId: project.orgId, role: 'analyst' }),
+        },
+        projectMembership: {
+          findMany: jest.fn(),
+          findUnique: jest.fn().mockResolvedValue(null),
+        },
+      });
+      const service = makeService(prisma, makeClickhouse());
+
+      await expect(service.resolveProjectRole('plain-org-member', PROJECT_ID)).rejects.toMatchObject({
+        problem: { status: 403 },
+      });
     });
   });
 
