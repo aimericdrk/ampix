@@ -39,8 +39,7 @@ import {
 
 /** Role → Badge variant, roughly by privilege level (owner highest, viewer lowest). */
 function roleBadgeVariant(role: OrgRole): BadgeProps['variant'] {
-  if (role === 'owner') return 'accent';
-  if (role === 'admin') return 'accent';
+  if (role === 'owner' || role === 'admin') return 'accent';
   if (role === 'analyst') return 'info';
   return 'default';
 }

@@ -46,6 +46,7 @@ export class ProjectRoleResolverService {
    * templates, screens) honour the same org-owner access as the `assertMembership` seam.
    */
   async resolveProjectRole(userId: string, projectId: string): Promise<ProjectRole> {
+    if (!isUuidShaped(projectId)) throw this.notFound();
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw this.notFound();
     const orgMembership = await this.prisma.membership.findUnique({
