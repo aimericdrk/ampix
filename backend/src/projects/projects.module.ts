@@ -12,8 +12,10 @@ import { ProjectsService } from './projects.service';
   imports: [AuthModule, AuthzModule],
   controllers: [ProjectsController, ProjectManagementController, ProjectMembersController],
   providers: [ProjectsService, ProjectManagementService, ProjectMembersService],
-  // Exported so AnalyticsModule (contracts §14) can reuse `assertMembership` instead of
-  // duplicating the 404-then-403 tenancy check.
-  exports: [ProjectsService],
+  // ProjectsService exported so AnalyticsModule (contracts §14) can reuse `assertMembership`
+  // instead of duplicating the 404-then-403 tenancy check. ProjectMembersService exported so
+  // OrgsModule's OrgProjectAccessService can delegate to it (owner-safety + serializable guards)
+  // for org-scoped per-project access management.
+  exports: [ProjectsService, ProjectMembersService],
 })
 export class ProjectsModule {}
