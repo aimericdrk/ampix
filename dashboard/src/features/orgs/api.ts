@@ -11,7 +11,7 @@ import type {
   ListMembersResponse,
   ListOrgsResponse,
   ListProjectAccessResponse,
-  OrgRole,
+  ProjectRole,
   RenameOrgRequest,
   RenameOrgResponse,
   SetProjectAccessRequest,
@@ -151,7 +151,7 @@ export function useSetMemberProjectAccess(orgId: string, userId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ projectId, role }: { projectId: string } & SetProjectAccessRequest) =>
-      apiFetch<{ projectId: string; role: OrgRole | null }>(
+      apiFetch<{ projectId: string; role: ProjectRole | null }>(
         `/api/v1/orgs/${orgId}/members/${userId}/project-access/${projectId}`,
         { method: 'PUT', body: { role } },
       ),

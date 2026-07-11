@@ -1102,6 +1102,18 @@ export const handlers = [
       if (existing?.role === 'owner' && callerRole !== 'owner') {
         return problem(403, 'Only owners can change the owner role');
       }
+      // changeRole delegate's unconditional self-guard: nobody — not even an owner — may re-role
+      // their OWN existing project membership row (project-members.service.ts `cannotChangeSelf`).
+      // The ADD path (no existing row) still defers to the org self-escalation guard above.
+      if (newRole !== null && existing && targetUserId === caller.id) {
+        return problem(403, 'Cannot change your own project role');
+      }
+      // Last-owner invariant (mirrors ProjectMembersService.remove/changeRole `lastOwner`): only an
+      // owner caller reaches here (admins were blocked above), but demoting/removing the sole
+      // project owner is still a conflict.
+      if (existing?.role === 'owner' && ownerCountFor(projectId) <= 1) {
+        return problem(409, newRole === null ? 'Cannot remove the last owner' : 'Cannot demote the last owner');
+      }
 
       if (newRole === null) {
         if (existing) {
