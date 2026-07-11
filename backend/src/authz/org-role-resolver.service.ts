@@ -16,9 +16,9 @@ export interface ResolvedAccess {
   role: Role;
 }
 
-const ROLE_RANK: Record<Role, number> = { viewer: 1, analyst: 2, admin: 3 };
+const ROLE_RANK: Record<Role, number> = { viewer: 1, analyst: 2, admin: 3, owner: 4 };
 
-/** admin > analyst > viewer, as a comparable number ("a route needs role >= the required level"). */
+/** owner > admin > analyst > viewer, as a comparable number ("a route needs role >= the required level"). */
 export function roleRank(role: Role): number {
   return ROLE_RANK[role];
 }

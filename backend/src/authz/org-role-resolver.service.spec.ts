@@ -27,6 +27,12 @@ describe('roleRank', () => {
   });
 });
 
+describe('roleRank — owner tier', () => {
+  it('ranks owner above admin', () => {
+    expect(roleRank('owner')).toBeGreaterThan(roleRank('admin'));
+  });
+});
+
 describe('OrgRoleResolverService', () => {
   describe('resolveOrgId', () => {
     it('resolves directly from :orgId when the org exists', async () => {
