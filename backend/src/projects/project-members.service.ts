@@ -79,8 +79,12 @@ export class ProjectMembersService {
     );
   }
 
-  async changeRole(projectId: string, actorRole: ProjectRole, targetUserId: string, newRole: ProjectRole): Promise<UpdatedProjectMember> {
+  async changeRole(projectId: string, actorUserId: string, actorRole: ProjectRole, targetUserId: string, newRole: ProjectRole): Promise<UpdatedProjectMember> {
     if (!isUuidShaped(targetUserId)) throw this.userNotFound();
+    // An actor may never change their OWN role — that would let e.g. an admin self-promote (to
+    // owner) or self-demote, sidestepping the owner / last-owner guards below. Role changes must
+    // always be applied by a different, sufficiently-privileged member.
+    if (targetUserId === actorUserId) throw this.cannotChangeSelf();
     return this.runSerializable(() =>
       this.prisma.$transaction(async (tx) => {
         const m = await tx.projectMembership.findUnique({
@@ -143,5 +147,8 @@ export class ProjectMembersService {
   }
   private lastOwner(action: 'demote' | 'remove'): ProblemException {
     return new ProblemException({ status: 409, title: 'Conflict', detail: `Cannot ${action} the last owner of this project` });
+  }
+  private cannotChangeSelf(): ProblemException {
+    return new ProblemException({ status: 403, title: 'Forbidden', detail: 'You cannot change your own role' });
   }
 }

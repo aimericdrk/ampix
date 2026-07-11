@@ -71,6 +71,11 @@ describe('ProjectMembersService (real Postgres)', () => {
     return user;
   }
 
+  // Stand-in id for "some other, sufficiently-privileged actor" in tests that pass actorRole as a
+  // literal and only care that the actor is NOT the target (so the self-role-change guard is not
+  // what's under test). Any value distinct from the seeded target id works.
+  const OTHER_ACTOR = 'other-actor-id';
+
   describe('list', () => {
     it('maps project memberships -> { user, role }', async () => {
       const { org, project } = await seedOrgAndProject();
@@ -91,7 +96,7 @@ describe('ProjectMembersService (real Postgres)', () => {
       await seedMember(org.id, project.id, 'other-owner@acme.test', 'admin', 'owner'); // avoid last-owner 409 masking the 403
 
       await expect(
-        service.changeRole(project.id, 'admin', owner.id, 'admin'),
+        service.changeRole(project.id, OTHER_ACTOR, 'admin', owner.id, 'admin'),
       ).rejects.toMatchObject({ problem: { status: 403 } });
     });
 
@@ -101,7 +106,7 @@ describe('ProjectMembersService (real Postgres)', () => {
       const analyst = await seedMember(org.id, project.id, 'analyst@acme.test', 'analyst', 'analyst');
 
       await expect(
-        service.changeRole(project.id, 'admin', analyst.id, 'owner'),
+        service.changeRole(project.id, OTHER_ACTOR, 'admin', analyst.id, 'owner'),
       ).rejects.toMatchObject({ problem: { status: 403 } });
     });
 
@@ -111,7 +116,7 @@ describe('ProjectMembersService (real Postgres)', () => {
       const analyst = await seedMember(org.id, project.id, 'analyst@acme.test', 'analyst', 'analyst');
 
       await expect(
-        service.changeRole(project.id, 'admin', analyst.id, 'viewer'),
+        service.changeRole(project.id, OTHER_ACTOR, 'admin', analyst.id, 'viewer'),
       ).resolves.toEqual({ user_id: analyst.id, role: 'viewer' });
     });
 
@@ -121,7 +126,7 @@ describe('ProjectMembersService (real Postgres)', () => {
       await seedMember(org.id, project.id, 'owner2@acme.test', 'admin', 'owner');
 
       await expect(
-        service.changeRole(project.id, 'owner', target.id, 'admin'),
+        service.changeRole(project.id, OTHER_ACTOR, 'owner', target.id, 'admin'),
       ).resolves.toEqual({ user_id: target.id, role: 'admin' });
     });
 
@@ -131,7 +136,7 @@ describe('ProjectMembersService (real Postgres)', () => {
       const analyst = await seedMember(org.id, project.id, 'analyst@acme.test', 'analyst', 'analyst');
 
       await expect(
-        service.changeRole(project.id, 'owner', analyst.id, 'owner'),
+        service.changeRole(project.id, OTHER_ACTOR, 'owner', analyst.id, 'owner'),
       ).resolves.toEqual({ user_id: analyst.id, role: 'owner' });
     });
 
@@ -149,13 +154,42 @@ describe('ProjectMembersService (real Postgres)', () => {
     });
   });
 
+  describe('self-role-change guard — an actor may never change their OWN role', () => {
+    it('403s when an admin tries to promote THEMSELVES to owner', async () => {
+      const { org, project } = await seedOrgAndProject();
+      await seedMember(org.id, project.id, 'owner@acme.test', 'admin', 'owner');
+      const admin = await seedMember(org.id, project.id, 'admin@acme.test', 'admin', 'admin');
+
+      await expect(
+        service.changeRole(project.id, admin.id, 'admin', admin.id, 'owner'),
+      ).rejects.toMatchObject({ problem: { status: 403 } });
+      const unchanged = await prisma.projectMembership.findUnique({
+        where: { userId_projectId: { userId: admin.id, projectId: project.id } },
+      });
+      expect(unchanged?.role).toBe('admin');
+    });
+
+    it('403s when an admin changes their OWN role (even a downgrade)', async () => {
+      const { org, project } = await seedOrgAndProject();
+      const admin = await seedMember(org.id, project.id, 'admin@acme.test', 'admin', 'admin');
+
+      await expect(
+        service.changeRole(project.id, admin.id, 'admin', admin.id, 'viewer'),
+      ).rejects.toMatchObject({ problem: { status: 403 } });
+      const unchanged = await prisma.projectMembership.findUnique({
+        where: { userId_projectId: { userId: admin.id, projectId: project.id } },
+      });
+      expect(unchanged?.role).toBe('admin');
+    });
+  });
+
   describe('last-owner invariant', () => {
     it('409s when an owner actor demotes the last owner', async () => {
       const { org, project } = await seedOrgAndProject();
       const owner = await seedMember(org.id, project.id, 'owner@acme.test', 'admin', 'owner');
 
       await expect(
-        service.changeRole(project.id, 'owner', owner.id, 'admin'),
+        service.changeRole(project.id, OTHER_ACTOR, 'owner', owner.id, 'admin'),
       ).rejects.toMatchObject({ problem: { status: 409 } });
       const stillOwner = await prisma.projectMembership.findUnique({
         where: { userId_projectId: { userId: owner.id, projectId: project.id } },
@@ -185,8 +219,8 @@ describe('ProjectMembersService (real Postgres)', () => {
         const ownerB = await seedMember(org.id, project.id, 'owner-b@acme.test', 'admin', 'owner');
 
         const [resultA, resultB] = await Promise.allSettled([
-          service.changeRole(project.id, 'owner', ownerA.id, 'admin'),
-          service.changeRole(project.id, 'owner', ownerB.id, 'admin'),
+          service.changeRole(project.id, ownerB.id, 'owner', ownerA.id, 'admin'),
+          service.changeRole(project.id, ownerA.id, 'owner', ownerB.id, 'admin'),
         ]);
 
         const outcomes = [resultA, resultB];
@@ -356,7 +390,7 @@ describe('ProjectMembersService (real Postgres)', () => {
       const { project } = await seedOrgAndProject();
 
       await expect(
-        service.changeRole(project.id, 'owner', 'not-a-uuid', 'admin'),
+        service.changeRole(project.id, OTHER_ACTOR, 'owner', 'not-a-uuid', 'admin'),
       ).rejects.toMatchObject({ problem: { status: 404 } });
       await expect(service.remove(project.id, 'owner', 'not-a-uuid')).rejects.toMatchObject({
         problem: { status: 404 },

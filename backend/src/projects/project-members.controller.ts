@@ -39,7 +39,7 @@ export class ProjectMembersController {
   async changeRole(@Req() req: AuthRequest, @Param('projectId') projectId: string, @Param('userId') userId: string, @Body() body: unknown): Promise<UpdatedProjectMember> {
     const dto = parseOrThrow(updateProjectMemberRoleSchema, body);
     const actorRole = await this.resolver.resolveProjectRole(req.user!.id, projectId);
-    return this.members.changeRole(projectId, actorRole, userId, dto.role);
+    return this.members.changeRole(projectId, req.user!.id, actorRole, userId, dto.role);
   }
 
   @Delete(':userId')
