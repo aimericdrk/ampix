@@ -6,6 +6,7 @@ import {
   MFA_USER,
   TEST_ORG_ID,
   TEST_ORG_NAME,
+  TEST_PROJECT,
   TEST_USER,
   VALID_ACCESS_TOKEN,
   VIEWER_ORG_ID,
@@ -17,7 +18,7 @@ function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
 }
 
-describe('OrgSettingsPage — admin (TEST_ORG)', () => {
+describe('OrgSettingsPage — owner (TEST_ORG)', () => {
   it('renames the organization', async () => {
     signIn();
     renderApp(`/orgs/${TEST_ORG_ID}/settings`);
@@ -33,7 +34,7 @@ describe('OrgSettingsPage — admin (TEST_ORG)', () => {
     );
   });
 
-  it('lists members with their roles and lets an admin change a role', async () => {
+  it('lists members with their roles and lets an owner change a member’s role', async () => {
     signIn();
     renderApp(`/orgs/${TEST_ORG_ID}/settings`);
     await screen.findByRole('heading', { name: TEST_ORG_NAME });
@@ -46,18 +47,46 @@ describe('OrgSettingsPage — admin (TEST_ORG)', () => {
     await waitFor(() => expect(roleSelect).toHaveValue('viewer'));
   });
 
-  it("refuses to demote the org's last admin with a friendly error", async () => {
+  it('locks the owner’s own row (no role select, no remove)', async () => {
     signIn();
     renderApp(`/orgs/${TEST_ORG_ID}/settings`);
     await screen.findByRole('heading', { name: TEST_ORG_NAME });
 
-    const roleSelect = await screen.findByLabelText(`Role for ${TEST_USER.name}`);
-    expect(roleSelect).toHaveValue('admin');
+    const table = await screen.findByRole('table', { name: 'Organization members' });
+    const row = within(table).getByText(TEST_USER.email).closest('tr') as HTMLElement;
+    expect(within(row).queryByLabelText(`Role for ${TEST_USER.name}`)).toBeNull();
+    expect(within(row).getByText('owner')).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
 
-    await userEvent.selectOptions(roleSelect, 'viewer');
+  it('transfers ownership to another member', async () => {
+    signIn();
+    renderApp(`/orgs/${TEST_ORG_ID}/settings`);
+    await screen.findByRole('heading', { name: TEST_ORG_NAME });
 
-    expect(await screen.findByText("Can't change the last admin's role")).toBeInTheDocument();
-    await waitFor(() => expect(roleSelect).toHaveValue('admin'));
+    await screen.findByText(MFA_USER.email);
+    await userEvent.click(screen.getByRole('button', { name: 'Transfer ownership' }));
+    await userEvent.selectOptions(screen.getByLabelText('New owner'), MFA_USER.id);
+    await userEvent.click(screen.getByRole('button', { name: 'Transfer' }));
+
+    await waitFor(() => {
+      const row = screen.getByText(MFA_USER.email).closest('tr') as HTMLElement;
+      expect(within(row).getByText('owner')).toBeInTheDocument();
+    });
+  });
+
+  it('grants a member viewer access to a project from the manage-access dialog', async () => {
+    signIn();
+    renderApp(`/orgs/${TEST_ORG_ID}/settings`);
+    await screen.findByRole('heading', { name: TEST_ORG_NAME });
+
+    await screen.findByText(MFA_USER.email);
+    const row = screen.getByText(MFA_USER.email).closest('tr') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Manage project access' }));
+
+    const projectSelect = await screen.findByLabelText(`${TEST_PROJECT.name} access`);
+    await userEvent.selectOptions(projectSelect, 'viewer');
+    await waitFor(() => expect(projectSelect).toHaveValue('viewer'));
   });
 
   it('removes a member after confirming in the dialog', async () => {
