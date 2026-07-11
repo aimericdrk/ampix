@@ -132,6 +132,26 @@ describe('ProjectRoleResolverService', () => {
       expect(prisma.projectMembership.findUnique).not.toHaveBeenCalled();
     });
 
+    it('resolves an org owner to owner even when they also hold a lower projectMembership row', async () => {
+      const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue({ id: PROJECT_ID, orgId: 'org-1' }) },
+        membership: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ userId: USER_ID, orgId: 'org-1', role: 'owner' }),
+        },
+        projectMembership: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ userId: USER_ID, projectId: PROJECT_ID, role: 'viewer' }),
+        },
+      });
+      const service = makeService(prisma);
+
+      // Org owner wins over the lower per-project row — derived owner access is additive.
+      await expect(service.resolveProjectRole(USER_ID, PROJECT_ID)).resolves.toBe('owner');
+    });
+
     it('still 403s a non-owner org member with no projectMembership row', async () => {
       const prisma = makePrisma({
         project: { findUnique: jest.fn().mockResolvedValue({ id: PROJECT_ID, orgId: 'org-1' }) },
