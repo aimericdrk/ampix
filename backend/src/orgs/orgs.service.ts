@@ -11,14 +11,14 @@ import type { CreatedOrg, OrgListItem, RenamedOrg } from './orgs.types';
 export class OrgsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Creates the org and an admin Membership for the creator, atomically. */
+  /** Creates the org and an owner Membership for the creator, atomically. */
   async create(userId: string, name: string): Promise<CreatedOrg> {
     const org = await this.prisma.$transaction(async (tx) => {
       const created = await tx.organization.create({ data: { name } });
-      await tx.membership.create({ data: { userId, orgId: created.id, role: 'admin' } });
+      await tx.membership.create({ data: { userId, orgId: created.id, role: 'owner' } });
       return created;
     });
-    return { id: org.id, name: org.name, role: 'admin' };
+    return { id: org.id, name: org.name, role: 'owner' };
   }
 
   /** The caller's orgs, with their role in each. */

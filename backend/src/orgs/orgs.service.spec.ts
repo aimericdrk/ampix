@@ -35,7 +35,7 @@ function makeService(prisma: unknown) {
 
 describe('OrgsService', () => {
   describe('create', () => {
-    it('creates the org and an admin Membership for the creator, in one transaction', async () => {
+    it('makes the creator the org owner, in one transaction', async () => {
       const prisma = makePrisma();
       prisma.organization.create.mockResolvedValue({ id: 'org-1', name: 'Acme' });
       const service = makeService(prisma);
@@ -45,9 +45,9 @@ describe('OrgsService', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.organization.create).toHaveBeenCalledWith({ data: { name: 'Acme' } });
       expect(prisma.membership.create).toHaveBeenCalledWith({
-        data: { userId: 'user-1', orgId: 'org-1', role: 'admin' },
+        data: { userId: 'user-1', orgId: 'org-1', role: 'owner' },
       });
-      expect(created).toEqual({ id: 'org-1', name: 'Acme', role: 'admin' });
+      expect(created).toEqual({ id: 'org-1', name: 'Acme', role: 'owner' });
     });
   });
 
