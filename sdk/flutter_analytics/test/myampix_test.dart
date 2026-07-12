@@ -190,6 +190,41 @@ void main() {
     await waitFor(() => MyAmpix.instance.getDistinctId() == 'user-42');
   });
 
+  test(r'setRevenueCatAppUserId persists and emits $rc_link', () async {
+    await initSdk();
+    MyAmpix.instance.setRevenueCatAppUserId('rc-user-1');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == r'$rc_link'));
+    final link = sentEvents().lastWhere((e) => e['event'] == r'$rc_link');
+    expect(link['properties'][r'$rc_app_user_id'], 'rc-user-1');
+  });
+
+  test(r'identify re-emits $rc_link on the new identity', () async {
+    await initSdk();
+    MyAmpix.instance.setRevenueCatAppUserId('rc-user-1');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == r'$rc_link'));
+    MyAmpix.instance.identify('user-42');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents()
+        .where((e) => e['event'] == r'$rc_link')
+        .any((e) => e['distinct_id'] == 'user-42'));
+  });
+
+  test(r'reset clears the RC link and identify afterwards emits no $rc_link', () async {
+    await initSdk();
+    MyAmpix.instance.setRevenueCatAppUserId('rc-user-1');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == r'$rc_link'));
+    final before = sentEvents().where((e) => e['event'] == r'$rc_link').length;
+    MyAmpix.instance.reset();
+    MyAmpix.instance.identify('user-99');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any(
+        (e) => e['event'] == r'$identify' && e['distinct_id'] == 'user-99'));
+    expect(sentEvents().where((e) => e['event'] == r'$rc_link').length, before);
+  });
+
   test(r'alias emits $identify carrying $alias', () async {
     await initSdk();
     MyAmpix.instance.alias('new-id');
