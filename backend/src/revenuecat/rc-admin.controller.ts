@@ -75,7 +75,7 @@ export class RcAdminController {
   @UseGuards(ProjectRolesGuard)
   @ProjectRoles('admin')
   resync(@Param('projectId') projectId: string) {
-    void this.backfill.run(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
+    this.backfill.fireAndForget(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
     return { status: 'started' };
   }
 

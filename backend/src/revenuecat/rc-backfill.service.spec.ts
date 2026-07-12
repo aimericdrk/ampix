@@ -57,4 +57,50 @@ describe('RcBackfillService.run', () => {
     await m.svc.run(PID);
     expect(m.client.listCustomers).not.toHaveBeenCalled();
   });
+
+  it('never rejects when the initial findUnique rejects', async () => {
+    const m = build();
+    m.prisma.revenueCatIntegration.findUnique.mockRejectedValue(new Error('db down'));
+    await expect(m.svc.run(PID)).resolves.toBeUndefined();
+  });
+
+  it('never rejects when the pre-loop setStatus write rejects (and logs instead of throwing)', async () => {
+    const m = build();
+    m.prisma.revenueCatIntegration.update.mockRejectedValue(new Error('write failed'));
+    await expect(m.svc.run(PID)).resolves.toBeUndefined();
+  });
+});
+
+describe('RcBackfillService.fireAndForget', () => {
+  it('never rejects even if run() somehow throws', async () => {
+    const m = build();
+    m.prisma.revenueCatIntegration.findUnique.mockRejectedValue(new Error('db down'));
+    expect(() => m.svc.fireAndForget(PID)).not.toThrow();
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+});
+
+describe('RcBackfillService.syncCustomer refresh reconciliation', () => {
+  it('sets totalSpentCents from total_revenue_in_usd.gross on refresh', async () => {
+    const m = build();
+    m.client.getSubscriptions.mockResolvedValue([
+      { product_id: 'pro_monthly', store: 'app_store', status: 'active',
+        current_period_ends_at: 1_752_592_000_000, gives_access: true,
+        total_revenue_in_usd: { gross: 49.99 } },
+    ]);
+    await m.svc.syncCustomer(PID, 'sk_test', 'p1', 'rc-user-1');
+    const call = m.prisma.subscriptionState.upsert.mock.calls[0][0];
+    expect(call.update.totalSpentCents).toBe(4999);
+  });
+
+  it('does not touch totalSpentCents on refresh when total_revenue_in_usd is absent', async () => {
+    const m = build();
+    m.client.getSubscriptions.mockResolvedValue([
+      { product_id: 'pro_monthly', store: 'app_store', status: 'active',
+        current_period_ends_at: 1_752_592_000_000, gives_access: true },
+    ]);
+    await m.svc.syncCustomer(PID, 'sk_test', 'p1', 'rc-user-1');
+    const call = m.prisma.subscriptionState.upsert.mock.calls[0][0];
+    expect(call.update).not.toHaveProperty('totalSpentCents');
+  });
 });

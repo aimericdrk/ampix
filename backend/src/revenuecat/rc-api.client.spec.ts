@@ -33,4 +33,36 @@ describe('RcApiClient', () => {
     const client = new RcApiClient(f);
     await expect(client.getSubscriptions('bad', 'p1', 'c1')).rejects.toThrow(/revenuecat api 401/i);
   });
+
+  it('throws when next_page repeats the cursor just fetched (no-progress guard)', async () => {
+    const sameCursor = '/v2/projects/p1/customers?starting_after=c1';
+    const f = fetchMock([
+      { items: [{ id: 'c1' }], next_page: sameCursor },
+      { items: [{ id: 'c1' }], next_page: sameCursor },
+    ]);
+    const client = new RcApiClient(f);
+    await expect(async () => {
+      for await (const _batch of client.listCustomers('sk_test', 'p1')) {
+        // drain
+      }
+    }).rejects.toThrow(/did not advance/i);
+  });
+
+  it('throws once pagination exceeds the page cap', async () => {
+    let call = 0;
+    const f = jest.fn(async () => {
+      call += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ items: [{ id: `c${call}` }], next_page: `/v2/projects/p1/customers?page=${call}` }),
+      } as Response;
+    }) as unknown as typeof fetch;
+    const client = new RcApiClient(f, 2); // constructor-injected cap keeps this test cheap
+    await expect(async () => {
+      for await (const _batch of client.listCustomers('sk_test', 'p1')) {
+        // drain
+      }
+    }).rejects.toThrow(/exceeded 2 pages/i);
+  });
 });

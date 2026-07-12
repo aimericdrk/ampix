@@ -120,7 +120,7 @@ export class RcAdminService {
       update,
     });
     if (existing === null && input.api_key) {
-      void this.backfill.run(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
+      this.backfill.fireAndForget(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
     }
     return this.getStatus(projectId);
   }

@@ -27,15 +27,21 @@ export class RcBackfillService {
     private readonly profileWriter: ProfileWriter,
   ) {}
 
+  /**
+   * Entry point for fire-and-forget callers (connect-time backfill, resync). The whole body is
+   * inside one try/catch — including `findUnique` and the pre-loop `setStatus` — so this method
+   * can never reject; a failure that occurs while trying to *record* the failure is itself
+   * swallowed and logged rather than thrown.
+   */
   async run(projectId: string, nowMs = Date.now()): Promise<void> {
-    const integration = await this.prisma.revenueCatIntegration.findUnique({ where: { projectId } });
-    if (!integration) return;
-    if (!integration.apiKey || !integration.rcProjectId) {
-      await this.setStatus(projectId, 'failed: missing credentials');
-      return;
-    }
-    await this.setStatus(projectId, 'running');
     try {
+      const integration = await this.prisma.revenueCatIntegration.findUnique({ where: { projectId } });
+      if (!integration) return;
+      if (!integration.apiKey || !integration.rcProjectId) {
+        await this.setStatus(projectId, 'failed: missing credentials');
+        return;
+      }
+      await this.setStatus(projectId, 'running');
       for await (const customers of this.client.listCustomers(integration.apiKey, integration.rcProjectId)) {
         for (const customer of customers) {
           await this.syncCustomer(projectId, integration.apiKey, integration.rcProjectId, customer.id, nowMs);
@@ -45,8 +51,19 @@ export class RcBackfillService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`backfill failed for ${projectId}: ${msg}`);
-      await this.setStatus(projectId, `failed: ${msg}`.slice(0, 500));
+      try {
+        await this.setStatus(projectId, `failed: ${msg}`.slice(0, 500));
+      } catch (writeErr) {
+        this.logger.error(
+          `backfill failed for ${projectId} and the failure status write also failed: ${String(writeErr)}`,
+        );
+      }
     }
+  }
+
+  /** Shared fire-and-forget wrapper for callers that don't await the backfill (spec §4.7). Never rejects. */
+  fireAndForget(projectId: string): void {
+    void this.run(projectId).catch(() => undefined);
   }
 
   /** Also used by the per-user refresh endpoint. */
@@ -78,6 +95,11 @@ export class RcBackfillService {
         ...(distinctId !== null ? { distinctId } : {}),
         status: mapApiStatus(current),
         productId: current.product_id, store: current.store,
+        // RC's reported total is authoritative on reconciliation, but only when it's present —
+        // omit the field entirely rather than clobbering an existing value with 0.
+        ...(current.total_revenue_in_usd !== undefined
+          ? { totalSpentCents: Math.round(current.total_revenue_in_usd.gross * 100) }
+          : {}),
         expiresAt: current.current_period_ends_at ? new Date(current.current_period_ends_at) : null,
         lastEventAt: new Date(nowMs),
       },
