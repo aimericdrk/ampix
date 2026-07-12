@@ -32,6 +32,7 @@ import {
   useTokens,
   useUpdateProject,
 } from '../api';
+import { IntegrationsSection } from './IntegrationsSection';
 import { ProjectMembersSection } from './ProjectMembersSection';
 
 /**
@@ -94,8 +95,14 @@ export function ProjectDetailPage() {
           <DataSection projectId={projectId} project={project} />
         </Reveal>
 
-        {project && isOwner && (
+        {project && isAdmin && (
           <Reveal index={5} className="lg:col-span-2">
+            <IntegrationsSection projectId={project.id} />
+          </Reveal>
+        )}
+
+        {project && isOwner && (
+          <Reveal index={6} className="lg:col-span-2">
             <DangerZoneSection
               projectId={project.id}
               onDeleted={() => router.history.push('/projects')}
