@@ -84,6 +84,34 @@ describe('cohortDefinitionSchema (contracts §16)', () => {
       ).toBe(true);
     });
   });
+
+  describe('profile condition', () => {
+    it('accepts a profile condition', () => {
+      const parsed = cohortDefinitionSchema.parse({
+        match: 'all',
+        conditions: [{ type: 'profile', property: '$rc_status', op: 'eq', value: 'active' }],
+      });
+      expect(parsed.conditions[0]).toMatchObject({ type: 'profile', property: '$rc_status' });
+    });
+
+    it('requires a value for a comparison op', () => {
+      expect(
+        cohortDefinitionSchema.safeParse({
+          match: 'all',
+          conditions: [{ type: 'profile', property: '$rc_status', op: 'eq' }],
+        }).success,
+      ).toBe(false);
+    });
+
+    it('allows is_set / is_not_set without a value', () => {
+      expect(
+        cohortDefinitionSchema.safeParse({
+          match: 'all',
+          conditions: [{ type: 'profile', property: '$rc_status', op: 'is_set' }],
+        }).success,
+      ).toBe(true);
+    });
+  });
 });
 
 describe('createCohortSchema', () => {

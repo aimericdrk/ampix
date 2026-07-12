@@ -128,6 +128,72 @@ describe('compileCohort (contracts §16)', () => {
     });
   });
 
+  describe('profile condition', () => {
+    it('compiles a profile condition to a user_profiles subquery with bound params', () => {
+      const { sql, params } = compile({
+        match: 'all',
+        conditions: [{ type: 'profile', property: '$rc_status', op: 'eq', value: 'active' }],
+      });
+      expect(sql).toContain('FROM user_profiles FINAL');
+      expect(sql).toContain('WHERE project_id = {cohortProjectId:UUID}');
+      expect(sql).toContain('JSONExtractString(toJSONString(properties), {c0Key:String})');
+      expect(params.c0Key).toBe('$rc_status');
+      expect(params.c0Val).toBe('active');
+      expect(sql).not.toContain('active');
+      expect(sql).not.toContain('$rc_status');
+    });
+
+    it('supports is_set without a bound value param', () => {
+      const { sql, params } = compile({
+        match: 'all',
+        conditions: [{ type: 'profile', property: '$rc_status', op: 'is_set' }],
+      });
+      expect(sql).toContain("!= ''");
+      expect(params.c0Key).toBe('$rc_status');
+      expect(params).not.toHaveProperty('c0Val');
+    });
+
+    it('composes under match:all as an INTERSECT with other condition subqueries', () => {
+      const { sql } = compile({
+        match: 'all',
+        conditions: [
+          { type: 'profile', property: '$rc_status', op: 'eq', value: 'active' },
+          { type: 'behavior', event: 'app_open', op: 'gte', count: 1, within_days: 30 },
+        ],
+      });
+      expect(sql).toContain('INTERSECT');
+      expect(sql).toContain('FROM user_profiles FINAL');
+      expect(sql).not.toContain('UNION');
+    });
+
+    it('composes under match:any as a UNION DISTINCT with other condition subqueries', () => {
+      const { sql } = compile({
+        match: 'any',
+        conditions: [
+          { type: 'profile', property: '$rc_status', op: 'eq', value: 'active' },
+          { type: 'did_not', event: 'app_open', within_days: 7 },
+        ],
+      });
+      expect(sql).toContain('UNION DISTINCT');
+      expect(sql).toContain('FROM user_profiles FINAL');
+      expect(sql).not.toContain('INTERSECT');
+    });
+
+    it('per-condition params never collide with other conditions', () => {
+      const { params } = compile({
+        match: 'all',
+        conditions: [
+          { type: 'profile', property: '$rc_status', op: 'eq', value: 'active' },
+          { type: 'property', property: 'plan', op: 'eq', value: 'pro' },
+        ],
+      });
+      expect(params.c0Key).toBe('$rc_status');
+      expect(params.c0Val).toBe('active');
+      expect(params.c1pKey0).toBe('plan');
+      expect(params.c1pVal0).toBe('pro');
+    });
+  });
+
   describe('match combinator', () => {
     it('all → INTERSECT of the per-condition id-sets', () => {
       const { sql } = compile({

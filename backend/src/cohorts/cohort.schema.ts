@@ -6,7 +6,8 @@ import { FILTER_OPS, filterValueSchema, insightsFilterSchema } from '../analytic
  * AND / `any` = OR) over 1..10 conditions. Each condition is one of:
  *  - `behavior`  — did an event `{op} {count}` times within the last `within_days` days (with §14 filters);
  *  - `did_not`   — performed the event 0 times in the window;
- *  - `property`  — a §14 filter over a known column / custom property (via `resolveProperty`).
+ *  - `property`  — a §14 filter over a known column / custom property (via `resolveProperty`);
+ *  - `profile`   — a §14-style filter over `user_profiles` properties (e.g. RevenueCat `$rc_status`).
  *
  * The SAME schema validates a definition on write AND before every run (preview / cohort_id filter),
  * so a stored definition is never trusted blindly — the injection-safe compiler is the only path to CH.
@@ -68,10 +69,25 @@ export const propertyConditionSchema = z
   );
 export type PropertyCondition = z.infer<typeof propertyConditionSchema>;
 
+/** A `profile` condition targets `user_profiles` (e.g. RevenueCat `$rc_status`) rather than events. */
+export const profileConditionSchema = z
+  .object({
+    type: z.literal('profile'),
+    property: z.string().trim().min(1).max(255),
+    op: z.enum(FILTER_OPS),
+    value: filterValueSchema.optional(),
+  })
+  .refine(
+    (cond) => cond.op === 'is_set' || cond.op === 'is_not_set' || cond.value !== undefined,
+    { message: 'value is required for this operator', path: ['value'] },
+  );
+export type ProfileCondition = z.infer<typeof profileConditionSchema>;
+
 export const cohortConditionSchema = z.union([
   behaviorConditionSchema,
   didNotConditionSchema,
   propertyConditionSchema,
+  profileConditionSchema,
 ]);
 export type CohortCondition = z.infer<typeof cohortConditionSchema>;
 

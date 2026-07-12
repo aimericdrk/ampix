@@ -1,5 +1,9 @@
 import { toChDateTime64 } from '../clickhouse/clickhouse.service';
-import { compileFilter, compileFilterClauses } from '../analytics/filter-compiler';
+import {
+  compileFilter,
+  compileFilterClauses,
+  profilePropertyPredicate,
+} from '../analytics/filter-compiler';
 import type { InsightsFilter } from '../analytics/insights-query.schema';
 import type {
   BehaviorCondition,
@@ -7,6 +11,7 @@ import type {
   CohortCountOp,
   CohortDefinition,
   DidNotCondition,
+  ProfileCondition,
   PropertyCondition,
 } from './cohort.schema';
 
@@ -135,6 +140,26 @@ function compileProperty(
   ].join('\n');
 }
 
+/** profile → users whose `user_profiles` row matches the property predicate (contracts §16 amendment). */
+function compileProfile(
+  cond: ProfileCondition,
+  index: number,
+  params: Record<string, unknown>,
+  scope: string,
+): string {
+  const keyParam = `c${index}Key`;
+  const valueParam = `c${index}Val`;
+  params[keyParam] = cond.property;
+  const expr = `JSONExtractString(toJSONString(properties), {${keyParam}:String})`;
+  const predicate = profilePropertyPredicate(expr, cond.op, cond.value, valueParam, params);
+  return [
+    'SELECT distinct_id',
+    'FROM user_profiles FINAL',
+    `WHERE project_id = {${scope}:UUID}`,
+    `  AND ${predicate}`,
+  ].join('\n');
+}
+
 function compileCondition(
   cond: CohortCondition,
   index: number,
@@ -149,6 +174,8 @@ function compileCondition(
       return compileDidNot(cond, index, params, now, scope);
     case 'property':
       return compileProperty(cond, index, params, scope);
+    case 'profile':
+      return compileProfile(cond, index, params, scope);
   }
 }
 
