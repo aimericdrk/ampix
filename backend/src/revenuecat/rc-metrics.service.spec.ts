@@ -1,0 +1,186 @@
+import { RcMetricsService } from './rc-metrics.service';
+
+const PID = '0197f6a0-0000-7000-8000-0000000000aa';
+
+/** feat-02 §3.4/T2: the `filters` query param is base64url(JSON.stringify(InsightsFilter[])). */
+function encodeFilters(filters: unknown): string {
+  return Buffer.from(JSON.stringify(filters)).toString('base64url');
+}
+
+function build({ integration = { id: 'int-1' } as unknown }: { integration?: unknown } = {}) {
+  const prisma = {
+    revenueCatIntegration: { findUnique: jest.fn(async () => integration) },
+    subscriptionState: {
+      groupBy: jest.fn(async ({ by }: any) =>
+        by[0] === 'status'
+          ? [
+              { status: 'active', _count: { _all: 5 }, _sum: { mrrCents: 4995 } },
+              { status: 'trial', _count: { _all: 2 }, _sum: { mrrCents: 0 } },
+            ]
+          : by[0] === 'productId'
+            ? [{ productId: 'pro_monthly', _count: { _all: 5 }, _sum: { mrrCents: 4995 } }]
+            : [{ store: 'APP_STORE', _count: { _all: 5 } }],
+      ),
+    },
+  } as any;
+  const clickhouse = { query: jest.fn(async () => []) } as any;
+  const projects = { assertMembership: jest.fn(async () => undefined) } as any;
+  return { prisma, clickhouse, projects, svc: new RcMetricsService(prisma, clickhouse, projects) };
+}
+
+describe('RcMetricsService.getSummary', () => {
+  it('404s when the project has no integration', async () => {
+    const { svc } = build({ integration: null });
+    await expect(svc.getSummary('u1', PID)).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+  });
+
+  it('asserts membership and aggregates state KPIs from Postgres', async () => {
+    const { svc, projects } = build();
+    const s = await svc.getSummary('u1', PID);
+    expect(projects.assertMembership).toHaveBeenCalledWith('u1', PID);
+    expect(s.active).toBe(5);
+    expect(s.in_trial).toBe(2);
+    expect(s.grace).toBe(0);
+    expect(s.mrr_cents).toBe(4995);
+    expect(s.by_product).toEqual([{ product_id: 'pro_monthly', active: 5, mrr_cents: 4995 }]);
+    expect(s.by_store).toEqual([{ store: 'APP_STORE', active: 5 }]);
+  });
+
+  it('propagates a membership rejection without touching Postgres/ClickHouse', async () => {
+    const { prisma, clickhouse, svc } = build();
+    (prisma.subscriptionState.groupBy as jest.Mock).mockClear();
+    const projects = { assertMembership: jest.fn(async () => Promise.reject(
+      Object.assign(new Error('x'), { problem: { status: 403 } }),
+    )) };
+    const rejecting = new RcMetricsService(prisma, clickhouse, projects as any);
+    await expect(rejecting.getSummary('u1', PID)).rejects.toMatchObject({
+      problem: { status: 403 },
+    });
+    expect(prisma.revenueCatIntegration.findUnique).not.toHaveBeenCalled();
+    expect(clickhouse.query).not.toHaveBeenCalled();
+  });
+
+  it('binds project + range params on every CH query and never interpolates', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getSummary('u1', PID, '2026-07-01', '2026-07-10');
+    expect(clickhouse.query.mock.calls.length).toBeGreaterThan(0);
+    for (const [sql, params] of clickhouse.query.mock.calls) {
+      expect(sql).toContain('{projectId:UUID}');
+      expect(params.projectId).toBe(PID);
+    }
+  });
+
+  it('the $rc_* event/property literals are fixed, not bound params', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getSummary('u1', PID, '2026-07-01', '2026-07-10');
+    const allSql = clickhouse.query.mock.calls.map(([sql]: [string]) => sql).join('\n');
+    expect(allSql).toContain('$rc_initial_purchase');
+    expect(allSql).toContain('$rc_expiration');
+    expect(allSql).toContain('$rc_renewal');
+  });
+
+  it('compiles a provided `filters` param into the new_subscriptions/trials and by_day queries only, bound', async () => {
+    const { svc, clickhouse } = build();
+    const filters = encodeFilters([{ property: 'os', op: 'eq', value: 'ios' }]);
+
+    await svc.getSummary('u1', PID, '2026-07-01', '2026-07-10', filters);
+
+    const calls = clickhouse.query.mock.calls as Array<[string, Record<string, unknown>]>;
+    const withFilter = calls.filter(([sql]) => sql.includes('filterVal0'));
+    const withoutFilter = calls.filter(([sql]) => !sql.includes('filterVal0'));
+    expect(withFilter.length).toBeGreaterThan(0);
+    expect(withoutFilter.length).toBeGreaterThan(0);
+    for (const [sql, params] of withFilter) {
+      expect(sql).toContain('os = {filterVal0:String}');
+      expect(params).toMatchObject({ filterVal0: 'ios' });
+    }
+  });
+
+  it('a malformed `filters` param is a 400 before touching ClickHouse', async () => {
+    const { svc, clickhouse } = build();
+    await expect(
+      svc.getSummary('u1', PID, '2026-07-01', '2026-07-10', 'not-valid-base64url-json'),
+    ).rejects.toMatchObject({ problem: { status: 400 } });
+    expect(clickhouse.query).not.toHaveBeenCalled();
+  });
+
+  it('defaults to the trailing 30-day window when from/to are omitted', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getSummary('u1', PID);
+    expect(clickhouse.query).toHaveBeenCalled();
+  });
+
+  it('maps CH rows into the response contract (new_subscriptions/churned/trials/by_day/churn_reasons/recent_events)', async () => {
+    const { svc, clickhouse } = build();
+    (clickhouse.query as jest.Mock)
+      .mockResolvedValueOnce([{ subs: 3, trials: 1 }])
+      .mockResolvedValueOnce([{ churned: 2 }])
+      .mockResolvedValueOnce([{ converted: 1 }])
+      .mockResolvedValueOnce([
+        { t: '2026-07-01', new_subscriptions: 2, churned: 1, revenue: 19.98 },
+      ])
+      .mockResolvedValueOnce([{ reason: 'PRICE_CHANGE', count: 2 }])
+      .mockResolvedValueOnce([
+        {
+          insert_id: 'ev-1',
+          event: '$rc_initial_purchase',
+          distinct_id: 'd1',
+          timestamp: '2026-07-01 00:00:00.000',
+          product_id: 'pro_monthly',
+          price: 9.99,
+        },
+      ]);
+
+    const s = await svc.getSummary('u1', PID, '2026-07-01', '2026-07-10');
+
+    expect(s.new_subscriptions).toBe(3);
+    expect(s.trials_started).toBe(1);
+    expect(s.churned).toBe(2);
+    expect(s.trials_converted).toBe(1);
+    expect(s.by_day).toEqual([
+      { t: '2026-07-01', new_subscriptions: 2, churned: 1, revenue: 19.98 },
+    ]);
+    expect(s.churn_reasons).toEqual([{ reason: 'PRICE_CHANGE', count: 2 }]);
+    expect(s.recent_events).toEqual([
+      {
+        insert_id: 'ev-1',
+        event: '$rc_initial_purchase',
+        distinct_id: 'd1',
+        timestamp: '2026-07-01 00:00:00.000',
+        product_id: 'pro_monthly',
+        price: 9.99,
+      },
+    ]);
+  });
+
+  it('zero-state: empty CH rows and empty Postgres groups yield zeros/empty arrays, not NaN/undefined', async () => {
+    const prisma = {
+      revenueCatIntegration: { findUnique: jest.fn(async () => ({ id: 'int-1' })) },
+      subscriptionState: { groupBy: jest.fn(async () => []) },
+    } as any;
+    const clickhouse = { query: jest.fn(async () => []) } as any;
+    const projects = { assertMembership: jest.fn(async () => undefined) } as any;
+    const svc = new RcMetricsService(prisma, clickhouse, projects);
+
+    const s = await svc.getSummary('u1', PID, '2026-07-01', '2026-07-10');
+
+    expect(s).toEqual({
+      mrr_cents: 0,
+      active: 0,
+      in_trial: 0,
+      grace: 0,
+      new_subscriptions: 0,
+      churned: 0,
+      trials_started: 0,
+      trials_converted: 0,
+      by_day: [],
+      by_product: [],
+      by_store: [],
+      churn_reasons: [],
+      recent_events: [],
+    });
+    expect(JSON.stringify(s)).not.toContain('NaN');
+  });
+});

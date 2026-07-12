@@ -9,13 +9,15 @@ import { RcAdminService } from './rc-admin.service';
 import { RcApiClient } from './rc-api.client';
 import { RcBackfillService } from './rc-backfill.service';
 import { RcIdentityService } from './rc-identity.service';
+import { RcMetricsController } from './rc-metrics.controller';
+import { RcMetricsService } from './rc-metrics.service';
 import { RcWebhookController } from './rc-webhook.controller';
 import { RcWebhookGuard } from './rc-webhook.guard';
 import { RcWebhookProcessor } from './rc-webhook.processor';
 
 @Module({
   imports: [AuthModule, AuthzModule, ProjectsModule, CohortsModule],
-  controllers: [RcWebhookController, RcAdminController],
+  controllers: [RcWebhookController, RcAdminController, RcMetricsController],
   providers: [
     RcWebhookGuard,
     RcWebhookProcessor,
@@ -26,6 +28,7 @@ import { RcWebhookProcessor } from './rc-webhook.processor';
     { provide: RcApiClient, useFactory: () => new RcApiClient() },
     RcBackfillService,
     RcAdminService,
+    RcMetricsService,
   ],
   exports: [RcWebhookProcessor, RcIdentityService],
 })
