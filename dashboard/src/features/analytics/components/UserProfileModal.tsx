@@ -1,11 +1,13 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { useEffect } from 'react';
 import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
 import { Badge } from '../../../components/ui/badge';
+import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '../../../components/ui/dialog';
 import { fieldLook } from '../../../components/ui/input';
+import { useToast } from '../../../components/ui/toast';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
@@ -14,19 +16,45 @@ import type {
   ScreenPathsResponse,
   UserEventContext,
   UserRecentEvent,
+  UserSubscription,
 } from '../../../lib/api/types';
-import { formatExactNumber } from '../format';
+import { formatCurrency, formatExactNumber } from '../format';
 import { useRunClickHeatmap, useRunScreenPaths, useScreens, useUserProfile } from '../api';
 import { FavoriteButton } from '../../favorites/FavoriteButton';
 import { useFavorites } from '../../favorites/favorites';
 import { useRecents } from '../../favorites/recents';
+import { useRcEnabled, useRefreshUserSubscription, useUserSubscription } from '../../revenuecat/api';
 import { defaultDate } from './builder-controls';
 import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
 import { PathMap } from './PathMap';
 
 /** The screen-view autocapture event (contracts §4) — drives the per-user screen-path diagram. */
 const SCREEN_VIEW_EVENT = '$screen_view';
+/** RevenueCat timeline event prefix (spec §4.7) — `$rc_initial_purchase`, `$rc_renewal`, etc. */
+const RC_EVENT_PREFIX = '$rc_';
 const HEATMAP_GRID: HeatmapGrid = { cols: 20, rows: 40 };
+
+/** Subscription status -> Badge variant (spec §4.7). Unlisted statuses fall back to `default`. */
+const SUBSCRIPTION_STATUS_VARIANT: Record<
+  string,
+  'success' | 'info' | 'warning' | 'outline' | 'danger'
+> = {
+  active: 'success',
+  trial: 'info',
+  grace: 'warning',
+  paused: 'outline',
+  churned: 'danger',
+};
+
+/**
+ * The forward (newest-first) index of the OLDEST `$rc_initial_purchase` in `events`, or -1 if none.
+ * `events` is newest-first, so the oldest occurrence is the last match when scanning forward —
+ * equivalently the first match when scanning the reversed (oldest-first) array, mapped back.
+ */
+function firstSubscribedIndex(events: UserRecentEvent[]): number {
+  const reversedIdx = [...events].reverse().findIndex((e) => e.event === '$rc_initial_purchase');
+  return reversedIdx === -1 ? -1 : events.length - 1 - reversedIdx;
+}
 
 /** Device/app context fields, in display order, with friendly labels. */
 const DEVICE_FIELDS: ReadonlyArray<readonly [keyof UserEventContext, string]> = [
@@ -122,11 +150,31 @@ export function UserProfileModal({
   const recents = useRecents(projectId);
   const recordRecent = recents.record;
 
+  // RC subscription card (spec §4.7) — hidden entirely when the project isn't connected to
+  // RevenueCat or this user has never had a subscription event.
+  const rcEnabled = useRcEnabled(projectId);
+  const { data: subscriptionData } = useUserSubscription(projectId, distinctId, rcEnabled);
+  const subscription = subscriptionData?.subscription ?? null;
+  const refreshSubscription = useRefreshUserSubscription(projectId);
+  const { toast } = useToast();
+  const handleRefreshSubscription = () => {
+    refreshSubscription.mutate(distinctId, {
+      onSuccess: () => toast({ title: 'Subscription refreshed' }),
+      onError: (err) =>
+        toast({
+          title: 'Could not refresh subscription',
+          description: err instanceof ApiError ? err.problem.title : 'Something went wrong.',
+          variant: 'error',
+        }),
+    });
+  };
+
   // The event whose detail is shown on the right. `null` means "follow the latest" (recent_events
   // is newest-first, so index 0). Clicking a timeline event pins it here.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const events = data?.recent_events ?? [];
   const selectedEvent = events.find((e) => e.insert_id === selectedId) ?? events[0];
+  const firstSubIndex = useMemo(() => firstSubscribedIndex(events), [events]);
 
   // Country: prefer the profile row (set via people.set); otherwise fall back to the most recent
   // event carrying a `country` super property (registerSuperProperties rides on events, not the
@@ -260,6 +308,20 @@ export function UserProfileModal({
                   </CardContent>
                 </Card>
 
+                {rcEnabled && subscription && (
+                  <Card>
+                    <CardContent>
+                      <CollapsibleSection title="Subscription" defaultOpen>
+                        <SubscriptionCard
+                          subscription={subscription}
+                          isRefreshing={refreshSubscription.isPending}
+                          onRefresh={handleRefreshSubscription}
+                        />
+                      </CollapsibleSection>
+                    </CardContent>
+                  </Card>
+                )}
+
                 <Card>
                   <CardContent>
                     <CollapsibleSection title="Screen path" defaultOpen={false}>
@@ -314,39 +376,55 @@ export function UserProfileModal({
                         data-testid="activity-timeline-scroll"
                       >
                         <ol className="flex flex-col gap-1 border-l border-border pl-4 text-sm">
-                          {events.map((event) => {
+                          {events.map((event, index) => {
                             const isSelected = event.insert_id === selectedEvent?.insert_id;
+                            const isRcEvent = event.event.startsWith(RC_EVENT_PREFIX);
                             return (
-                              <li key={event.insert_id} className="relative">
-                                <span
-                                  aria-hidden
-                                  className={cn(
-                                    'absolute -left-[1.3125rem] top-2.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
-                                    isSelected ? 'bg-accent ring-2 ring-accent/30' : 'bg-accent',
-                                  )}
-                                />
-                                <button
-                                  type="button"
-                                  aria-pressed={isSelected}
-                                  onClick={() => setSelectedId(event.insert_id)}
-                                  className={cn(
-                                    'w-full rounded-md px-2 py-1.5 text-left transition-colors',
-                                    isSelected
-                                      ? 'bg-accent/10 ring-1 ring-accent/40'
-                                      : 'hover:bg-chart-surface',
-                                  )}
-                                >
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-medium">{event.event}</span>
-                                    {event.screen_name && (
-                                      <Badge variant="outline">{event.screen_name}</Badge>
+                              <Fragment key={event.insert_id}>
+                                {index === firstSubIndex && (
+                                  <li
+                                    role="presentation"
+                                    className="-ml-4 pl-4 py-1 text-xs font-semibold text-accent"
+                                  >
+                                    ★ First subscribed
+                                  </li>
+                                )}
+                                <li className="relative">
+                                  <span
+                                    aria-hidden
+                                    className={cn(
+                                      'absolute -left-[1.3125rem] top-2.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
+                                      isSelected
+                                        ? 'bg-accent ring-2 ring-accent/30'
+                                        : isRcEvent
+                                          ? 'bg-accent ring-2 ring-accent/20'
+                                          : 'bg-accent',
                                     )}
-                                  </div>
-                                  <div className="text-xs text-text-muted">
-                                    {new Date(event.timestamp).toLocaleString()}
-                                  </div>
-                                </button>
-                              </li>
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    onClick={() => setSelectedId(event.insert_id)}
+                                    className={cn(
+                                      'w-full rounded-md px-2 py-1.5 text-left transition-colors',
+                                      isSelected
+                                        ? 'bg-accent/10 ring-1 ring-accent/40'
+                                        : 'hover:bg-chart-surface',
+                                    )}
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-medium">{event.event}</span>
+                                      {event.screen_name && (
+                                        <Badge variant="outline">{event.screen_name}</Badge>
+                                      )}
+                                      {isRcEvent && <Badge variant="accent">subscription</Badge>}
+                                    </div>
+                                    <div className="text-xs text-text-muted">
+                                      {new Date(event.timestamp).toLocaleString()}
+                                    </div>
+                                  </button>
+                                </li>
+                              </Fragment>
                             );
                           })}
                         </ol>
@@ -373,6 +451,61 @@ export function UserProfileModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The LEFT column's RC subscription summary (spec §4.7): status, plan/store/period, spend, dates,
+ *  a manual refresh, and a deep-link into RevenueCat's dashboard when the project id is known. */
+function SubscriptionCard({
+  subscription,
+  isRefreshing,
+  onRefresh,
+}: {
+  subscription: UserSubscription;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const currency = subscription.currency ?? 'USD';
+  return (
+    <div className="flex flex-col gap-3">
+      <Badge variant={SUBSCRIPTION_STATUS_VARIANT[subscription.status] ?? 'default'}>
+        {subscription.status}
+      </Badge>
+      <PropertyGrid
+        entries={[
+          ['Plan', subscription.product_id],
+          ['Store', subscription.store],
+          ['Period', subscription.period_type],
+          ['Total spent', formatCurrency(subscription.total_spent_cents / 100, currency)],
+          ['MRR', formatCurrency(subscription.mrr_cents / 100, currency)],
+          [
+            'First purchased',
+            subscription.first_purchase_at
+              ? new Date(subscription.first_purchase_at).toLocaleDateString()
+              : null,
+          ],
+          [
+            'Renews / expires',
+            subscription.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : null,
+          ],
+        ]}
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="secondary" size="sm" disabled={isRefreshing} onClick={onRefresh}>
+          {isRefreshing ? 'Refreshing…' : 'Refresh from RevenueCat'}
+        </Button>
+        {subscription.rc_customer_url && (
+          <a
+            href={subscription.rc_customer_url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm font-medium text-accent hover:underline"
+          >
+            Open in RevenueCat
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 

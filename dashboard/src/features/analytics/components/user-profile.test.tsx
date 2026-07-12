@@ -6,10 +6,12 @@ import type { ClickHeatmapQuery, ScreenPathsQuery } from '../../../lib/api/types
 import { authStore } from '../../auth/store';
 import {
   CLICK_HEATMAP_FIXTURE,
+  projectsHandlerWithoutRc,
   SCREEN_PATHS_FIXTURE,
   TEST_PROJECT,
   TEST_USER,
   USER_PROFILE_FIXTURE,
+  USER_SUBSCRIPTION_FIXTURE,
   VALID_ACCESS_TOKEN,
 } from '../../../test/msw/handlers';
 import { server } from '../../../test/msw/server';
@@ -122,5 +124,37 @@ describe('UserProfilePage', () => {
     expect(bodies[0]!.distinct_ids).toEqual(USER_PROFILE_FIXTURE.distinct_ids);
 
     expect(await screen.findByTestId('path-map')).toBeInTheDocument();
+  });
+
+  it('shows the subscription card with status badge and RC link', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const card = (await screen.findByText('Subscription')).closest('.rounded-xl')! as HTMLElement;
+    expect(within(card).getByText('active')).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: /open in revenuecat/i })).toHaveAttribute(
+      'href',
+      USER_SUBSCRIPTION_FIXTURE.rc_customer_url!,
+    );
+  });
+
+  it('marks $rc_ timeline events and renders the first-subscribed divider', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    expect(await within(timeline).findByText('★ First subscribed')).toBeInTheDocument();
+    expect(within(timeline).getAllByText('subscription').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders no subscription card when RC is not connected', async () => {
+    server.use(projectsHandlerWithoutRc());
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    await screen.findByRole('heading', { name: 'user-001' });
+    await waitFor(() => expect(screen.queryByText('Subscription')).not.toBeInTheDocument());
   });
 });
