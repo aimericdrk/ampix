@@ -51,13 +51,22 @@ import type {
   OrgRole,
   Project,
   ProjectRole,
+  RcIntegrationStatus,
+  RcJournalEntry,
+  RcJournalResponse,
+  RcReplayResponse,
+  RcResyncResponse,
   RenameOrgResponse,
   SessionsSummaryResponse,
   Setup2faResponse,
+  SubscriptionAttributionResponse,
+  SubscriptionsSummaryResponse,
   UpdatedProjectMember,
   UpdateProjectResponse,
   UserListItem,
   UserProfileResponse,
+  UserSubscription,
+  UserSubscriptionResponse,
 } from '../../lib/api/types';
 
 export const TEST_USER: AuthUser = {
@@ -98,7 +107,9 @@ export const THIRD_ORG_USER: AuthUser = {
   name: 'Grace Hopper',
 };
 
-/** Fixture project (contracts §12) — org_name + ingest_token included, requester owns it. */
+/** Fixture project (contracts §12) — org_name + ingest_token included, requester owns it.
+ *  RC-on is the fixture default; gating-off tests override the projects handler with
+ *  {@link projectsHandlerWithoutRc}. */
 export const TEST_PROJECT: Project = {
   id: '0197f6a0-0000-7000-8000-0000000000aa',
   org_id: '0197f6a0-0000-7000-8000-0000000000bb',
@@ -107,6 +118,7 @@ export const TEST_PROJECT: Project = {
   timezone: 'UTC',
   ingest_token: 'mam_0123456789abcdef0123456789abcdef',
   role: 'owner',
+  integrations: { revenuecat: true },
 };
 
 /** Deterministic sample for GET /projects/:projectId/events/summary (contracts §12). */
@@ -244,14 +256,30 @@ export const USER_PROFILE_FIXTURE: Omit<
   first_seen: '2026-05-01T08:00:00.000Z',
   // Newest-first. The $screen_view rows drive the screen-path chain: chronologically
   // home → catalog → catalog → cart, collapsing to home → catalog → cart. Non-screen events carry
-  // a null screen_name.
+  // a null screen_name. evt-108/evt-107 are the RevenueCat timeline rows (Task 20's tests).
   recent_events: [
+    {
+      insert_id: 'evt-108',
+      event: '$rc_renewal',
+      timestamp: '2026-07-01T10:05:00.000Z',
+      screen_name: null,
+      properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
     {
       insert_id: 'evt-106',
       event: 'checkout_completed',
       timestamp: '2026-07-01T10:00:00.000Z',
       screen_name: null,
       properties: { country: 'FR', $price: 42.5, currency: 'EUR', order_id: 'ord-9' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
+    {
+      insert_id: 'evt-107',
+      event: '$rc_initial_purchase',
+      timestamp: '2026-07-01T09:59:00.000Z',
+      screen_name: null,
+      properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
       context: DEVICE_CONTEXT_FIXTURE,
     },
     {
@@ -430,6 +458,143 @@ export const ENGAGEMENT_FIXTURE: EngagementResponse = {
     { t: '2026-06-30', new: 35, returning: 100 },
     { t: '2026-07-01', new: 40, returning: 110 },
   ],
+};
+
+// --- RevenueCat integration fixtures (spec §4.7) ---
+
+/** Deterministic status for `GET .../integrations/revenuecat` — connected, sandbox off, a full
+ *  journal counts breakdown across all four statuses. */
+export const RC_STATUS_FIXTURE: RcIntegrationStatus = {
+  connected: true,
+  webhook_path: `/webhooks/revenuecat/${TEST_PROJECT.id}`,
+  webhook_secret: 'rcwh_test_secret_abc123',
+  api_key_masked: '…1234',
+  rc_project_id: 'rcproj_demo',
+  sandbox_mode: false,
+  last_webhook_at: '2026-07-01T09:58:00.000Z',
+  backfill_status: 'completed',
+  counts: { processed: 214, failed: 3, unlinked: 5, skipped: 8 },
+};
+
+export const RC_JOURNAL_FIXTURE: RcJournalEntry[] = [
+  {
+    id: 'rcje-4',
+    rc_event_id: 'evt_rc_004',
+    event_type: 'INITIAL_PURCHASE',
+    rc_app_user_id: 'rcuser-001',
+    status: 'processed',
+    error: null,
+    received_at: '2026-07-01T09:58:00.000Z',
+  },
+  {
+    id: 'rcje-3',
+    rc_event_id: 'evt_rc_003',
+    event_type: 'RENEWAL',
+    rc_app_user_id: 'rcuser-002',
+    status: 'processed',
+    error: null,
+    received_at: '2026-06-30T14:10:00.000Z',
+  },
+  {
+    id: 'rcje-2',
+    rc_event_id: 'evt_rc_002',
+    event_type: 'CANCELLATION',
+    rc_app_user_id: null,
+    status: 'unlinked',
+    error: 'No user matched rc_app_user_id',
+    received_at: '2026-06-30T08:00:00.000Z',
+  },
+  {
+    id: 'rcje-1',
+    rc_event_id: 'evt_rc_001',
+    event_type: 'BILLING_ISSUE',
+    rc_app_user_id: 'rcuser-003',
+    status: 'failed',
+    error: 'Downstream write failed',
+    received_at: '2026-06-29T12:00:00.000Z',
+  },
+];
+
+/** Deterministic sample for `GET /metrics/subscriptions` — $49.95 MRR, 5 active, 2 in trial. */
+export const SUBSCRIPTIONS_SUMMARY_FIXTURE: SubscriptionsSummaryResponse = {
+  mrr_cents: 4995,
+  active: 5,
+  in_trial: 2,
+  grace: 1,
+  new_subscriptions: 3,
+  churned: 1,
+  trials_started: 4,
+  trials_converted: 2,
+  by_day: [
+    { t: '2026-06-29', new_subscriptions: 1, churned: 0, revenue: 999 },
+    { t: '2026-06-30', new_subscriptions: 1, churned: 1, revenue: 1998 },
+    { t: '2026-07-01', new_subscriptions: 1, churned: 0, revenue: 999 },
+  ],
+  by_product: [
+    { product_id: 'pro_monthly', active: 3, mrr_cents: 2997 },
+    { product_id: 'pro_annual', active: 2, mrr_cents: 1998 },
+  ],
+  by_store: [
+    { store: 'app_store', active: 3 },
+    { store: 'play_store', active: 2 },
+  ],
+  churn_reasons: [
+    { reason: 'voluntary', count: 1 },
+    { reason: 'billing_error', count: 1 },
+  ],
+  recent_events: [
+    {
+      insert_id: 'rcevt-3',
+      event: '$rc_initial_purchase',
+      distinct_id: 'user-001',
+      timestamp: '2026-07-01T09:58:00.000Z',
+      product_id: 'pro_monthly',
+      price: 9.99,
+    },
+    {
+      insert_id: 'rcevt-2',
+      event: '$rc_renewal',
+      distinct_id: 'user-002',
+      timestamp: '2026-06-30T14:10:00.000Z',
+      product_id: 'pro_annual',
+      price: 99.99,
+    },
+  ],
+};
+
+/** Deterministic sample for `GET /metrics/subscriptions/attribution`: 10 trials, 4 converted. */
+export const SUBSCRIPTION_ATTRIBUTION_FIXTURE: SubscriptionAttributionResponse = {
+  drivers: [
+    { event: '$screen_view', users: 40 },
+    { event: 'checkout_completed', users: 12 },
+  ],
+  screens: [
+    { screen_name: 'Paywall', users: 30 },
+    { screen_name: 'Onboarding', users: 18 },
+  ],
+  time_to_convert: [
+    { bucket: '<1d', users: 4 },
+    { bucket: '1-3d', users: 3 },
+    { bucket: '3-7d', users: 2 },
+    { bucket: '7-14d', users: 1 },
+  ],
+  trial_funnel: { trials: 10, converted: 4 },
+};
+
+/** Deterministic active subscription for `GET/POST .../users/:distinctId(/refresh)`. */
+export const USER_SUBSCRIPTION_FIXTURE: UserSubscription = {
+  status: 'active',
+  product_id: 'pro_monthly',
+  store: 'app_store',
+  period_type: 'normal',
+  total_spent_cents: 2997,
+  mrr_cents: 999,
+  currency: 'USD',
+  first_purchase_at: '2026-05-01T08:00:00.000Z',
+  expires_at: '2026-08-01T08:00:00.000Z',
+  cancelled_at: null,
+  rc_app_user_id: 'rcuser-001',
+  rc_customer_url: 'https://app.revenuecat.com/customers/rcproj_demo/rcuser-001',
 };
 
 // --- Screens, user-path map & click heatmap fixtures (contracts §18/§19) ---
@@ -775,7 +940,32 @@ function toProject(record: ProjectRecord, callerId: string): Project {
     timezone: record.timezone,
     ingest_token: ingestTokenFor(record.id),
     role: projectRoleFor(record.id, record.orgId, callerId) ?? 'viewer',
+    // RC-on is the fixture default; gating-off tests override the handler via projectsHandlerWithoutRc().
+    integrations: { revenuecat: true },
   };
+}
+
+/**
+ * Gating-off override for `GET /api/v1/projects` — used by tests exercising the "RevenueCat not
+ * connected" state (the nav item hidden, upsell shown, etc). Returns TEST_PROJECT unchanged except
+ * for `integrations.revenuecat: false`; pass to `server.use(...)` for the duration of the test.
+ */
+export function projectsHandlerWithoutRc() {
+  return http.get('/api/v1/projects', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token)) {
+      return problem(401, 'Access token invalid or expired');
+    }
+    const caller = userForToken(token);
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const response: ListProjectsResponse = {
+      projects: orgsState.projects.map((record) => ({
+        ...toProject(record, caller.id),
+        integrations: { revenuecat: false },
+      })),
+    };
+    return HttpResponse.json(response);
+  });
 }
 
 export const handlers = [
@@ -1272,6 +1462,100 @@ export const handlers = [
       ...EVENT_SUMMARY_FIXTURE,
     };
     return HttpResponse.json(response);
+  }),
+
+  // --- RevenueCat integration (spec §4.7) ---
+
+  http.get('/api/v1/projects/:projectId/integrations/revenuecat', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(RC_STATUS_FIXTURE);
+  }),
+
+  http.put('/api/v1/projects/:projectId/integrations/revenuecat', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as {
+      api_key?: string;
+      rc_project_id?: string;
+      sandbox_mode?: boolean;
+    };
+    const response: RcIntegrationStatus = {
+      ...RC_STATUS_FIXTURE,
+      connected: true,
+      api_key_masked: body.api_key ? `…${body.api_key.slice(-4)}` : RC_STATUS_FIXTURE.api_key_masked,
+      rc_project_id: body.rc_project_id ?? RC_STATUS_FIXTURE.rc_project_id,
+      sandbox_mode: body.sandbox_mode ?? RC_STATUS_FIXTURE.sandbox_mode,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.delete('/api/v1/projects/:projectId/integrations/revenuecat', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get('/api/v1/projects/:projectId/integrations/revenuecat/events', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const status = new URL(request.url).searchParams.get('status');
+    const events = status ? RC_JOURNAL_FIXTURE.filter((e) => e.status === status) : RC_JOURNAL_FIXTURE;
+    const response: RcJournalResponse = { events };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/integrations/revenuecat/replay', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: RcReplayResponse = { replayed: 5, remaining: 0 };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/integrations/revenuecat/resync', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: RcResyncResponse = { status: 'started' };
+    return HttpResponse.json(response, { status: 202 });
+  }),
+
+  http.get('/api/v1/projects/:projectId/integrations/revenuecat/users/:distinctId', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: UserSubscriptionResponse = { subscription: USER_SUBSCRIPTION_FIXTURE };
+    return HttpResponse.json(response);
+  }),
+
+  http.post(
+    '/api/v1/projects/:projectId/integrations/revenuecat/users/:distinctId/refresh',
+    ({ request }) => {
+      const token = bearerToken(request);
+      if (!token || !ACCEPTED_TOKENS.has(token))
+        return problem(401, 'Access token invalid or expired');
+      const response: UserSubscriptionResponse = { subscription: USER_SUBSCRIPTION_FIXTURE };
+      return HttpResponse.json(response);
+    },
+  ),
+
+  http.get('/api/v1/projects/:projectId/metrics/subscriptions', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SUBSCRIPTIONS_SUMMARY_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/subscriptions/attribution', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SUBSCRIPTION_ATTRIBUTION_FIXTURE);
   }),
 
   http.post('/api/v1/orgs/:orgId/projects', async ({ request, params }) => {
