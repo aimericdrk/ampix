@@ -499,6 +499,13 @@ class MyAmpix {
   bool get autocaptureScreenshotsEnabled =>
       _initialized && _autocaptureScreenshots;
 
+  /// The current distinct id, or null before [init] completes its identity load.
+  /// Pass this to other SDKs (e.g. RevenueCat's `Purchases.logIn`) to share identity.
+  String? getDistinctId() {
+    if (!_initialized) return null;
+    return _identity.distinctId;
+  }
+
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);
     // Debug-only: shows the identity transition. `changed=false` means the user was already

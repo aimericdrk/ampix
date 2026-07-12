@@ -181,6 +181,15 @@ void main() {
     expect(after['distinct_id'], 'u_42');
   });
 
+  test('getDistinctId returns null before init and the identified id after identify', () async {
+    expect(MyAmpix.instance.getDistinctId(), isNull);
+    await initSdk();
+    final anon = MyAmpix.instance.getDistinctId();
+    expect(anon, isNotNull);
+    MyAmpix.instance.identify('user-42');
+    await waitFor(() => MyAmpix.instance.getDistinctId() == 'user-42');
+  });
+
   test(r'alias emits $identify carrying $alias', () async {
     await initSdk();
     MyAmpix.instance.alias('new-id');
