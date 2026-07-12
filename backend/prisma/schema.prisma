@@ -102,6 +102,9 @@ model Project {
   createdById        String?             @map("created_by") @db.Uuid
   createdBy          User?               @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   projectMemberships ProjectMembership[]
+  revenuecatIntegration RevenueCatIntegration?
+  subscriptionStates    SubscriptionState[]
+  revenuecatWebhookEvents RevenueCatWebhookEvent[]
 
   @@map("projects")
 }
@@ -269,4 +272,63 @@ model ScreenCapture {
   @@unique([projectId, screenName, appVersion])
   @@index([projectId, screenName])
   @@map("screen_captures")
+}
+
+model RevenueCatIntegration {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  projectId      String    @unique @map("project_id") @db.Uuid
+  webhookSecret  String    @map("webhook_secret")
+  apiKey         String?   @map("api_key")
+  rcProjectId    String?   @map("rc_project_id")
+  sandboxMode    Boolean   @default(false) @map("sandbox_mode")
+  lastWebhookAt  DateTime? @map("last_webhook_at")
+  backfillStatus String?   @map("backfill_status")
+  connectedAt    DateTime  @default(now()) @map("connected_at")
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("revenuecat_integrations")
+}
+
+model SubscriptionState {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  projectId       String    @map("project_id") @db.Uuid
+  rcAppUserId     String    @map("rc_app_user_id")
+  distinctId      String?   @map("distinct_id")
+  status          String
+  productId       String?   @map("product_id")
+  store           String?
+  periodType      String?   @map("period_type")
+  priceCents      Int?      @map("price_cents")
+  currency        String?
+  mrrCents        Int       @default(0) @map("mrr_cents")
+  totalSpentCents Int       @default(0) @map("total_spent_cents")
+  firstPurchaseAt DateTime? @map("first_purchase_at")
+  expiresAt       DateTime? @map("expires_at")
+  cancelledAt     DateTime? @map("cancelled_at")
+  lastEventAt     DateTime? @map("last_event_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, rcAppUserId])
+  @@index([projectId, status])
+  @@index([projectId, distinctId])
+  @@map("subscription_states")
+}
+
+model RevenueCatWebhookEvent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  rcEventId   String    @map("rc_event_id")
+  eventType   String    @map("event_type")
+  rcAppUserId String?   @map("rc_app_user_id")
+  payload     Json
+  status      String
+  error       String?
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, rcEventId])
+  @@index([projectId, status])
+  @@map("revenuecat_webhook_events")
 }
