@@ -26,8 +26,11 @@ function buildMocks() {
         const row = journalRows.find((r) => r.id === where.id); Object.assign(row, data); return row;
       }),
       findMany: jest.fn(async ({ where }: any) =>
-        journalRows.filter((r) => r.status === 'unlinked' &&
+        journalRows.filter((r) => where.status.in.includes(r.status) &&
           (where.rcAppUserId === undefined || r.rcAppUserId === where.rcAppUserId))),
+      count: jest.fn(async ({ where }: any) =>
+        journalRows.filter((r) => where.status.in.includes(r.status) &&
+          (where.rcAppUserId === undefined || r.rcAppUserId === where.rcAppUserId)).length),
     },
     subscriptionState: {
       upsert: jest.fn(async ({ where, create, update }: any) => {
@@ -127,5 +130,40 @@ describe('RcWebhookProcessor.replayUnlinked', () => {
     expect(result).toEqual({ replayed: 1, remaining: 0 });
     expect(m.journalRows[0].status).toBe('processed');
     expect(m.clickhouse.insertEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it('also replays failed rows, and remaining reflects the true post-loop count', async () => {
+    const m = buildMocks();
+    m.clickhouse.insertEvents.mockRejectedValueOnce(new Error('ch down'));
+    const p = new RcWebhookProcessor(m.prisma, m.clickhouse, m.profileWriter, m.identity);
+    await p.process(INTEGRATION, BODY, NOW);
+    expect(m.journalRows[0].status).toBe('failed');
+    const result = await p.replayUnlinked('pid-1', 'rc-user-1', NOW);
+    expect(result).toEqual({ replayed: 1, remaining: 0 });
+    expect(m.journalRows[0].status).toBe('processed');
+  });
+});
+
+describe('RcWebhookProcessor state regression', () => {
+  it('a later CANCELLATION patches only cancelledAt, retaining fields set by the INITIAL_PURCHASE', async () => {
+    const m = buildMocks();
+    const p = new RcWebhookProcessor(m.prisma, m.clickhouse, m.profileWriter, m.identity);
+    await p.process(INTEGRATION, BODY, NOW);
+
+    const cancellation = {
+      id: 'evt-cancel', type: 'CANCELLATION', app_user_id: 'rc-user-1',
+      event_timestamp_ms: NOW + 1_000, environment: 'PRODUCTION', price: null,
+    };
+    await p.process(INTEGRATION, { event: cancellation }, NOW + 1_000);
+
+    const state = m.stateRows.get('pid-1:rc-user-1');
+    expect(state).toMatchObject({
+      status: 'active', // CANCELLATION does not change status
+      productId: 'pro_monthly', // retained from INITIAL_PURCHASE, not clobbered
+      store: 'APP_STORE', // retained from INITIAL_PURCHASE, not clobbered
+      totalSpentCents: 999, // unchanged: CANCELLATION's addSpendCents is 0
+      firstPurchaseAt: new Date(EVENT.purchased_at_ms), // set-once, untouched by later events
+    });
+    expect(state.cancelledAt).toEqual(new Date(cancellation.event_timestamp_ms));
   });
 });
