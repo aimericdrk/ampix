@@ -27,7 +27,10 @@ function CopyIconButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const handleCopy = () => {
-    if (!navigator.clipboard) return;
+    if (!navigator.clipboard) {
+      toast({ title: 'Copy not available' });
+      return;
+    }
     navigator.clipboard
       .writeText(value)
       .then(() => {
@@ -58,7 +61,7 @@ function formatDate(iso: string): string {
  *  the connect form; connected shows the webhook URL/secret, health counters, and journal/backfill
  *  controls. Rendered only for project admins (gated in ProjectDetailPage). */
 export function IntegrationsSection({ projectId }: { projectId: string }) {
-  const { data: status, isPending } = useRcStatus(projectId);
+  const { data: status, isPending, isError, error } = useRcStatus(projectId);
 
   return (
     <Card data-testid="rc-integration-card">
@@ -71,6 +74,11 @@ export function IntegrationsSection({ projectId }: { projectId: string }) {
       </CardHeader>
       <CardContent>
         {isPending && <p className="text-sm text-text-muted">Loading…</p>}
+        {isError && (
+          <p role="alert" className="text-danger">
+            {error instanceof ApiError ? error.problem.title : 'Failed to load RevenueCat status'}
+          </p>
+        )}
         {status && (status.connected ? <ConnectedPanel projectId={projectId} status={status} /> : <ConnectForm projectId={projectId} />)}
       </CardContent>
     </Card>
@@ -283,7 +291,7 @@ function ConnectedPanel({
       {journal && journal.events.length > 0 && (
         <div className="space-y-2">
           <Separator />
-          <p className="text-sm font-medium">Latest failed/unlinked events</p>
+          <p className="text-sm font-medium">Latest failed events</p>
           <ul className="space-y-1">
             {journal.events.map((entry) => (
               <li key={entry.id} className="flex items-center justify-between gap-4 text-sm">

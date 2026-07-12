@@ -75,6 +75,23 @@ describe('IntegrationsSection', () => {
     await waitFor(() => expect(putBody).toEqual({ api_key: 'sk_test_123', rc_project_id: 'proj1' }));
   });
 
+  it('renders the problem title when the status fetch fails', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/integrations/revenuecat', () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Internal server error', status: 500 },
+          { status: 500, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    );
+    signIn();
+    renderApp(SETTINGS_URL);
+
+    const card = await screen.findByTestId('rc-integration-card');
+    expect(await within(card).findByRole('alert')).toHaveTextContent('Internal server error');
+    expect(within(card).queryByLabelText(/secret api key/i)).not.toBeInTheDocument();
+  });
+
   it('disconnects behind a confirm dialog', async () => {
     let disconnected = false;
     server.use(
