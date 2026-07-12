@@ -55,7 +55,11 @@ export function useRcReplay(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiFetch<RcReplayResponse>(`${rcBase(projectId)}/replay`, { method: 'POST' }),
-    onSuccess: () => invalidateRc(queryClient, projectId),
+    // Journal counts/backfill status only — the connected/gating flag doesn't change, so unlike
+    // upsert/disconnect this does NOT invalidate ['projects'].
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: rcKey(projectId) });
+    },
   });
 }
 
@@ -63,7 +67,10 @@ export function useRcResync(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiFetch<RcResyncResponse>(`${rcBase(projectId)}/resync`, { method: 'POST' }),
-    onSuccess: () => invalidateRc(queryClient, projectId),
+    // See useRcReplay: backfill status only, no gating-flag change.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: rcKey(projectId) });
+    },
   });
 }
 
