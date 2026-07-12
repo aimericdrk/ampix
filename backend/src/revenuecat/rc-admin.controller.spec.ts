@@ -10,12 +10,21 @@ describe('RcAdminController authz metadata', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, RcAdminController)).toEqual([JwtAuthGuard]);
   });
 
-  it.each(['getStatus', 'upsert', 'disconnect', 'listJournal', 'replay'] as const)(
+  it.each(['getStatus', 'upsert', 'disconnect', 'listJournal', 'replay', 'resync'] as const)(
     '%s requires project admin via ProjectRolesGuard',
     (method) => {
       const handler = RcAdminController.prototype[method];
       expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([ProjectRolesGuard]);
       expect(Reflect.getMetadata(PROJECT_ROLES_KEY, handler)).toBe('admin');
+    },
+  );
+
+  it.each(['refreshUser'] as const)(
+    '%s requires project analyst via ProjectRolesGuard',
+    (method) => {
+      const handler = RcAdminController.prototype[method];
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([ProjectRolesGuard]);
+      expect(Reflect.getMetadata(PROJECT_ROLES_KEY, handler)).toBe('analyst');
     },
   );
 

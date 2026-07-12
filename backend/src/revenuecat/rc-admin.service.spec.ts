@@ -22,7 +22,8 @@ function build(overrides: { integration?: unknown } = {}) {
   } as any;
   const projects = { assertMembership: jest.fn(async () => undefined) } as any;
   const processor = { replayUnlinked: jest.fn(async () => ({ replayed: 1, remaining: 0 })) } as any;
-  return { prisma, projects, processor, svc: new RcAdminService(prisma, projects, processor) };
+  const backfill = { run: jest.fn(async () => undefined) } as any;
+  return { prisma, projects, processor, backfill, svc: new RcAdminService(prisma, projects, processor, backfill) };
 }
 
 describe('RcAdminService', () => {
@@ -46,6 +47,24 @@ describe('RcAdminService', () => {
     const args = prisma.revenueCatIntegration.upsert.mock.calls[0][0];
     expect(args.create.webhookSecret).toMatch(/^rcwh_[0-9a-f]{48}$/);
     expect(args.update.webhookSecret).toBeUndefined();
+  });
+
+  it('upsert triggers backfill on the create path when an api key is provided', async () => {
+    const { svc, backfill } = build();
+    await svc.upsert(PID, { api_key: 'k', rc_project_id: 'p', sandbox_mode: true });
+    expect(backfill.run).toHaveBeenCalledWith(PID);
+  });
+
+  it('upsert does not trigger backfill on the update path (row already existed)', async () => {
+    const { svc, backfill } = build({ integration: ROW });
+    await svc.upsert(PID, { api_key: 'k2', rc_project_id: 'p', sandbox_mode: true });
+    expect(backfill.run).not.toHaveBeenCalled();
+  });
+
+  it('upsert does not trigger backfill on create when no api key is provided', async () => {
+    const { svc, backfill } = build();
+    await svc.upsert(PID, { rc_project_id: 'p', sandbox_mode: true });
+    expect(backfill.run).not.toHaveBeenCalled();
   });
 
   it('getUserSubscription asserts membership and returns null when unknown', async () => {

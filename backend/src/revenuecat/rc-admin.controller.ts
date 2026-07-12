@@ -8,6 +8,7 @@ import { ProjectRoles } from '../authz/project-roles.decorator';
 import { ProjectRolesGuard } from '../authz/project-roles.guard';
 import { rcUpsertSchema } from './rc-admin.schema';
 import { RcAdminService } from './rc-admin.service';
+import { RcBackfillService } from './rc-backfill.service';
 
 /**
  * RevenueCat integration management (spec §4.7). Mounted under
@@ -19,7 +20,10 @@ import { RcAdminService } from './rc-admin.service';
 @Controller('api/v1/projects/:projectId/integrations/revenuecat')
 @UseGuards(JwtAuthGuard)
 export class RcAdminController {
-  constructor(private readonly service: RcAdminService) {}
+  constructor(
+    private readonly service: RcAdminService,
+    private readonly backfill: RcBackfillService,
+  ) {}
 
   @Get()
   @UseGuards(ProjectRolesGuard)
@@ -63,6 +67,29 @@ export class RcAdminController {
     @Param('projectId') projectId: string,
     @Param('distinctId') distinctId: string,
   ) {
+    return this.service.getUserSubscription(req.user!.id, projectId, distinctId);
+  }
+
+  @Post('resync')
+  @HttpCode(202)
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
+  resync(@Param('projectId') projectId: string) {
+    void this.backfill.run(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
+    return { status: 'started' };
+  }
+
+  @Post('users/:distinctId/refresh')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('analyst')
+  async refreshUser(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Param('distinctId') distinctId: string,
+  ) {
+    const integration = await this.service.requireIntegrationWithKey(projectId);
+    const state = await this.service.requireStateByDistinctId(projectId, distinctId);
+    await this.backfill.syncCustomer(projectId, integration.apiKey, integration.rcProjectId, state.rcAppUserId);
     return this.service.getUserSubscription(req.user!.id, projectId, distinctId);
   }
 }

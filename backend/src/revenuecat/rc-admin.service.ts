@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import type { SubscriptionState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
 import { ProblemException } from '../common/problem-details';
 import { RcWebhookProcessor } from './rc-webhook.processor';
+import { RcBackfillService } from './rc-backfill.service';
 import type { RcUpsertInput } from './rc-admin.schema';
 
 export interface RcIntegrationStatus {
@@ -57,6 +59,7 @@ export class RcAdminService {
     private readonly prisma: PrismaService,
     private readonly projects: ProjectsService,
     private readonly processor: RcWebhookProcessor,
+    private readonly backfill: RcBackfillService,
   ) {}
 
   async getStatus(projectId: string): Promise<RcIntegrationStatus> {
@@ -100,6 +103,7 @@ export class RcAdminService {
   }
 
   async upsert(projectId: string, input: RcUpsertInput): Promise<RcIntegrationStatus> {
+    const existing = await this.prisma.revenueCatIntegration.findUnique({ where: { projectId } });
     const update: Record<string, unknown> = {};
     if (input.api_key !== undefined) update.apiKey = input.api_key;
     if (input.rc_project_id !== undefined) update.rcProjectId = input.rc_project_id;
@@ -115,6 +119,9 @@ export class RcAdminService {
       },
       update,
     });
+    if (existing === null && input.api_key) {
+      void this.backfill.run(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
+    }
     return this.getStatus(projectId);
   }
 
@@ -179,6 +186,36 @@ export class RcAdminService {
           : null,
       },
     };
+  }
+
+  /** Used by resync/refresh endpoints — throws 404 with no row, 409 with an incomplete config. */
+  async requireIntegrationWithKey(projectId: string): Promise<{ apiKey: string; rcProjectId: string }> {
+    const row = await this.prisma.revenueCatIntegration.findUnique({ where: { projectId } });
+    if (row === null) throw this.notFound();
+    if (!row.apiKey || !row.rcProjectId) {
+      throw new ProblemException({
+        status: 409,
+        title: 'Conflict',
+        detail: 'RevenueCat integration is missing an api key or project id',
+      });
+    }
+    return { apiKey: row.apiKey, rcProjectId: row.rcProjectId };
+  }
+
+  /** Used by the per-user refresh endpoint — 404 when no subscription state has been seen yet. */
+  async requireStateByDistinctId(projectId: string, distinctId: string): Promise<SubscriptionState> {
+    const state = await this.prisma.subscriptionState.findFirst({
+      where: { projectId, distinctId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (state === null) {
+      throw new ProblemException({
+        status: 404,
+        title: 'Not Found',
+        detail: 'No subscription state found for this user',
+      });
+    }
+    return state;
   }
 
   private notFound(): ProblemException {
