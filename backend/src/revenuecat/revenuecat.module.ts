@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { AuthzModule } from '../authz/authz.module';
 import { ProjectsModule } from '../projects/projects.module';
+import { CohortsModule } from '../cohorts/cohorts.module';
 import { ProfileWriter } from '../ingestion/profile-writer';
 import { RcAdminController } from './rc-admin.controller';
 import { RcAdminService } from './rc-admin.service';
@@ -13,7 +14,7 @@ import { RcWebhookGuard } from './rc-webhook.guard';
 import { RcWebhookProcessor } from './rc-webhook.processor';
 
 @Module({
-  imports: [AuthModule, AuthzModule, ProjectsModule],
+  imports: [AuthModule, AuthzModule, ProjectsModule, CohortsModule],
   controllers: [RcWebhookController, RcAdminController],
   providers: [
     RcWebhookGuard,

@@ -35,8 +35,8 @@ export class RcAdminController {
   @Put()
   @UseGuards(ProjectRolesGuard)
   @ProjectRoles('admin')
-  async upsert(@Param('projectId') projectId: string, @Body() body: unknown) {
-    return this.service.upsert(projectId, parseOrThrow(rcUpsertSchema, body));
+  async upsert(@Req() req: AuthRequest, @Param('projectId') projectId: string, @Body() body: unknown) {
+    return this.service.upsert(projectId, parseOrThrow(rcUpsertSchema, body), req.user!.id);
   }
 
   @Delete()

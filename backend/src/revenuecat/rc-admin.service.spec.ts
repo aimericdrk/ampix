@@ -7,7 +7,7 @@ const ROW = {
   connectedAt: new Date(0),
 };
 
-function build(overrides: { integration?: unknown } = {}) {
+function build(overrides: { integration?: unknown; existingCohortNames?: string[] } = {}) {
   const prisma = {
     revenueCatIntegration: {
       findUnique: jest.fn(async () => overrides.integration ?? null),
@@ -18,12 +18,23 @@ function build(overrides: { integration?: unknown } = {}) {
       groupBy: jest.fn(async () => [{ status: 'processed', _count: { _all: 3 } }]),
       findMany: jest.fn(async () => []),
     },
+    cohort: {
+      findMany: jest.fn(async () => (overrides.existingCohortNames ?? []).map((name) => ({ name }))),
+    },
     subscriptionState: { findFirst: jest.fn(async () => null) },
   } as any;
   const projects = { assertMembership: jest.fn(async () => undefined) } as any;
   const processor = { replayUnlinked: jest.fn(async () => ({ replayed: 1, remaining: 0 })) } as any;
   const backfill = { run: jest.fn(async () => undefined), fireAndForget: jest.fn() } as any;
-  return { prisma, projects, processor, backfill, svc: new RcAdminService(prisma, projects, processor, backfill) };
+  const cohorts = { create: jest.fn(async () => undefined) } as any;
+  return {
+    prisma,
+    projects,
+    processor,
+    backfill,
+    cohorts,
+    svc: new RcAdminService(prisma, projects, processor, backfill, cohorts),
+  };
 }
 
 describe('RcAdminService', () => {
@@ -43,7 +54,7 @@ describe('RcAdminService', () => {
 
   it('upsert generates a rcwh_ webhook secret on create and never regenerates it on update', async () => {
     const { svc, prisma } = build();
-    await svc.upsert(PID, { api_key: 'k', rc_project_id: 'p', sandbox_mode: true });
+    await svc.upsert(PID, { api_key: 'k', rc_project_id: 'p', sandbox_mode: true }, 'user-1');
     const args = prisma.revenueCatIntegration.upsert.mock.calls[0][0];
     expect(args.create.webhookSecret).toMatch(/^rcwh_[0-9a-f]{48}$/);
     expect(args.update.webhookSecret).toBeUndefined();
@@ -51,20 +62,39 @@ describe('RcAdminService', () => {
 
   it('upsert triggers backfill on the create path when an api key is provided', async () => {
     const { svc, backfill } = build();
-    await svc.upsert(PID, { api_key: 'k', rc_project_id: 'p', sandbox_mode: true });
+    await svc.upsert(PID, { api_key: 'k', rc_project_id: 'p', sandbox_mode: true }, 'user-1');
     expect(backfill.fireAndForget).toHaveBeenCalledWith(PID);
   });
 
   it('upsert does not trigger backfill on the update path (row already existed)', async () => {
     const { svc, backfill } = build({ integration: ROW });
-    await svc.upsert(PID, { api_key: 'k2', rc_project_id: 'p', sandbox_mode: true });
+    await svc.upsert(PID, { api_key: 'k2', rc_project_id: 'p', sandbox_mode: true }, 'user-1');
     expect(backfill.fireAndForget).not.toHaveBeenCalled();
   });
 
   it('upsert does not trigger backfill on create when no api key is provided', async () => {
     const { svc, backfill } = build();
-    await svc.upsert(PID, { rc_project_id: 'p', sandbox_mode: true });
+    await svc.upsert(PID, { rc_project_id: 'p', sandbox_mode: true }, 'user-1');
     expect(backfill.fireAndForget).not.toHaveBeenCalled();
+  });
+
+  it('creates the four RC cohorts on first connect, skipping existing names', async () => {
+    const { svc, cohorts } = build();
+    await svc.upsert(PID, { api_key: 'k' }, 'user-1');
+    const names = cohorts.create.mock.calls.map((c: any) => c[2].name);
+    expect(names).toEqual([
+      'RC: Active subscribers', 'RC: In trial', 'RC: Churned', 'RC: Billing issue',
+    ]);
+    expect(cohorts.create.mock.calls[0][2].definition).toEqual({
+      match: 'all',
+      conditions: [{ type: 'profile', property: '$rc_status', op: 'eq', value: 'active' }],
+    });
+  });
+
+  it('does not create cohorts when the integration already existed', async () => {
+    const { svc, cohorts } = build({ integration: ROW });
+    await svc.upsert(PID, { sandbox_mode: true }, 'user-1');
+    expect(cohorts.create).not.toHaveBeenCalled();
   });
 
   it('getUserSubscription asserts membership and returns null when unknown', async () => {

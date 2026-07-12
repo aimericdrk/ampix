@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { SubscriptionState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
 import { ProblemException } from '../common/problem-details';
+import { CohortsService } from '../cohorts/cohorts.service';
 import { RcWebhookProcessor } from './rc-webhook.processor';
 import { RcBackfillService } from './rc-backfill.service';
 import type { RcUpsertInput } from './rc-admin.schema';
@@ -55,11 +56,21 @@ const JOURNAL_STATUSES = ['processed', 'failed', 'unlinked', 'skipped'] as const
  */
 @Injectable()
 export class RcAdminService {
+  private static readonly AUTO_COHORTS: Array<{ name: string; value: string }> = [
+    { name: 'RC: Active subscribers', value: 'active' },
+    { name: 'RC: In trial', value: 'trial' },
+    { name: 'RC: Churned', value: 'churned' },
+    { name: 'RC: Billing issue', value: 'grace' },
+  ];
+
+  private readonly logger = new Logger(RcAdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly projects: ProjectsService,
     private readonly processor: RcWebhookProcessor,
     private readonly backfill: RcBackfillService,
+    private readonly cohorts: CohortsService,
   ) {}
 
   async getStatus(projectId: string): Promise<RcIntegrationStatus> {
@@ -102,7 +113,7 @@ export class RcAdminService {
     };
   }
 
-  async upsert(projectId: string, input: RcUpsertInput): Promise<RcIntegrationStatus> {
+  async upsert(projectId: string, input: RcUpsertInput, userId: string): Promise<RcIntegrationStatus> {
     const existing = await this.prisma.revenueCatIntegration.findUnique({ where: { projectId } });
     const update: Record<string, unknown> = {};
     if (input.api_key !== undefined) update.apiKey = input.api_key;
@@ -119,10 +130,36 @@ export class RcAdminService {
       },
       update,
     });
-    if (existing === null && input.api_key) {
-      this.backfill.fireAndForget(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
+    if (existing === null) {
+      if (input.api_key) {
+        this.backfill.fireAndForget(projectId); // fire-and-forget: no scheduler exists (Global Constraints)
+      }
+      try {
+        await this.createAutoCohorts(projectId, userId);
+      } catch (err) {
+        // The integration row is already created — a cohort-seeding failure must not fail connect.
+        this.logger.error(`Failed to auto-create RC cohorts for project ${projectId}`, err as Error);
+      }
     }
     return this.getStatus(projectId);
+  }
+
+  private async createAutoCohorts(projectId: string, userId: string): Promise<void> {
+    const existing = await this.prisma.cohort.findMany({
+      where: { projectId },
+      select: { name: true },
+    });
+    const taken = new Set(existing.map((c) => c.name));
+    for (const { name, value } of RcAdminService.AUTO_COHORTS) {
+      if (taken.has(name)) continue;
+      await this.cohorts.create(projectId, userId, {
+        name,
+        definition: {
+          match: 'all',
+          conditions: [{ type: 'profile', property: '$rc_status', op: 'eq', value }],
+        },
+      });
+    }
   }
 
   async disconnect(projectId: string): Promise<void> {
