@@ -19,6 +19,18 @@ describe('SubscriptionsPage', () => {
     expect(main.getByText(/by product/i)).toBeInTheDocument();
   });
 
+  it('renders attribution: drivers, time-to-convert, trial funnel', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    renderApp(URL);
+    const main = within(await screen.findByRole('main'));
+    expect(await main.findByText(/conversion drivers/i)).toBeInTheDocument();
+    expect(main.getByText(/time to convert/i)).toBeInTheDocument();
+    expect(main.getByText(/trial funnel/i)).toBeInTheDocument();
+    // from SUBSCRIPTION_ATTRIBUTION_FIXTURE:
+    expect(main.getByText('$screen_view')).toBeInTheDocument();
+    expect(main.getByText('Paywall')).toBeInTheDocument();
+  });
+
   it('shows the Subscriptions nav entry when RC is connected', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp(`/projects/${TEST_PROJECT.id}/insights`);
