@@ -43,6 +43,7 @@ describe('ProjectsService', () => {
                 timezone: 'UTC',
                 org: { id: 'org-1', name: "Ada's Workspace" },
                 sdkTokens: [{ token: 'mam_' + 'a'.repeat(32) }],
+                revenuecatIntegration: null,
               },
             },
             {
@@ -56,6 +57,7 @@ describe('ProjectsService', () => {
                 timezone: 'Europe/Paris',
                 org: { id: 'org-1', name: "Ada's Workspace" },
                 sdkTokens: [],
+                revenuecatIntegration: null,
               },
             },
           ]),
@@ -77,6 +79,7 @@ describe('ProjectsService', () => {
           timezone: 'UTC',
           ingest_token: 'mam_' + 'a'.repeat(32),
           role: 'owner',
+          integrations: { revenuecat: false },
         },
         {
           id: 'project-2',
@@ -86,6 +89,7 @@ describe('ProjectsService', () => {
           timezone: 'Europe/Paris',
           ingest_token: null,
           role: 'viewer',
+          integrations: { revenuecat: false },
         },
       ]);
     });
@@ -105,6 +109,7 @@ describe('ProjectsService', () => {
                 timezone: 'UTC',
                 org: { id: 'org-2', name: 'Org B' },
                 sdkTokens: [],
+                revenuecatIntegration: null,
               },
             },
           ]),
@@ -126,6 +131,37 @@ describe('ProjectsService', () => {
     it('returns an empty list for a user with no project memberships', async () => {
       const service = makeService(makePrisma(), makeClickhouse());
       await expect(service.listForUser('lonely-user')).resolves.toEqual([]);
+    });
+
+    it('exposes integrations.revenuecat from the integration row presence', async () => {
+      const membershipFixture = (overrides: { revenuecatIntegration: { id: string } | null }) => ({
+        userId: 'user-1',
+        projectId: 'project-1',
+        role: 'owner',
+        project: {
+          id: 'project-1',
+          orgId: 'org-1',
+          name: 'Default',
+          timezone: 'UTC',
+          org: { id: 'org-1', name: "Ada's Workspace" },
+          sdkTokens: [],
+          ...overrides,
+        },
+      });
+      const prisma = makePrisma({
+        projectMembership: {
+          findMany: jest.fn().mockResolvedValue([
+            membershipFixture({ revenuecatIntegration: { id: 'int-1' } }),
+            membershipFixture({ revenuecatIntegration: null }),
+          ]),
+        },
+      });
+      const service = makeService(prisma, makeClickhouse());
+
+      const items = await service.listForUser('user-1');
+
+      expect(items[0].integrations).toEqual({ revenuecat: true });
+      expect(items[1].integrations).toEqual({ revenuecat: false });
     });
   });
 

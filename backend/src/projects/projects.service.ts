@@ -40,6 +40,7 @@ export class ProjectsService {
               orderBy: { createdAt: 'desc' },
               take: 1,
             },
+            revenuecatIntegration: { select: { id: true } },
           },
         },
       },
@@ -53,6 +54,7 @@ export class ProjectsService {
       timezone: m.project.timezone,
       ingest_token: m.project.sdkTokens[0]?.token ?? null,
       role: m.role,
+      integrations: { revenuecat: m.project.revenuecatIntegration !== null },
     }));
   }
 

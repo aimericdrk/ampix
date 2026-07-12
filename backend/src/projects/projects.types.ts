@@ -9,6 +9,7 @@ export interface ProjectListItem {
   timezone: string;
   ingest_token: string | null;
   role: ProjectRole;
+  integrations: { revenuecat: boolean };
 }
 
 /** GET /api/v1/projects/:projectId/events/summary response (contracts §12). */
