@@ -78,6 +78,36 @@ interface RecentEventRow {
   price: string | number;
 }
 
+export interface SubscriptionAttributionResponse {
+  drivers: Array<{ event: string; users: number }>;
+  screens: Array<{ screen_name: string; users: number }>;
+  time_to_convert: Array<{ bucket: string; users: number }>;
+  trial_funnel: { trials: number; converted: number };
+}
+
+interface DriverRow {
+  event: string;
+  users: string | number;
+}
+
+interface ScreenRow {
+  screen_name: string;
+  users: string | number;
+}
+
+interface TimeToConvertRow {
+  bucket: string;
+  users: string | number;
+}
+
+interface TrialFunnelRow {
+  trials: string | number;
+  converted: string | number;
+}
+
+/** Fixed display order for `time_to_convert` buckets — CH's `GROUP BY bucket` has no guaranteed order. */
+const TIME_TO_CONVERT_BUCKET_ORDER = ['<1d', '1-3d', '3-7d', '7-14d', '14-30d', '30d+'];
+
 /**
  * `GET /metrics/subscriptions` (Subscriptions page). Current-state KPIs (mrr/active/in_trial/grace,
  * by_product, by_store) read `SubscriptionState` in Postgres and are deliberately NOT scoped by
@@ -257,6 +287,119 @@ ${filterAndClause}
         product_id: row.product_id,
         price: Number(row.price),
       })),
+    };
+  }
+
+  /**
+   * `GET /metrics/subscriptions/attribution` (Subscriptions page). Conversion drivers/screens look
+   * at the 7 days of activity immediately before each user's first `$rc_initial_purchase`;
+   * time-to-convert buckets the gap between first-ever-seen and first purchase; the trial funnel
+   * counts TRIAL initial purchases in range against later `$rc_renewal`. No `filters` param — same
+   * as the lifecycle KPIs in `getSummary`, this is a fixed cohort definition, not a filtered query.
+   */
+  async getAttribution(
+    userId: string,
+    projectId: string,
+    fromRaw?: string,
+    toRaw?: string,
+  ): Promise<SubscriptionAttributionResponse> {
+    await this.projects.assertMembership(userId, projectId);
+
+    const integration = await this.prisma.revenueCatIntegration.findUnique({
+      where: { projectId },
+    });
+    if (integration === null) {
+      throw new ProblemException({
+        status: 404,
+        title: 'Not Found',
+        detail: 'RevenueCat integration not found',
+      });
+    }
+
+    const { from, to } = resolveDateOnlyRange(fromRaw, toRaw);
+    const params: Record<string, unknown> = {
+      projectId,
+      from: toChDateTime64(parseDateOnlyUTC(from)),
+      toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
+    };
+
+    const firstPurchaseCte = `
+      WITH first_purchase AS (
+        SELECT distinct_id, min(timestamp) AS fp
+        FROM events
+        WHERE project_id = {projectId:UUID} AND event = '${RC_INITIAL}'
+          AND timestamp >= {from:DateTime64} AND timestamp < {toExclusive:DateTime64}
+        GROUP BY distinct_id
+      )`;
+
+    const [driverRows, screenRows, timeToConvertRows, trialFunnelRows] = await Promise.all([
+      this.clickhouse.query<DriverRow>(
+        `${firstPurchaseCte}
+         SELECT e.event AS event, uniqExact(e.distinct_id) AS users
+         FROM events AS e
+         INNER JOIN first_purchase AS f ON e.distinct_id = f.distinct_id
+         WHERE e.project_id = {projectId:UUID}
+           AND e.timestamp < f.fp AND e.timestamp >= f.fp - INTERVAL 7 DAY
+           AND e.event NOT LIKE '$rc%'
+         GROUP BY e.event ORDER BY users DESC LIMIT 20`,
+        params,
+      ),
+      this.clickhouse.query<ScreenRow>(
+        `${firstPurchaseCte}
+         SELECT JSONExtractString(toJSONString(e.properties), '$screen_name') AS screen_name,
+                uniqExact(e.distinct_id) AS users
+         FROM events AS e
+         INNER JOIN first_purchase AS f ON e.distinct_id = f.distinct_id
+         WHERE e.project_id = {projectId:UUID}
+           AND e.timestamp < f.fp AND e.timestamp >= f.fp - INTERVAL 7 DAY
+           AND e.event = '$screen_view'
+         GROUP BY screen_name
+         HAVING screen_name != ''
+         ORDER BY users DESC LIMIT 20`,
+        params,
+      ),
+      this.clickhouse.query<TimeToConvertRow>(
+        `${firstPurchaseCte},
+         first_seen AS (
+           SELECT distinct_id, min(timestamp) AS fs FROM events
+           WHERE project_id = {projectId:UUID} GROUP BY distinct_id
+         )
+         SELECT multiIf(d < 1, '<1d', d < 3, '1-3d', d < 7, '3-7d', d < 14, '7-14d', d < 30, '14-30d', '30d+') AS bucket,
+                count() AS users
+         FROM (
+           SELECT dateDiff('day', s.fs, f.fp) AS d
+           FROM first_purchase AS f INNER JOIN first_seen AS s ON f.distinct_id = s.distinct_id
+         )
+         GROUP BY bucket`,
+        params,
+      ),
+      this.clickhouse.query<TrialFunnelRow>(
+        `WITH trial_starts AS (
+           SELECT DISTINCT distinct_id FROM events
+           WHERE project_id = {projectId:UUID} AND event = '${RC_INITIAL}'
+             AND ${PERIOD_EXPR} = 'TRIAL'
+             AND timestamp >= {from:DateTime64} AND timestamp < {toExclusive:DateTime64}
+         )
+         SELECT count() AS trials,
+                countIf(distinct_id IN (SELECT DISTINCT distinct_id FROM events
+                  WHERE project_id = {projectId:UUID} AND event = '${RC_RENEWAL}')) AS converted
+         FROM trial_starts`,
+        params,
+      ),
+    ]);
+
+    const usersByBucket = new Map(timeToConvertRows.map((row) => [row.bucket, Number(row.users)]));
+
+    return {
+      drivers: driverRows.map((row) => ({ event: row.event, users: Number(row.users) })),
+      screens: screenRows.map((row) => ({ screen_name: row.screen_name, users: Number(row.users) })),
+      time_to_convert: TIME_TO_CONVERT_BUCKET_ORDER.filter((bucket) => usersByBucket.has(bucket)).map(
+        (bucket) => ({ bucket, users: usersByBucket.get(bucket)! }),
+      ),
+      trial_funnel: {
+        trials: Number(trialFunnelRows[0]?.trials ?? 0),
+        converted: Number(trialFunnelRows[0]?.converted ?? 0),
+      },
     };
   }
 

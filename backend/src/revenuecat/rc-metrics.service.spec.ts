@@ -184,3 +184,27 @@ describe('RcMetricsService.getSummary', () => {
     expect(JSON.stringify(s)).not.toContain('NaN');
   });
 });
+
+describe('RcMetricsService.getAttribution', () => {
+  it('404s without an integration and asserts membership with one', async () => {
+    const a = build({ integration: null });
+    await expect(a.svc.getAttribution('u1', PID)).rejects.toMatchObject({ status: 404 });
+    const b = build();
+    await b.svc.getAttribution('u1', PID);
+    expect(b.projects.assertMembership).toHaveBeenCalledWith('u1', PID);
+  });
+
+  it('shapes empty CH results into empty arrays and zeroed funnel', async () => {
+    const { svc } = build();
+    const r = await svc.getAttribution('u1', PID);
+    expect(r).toEqual({ drivers: [], screens: [], time_to_convert: [], trial_funnel: { trials: 0, converted: 0 } });
+  });
+
+  it('excludes $rc events from drivers and bounds the pre-purchase window', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getAttribution('u1', PID);
+    const driversSql = clickhouse.query.mock.calls.map((c: any) => c[0]).find((s: string) => s.includes('NOT LIKE'));
+    expect(driversSql).toContain("NOT LIKE '$rc%'");
+    expect(driversSql).toContain('INTERVAL 7 DAY');
+  });
+});
