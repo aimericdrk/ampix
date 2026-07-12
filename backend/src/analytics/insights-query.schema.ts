@@ -61,6 +61,10 @@ export const insightsFilterSchema = z
     property: z.string().trim().min(1).max(MAX_PROPERTY_LENGTH),
     op: z.enum(FILTER_OPS),
     value: filterValueSchema.optional(),
+    // RevenueCat spec §4.5 amendment: an omitted/`'event'` target keeps the existing
+    // `analytics.events`-column/JSON-property behavior byte-for-byte; `'profile'` filters against
+    // `analytics.user_profiles` instead (see `compileFilter` in filter-compiler.ts).
+    target: z.enum(['event', 'profile']).optional(),
   })
   .refine(
     (filter) => filter.op === 'is_set' || filter.op === 'is_not_set' || filter.value !== undefined,

@@ -47,6 +47,49 @@ describe('compileFilterClauses (shared, contracts §14/§15)', () => {
   });
 });
 
+describe('compileFilterClauses: target "profile" (RevenueCat spec §4.5 amendment)', () => {
+  it('compiles eq to a user_profiles IN-subquery with bound key and value', () => {
+    const params: Record<string, unknown> = {};
+    const [clause] = compileFilterClauses([
+      { property: '$rc_status', op: 'eq', value: 'active', target: 'profile' },
+    ], params);
+    expect(clause).toBe(
+      'distinct_id IN (SELECT distinct_id FROM user_profiles FINAL WHERE project_id = {projectId:UUID} AND JSONExtractString(toJSONString(properties), {filterKey0:String}) = {filterVal0:String})',
+    );
+    expect(params).toEqual({ filterKey0: '$rc_status', filterVal0: 'active' });
+  });
+
+  it('supports is_set / is_not_set on profile properties with no value param bound', () => {
+    const params: Record<string, unknown> = {};
+    const [clause] = compileFilterClauses([
+      { property: '$rc_status', op: 'is_set', target: 'profile' },
+    ], params);
+    expect(clause).toContain("!= ''");
+    expect(params).toEqual({ filterKey0: '$rc_status' });
+  });
+
+  it('leaves event-target filters untouched (default path unchanged)', () => {
+    const withTarget = compileFilterClauses(
+      [{ property: 'os', op: 'eq', value: 'ios', target: 'event' }],
+      {},
+    );
+    const without = compileFilterClauses([{ property: 'os', op: 'eq', value: 'ios' }], {});
+    expect(withTarget[0]).toBe(without[0]);
+  });
+
+  it('INJECTION: a malicious profile property/value is only ever bound, never inlined', () => {
+    const params: Record<string, unknown> = {};
+    const attack = "'; DROP TABLE user_profiles; --";
+    const [clause] = compileFilterClauses([
+      { property: attack, op: 'eq', value: attack, target: 'profile' },
+    ], params);
+    expect(params.filterKey0).toBe(attack);
+    expect(params.filterVal0).toBe(attack);
+    expect(clause).not.toContain(attack);
+    expect(clause).not.toContain('DROP TABLE');
+  });
+});
+
 describe('compileDateRange', () => {
   it('binds inclusive `from` and exclusive `to + 1 day`', () => {
     expect(compileDateRange('2026-06-01', '2026-06-02')).toEqual({

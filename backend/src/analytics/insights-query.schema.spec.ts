@@ -1,4 +1,4 @@
-import { insightsQuerySchema } from './insights-query.schema';
+import { insightsFilterSchema, insightsQuerySchema } from './insights-query.schema';
 
 function validQuery(overrides: Record<string, unknown> = {}) {
   return {
@@ -130,6 +130,29 @@ describe('insightsQuerySchema', () => {
       validQuery({ date_range: { from: '2026-06-01', to: '2026-06-01' } }),
     );
     expect(result.success).toBe(true);
+  });
+
+  it('accepts target "profile" on a filter and defaults target to undefined', () => {
+    const parsed = insightsFilterSchema.parse({
+      property: '$rc_status',
+      op: 'eq',
+      value: 'active',
+      target: 'profile',
+    });
+    expect(parsed.target).toBe('profile');
+    expect(
+      insightsFilterSchema.parse({ property: 'os', op: 'eq', value: 'ios' }).target,
+    ).toBeUndefined();
+  });
+
+  it('rejects an unknown target', () => {
+    const result = insightsFilterSchema.safeParse({
+      property: 'x',
+      op: 'eq',
+      value: 'y',
+      target: 'nope',
+    });
+    expect(result.success).toBe(false);
   });
 
   it('accepts numeric and boolean filter values', () => {
