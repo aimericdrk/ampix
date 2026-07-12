@@ -29,6 +29,7 @@ import { DashboardViewPage } from './features/analytics/components/DashboardView
 import { LiveEventsPage } from './features/analytics/components/LiveEventsPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { RevenuePage } from './features/analytics/components/RevenuePage';
+import { SubscriptionsPage } from './features/analytics/components/SubscriptionsPage';
 import { DistributionsPage } from './features/analytics/components/DistributionsPage';
 import { PropertyExplorerPage } from './features/analytics/components/PropertyExplorerPage';
 import { EventCatalogPage } from './features/analytics/components/EventCatalogPage';
@@ -265,6 +266,12 @@ const revenueRoute = createRoute({
   component: RevenuePage,
 });
 
+const subscriptionsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/subscriptions',
+  component: SubscriptionsPage,
+});
+
 // --- Distribution histograms (feat-09) ---
 
 const distributionsRoute = createRoute({
@@ -337,6 +344,7 @@ export const routeTree = rootRoute.addChildren([
     userProfileRoute,
     sessionsRoute,
     revenueRoute,
+    subscriptionsRoute,
     distributionsRoute,
     propertiesRoute,
     eventsRoute,

@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { IconSparkle } from '../../components/ui/icons';
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
 import { IconSearch } from '../../components/ui/icons';
 import { Kbd } from '../../components/ui/kbd';
@@ -11,6 +11,7 @@ import { cn } from '../../lib/cn';
 import type { UserListItem } from '../../lib/api/types';
 import { useCohorts, useDashboards, useReports, useUsersList } from '../analytics/api';
 import { useProjects } from '../projects/api';
+import { useRcEnabled } from '../revenuecat/api';
 import { useFavorites } from '../favorites/favorites';
 import type { FavItemType } from '../favorites/favorites';
 import { useRecents } from '../favorites/recents';
@@ -133,6 +134,15 @@ export function CommandPalette({ projectId }: { projectId: string }) {
   const { data: projectsData } = useProjects();
   const favorites = useFavorites(projectId);
   const recents = useRecents(projectId);
+  const rcEnabled = useRcEnabled(projectId);
+  const navGroups = useMemo(
+    () =>
+      projectGroups().map((g) => ({
+        ...g,
+        items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/subscriptions')),
+      })),
+    [rcEnabled],
+  );
 
   // Dropping stale rows the instant the query empties keeps a since-cleared search from lingering.
   useEffect(() => {
@@ -215,7 +225,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
       })
     : [];
 
-  const pageItems: PaletteItem[] = projectGroups()
+  const pageItems: PaletteItem[] = navGroups
     .flatMap((group) => group.items)
     .filter((item) => matchesQuery(item.label, query))
     .map((item) => ({

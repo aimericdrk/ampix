@@ -15,6 +15,7 @@ import {
   LayoutTemplate,
   Radio,
   Repeat,
+  RefreshCw,
   Settings,
   Tags,
   User,
@@ -31,6 +32,7 @@ export type IconName =
   | 'paths'
   | 'heatmap'
   | 'revenue'
+  | 'subscriptions'
   | 'distributions'
   | 'properties'
   | 'events'
@@ -55,6 +57,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   paths: GitBranch,
   heatmap: Grid3x3,
   revenue: CircleDollarSign,
+  subscriptions: RefreshCw,
   distributions: ChartBar,
   properties: Tags,
   events: Zap,

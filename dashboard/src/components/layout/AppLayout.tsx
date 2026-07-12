@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useParams, useRouter, useRouterState } from '@tanstack/react-router';
 import { m } from 'motion/react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DateRangeProvider } from '../../features/analytics/date-range';
 import { GlobalFilterBar } from '../../features/analytics/components/GlobalFilterBar';
 import { GlobalFiltersProvider } from '../../features/analytics/global-filters';
@@ -9,6 +9,7 @@ import { logout } from '../../features/auth/api';
 import { authStore, useAuth } from '../../features/auth/store';
 import { currentOrgStore, useCurrentOrgId } from '../../features/orgs/store';
 import { useProjects } from '../../features/projects/api';
+import { useRcEnabled } from '../../features/revenuecat/api';
 import { useKeyboardShortcuts } from '../../features/shortcuts/keyboard-shortcuts';
 import { ShortcutsHelp } from '../../features/shortcuts/ShortcutsHelp';
 import { cn } from '../../lib/cn';
@@ -136,7 +137,17 @@ export function AppLayout() {
     }
   };
 
-  const groups = projectId ? projectGroups() : [];
+  const rcEnabled = useRcEnabled(projectId);
+  const groups = useMemo(
+    () =>
+      projectId
+        ? projectGroups().map((g) => ({
+            ...g,
+            items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/subscriptions')),
+          }))
+        : [],
+    [projectId, rcEnabled],
+  );
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const activeGroupAccent: NavAccent =
     groups.find((group) =>
