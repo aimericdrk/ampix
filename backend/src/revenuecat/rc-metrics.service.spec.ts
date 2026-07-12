@@ -207,4 +207,55 @@ describe('RcMetricsService.getAttribution', () => {
     expect(driversSql).toContain("NOT LIKE '$rc%'");
     expect(driversSql).toContain('INTERVAL 7 DAY');
   });
+
+  it('canonicalizes identities in drivers/screens/first_seen so anon+identified events merge', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getAttribution('u1', PID);
+    const calls = clickhouse.query.mock.calls.map((c: any) => c[0]);
+    const driversSql = calls.find((s: string) => s.includes('NOT LIKE'));
+    const screensSql = calls.find((s: string) => s.includes('$screen_view'));
+    const timeToConvertSql = calls.find((s: string) => s.includes('first_seen'));
+    for (const sql of [driversSql, screensSql, timeToConvertSql]) {
+      expect(sql).toContain('aliases');
+      expect(sql).toContain('coalesce(aliases.canonical_id');
+    }
+    // settings arg (3rd) carries join_use_nulls=1 for every canonicalized query.
+    const settingsArgs = clickhouse.query.mock.calls
+      .filter((c: any) => [driversSql, screensSql, timeToConvertSql].includes(c[0]))
+      .map((c: any) => c[2]);
+    for (const settings of settingsArgs) {
+      expect(settings).toEqual({ join_use_nulls: 1 });
+    }
+  });
+
+  it('buckets time_to_convert by elapsed seconds, not truncated calendar days', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getAttribution('u1', PID);
+    const sql = clickhouse.query.mock.calls.map((c: any) => c[0]).find((s: string) => s.includes('first_seen'));
+    expect(sql).toContain("dateDiff('second', s.fs, f.fp)");
+    expect(sql).not.toContain("dateDiff('day'");
+    expect(sql).toContain('secs < 86400');
+  });
+
+  it('funnel counts a renewal as conversion only when it comes after the trial start', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getAttribution('u1', PID);
+    const call = clickhouse.query.mock.calls.find((c: any) => c[0].includes('trial_starts'));
+    expect(call[0]).toContain('r.first_renewal > t.trial_ts');
+    expect(call[0]).not.toMatch(/distinct_id IN \(SELECT DISTINCT distinct_id/);
+    // join_use_nulls=1 so an unmatched LEFT JOIN yields NULL (not epoch-zero) for first_renewal.
+    expect(call[2]).toEqual({ join_use_nulls: 1 });
+  });
+
+  it('maps the funnel row to trials/converted counts', async () => {
+    const { prisma, projects } = build();
+    const clickhouse = {
+      query: jest.fn(async (sql: string) =>
+        sql.includes('trial_starts') ? [{ trials: 10, converted: 4 }] : [],
+      ),
+    } as any;
+    const svc = new RcMetricsService(prisma, clickhouse, projects);
+    const r = await svc.getAttribution('u1', PID);
+    expect(r.trial_funnel).toEqual({ trials: 10, converted: 4 });
+  });
 });

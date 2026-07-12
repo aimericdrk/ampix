@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ClickHouseService, toChDateTime64 } from '../clickhouse/clickhouse.service';
 import { parseDateOnlyUTC } from '../analytics/bucket-grid';
 import { compileFilterClauses } from '../analytics/filter-compiler';
+import { canonicalization, CANONICAL_JOIN_SETTINGS } from '../analytics/identity';
 import { parseFiltersParam, resolveDateOnlyRange } from '../analytics/read-query.util';
 import { ProblemException } from '../common/problem-details';
 import { PrismaService } from '../prisma/prisma.service';
@@ -323,33 +324,41 @@ ${filterAndClause}
       toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
     };
 
+    // §17 identity-correct cohort: pre-identify (anonymous) events carry the anon distinct_id, so
+    // first_purchase/first_seen and the outer drivers/screens scans all group and join on the
+    // canonical uid — an anon→identified user's pre-purchase activity is one merged timeline.
+    const canon = canonicalization('e.distinct_id');
     const firstPurchaseCte = `
-      WITH first_purchase AS (
-        SELECT distinct_id, min(timestamp) AS fp
-        FROM events
-        WHERE project_id = {projectId:UUID} AND event = '${RC_INITIAL}'
-          AND timestamp >= {from:DateTime64} AND timestamp < {toExclusive:DateTime64}
-        GROUP BY distinct_id
+      first_purchase AS (
+        SELECT ${canon.uid} AS uid, min(e.timestamp) AS fp
+        FROM events AS e
+        ${canon.join}
+        WHERE e.project_id = {projectId:UUID} AND e.event = '${RC_INITIAL}'
+          AND e.timestamp >= {from:DateTime64} AND e.timestamp < {toExclusive:DateTime64}
+        GROUP BY uid
       )`;
 
     const [driverRows, screenRows, timeToConvertRows, trialFunnelRows] = await Promise.all([
       this.clickhouse.query<DriverRow>(
-        `${firstPurchaseCte}
-         SELECT e.event AS event, uniqExact(e.distinct_id) AS users
+        `WITH ${canon.cte}, ${firstPurchaseCte}
+         SELECT e.event AS event, uniqExact(${canon.uid}) AS users
          FROM events AS e
-         INNER JOIN first_purchase AS f ON e.distinct_id = f.distinct_id
+         ${canon.join}
+         INNER JOIN first_purchase AS f ON ${canon.uid} = f.uid
          WHERE e.project_id = {projectId:UUID}
            AND e.timestamp < f.fp AND e.timestamp >= f.fp - INTERVAL 7 DAY
            AND e.event NOT LIKE '$rc%'
          GROUP BY e.event ORDER BY users DESC LIMIT 20`,
         params,
+        canon.settings,
       ),
       this.clickhouse.query<ScreenRow>(
-        `${firstPurchaseCte}
+        `WITH ${canon.cte}, ${firstPurchaseCte}
          SELECT JSONExtractString(toJSONString(e.properties), '$screen_name') AS screen_name,
-                uniqExact(e.distinct_id) AS users
+                uniqExact(${canon.uid}) AS users
          FROM events AS e
-         INNER JOIN first_purchase AS f ON e.distinct_id = f.distinct_id
+         ${canon.join}
+         INNER JOIN first_purchase AS f ON ${canon.uid} = f.uid
          WHERE e.project_id = {projectId:UUID}
            AND e.timestamp < f.fp AND e.timestamp >= f.fp - INTERVAL 7 DAY
            AND e.event = '$screen_view'
@@ -357,34 +366,56 @@ ${filterAndClause}
          HAVING screen_name != ''
          ORDER BY users DESC LIMIT 20`,
         params,
+        canon.settings,
       ),
       this.clickhouse.query<TimeToConvertRow>(
-        `${firstPurchaseCte},
+        `WITH ${canon.cte}, ${firstPurchaseCte},
          first_seen AS (
-           SELECT distinct_id, min(timestamp) AS fs FROM events
-           WHERE project_id = {projectId:UUID} GROUP BY distinct_id
+           SELECT ${canon.uid} AS uid, min(e.timestamp) AS fs
+           FROM events AS e
+           ${canon.join}
+           WHERE e.project_id = {projectId:UUID}
+           GROUP BY uid
          )
-         SELECT multiIf(d < 1, '<1d', d < 3, '1-3d', d < 7, '3-7d', d < 14, '7-14d', d < 30, '14-30d', '30d+') AS bucket,
+         SELECT multiIf(secs < 86400, '<1d', secs < 259200, '1-3d', secs < 604800, '3-7d',
+                         secs < 1209600, '7-14d', secs < 2592000, '14-30d', '30d+') AS bucket,
                 count() AS users
          FROM (
-           SELECT dateDiff('day', s.fs, f.fp) AS d
-           FROM first_purchase AS f INNER JOIN first_seen AS s ON f.distinct_id = s.distinct_id
+           -- Elapsed seconds, not calendar-day truncation, so a purchase 20h after first-seen
+           -- buckets as '<1d' instead of being rounded to a whole calendar day.
+           SELECT dateDiff('second', s.fs, f.fp) AS secs
+           FROM first_purchase AS f INNER JOIN first_seen AS s ON f.uid = s.uid
          )
          GROUP BY bucket`,
         params,
+        canon.settings,
       ),
       this.clickhouse.query<TrialFunnelRow>(
         `WITH trial_starts AS (
-           SELECT DISTINCT distinct_id FROM events
+           -- min(timestamp) per user: if a user somehow has multiple trials in range, conversion is
+           -- measured from the earliest one.
+           SELECT distinct_id, min(timestamp) AS trial_ts
+           FROM events
            WHERE project_id = {projectId:UUID} AND event = '${RC_INITIAL}'
              AND ${PERIOD_EXPR} = 'TRIAL'
              AND timestamp >= {from:DateTime64} AND timestamp < {toExclusive:DateTime64}
+           GROUP BY distinct_id
+         ),
+         renewals AS (
+           SELECT distinct_id, min(timestamp) AS first_renewal
+           FROM events
+           WHERE project_id = {projectId:UUID} AND event = '${RC_RENEWAL}'
+           GROUP BY distinct_id
          )
          SELECT count() AS trials,
-                countIf(distinct_id IN (SELECT DISTINCT distinct_id FROM events
-                  WHERE project_id = {projectId:UUID} AND event = '${RC_RENEWAL}')) AS converted
-         FROM trial_starts`,
+                -- join_use_nulls=1 (CANONICAL_JOIN_SETTINGS) makes r.first_renewal NULL, not
+                -- epoch-zero, for non-renewed users, so NULL > trial_ts is NULL and countIf
+                -- correctly skips them instead of counting a false conversion.
+                countIf(r.first_renewal > t.trial_ts) AS converted
+         FROM trial_starts AS t
+         LEFT JOIN renewals AS r ON t.distinct_id = r.distinct_id`,
         params,
+        CANONICAL_JOIN_SETTINGS,
       ),
     ]);
 
