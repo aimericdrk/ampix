@@ -197,6 +197,9 @@ export function LiveEventsPage() {
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <Badge variant="accent">{event.event}</Badge>
+                        {event.event.startsWith('$rc_') && (
+                          <Badge variant="accent">subscription</Badge>
+                        )}
                         <span
                           className="truncate font-mono text-xs text-text-muted"
                           title={event.distinct_id}

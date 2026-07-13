@@ -95,6 +95,49 @@ describe('LiveEventsPage', () => {
     );
   });
 
+  it('tags $rc_ subscription events with a badge and leaves regular events untagged', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/events/live', () =>
+        HttpResponse.json({
+          events: [
+            {
+              insert_id: 'evt-rc',
+              event: '$rc_renewal',
+              distinct_id: 'user-sub',
+              timestamp: '2026-07-02T12:31:00.000Z',
+              os: 'iOS',
+              app_version: '2.0.0',
+            },
+            {
+              insert_id: 'evt-plain',
+              event: 'product_viewed',
+              distinct_id: 'user-002',
+              timestamp: '2026-07-02T12:30:00.000Z',
+              os: 'Android',
+              app_version: '2.0.0',
+            },
+          ],
+          next_before: null,
+        }),
+      ),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/live`);
+
+    const stream = await screen.findByRole('log', { name: 'Live event stream, newest first' });
+    const rows = within(stream).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+
+    const rcRow = within(rows[0]!);
+    expect(rcRow.getByText('$rc_renewal')).toBeInTheDocument();
+    expect(rcRow.getAllByText('subscription')).toHaveLength(1);
+
+    const plainRow = within(rows[1]!);
+    expect(plainRow.getByText('product_viewed')).toBeInTheDocument();
+    expect(plainRow.queryByText('subscription')).not.toBeInTheDocument();
+  });
+
   it('loads older events via next_before when "Load older" is clicked', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/live`);
