@@ -15,7 +15,7 @@ function Probe() {
       <ul>
         {filters.map((f, i) => (
           <li key={i} data-testid={`filter-${i}`}>
-            {f.property} {f.op} {f.value ?? ''}
+            {f.property} {f.op} {f.value ?? ''} {f.target ?? ''}
           </li>
         ))}
       </ul>
@@ -133,6 +133,22 @@ describe('GlobalFiltersProvider / useGlobalFilters', () => {
 
     expect(screen.getByTestId('count')).toHaveTextContent('1');
     expect(screen.getByTestId('filter-0')).toHaveTextContent('plan eq enterprise');
+  });
+
+  it("preserves a filter's profile target across a persist → reload round-trip", () => {
+    localStorage.setItem(
+      `myampix:globalfilters:${PROJECT_ID}`,
+      JSON.stringify([{ property: '$rc_status', op: 'eq', value: 'active', target: 'profile' }]),
+    );
+
+    render(
+      <GlobalFiltersProvider projectId={PROJECT_ID}>
+        <Probe />
+      </GlobalFiltersProvider>,
+    );
+
+    // Without preserving `target`, the reloaded filter silently degrades to an event-target filter.
+    expect(screen.getByTestId('filter-0')).toHaveTextContent('$rc_status eq active profile');
   });
 
   it('scopes persistence per project — switching projects never leaks the previous filters', async () => {
