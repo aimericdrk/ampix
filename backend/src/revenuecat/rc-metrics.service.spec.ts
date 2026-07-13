@@ -81,6 +81,20 @@ describe('RcMetricsService.getSummary', () => {
     expect(allSql).toContain('$rc_renewal');
   });
 
+  it('excludes the $rc_link identity event from the recent_events and by_day lifecycle scans', async () => {
+    const { svc, clickhouse } = build();
+    await svc.getSummary('u1', PID, '2026-07-01', '2026-07-10');
+    // The two `$rc_%` lifecycle scans are the only ones combining the LIKE with a LIMIT
+    // (recent_events) or a `GROUP BY t` (by_day); both must exclude the contentless identity event.
+    const lifecycleScans = clickhouse.query.mock.calls
+      .map(([sql]: [string]) => sql)
+      .filter((sql: string) => sql.includes("event LIKE '$rc\\_%'"));
+    expect(lifecycleScans.length).toBe(2);
+    for (const sql of lifecycleScans) {
+      expect(sql).toContain("event != '$rc_link'");
+    }
+  });
+
   it('compiles a provided `filters` param into the new_subscriptions/trials and by_day queries only, bound', async () => {
     const { svc, clickhouse } = build();
     const filters = encodeFilters([{ property: 'os', op: 'eq', value: 'ios' }]);

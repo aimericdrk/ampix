@@ -32,6 +32,14 @@ import { PathMap } from './PathMap';
 const SCREEN_VIEW_EVENT = '$screen_view';
 /** RevenueCat timeline event prefix (spec §4.7) — `$rc_initial_purchase`, `$rc_renewal`, etc. */
 const RC_EVENT_PREFIX = '$rc_';
+
+/**
+ * A RevenueCat subscription lifecycle event. `$rc_link` shares the `$rc_` prefix but is an SDK
+ * identity event (not a subscription event), so it's excluded from the "subscription" badge/ring.
+ */
+function isSubscriptionEvent(name: string): boolean {
+  return name.startsWith(RC_EVENT_PREFIX) && name !== '$rc_link';
+}
 const HEATMAP_GRID: HeatmapGrid = { cols: 20, rows: 40 };
 
 /** Subscription status -> Badge variant (spec §4.7). Unlisted statuses fall back to `default`. */
@@ -378,7 +386,7 @@ export function UserProfileModal({
                         <ol className="flex flex-col gap-1 border-l border-border pl-4 text-sm">
                           {events.map((event, index) => {
                             const isSelected = event.insert_id === selectedEvent?.insert_id;
-                            const isRcEvent = event.event.startsWith(RC_EVENT_PREFIX);
+                            const isRcEvent = isSubscriptionEvent(event.event);
                             return (
                               <Fragment key={event.insert_id}>
                                 {index === firstSubIndex && (

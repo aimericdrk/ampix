@@ -149,6 +149,40 @@ describe('UserProfilePage', () => {
     expect(within(timeline).getAllByText('subscription').length).toBeGreaterThanOrEqual(2);
   });
 
+  it('badges $rc_ subscription timeline events but not the $rc_link identity event', async () => {
+    const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId', () =>
+        HttpResponse.json({
+          distinct_id: 'user-001',
+          last_seen: '2026-07-01T10:06:00.000Z',
+          event_count: 4,
+          ...USER_PROFILE_FIXTURE,
+          recent_events: [
+            { insert_id: 'evt-link', event: '$rc_link', timestamp: '2026-07-01T10:06:00.000Z', screen_name: null, properties: {}, context: ctx },
+            { insert_id: 'evt-ren', event: '$rc_renewal', timestamp: '2026-07-01T10:05:00.000Z', screen_name: null, properties: {}, context: ctx },
+            { insert_id: 'evt-init', event: '$rc_initial_purchase', timestamp: '2026-07-01T09:59:00.000Z', screen_name: null, properties: {}, context: ctx },
+            { insert_id: 'evt-plain', event: 'checkout_completed', timestamp: '2026-07-01T09:58:00.000Z', screen_name: null, properties: {}, context: ctx },
+          ],
+        }),
+      ),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+
+    // Only $rc_renewal and $rc_initial_purchase are subscription events; $rc_link is an identity
+    // event and checkout_completed is a regular event, so exactly two rows carry the badge.
+    expect(within(timeline).getAllByText('subscription')).toHaveLength(2);
+
+    const linkRow = within(timeline).getByText('$rc_link').closest('li')! as HTMLElement;
+    expect(within(linkRow).queryByText('subscription')).not.toBeInTheDocument();
+  });
+
   it('renders no subscription card when RC is not connected', async () => {
     server.use(projectsHandlerWithoutRc());
     signIn();

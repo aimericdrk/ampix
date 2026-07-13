@@ -13,6 +13,9 @@ const RC_RENEWAL = '$rc_renewal';
 const RC_EXPIRATION = '$rc_expiration';
 const RC_CANCELLATION = '$rc_cancellation';
 const RC_NON_RENEWING = '$rc_non_renewing_purchase';
+// `$rc_link` is an SDK identity event (re-emitted on every identify() when a RevenueCat link is
+// set), not a subscription lifecycle event — excluded from the `$rc_%` lifecycle scans below.
+const RC_LINK_EVENT = '$rc_link';
 const PRICE_EXPR = "JSONExtractFloat(toJSONString(properties), '$price')";
 const PERIOD_EXPR = "JSONExtractString(toJSONString(properties), '$rc_period_type')";
 const PRODUCT_ID_EXPR = "JSONExtractString(toJSONString(properties), '$product_id')";
@@ -217,6 +220,7 @@ ${filterAndClause}`,
              AND e.timestamp >= {from:DateTime64}
              AND e.timestamp < {toExclusive:DateTime64}
              AND event LIKE '$rc\\_%'
+             AND event != '${RC_LINK_EVENT}'
 ${filterAndClause}
            GROUP BY t
            ORDER BY t`,
@@ -252,6 +256,7 @@ ${filterAndClause}
              AND e.timestamp >= {from:DateTime64}
              AND e.timestamp < {toExclusive:DateTime64}
              AND event LIKE '$rc\\_%'
+             AND event != '${RC_LINK_EVENT}'
            ORDER BY timestamp DESC
            LIMIT ${RECENT_EVENTS_LIMIT}`,
           params,

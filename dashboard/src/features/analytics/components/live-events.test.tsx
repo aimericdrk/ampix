@@ -95,7 +95,7 @@ describe('LiveEventsPage', () => {
     );
   });
 
-  it('tags $rc_ subscription events with a badge and leaves regular events untagged', async () => {
+  it('tags $rc_ subscription events with a badge, but not the $rc_link identity event or regular events', async () => {
     server.use(
       http.get('/api/v1/projects/:projectId/events/live', () =>
         HttpResponse.json({
@@ -103,6 +103,14 @@ describe('LiveEventsPage', () => {
             {
               insert_id: 'evt-rc',
               event: '$rc_renewal',
+              distinct_id: 'user-sub',
+              timestamp: '2026-07-02T12:32:00.000Z',
+              os: 'iOS',
+              app_version: '2.0.0',
+            },
+            {
+              insert_id: 'evt-link',
+              event: '$rc_link',
               distinct_id: 'user-sub',
               timestamp: '2026-07-02T12:31:00.000Z',
               os: 'iOS',
@@ -127,13 +135,18 @@ describe('LiveEventsPage', () => {
 
     const stream = await screen.findByRole('log', { name: 'Live event stream, newest first' });
     const rows = within(stream).getAllByRole('listitem');
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
 
     const rcRow = within(rows[0]!);
     expect(rcRow.getByText('$rc_renewal')).toBeInTheDocument();
     expect(rcRow.getAllByText('subscription')).toHaveLength(1);
 
-    const plainRow = within(rows[1]!);
+    // `$rc_link` shares the `$rc_` prefix but is an identity event, not a subscription event.
+    const linkRow = within(rows[1]!);
+    expect(linkRow.getByText('$rc_link')).toBeInTheDocument();
+    expect(linkRow.queryByText('subscription')).not.toBeInTheDocument();
+
+    const plainRow = within(rows[2]!);
     expect(plainRow.getByText('product_viewed')).toBeInTheDocument();
     expect(plainRow.queryByText('subscription')).not.toBeInTheDocument();
   });
