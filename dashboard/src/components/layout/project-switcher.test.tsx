@@ -32,7 +32,8 @@ describe('ProjectSwitcher', () => {
     expect(within(menu).getByRole('menuitem', { name: 'All projects' })).toBeInTheDocument();
     await userEvent.click(within(menu).getByRole('menuitem', { name: TEST_PROJECT.name }));
 
-    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+    // Choosing a project lands on its Home overview (not the settings/detail page).
+    await screen.findByRole('heading', { name: 'Home' });
   });
 
   it('only lists projects from the selected workspace', async () => {

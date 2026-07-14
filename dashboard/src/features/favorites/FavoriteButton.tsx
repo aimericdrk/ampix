@@ -37,7 +37,7 @@ export function FavoriteButton({
       onClick={stopAndToggle}
       className={cn('px-2', className)}
     >
-      <IconStar filled={isFavorite} className={isFavorite ? 'text-accent' : undefined} />
+      <IconStar size={20} filled={isFavorite} className={isFavorite ? 'text-accent' : undefined} />
     </Button>
   );
 }

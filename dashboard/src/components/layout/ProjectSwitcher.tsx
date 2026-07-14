@@ -68,7 +68,7 @@ export function ProjectSwitcher() {
                 className={MENU_ITEM_CLASS}
                 onClick={() => {
                   close();
-                  void navigate({ to: '/projects/$projectId', params: { projectId: project.id } });
+                  void navigate({ to: '/projects/$projectId/home', params: { projectId: project.id } });
                 }}
               >
                 <MenuCheck hidden={!active} />
