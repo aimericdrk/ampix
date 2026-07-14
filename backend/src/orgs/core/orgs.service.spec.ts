@@ -1,4 +1,4 @@
-import type { PrismaService } from '../prisma/prisma.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { OrgsService } from './orgs.service';
 
 interface FakePrisma {

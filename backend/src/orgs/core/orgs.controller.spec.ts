@@ -1,4 +1,4 @@
-import type { AuthRequest } from '../auth/auth.types';
+import type { AuthRequest } from '../../auth/auth.types';
 import { OrgsController } from './orgs.controller';
 import type { OrgsService } from './orgs.service';
 

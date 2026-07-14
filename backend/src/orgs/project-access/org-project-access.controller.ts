@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Param, Put, Req, UseGuards } from '@nestjs/common';
-import { parseOrThrow } from '../auth/auth.schemas';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { AuthRequest } from '../auth/auth.types';
-import { Roles } from '../authz/roles.decorator';
-import { RolesGuard } from '../authz/roles.guard';
-import { OrgRoleResolverService } from '../authz/org-role-resolver.service';
+import { parseOrThrow } from '../../auth/auth.schemas';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import type { AuthRequest } from '../../auth/auth.types';
+import { Roles } from '../../authz/roles.decorator';
+import { RolesGuard } from '../../authz/roles.guard';
+import { OrgRoleResolverService } from '../../authz/org-role-resolver.service';
 import { setProjectAccessSchema } from './org-project-access.schemas';
 import { OrgProjectAccessService } from './org-project-access.service';
 import type { ListProjectAccessResponse } from './org-project-access.types';

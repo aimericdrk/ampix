@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Role } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ProblemException } from '../common/problem-details';
-import { isUuidShaped } from '../common/uuid';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ProblemException } from '../../common/problem-details';
+import { isUuidShaped } from '../../common/uuid';
 import type { MemberListItem, UpdatedMember } from './members.types';
 
 /** Prisma's error code for a Postgres serialization failure (SQLSTATE 40001) surfaced from an

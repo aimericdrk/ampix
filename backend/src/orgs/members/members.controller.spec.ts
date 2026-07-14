@@ -1,6 +1,6 @@
 import { MembersController } from './members.controller';
 import type { MembersService } from './members.service';
-import type { AuthRequest } from '../auth/auth.types';
+import type { AuthRequest } from '../../auth/auth.types';
 
 const ACTOR_ID = 'actor-1';
 
