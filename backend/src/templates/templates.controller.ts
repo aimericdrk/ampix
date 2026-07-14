@@ -1,6 +1,6 @@
 import { Controller, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { AuthRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/tokens/jwt-auth.guard';
 import { ProjectRoles } from '../authz/project-roles.decorator';
 import { ProjectRolesGuard } from '../authz/project-roles.guard';
 import { TemplatesService } from './templates.service';

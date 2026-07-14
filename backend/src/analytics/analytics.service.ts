@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { parseOrThrow } from '../auth/auth.schemas';
+import { parseOrThrow } from '../auth/schemas/auth.schemas';
 import {
   ClickHouseService,
   fromChDateTime64,

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
-import { PrismaService } from '../prisma/prisma.service';
-import { PasswordService } from './password.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PasswordService } from '../crypto/password.service';
 
 export const RECOVERY_CODE_COUNT = 10;
 

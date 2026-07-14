@@ -1,6 +1,6 @@
-import type { PrismaService } from '../prisma/prisma.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { RefreshTokenService } from './refresh-token.service';
-import { makeAuthTestConfig } from './test-support/config.fixture';
+import { makeAuthTestConfig } from '../test-support/config.fixture';
 
 interface Row {
   id: string;

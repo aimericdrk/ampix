@@ -1,4 +1,4 @@
-import { ProblemException } from '../common/problem-details';
+import { ProblemException } from '../../common/problem-details';
 import {
   codeSchema,
   loginSchema,

@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { PasswordService } from './password.service';
-import { RecoveryCodeService } from './recovery-code.service';
-import { RefreshTokenService } from './refresh-token.service';
-import { TokenService } from './token.service';
-import { TotpService } from './totp.service';
-import { TwoFactorAttemptLimiter } from './two-factor-attempt-limiter';
+import { AuthController } from './controllers/auth.controller';
+import { AuthService } from './services/auth.service';
+import { JwtAuthGuard } from './tokens/jwt-auth.guard';
+import { PasswordService } from './crypto/password.service';
+import { RecoveryCodeService } from './two-factor/recovery-code.service';
+import { RefreshTokenService } from './tokens/refresh-token.service';
+import { TokenService } from './tokens/token.service';
+import { TotpService } from './two-factor/totp.service';
+import { TwoFactorAttemptLimiter } from './two-factor/two-factor-attempt-limiter';
 
 @Module({
   // Registered with no default secret: every sign/verify call in TokenService passes its own

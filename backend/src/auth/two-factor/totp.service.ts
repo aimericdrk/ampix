@@ -2,10 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import type Redis from 'ioredis';
-import { APP_CONFIG, AppConfig } from '../config/app-config';
-import { REDIS } from '../redis/redis.module';
-import { requireAuthConfig, requireTotpEncKey } from './auth-config.util';
-import { decodeEncryptionKey, decryptSecret, encryptSecret } from './crypto/aes-gcm';
+import { APP_CONFIG, AppConfig } from '../../config/app-config';
+import { REDIS } from '../../redis/redis.module';
+import { requireAuthConfig, requireTotpEncKey } from '../services/auth-config.util';
+import { decodeEncryptionKey, decryptSecret, encryptSecret } from '../crypto/aes-gcm';
 
 /**
  * otplib's `authenticator` preset defaults — 30 s step, 6 digits, SHA-1 — are exactly RFC 6238 /

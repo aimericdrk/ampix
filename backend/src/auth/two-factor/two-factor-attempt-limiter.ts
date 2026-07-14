@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { ProblemException } from '../common/problem-details';
-import { REDIS } from '../redis/redis.module';
+import { ProblemException } from '../../common/problem-details';
+import { REDIS } from '../../redis/redis.module';
 
 /** Contracts §11: "max ~10/5min" per user for 2FA code-guessing endpoints. */
 export const TWO_FACTOR_ATTEMPT_LIMIT = 10;

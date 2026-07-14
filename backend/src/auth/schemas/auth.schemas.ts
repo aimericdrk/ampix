@@ -1,5 +1,5 @@
 import { z, ZodTypeAny } from 'zod';
-import { ProblemException } from '../common/problem-details';
+import { ProblemException } from '../../common/problem-details';
 
 // Upper bounds are defense in depth against oversized-payload abuse (e.g. a ~1MB "code" being fed
 // into the argon2 recovery-code verify loop, or a huge email/name being hashed/persisted) — chosen

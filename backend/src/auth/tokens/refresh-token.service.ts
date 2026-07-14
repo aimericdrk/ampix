@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import { APP_CONFIG, AppConfig } from '../config/app-config';
-import { PrismaService } from '../prisma/prisma.service';
-import { requireAuthConfig } from './auth-config.util';
+import { APP_CONFIG, AppConfig } from '../../config/app-config';
+import { PrismaService } from '../../prisma/prisma.service';
+import { requireAuthConfig } from '../services/auth-config.util';
 
 const RAW_TOKEN_BYTES = 32; // 256 bits of entropy — plenty to make guessing infeasible.
 

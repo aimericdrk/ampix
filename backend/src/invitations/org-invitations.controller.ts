@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
-import { parseOrThrow } from '../auth/auth.schemas';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { parseOrThrow } from '../auth/schemas/auth.schemas';
+import { JwtAuthGuard } from '../auth/tokens/jwt-auth.guard';
 import { Roles } from '../authz/roles.decorator';
 import { RolesGuard } from '../authz/roles.guard';
 import { createInvitationSchema } from './invitations.schemas';

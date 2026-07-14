@@ -1,14 +1,14 @@
 import type { Response } from 'express';
 import { AuthController } from './auth.controller';
-import type { AuthService } from './auth.service';
-import type { RecoveryCodeService } from './recovery-code.service';
-import type { RefreshTokenService } from './refresh-token.service';
-import type { TokenService } from './token.service';
-import type { TotpService } from './totp.service';
-import type { TwoFactorAttemptLimiter } from './two-factor-attempt-limiter';
-import type { AuthRequest } from './auth.types';
-import { REFRESH_COOKIE_NAME } from './cookies';
-import { makeAuthTestConfig } from './test-support/config.fixture';
+import type { AuthService } from '../services/auth.service';
+import type { RecoveryCodeService } from '../two-factor/recovery-code.service';
+import type { RefreshTokenService } from '../tokens/refresh-token.service';
+import type { TokenService } from '../tokens/token.service';
+import type { TotpService } from '../two-factor/totp.service';
+import type { TwoFactorAttemptLimiter } from '../two-factor/two-factor-attempt-limiter';
+import type { AuthRequest } from '../auth.types';
+import { REFRESH_COOKIE_NAME } from '../tokens/cookies';
+import { makeAuthTestConfig } from '../test-support/config.fixture';
 
 const USER = { id: 'user-1', email: 'a@b.com', name: 'A' };
 

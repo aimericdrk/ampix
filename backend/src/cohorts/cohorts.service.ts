@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Cohort } from '@prisma/client';
-import { parseOrThrow } from '../auth/auth.schemas';
+import { parseOrThrow } from '../auth/schemas/auth.schemas';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
 import { isUuidShaped } from '../common/uuid';

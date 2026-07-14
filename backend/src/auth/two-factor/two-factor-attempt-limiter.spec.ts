@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { ProblemException } from '../common/problem-details';
+import { ProblemException } from '../../common/problem-details';
 import {
   TWO_FACTOR_ATTEMPT_LIMIT,
   TWO_FACTOR_ATTEMPT_WINDOW_MS,

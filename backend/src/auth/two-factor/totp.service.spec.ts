@@ -1,8 +1,8 @@
 import { authenticator } from 'otplib';
 import type Redis from 'ioredis';
-import { AppConfig } from '../config/app-config';
+import { AppConfig } from '../../config/app-config';
 import { TotpService } from './totp.service';
-import { makeAuthTestConfig as baseConfig } from './test-support/config.fixture';
+import { makeAuthTestConfig as baseConfig } from '../test-support/config.fixture';
 
 class FakeRedis {
   store = new Map<string, string>();

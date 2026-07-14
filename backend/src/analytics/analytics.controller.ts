@@ -10,9 +10,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { parseOrThrow } from '../auth/auth.schemas';
+import { parseOrThrow } from '../auth/schemas/auth.schemas';
 import type { AuthRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/tokens/jwt-auth.guard';
 import { ProblemException } from '../common/problem-details';
 import { AiRequestError, AiUnconfiguredError, MistralService } from './ai/mistral.service';
 import { AnalyticsService } from './analytics.service';

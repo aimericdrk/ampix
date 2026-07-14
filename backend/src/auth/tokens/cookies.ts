@@ -1,5 +1,5 @@
 import type { CookieOptions, Response } from 'express';
-import { AuthConfig } from './auth-config.util';
+import { AuthConfig } from '../services/auth-config.util';
 
 /** §11: httpOnly refresh cookie, scoped to the auth routes only. */
 export const REFRESH_COOKIE_NAME = 'mam_refresh';

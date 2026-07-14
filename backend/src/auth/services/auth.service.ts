@@ -1,18 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
-import { APP_CONFIG, AppConfig } from '../config/app-config';
-import { PrismaService } from '../prisma/prisma.service';
-import { ProblemException } from '../common/problem-details';
-import { generateSdkToken } from '../common/sdk-token';
+import { APP_CONFIG, AppConfig } from '../../config/app-config';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ProblemException } from '../../common/problem-details';
+import { generateSdkToken } from '../../common/sdk-token';
 import { requireTotpEncKey } from './auth-config.util';
-import { decodeEncryptionKey, decryptSecret, encryptSecret } from './crypto/aes-gcm';
-import { PasswordService } from './password.service';
-import { RecoveryCodeService } from './recovery-code.service';
-import { RefreshTokenService } from './refresh-token.service';
-import { TokenService } from './token.service';
-import { TotpService } from './totp.service';
-import { LoginDto, SignupDto } from './auth.schemas';
-import { PublicUser, toPublicUser } from './auth.types';
+import { decodeEncryptionKey, decryptSecret, encryptSecret } from '../crypto/aes-gcm';
+import { PasswordService } from '../crypto/password.service';
+import { RecoveryCodeService } from '../two-factor/recovery-code.service';
+import { RefreshTokenService } from '../tokens/refresh-token.service';
+import { TokenService } from '../tokens/token.service';
+import { TotpService } from '../two-factor/totp.service';
+import { LoginDto, SignupDto } from '../schemas/auth.schemas';
+import { PublicUser, toPublicUser } from '../auth.types';
 
 export interface Session {
   accessToken: string;

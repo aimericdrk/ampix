@@ -1,6 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
 import { TokenService } from './token.service';
-import { makeAuthTestConfig as baseConfig } from './test-support/config.fixture';
+import { makeAuthTestConfig as baseConfig } from '../test-support/config.fixture';
 
 const USER = { id: '018f6b2e-0000-7000-8000-000000000001', email: 'a@b.com', name: 'A' };
 

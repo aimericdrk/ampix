@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { APP_CONFIG, AppConfig } from '../config/app-config';
-import { requireAccessSecret, requireAuthConfig, requireMfaSecret } from './auth-config.util';
-import { AccessTokenPayload, MfaTokenPayload, PublicUser } from './auth.types';
+import { APP_CONFIG, AppConfig } from '../../config/app-config';
+import { requireAccessSecret, requireAuthConfig, requireMfaSecret } from '../services/auth-config.util';
+import { AccessTokenPayload, MfaTokenPayload, PublicUser } from '../auth.types';
 
 /**
  * Issues and verifies the two JWT-based token kinds (contracts §11). Access and mfa tokens are

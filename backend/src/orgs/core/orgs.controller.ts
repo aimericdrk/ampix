@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import { parseOrThrow } from '../../auth/auth.schemas';
+import { parseOrThrow } from '../../auth/schemas/auth.schemas';
 import type { AuthRequest } from '../../auth/auth.types';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../auth/tokens/jwt-auth.guard';
 import { Roles } from '../../authz/roles.decorator';
 import { RolesGuard } from '../../authz/roles.guard';
 import { createOrgSchema, renameOrgSchema } from './orgs.schemas';

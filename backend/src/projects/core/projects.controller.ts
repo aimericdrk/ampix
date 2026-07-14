@@ -10,8 +10,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { parseOrThrow } from '../../auth/auth.schemas';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { parseOrThrow } from '../../auth/schemas/auth.schemas';
+import { JwtAuthGuard } from '../../auth/tokens/jwt-auth.guard';
 import type { AuthRequest } from '../../auth/auth.types';
 import { ProjectRoles } from '../../authz/project-roles.decorator';
 import { ProjectRolesGuard } from '../../authz/project-roles.guard';

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseOrThrow } from '../auth/auth.schemas';
+import { parseOrThrow } from '../auth/schemas/auth.schemas';
 import { flowsQuerySchema } from '../analytics/flows.schema';
 import { funnelsQuerySchema } from '../analytics/funnels.schema';
 import {

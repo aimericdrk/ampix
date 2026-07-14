@@ -5,7 +5,7 @@ import {
   REFRESH_COOKIE_PATH,
   setRefreshCookie,
 } from './cookies';
-import { makeAuthTestConfig } from './test-support/config.fixture';
+import { makeAuthTestConfig } from '../test-support/config.fixture';
 
 function fakeResponse() {
   return {

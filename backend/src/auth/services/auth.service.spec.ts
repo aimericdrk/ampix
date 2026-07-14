@@ -2,15 +2,15 @@ import { JwtService } from '@nestjs/jwt';
 import { Prisma, User } from '@prisma/client';
 import { authenticator } from 'otplib';
 import type Redis from 'ioredis';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
-import { decodeEncryptionKey, encryptSecret } from './crypto/aes-gcm';
-import { PasswordService } from './password.service';
-import { RecoveryCodeService } from './recovery-code.service';
-import { RefreshTokenService } from './refresh-token.service';
-import { TokenService } from './token.service';
-import { TotpService } from './totp.service';
-import { makeAuthTestConfig } from './test-support/config.fixture';
+import { decodeEncryptionKey, encryptSecret } from '../crypto/aes-gcm';
+import { PasswordService } from '../crypto/password.service';
+import { RecoveryCodeService } from '../two-factor/recovery-code.service';
+import { RefreshTokenService } from '../tokens/refresh-token.service';
+import { TokenService } from '../tokens/token.service';
+import { TotpService } from '../two-factor/totp.service';
+import { makeAuthTestConfig } from '../test-support/config.fixture';
 
 let nextId = 0;
 function makeUser(overrides: Partial<User> = {}): User {

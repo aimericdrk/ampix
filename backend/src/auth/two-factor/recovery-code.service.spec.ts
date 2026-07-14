@@ -1,5 +1,5 @@
-import type { PrismaService } from '../prisma/prisma.service';
-import { PasswordService } from './password.service';
+import type { PrismaService } from '../../prisma/prisma.service';
+import { PasswordService } from '../crypto/password.service';
 import { RECOVERY_CODE_COUNT, RecoveryCodeService } from './recovery-code.service';
 
 interface Row {

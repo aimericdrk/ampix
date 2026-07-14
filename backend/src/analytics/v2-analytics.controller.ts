@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { AuthRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/tokens/jwt-auth.guard';
 import type {
   ClickHeatmapResponse,
   EngagementResponse,

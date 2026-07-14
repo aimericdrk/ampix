@@ -11,10 +11,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { APP_CONFIG, AppConfig } from '../config/app-config';
-import { ProblemException } from '../common/problem-details';
-import { requireAuthConfig } from './auth-config.util';
-import { AuthService } from './auth.service';
+import { APP_CONFIG, AppConfig } from '../../config/app-config';
+import { ProblemException } from '../../common/problem-details';
+import { requireAuthConfig } from '../services/auth-config.util';
+import { AuthService } from '../services/auth.service';
 import {
   changePasswordSchema,
   codeSchema,
@@ -23,15 +23,15 @@ import {
   signupSchema,
   updateMeSchema,
   verify2faSchema,
-} from './auth.schemas';
-import type { AuthRequest } from './auth.types';
-import { clearRefreshCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from './cookies';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { RecoveryCodeService } from './recovery-code.service';
-import { RefreshTokenService } from './refresh-token.service';
-import { TokenService } from './token.service';
-import { TotpService } from './totp.service';
-import { TwoFactorAttemptLimiter } from './two-factor-attempt-limiter';
+} from '../schemas/auth.schemas';
+import type { AuthRequest } from '../auth.types';
+import { clearRefreshCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from '../tokens/cookies';
+import { JwtAuthGuard } from '../tokens/jwt-auth.guard';
+import { RecoveryCodeService } from '../two-factor/recovery-code.service';
+import { RefreshTokenService } from '../tokens/refresh-token.service';
+import { TokenService } from '../tokens/token.service';
+import { TotpService } from '../two-factor/totp.service';
+import { TwoFactorAttemptLimiter } from '../two-factor/two-factor-attempt-limiter';
 
 function unauthorized(detail: string): ProblemException {
   return new ProblemException({ status: 401, title: 'Unauthorized', detail });

@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
-import { ProblemException } from '../common/problem-details';
+import { ProblemException } from '../../common/problem-details';
 import { TokenService } from './token.service';
-import type { AuthRequest } from './auth.types';
+import type { AuthRequest } from '../auth.types';
 
 function unauthorized(): ProblemException {
   return new ProblemException({

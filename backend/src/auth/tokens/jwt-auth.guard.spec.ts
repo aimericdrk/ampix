@@ -1,9 +1,9 @@
 import { JwtService } from '@nestjs/jwt';
 import type { ExecutionContext } from '@nestjs/common';
-import { ProblemException } from '../common/problem-details';
+import { ProblemException } from '../../common/problem-details';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { TokenService } from './token.service';
-import { makeAuthTestConfig } from './test-support/config.fixture';
+import { makeAuthTestConfig } from '../test-support/config.fixture';
 
 const USER = { id: '018f6b2e-0000-7000-8000-000000000001', email: 'a@b.com', name: 'A' };
 

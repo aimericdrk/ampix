@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { AuthRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/tokens/jwt-auth.guard';
 import { AdvancedAnalyticsService } from './advanced-analytics.service';
 import type { FlowResponse, FunnelResponse, RetentionResponse } from './analytics.types';
 

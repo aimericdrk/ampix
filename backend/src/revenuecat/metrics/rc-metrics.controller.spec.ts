@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import type { AuthRequest } from '../../auth/auth.types';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../auth/tokens/jwt-auth.guard';
 import { RcMetricsController } from './rc-metrics.controller';
 import type { RcMetricsService } from './rc-metrics.service';
 
