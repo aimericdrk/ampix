@@ -67,13 +67,14 @@ export function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       <div>
         <Label htmlFor="login-email" className="mb-1 block">
           Email
         </Label>
         <Input
           id="login-email"
+          className="h-11"
           type="email"
           autoComplete="email"
           value={values.email}
@@ -92,6 +93,7 @@ export function LoginForm() {
         </Label>
         <Input
           id="login-password"
+          className="h-11"
           type="password"
           autoComplete="current-password"
           value={values.password}

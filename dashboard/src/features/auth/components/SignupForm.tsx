@@ -53,13 +53,14 @@ export function SignupForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       <div>
         <Label htmlFor="signup-name" className="mb-1 block">
           Name
         </Label>
         <Input
           id="signup-name"
+          className="h-11"
           autoComplete="name"
           value={values.name}
           aria-invalid={Boolean(visibleErrors.name)}
@@ -77,6 +78,7 @@ export function SignupForm() {
         </Label>
         <Input
           id="signup-email"
+          className="h-11"
           type="email"
           autoComplete="email"
           value={values.email}
@@ -95,6 +97,7 @@ export function SignupForm() {
         </Label>
         <Input
           id="signup-password"
+          className="h-11"
           type="password"
           autoComplete="new-password"
           value={values.password}

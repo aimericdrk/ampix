@@ -13,10 +13,10 @@ export function LoginPage() {
         aria-hidden="true"
         className="pointer-events-none absolute bottom-0 right-0 size-96 translate-x-1/3 translate-y-1/3 rounded-full bg-gradient-brand opacity-[0.07] blur-3xl"
       />
-      <div className="relative flex flex-col items-center gap-6">
+      <div className="relative flex w-full max-w-2xl flex-col items-center gap-6">
         <span className="text-gradient-brand font-display text-2xl font-bold">MyAmpix</span>
-        <GlowCard outerClassName="w-full max-w-sm" className="w-full p-8">
-          <h1 className="mb-6 text-center font-display text-lg font-semibold">Log in to MyAmpix</h1>
+        <GlowCard outerClassName="w-full" className="w-full p-10 sm:p-12">
+          <h1 className="mb-8 text-center font-display text-2xl font-semibold">Log in to MyAmpix</h1>
           <LoginForm />
           <p className="mt-4 text-center text-sm text-text-muted">
             No account?{' '}
