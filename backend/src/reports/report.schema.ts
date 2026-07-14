@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { parseOrThrow } from '../auth/schemas/auth.schemas';
-import { flowsQuerySchema } from '../analytics/flows.schema';
-import { funnelsQuerySchema } from '../analytics/funnels.schema';
+import { flowsQuerySchema } from '../analytics/queries/flows/flows.schema';
+import { funnelsQuerySchema } from '../analytics/queries/funnels/funnels.schema';
 import {
   cohortIdSchema,
   dateRangeSchema,
   insightsQuerySchema,
-} from '../analytics/insights-query.schema';
-import { retentionQuerySchema } from '../analytics/retention.schema';
+} from '../analytics/queries/insights/insights-query.schema';
+import { retentionQuerySchema } from '../analytics/queries/retention/retention.schema';
 
 /**
  * Saved-report schema (contracts §16). A saved report is a named query of any analysis kind; its

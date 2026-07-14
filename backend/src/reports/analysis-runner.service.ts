@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { AdvancedAnalyticsService } from '../analytics/advanced-analytics.service';
-import { AnalyticsService } from '../analytics/analytics.service';
+import { AdvancedAnalyticsService } from '../analytics/services/advanced-analytics.service';
+import { AnalyticsService } from '../analytics/services/analytics.service';
 import type {
   FlowResponse,
   FunnelResponse,

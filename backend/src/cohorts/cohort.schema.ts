@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FILTER_OPS, filterValueSchema, insightsFilterSchema } from '../analytics/insights-query.schema';
+import { FILTER_OPS, filterValueSchema, insightsFilterSchema } from '../analytics/queries/insights/insights-query.schema';
 
 /**
  * Cohort definition schema (contracts §16). A cohort is a saved audience: a `match` mode (`all` =

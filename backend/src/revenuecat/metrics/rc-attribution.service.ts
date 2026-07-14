@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ClickHouseService, toChDateTime64 } from '../../clickhouse/clickhouse.service';
-import { parseDateOnlyUTC } from '../../analytics/bucket-grid';
-import { canonicalization, CANONICAL_JOIN_SETTINGS } from '../../analytics/identity';
-import { resolveDateOnlyRange } from '../../analytics/read-query.util';
+import { parseDateOnlyUTC } from '../../analytics/support/bucket-grid';
+import { canonicalization, CANONICAL_JOIN_SETTINGS } from '../../analytics/support/identity';
+import { resolveDateOnlyRange } from '../../analytics/support/read-query.util';
 import { ProblemException } from '../../common/problem-details';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProjectsService } from '../../projects/core/projects.service';

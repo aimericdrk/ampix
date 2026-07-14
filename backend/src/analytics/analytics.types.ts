@@ -1,4 +1,4 @@
-import type { InsightsQuery } from './insights-query.schema';
+import type { InsightsQuery } from './queries/insights/insights-query.schema';
 
 /** POST /query/insights response (contracts §14). */
 export interface InsightsSeriesPoint {

@@ -1,5 +1,5 @@
-import type { AdvancedAnalyticsService } from '../analytics/advanced-analytics.service';
-import type { AnalyticsService } from '../analytics/analytics.service';
+import type { AdvancedAnalyticsService } from '../analytics/services/advanced-analytics.service';
+import type { AnalyticsService } from '../analytics/services/analytics.service';
 import { AnalysisRunnerService } from './analysis-runner.service';
 
 const USER = 'user-1';

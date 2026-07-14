@@ -3,8 +3,8 @@ import {
   compileFilter,
   compileFilterClauses,
   profilePropertyPredicate,
-} from '../analytics/filter-compiler';
-import type { InsightsFilter } from '../analytics/insights-query.schema';
+} from '../analytics/support/filter-compiler';
+import type { InsightsFilter } from '../analytics/queries/insights/insights-query.schema';
 import type {
   BehaviorCondition,
   CohortCondition,

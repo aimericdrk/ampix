@@ -2,13 +2,13 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { CohortsModule } from '../cohorts/cohorts.module';
 import { ProjectsModule } from '../projects/projects.module';
-import { AdvancedAnalyticsController } from './advanced-analytics.controller';
-import { AdvancedAnalyticsService } from './advanced-analytics.service';
+import { AdvancedAnalyticsController } from './controllers/advanced-analytics.controller';
+import { AdvancedAnalyticsService } from './services/advanced-analytics.service';
 import { MistralService } from './ai/mistral.service';
-import { AnalyticsController } from './analytics.controller';
-import { AnalyticsService } from './analytics.service';
-import { V2AnalyticsController } from './v2-analytics.controller';
-import { V2AnalyticsService } from './v2-analytics.service';
+import { AnalyticsController } from './controllers/analytics.controller';
+import { AnalyticsService } from './services/analytics.service';
+import { V2AnalyticsController } from './controllers/v2-analytics.controller';
+import { V2AnalyticsService } from './services/v2-analytics.service';
 
 @Module({
   imports: [AuthModule, ProjectsModule, CohortsModule],
