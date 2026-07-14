@@ -79,17 +79,29 @@ export function IntegrationsSection({ projectId }: { projectId: string }) {
             {error instanceof ApiError ? error.problem.title : 'Failed to load RevenueCat status'}
           </p>
         )}
-        {status && (status.connected ? <ConnectedPanel projectId={projectId} status={status} /> : <ConnectForm projectId={projectId} />)}
+        {status &&
+          (status.connected ? (
+            <ConnectedPanel projectId={projectId} status={status} />
+          ) : (
+            <ConnectForm projectId={projectId} status={status} />
+          ))}
       </CardContent>
     </Card>
   );
 }
 
-function ConnectForm({ projectId }: { projectId: string }) {
+function ConnectForm({
+  projectId,
+  status,
+}: {
+  projectId: string;
+  status: RcIntegrationStatus;
+}) {
   const upsert = useUpsertRcIntegration(projectId);
   const { toast } = useToast();
   const [apiKey, setApiKey] = useState('');
   const [rcProjectId, setRcProjectId] = useState('');
+  const webhookUrl = `${getRuntimeConfig().apiBaseUrl}${status.webhook_path}`;
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -110,6 +122,19 @@ function ConnectForm({ projectId }: { projectId: string }) {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      <div className="rounded-lg border border-border bg-surface-muted/40 p-3">
+        <p className="text-sm font-medium">Webhook endpoint</p>
+        <p className="mb-2 text-xs text-text-muted">
+          Add this URL as a webhook in your RevenueCat project. We generate the authorization
+          secret when you connect below.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded bg-surface px-2 py-1 font-mono text-xs">
+            {webhookUrl}
+          </code>
+          <CopyIconButton value={webhookUrl} label="webhook URL" />
+        </div>
+      </div>
       <div>
         <Label htmlFor="rc-api-key" className="mb-1 block">
           Secret API key

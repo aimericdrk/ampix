@@ -38,6 +38,9 @@ describe('IntegrationsSection', () => {
     const card = await screen.findByTestId('rc-integration-card');
     expect(await within(card).findByLabelText(/secret api key/i)).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: /connect/i })).toBeInTheDocument();
+    // The webhook endpoint is shown before connecting, so the user knows where RevenueCat posts.
+    expect(within(card).getByText(new RegExp(RC_STATUS_FIXTURE.webhook_path))).toBeInTheDocument();
+    expect(within(card).getByLabelText(/copy webhook url/i)).toBeInTheDocument();
   });
 
   it('is absent for non-admin roles', async () => {
