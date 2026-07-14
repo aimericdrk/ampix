@@ -9,8 +9,10 @@ import { RcAdminService } from './admin/rc-admin.service';
 import { RcApiClient } from './api/rc-api.client';
 import { RcBackfillService } from './backfill/rc-backfill.service';
 import { RcIdentityService } from './identity/rc-identity.service';
+import { RcAttributionService } from './metrics/rc-attribution.service';
 import { RcMetricsController } from './metrics/rc-metrics.controller';
 import { RcMetricsService } from './metrics/rc-metrics.service';
+import { RcSummaryService } from './metrics/rc-summary.service';
 import { RcWebhookController } from './webhook/rc-webhook.controller';
 import { RcWebhookGuard } from './webhook/rc-webhook.guard';
 import { RcWebhookProcessor } from './webhook/rc-webhook.processor';
@@ -28,6 +30,8 @@ import { RcWebhookProcessor } from './webhook/rc-webhook.processor';
     { provide: RcApiClient, useFactory: () => new RcApiClient() },
     RcBackfillService,
     RcAdminService,
+    RcSummaryService,
+    RcAttributionService,
     RcMetricsService,
   ],
   exports: [RcWebhookProcessor, RcIdentityService],
