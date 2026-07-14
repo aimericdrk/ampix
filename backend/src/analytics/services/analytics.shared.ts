@@ -34,8 +34,8 @@ export function sinceParam(): string {
   return toChDateTime64(Date.now() - META_LOOKBACK_MS);
 }
 
-/** Reindexes ClickHouse's (sparse) grouped rows onto the full zero-filled bucket grid. Shared by
- *  `InsightsQueryService` (per-series buckets) and `SummariesService` (sessions/revenue by_day). */
+/** Reindexes ClickHouse's (sparse) grouped rows onto the full zero-filled bucket grid. Used by
+ *  `InsightsQueryService` for per-series buckets. */
 export function zeroFill(
   buckets: Bucket[],
   rows: { bucket_ts: string | number; value: string | number }[],

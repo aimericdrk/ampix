@@ -40,7 +40,7 @@ export class ProjectMembersService {
    * and the `create()` all run inside ONE Serializable transaction (see {@link runSerializable}
    * for the write-skew rationale). Without this, `add`'s org-membership read and its `create()`
    * are two separate READ COMMITTED statements — a concurrent org-member removal (which runs
-   * SERIALIZABLE itself and cascade-deletes ProjectMemberships, see `orgs/members.service.ts`)
+   * SERIALIZABLE itself and cascade-deletes ProjectMemberships, see `orgs/members/members.service.ts`)
    * can commit in between: `add` reads "org member: yes", the removal deletes the org Membership
    * and cascades away any ProjectMembership, then `add`'s `create()` commits anyway — minting a
    * ProjectMembership for someone who is no longer an org member, violating this feature's core

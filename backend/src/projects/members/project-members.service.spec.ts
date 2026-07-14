@@ -12,7 +12,7 @@ jest.setTimeout(180000);
  * SECURITY-CRITICAL: this suite exercises the owner-safety rules against a REAL Postgres instance
  * (Testcontainers) rather than mocks. The last-owner invariant relies on `changeRole`/`remove`
  * running under SERIALIZABLE isolation to prevent write-skew (see `runSerializable` in
- * `orgs/members.service.ts` for the full explanation) — a mock `$transaction` can't reproduce
+ * `orgs/members/members.service.ts` for the full explanation) — a mock `$transaction` can't reproduce
  * Postgres's predicate-lock-based conflict detection, so the concurrency test below needs the
  * genuine article to be meaningful.
  */

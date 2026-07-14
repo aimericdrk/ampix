@@ -198,7 +198,7 @@ export class ProjectManagementService {
   /**
    * Runs `run` (a full `$transaction(...)` call) and retries it EXACTLY ONCE if Postgres aborts
    * it with a serialization failure — see the identical helper (and its full write-skew
-   * rationale) in `orgs/members.service.ts` and `projects/project-members.service.ts`.
+   * rationale) in `orgs/members/members.service.ts` and `projects/members/project-members.service.ts`.
    */
   private async runSerializable<T>(run: () => Promise<T>): Promise<T> {
     try {
