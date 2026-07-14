@@ -52,6 +52,10 @@ export interface ComparisonTrendProps {
    * elsewhere). Omit (or pass an empty array) to keep the chart exactly as before — fully
    * backward compatible. */
   annotations?: Annotation[];
+  /** The accessible per-bucket data table under the chart. Defaults to `true`. Set `false` only
+   * when an equivalent table is provided nearby (e.g. Home's collapsible "Daily breakdown"), to
+   * avoid showing the same day-by-day list twice. */
+  showDataTable?: boolean;
 }
 
 function capitalize(text: string): string {
@@ -144,6 +148,7 @@ export function ComparisonTrend({
   height = 320,
   anomalies,
   annotations,
+  showDataTable = true,
 }: ComparisonTrendProps) {
   const chartId = useId();
   const currentGradientId = seriesGradientId(chartId, 0);
@@ -249,12 +254,14 @@ export function ComparisonTrend({
 
       {hasAnomalies && <p className="text-xs text-text-muted">△ anomaly</p>}
 
-      <ComparisonTrendTable
-        rows={rows}
-        xHeader={capitalize(xKey)}
-        valueHeader={label}
-        hasPrevious={hasPrevious}
-      />
+      {showDataTable && (
+        <ComparisonTrendTable
+          rows={rows}
+          xHeader={capitalize(xKey)}
+          valueHeader={label}
+          hasPrevious={hasPrevious}
+        />
+      )}
     </div>
   );
 }

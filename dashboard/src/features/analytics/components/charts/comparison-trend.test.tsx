@@ -47,6 +47,21 @@ describe('ComparisonTrend', () => {
     expect(within(table).queryByText('Previous')).not.toBeInTheDocument();
   });
 
+  it('omits the data table when showDataTable is false, keeping the figure', () => {
+    render(
+      <ComparisonTrend
+        current={current}
+        xKey="day"
+        valueKey="sessions"
+        label="Sessions"
+        ariaLabel="Sessions trend"
+        showDataTable={false}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'Sessions trend' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
   it('renders a dashed "Previous" overlay series with a legend entry when previous is provided', () => {
     render(
       <ComparisonTrend

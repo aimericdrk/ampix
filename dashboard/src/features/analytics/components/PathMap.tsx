@@ -126,6 +126,10 @@ export function PathMap({
             width: layout.width,
             height: layout.height,
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            // A faint dot grid gives the pan/zoom canvas a sense of space; it rides the same transform
+            // so the dots move and scale with the flow.
+            backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
           }}
         >
           <svg
@@ -140,8 +144,8 @@ export function PathMap({
                 data-testid="path-edge"
                 d={edgePath(edge.source, edge.target)}
                 fill="none"
-                stroke="var(--series-1)"
-                strokeOpacity={0.35}
+                stroke="var(--accent)"
+                strokeOpacity={0.45}
                 strokeWidth={edgeStrokeWidth(edge.value, layout.maxValue)}
                 strokeLinecap="round"
               >
@@ -181,38 +185,45 @@ function PathNodeCard({
     <div
       data-testid="path-node"
       className={cn(
-        'absolute flex flex-col overflow-hidden rounded-xl border shadow-sm',
-        synthetic ? 'border-dashed border-border bg-surface/60' : 'border-border bg-surface',
+        'absolute flex flex-col overflow-hidden rounded-2xl border bg-surface shadow-lg shadow-black/20',
+        synthetic ? 'border-dashed border-border' : 'border-border',
       )}
       style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
     >
-      {synthetic ? (
-        <div
-          aria-hidden="true"
-          className="flex flex-1 items-center justify-center bg-chart-surface text-3xl text-text-muted"
-        >
-          {node.event === '$end' ? '⤓' : '…'}
-        </div>
-      ) : (
-        <ScreenImage
-          projectId={projectId}
-          screenName={node.event}
-          alt={`Screenshot of ${node.event}`}
-          cacheKey={cacheKey}
-          className="flex-1"
-        />
-      )}
-      <div className="flex items-center justify-between gap-2 border-t border-border px-2.5 py-1.5">
-        <span className="truncate text-xs font-medium" title={screenLabel(node.event)}>
+      {/* Header: the node's identity — screen name + how many users passed through. Reading the map
+          by names (not by near-identical screenshots) is what makes a flow legible. */}
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-surface-raised px-3 py-2">
+        <span className="truncate text-sm font-semibold" title={screenLabel(node.event)}>
           {screenLabel(node.event)}
         </span>
         <span
-          className="shrink-0 text-xs tabular-nums text-text-muted"
+          className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium tabular-nums text-accent"
           title={`${formatExactNumber(node.value)} users`}
         >
           {formatCompactNumber(node.value)}
         </span>
       </div>
+
+      {/* Body: a framed, cropped screenshot preview (or a glyph for the synthetic entry/exit nodes),
+          padded so the light screenshot reads as a card on the dark canvas rather than a raw slab. */}
+      {synthetic ? (
+        <div
+          aria-hidden="true"
+          className="flex flex-1 items-center justify-center bg-chart-surface text-2xl text-text-muted"
+        >
+          {node.event === '$end' ? '⤓' : '↦'}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-hidden bg-chart-surface p-1.5">
+          <ScreenImage
+            projectId={projectId}
+            screenName={node.event}
+            alt={`Screenshot of ${node.event}`}
+            cacheKey={cacheKey}
+            className="h-full w-full rounded-lg object-cover object-top opacity-90"
+          />
+        </div>
+      )}
     </div>
   );
 }

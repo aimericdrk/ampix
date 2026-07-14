@@ -6,7 +6,7 @@ export const NODE_HEIGHT = 176;
 export const COLUMN_GAP = 104;
 export const ROW_GAP = 28;
 export const EDGE_MIN_WIDTH = 1.5;
-export const EDGE_MAX_WIDTH = 12;
+export const EDGE_MAX_WIDTH = 8;
 
 const COLUMN_STRIDE = NODE_WIDTH + COLUMN_GAP;
 const ROW_STRIDE = NODE_HEIGHT + ROW_GAP;
