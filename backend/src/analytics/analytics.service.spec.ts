@@ -431,6 +431,7 @@ describe('AnalyticsService', () => {
         [
           {
             distinct_id: 'u1',
+            first_seen: '2026-05-01 08:00:00.000',
             last_seen: '2026-06-01 12:00:00.000',
             event_count: '5',
             name: 'Ada Lovelace',
@@ -445,6 +446,7 @@ describe('AnalyticsService', () => {
       expect(result.users).toEqual([
         {
           distinct_id: 'u1',
+          first_seen: '2026-05-01T08:00:00.000Z',
           last_seen: '2026-06-01T12:00:00.000Z',
           event_count: 5,
           name: 'Ada Lovelace',
@@ -459,6 +461,7 @@ describe('AnalyticsService', () => {
         [
           {
             distinct_id: 'u1',
+            first_seen: '2026-06-01 12:00:00.000',
             last_seen: '2026-06-01 12:00:00.000',
             event_count: '1',
             name: '',
@@ -547,8 +550,8 @@ describe('AnalyticsService', () => {
     it('binds cursor and paginates: fetching limit+1 rows to compute next_cursor', async () => {
       const clickhouse = makeClickhouse([
         [
-          { distinct_id: 'u1', last_seen: '2026-06-01 12:00:00.000', event_count: 1 },
-          { distinct_id: 'u2', last_seen: '2026-06-01 12:00:00.000', event_count: 1 },
+          { distinct_id: 'u1', first_seen: '2026-06-01 12:00:00.000', last_seen: '2026-06-01 12:00:00.000', event_count: 1 },
+          { distinct_id: 'u2', first_seen: '2026-06-01 12:00:00.000', last_seen: '2026-06-01 12:00:00.000', event_count: 1 },
         ],
       ]);
       const service = makeService(clickhouse, makeProjects());
@@ -565,7 +568,7 @@ describe('AnalyticsService', () => {
 
     it('next_cursor is null when fewer rows than limit come back (no more pages)', async () => {
       const clickhouse = makeClickhouse([
-        [{ distinct_id: 'u1', last_seen: '2026-06-01 12:00:00.000', event_count: 1 }],
+        [{ distinct_id: 'u1', first_seen: '2026-06-01 12:00:00.000', last_seen: '2026-06-01 12:00:00.000', event_count: 1 }],
       ]);
       const service = makeService(clickhouse, makeProjects());
 

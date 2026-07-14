@@ -54,6 +54,7 @@ export interface LiveEventsResponse {
 /** GET /users response (contracts §14). */
 export interface UserListItem {
   distinct_id: string;
+  first_seen: string;
   last_seen: string;
   event_count: number;
   /** From the user's `user_profiles` row (§17 canonical id); null when absent/empty. */

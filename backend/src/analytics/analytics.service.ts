@@ -72,6 +72,7 @@ interface LiveEventRow {
 
 interface UserRow {
   distinct_id: string;
+  first_seen: string;
   last_seen: string;
   event_count: string | number;
   name: string;
@@ -453,6 +454,7 @@ export class AnalyticsService {
     const rows = await this.clickhouse.query<UserRow>(
       `WITH ${canon.cte}
        SELECT ${canon.uid} AS distinct_id,
+              min(e.timestamp) AS first_seen,
               max(e.timestamp) AS last_seen,
               count(DISTINCT e.insert_id) AS event_count,
               any(JSONExtractString(toJSONString(up.properties), 'name')) AS name,
@@ -474,6 +476,7 @@ export class AnalyticsService {
     const page = hasMore ? rows.slice(0, limit) : rows;
     const users = page.map((row) => ({
       distinct_id: row.distinct_id,
+      first_seen: fromChDateTime64(row.first_seen),
       last_seen: fromChDateTime64(row.last_seen),
       event_count: Number(row.event_count),
       name: row.name || null,
