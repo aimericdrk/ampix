@@ -80,18 +80,27 @@ async function parse<T>(res: Response): Promise<T> {
  * replay; auth endpoints excluded). Returns the raw `Response` so both JSON and binary (blob)
  * callers share the identical transport + refresh semantics.
  */
+// In dev a 401 usually means the backend restarted or is mid-reload, not that the
+// session is dead — keep the in-memory session so a save/HMR doesn't log you out.
+// Vitest also runs with DEV=true, so exclude test mode to keep asserting the
+// production logout behavior.
+function clearSessionUnlessDev(): void {
+  if (import.meta.env.DEV && import.meta.env.MODE !== 'test') return;
+  authStore.clearSession();
+}
+
 async function sendWithRefresh(path: string, options: ApiFetchOptions): Promise<Response> {
   const res = await send(path, options);
   if (res.status === 401 && !AUTH_PATHS.has(path)) {
     const refreshed = await refreshSession();
     if (!refreshed) {
-      authStore.clearSession();
+      clearSessionUnlessDev();
       return res;
     }
     const replay = await send(path, options);
     // A 401 on the freshly-refreshed token means the session is truly dead
     // (e.g. user disabled); log out locally instead of looping refresh-replay.
-    if (replay.status === 401) authStore.clearSession();
+    if (replay.status === 401) clearSessionUnlessDev();
     return replay;
   }
   return res;

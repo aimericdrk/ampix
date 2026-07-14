@@ -7,8 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/ingest': 'http://localhost:8080',
+      '/api': 'http://localhost:8088',
+      '/ingest': 'http://localhost:8088',
     },
   },
   test: {

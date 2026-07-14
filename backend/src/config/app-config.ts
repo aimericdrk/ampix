@@ -55,7 +55,7 @@ function isCookieSecureTruthy(raw: string | undefined): boolean {
 /** Environment schema per shared contracts §3 and §11. Unknown keys in process.env are ignored. */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().max(65535).default(8080),
+  PORT: z.coerce.number().int().positive().max(65535).default(8088),
   DATABASE_URL: z.string().regex(/^postgresql:\/\//, 'must be a postgresql:// URL'),
   CLICKHOUSE_URL: z
     .string()
@@ -204,6 +204,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const v = parsed.data;
+
+  // Development convenience: short-lived access tokens mean a long coding session keeps bouncing you
+  // back to the login screen. Unless the operator has explicitly pinned the TTLs, dev issues
+  // long-lived tokens so a working session survives the day (and page reloads, via the refresh
+  // cookie). Production and any explicit ACCESS_TOKEN_TTL/REFRESH_TOKEN_TTL override are untouched.
+  const isDev = v.NODE_ENV === 'development';
+  const DEV_ACCESS_TOKEN_TTL = 60 * 60 * 24 * 30; // 30 days
+  const DEV_REFRESH_TOKEN_TTL = 60 * 60 * 24 * 365; // 1 year
+  const accessTokenTtl =
+    isDev && env.ACCESS_TOKEN_TTL === undefined ? DEV_ACCESS_TOKEN_TTL : v.ACCESS_TOKEN_TTL;
+  const refreshTokenTtl =
+    isDev && env.REFRESH_TOKEN_TTL === undefined ? DEV_REFRESH_TOKEN_TTL : v.REFRESH_TOKEN_TTL;
+
   return {
     nodeEnv: v.NODE_ENV,
     port: v.PORT,
@@ -226,8 +239,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     mistralApiKey: v.MISTRAL_API_KEY,
     mistralModel: v.MISTRAL_MODEL,
     auth: {
-      accessTokenTtl: v.ACCESS_TOKEN_TTL,
-      refreshTokenTtl: v.REFRESH_TOKEN_TTL,
+      accessTokenTtl,
+      refreshTokenTtl,
       mfaTokenTtl: v.MFA_TOKEN_TTL,
       totpIssuer: v.TOTP_ISSUER,
       totpEncKey: v.TOTP_ENC_KEY,

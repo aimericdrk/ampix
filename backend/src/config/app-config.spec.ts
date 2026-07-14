@@ -23,7 +23,7 @@ describe('loadConfig', () => {
   it('parses a valid environment and applies contract defaults', () => {
     const config = loadConfig(validEnv);
     expect(config.nodeEnv).toBe('production');
-    expect(config.port).toBe(8080);
+    expect(config.port).toBe(8088);
     expect(config.ingestMaxBatch).toBe(100);
     expect(config.ingestMaxBodyKb).toBe(1024);
     expect(config.ingestRateLimitPerMin).toBe(1000);
@@ -83,6 +83,29 @@ describe('loadConfig', () => {
 
   it('rejects a non-postgres DATABASE_URL', () => {
     expect(() => loadConfig({ ...validEnv, DATABASE_URL: 'mysql://nope' })).toThrow(/DATABASE_URL/);
+  });
+
+  it('issues long-lived tokens in development when the TTLs are not pinned', () => {
+    const config = loadConfig({ ...validEnv, NODE_ENV: 'development' });
+    expect(config.auth!.accessTokenTtl).toBe(60 * 60 * 24 * 30); // 30 days
+    expect(config.auth!.refreshTokenTtl).toBe(60 * 60 * 24 * 365); // 1 year
+  });
+
+  it('respects explicit token TTLs even in development', () => {
+    const config = loadConfig({
+      ...validEnv,
+      NODE_ENV: 'development',
+      ACCESS_TOKEN_TTL: '900',
+      REFRESH_TOKEN_TTL: '3600',
+    });
+    expect(config.auth!.accessTokenTtl).toBe(900);
+    expect(config.auth!.refreshTokenTtl).toBe(3600);
+  });
+
+  it('keeps the short contract-default token TTLs in production', () => {
+    const config = loadConfig(validEnv);
+    expect(config.auth!.accessTokenTtl).toBe(900);
+    expect(config.auth!.refreshTokenTtl).toBe(2_592_000);
   });
 
   it('requires JWT secrets outside NODE_ENV=test', () => {
@@ -284,7 +307,7 @@ describe('loadConfig', () => {
       expect(description.DATABASE_URL).toBe('set');
 
       // Non-secret operational values are present for boot-time debugging.
-      expect(description.PORT).toBe('8080');
+      expect(description.PORT).toBe('8088');
       expect(description.NODE_ENV).toBe('production');
       expect(description.CLICKHOUSE_URL).toBe('http://localhost:8123');
       expect(description.CLICKHOUSE_DB).toBe('analytics');

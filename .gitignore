@@ -7,6 +7,7 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+graphify-out/
 
 # Environment — real env files never committed; the example is
 .env
@@ -42,3 +43,4 @@ google-service-account.json
 **/google-service-account.json
 *-service-account*.json
 *.serviceaccount.json
+ruvector.db

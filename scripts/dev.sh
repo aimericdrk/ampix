@@ -37,9 +37,33 @@ pnpm --filter @myampix/backend exec prisma migrate deploy
 info "seeding demo project + ingest token…"
 pnpm --filter @myampix/backend exec prisma db seed
 
-# 4. app processes — Ctrl-C stops both
-info "starting backend (http://localhost:8080) + dashboard (http://localhost:5173)…"
+# 4. app processes — backend logs on the left, dashboard logs on the right
+BACKEND_CMD='pnpm --filter @myampix/backend start:dev'
+DASHBOARD_CMD='pnpm --filter dashboard dev'
+info "starting backend (http://localhost:8088) + dashboard (http://localhost:5173)…"
+
+if command -v tmux >/dev/null; then
+  if [ -n "${TMUX:-}" ]; then
+    # already inside tmux: split the current window instead of nesting sessions
+    tmux split-window -h "$DASHBOARD_CMD"
+    tmux select-pane -L
+    exec $BACKEND_CMD
+  fi
+  SESSION=myampix-dev
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
+  info "opening tmux session '$SESSION' — Ctrl-C in a pane stops that process, 'tmux kill-session -t $SESSION' stops both"
+  exec tmux new-session -s "$SESSION" -n dev "$BACKEND_CMD" \; \
+    split-window -h "$DASHBOARD_CMD" \; \
+    set-option -g mouse on \; \
+    set-option -w pane-border-status top \; \
+    select-pane -t 0 -T 'backend :8088' \; \
+    select-pane -t 1 -T 'dashboard :5173' \; \
+    select-pane -t 0
+fi
+
+# fallback: no tmux — interleaved logs with colored prefixes
+info "tmux not found — showing labeled logs instead (run 'brew install tmux' to get the split view)"
 trap 'echo; info "shutting down backend + dashboard…"; kill 0' EXIT INT TERM
-pnpm --filter @myampix/backend start:dev &
-pnpm --filter dashboard dev &
+$BACKEND_CMD 2>&1 | sed -e $'s/^/\033[1;34m[backend]\033[0m /' &
+$DASHBOARD_CMD 2>&1 | sed -e $'s/^/\033[1;35m[web]    \033[0m /' &
 wait

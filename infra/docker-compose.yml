@@ -60,6 +60,33 @@ services:
       timeout: 3s
       retries: 12
 
+  # Web-based Postgres explorer — browse and edit data at http://localhost:8082
+  # Login: System "PostgreSQL", Server "postgres", user "myampix" / pass "myampix_dev", db "myampix"
+  adminer:
+    image: adminer:4
+    ports:
+      - "8082:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Web-based ClickHouse explorer — browse and query data at http://localhost:5521
+  # Connection is pre-filled; the browser talks to ClickHouse via the host-exposed 8123 port.
+  ch-ui:
+    image: ghcr.io/caioricciuti/ch-ui:latest
+    ports:
+      - "5521:5521"
+    environment:
+      VITE_CLICKHOUSE_URL: "http://localhost:8123"
+      VITE_CLICKHOUSE_USER: default
+      VITE_CLICKHOUSE_PASS: myampix_dev
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
 volumes:
   clickhouse_data:
   postgres_data:
