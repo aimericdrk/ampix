@@ -418,4 +418,49 @@ describe('ProjectsService', () => {
       );
     });
   });
+
+  describe('getProjectStats', () => {
+    it('returns [] and never touches ClickHouse when the user holds no memberships', async () => {
+      const prisma = makePrisma();
+      const clickhouse = makeClickhouse();
+      const service = makeService(prisma, clickhouse);
+
+      await expect(service.getProjectStats('user-1')).resolves.toEqual([]);
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+
+    it('merges user counts + top country per project, defaulting missing data', async () => {
+      const prisma = makePrisma({
+        projectMembership: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ projectId: 'proj-a' }, { projectId: 'proj-b' }]),
+        },
+      });
+      // Two queries: the uniqExact count query, then the country query. Branch on the SQL.
+      const clickhouse = {
+        query: jest.fn(async (sql: string, _params?: Record<string, unknown>) => {
+          if (sql.includes("'country'")) {
+            return [{ project_id: 'proj-a', country: 'US', users: 4 }];
+          }
+          return [
+            { project_id: 'proj-a', user_count: 5 },
+            { project_id: 'proj-b', user_count: 2 },
+          ];
+        }),
+      };
+      const service = makeService(prisma, clickhouse);
+
+      const stats = await service.getProjectStats('user-1');
+
+      // Both queries bind the project-id array as a param (never interpolated).
+      for (const call of clickhouse.query.mock.calls) {
+        expect(call[1]).toEqual({ projectIds: ['proj-a', 'proj-b'] });
+      }
+      expect(stats).toEqual([
+        { project_id: 'proj-a', user_count: 5, top_country: 'US' },
+        { project_id: 'proj-b', user_count: 2, top_country: null }, // no country row → null
+      ]);
+    });
+  });
 });

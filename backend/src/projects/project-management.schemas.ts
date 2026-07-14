@@ -24,3 +24,20 @@ export const createTokenSchema = z.object({
   label: z.string().trim().min(1).max(MAX_LABEL_LENGTH).optional(),
 });
 export type CreateTokenDto = z.infer<typeof createTokenSchema>;
+
+/**
+ * POST /api/v1/projects/:projectId/data/purge body. Each scope the caller opts into is wiped;
+ * at least one must be selected. Owner-only, irreversible (enforced at the controller).
+ */
+export const purgeDataSchema = z.object({
+  scopes: z
+    .object({
+      analytics: z.boolean().optional(),
+      revenuecat: z.boolean().optional(),
+      saved: z.boolean().optional(),
+    })
+    .refine((s) => s.analytics === true || s.revenuecat === true || s.saved === true, {
+      message: 'at least one scope must be selected',
+    }),
+});
+export type PurgeDataDto = z.infer<typeof purgeDataSchema>;

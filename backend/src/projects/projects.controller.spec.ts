@@ -1,3 +1,5 @@
+import 'reflect-metadata';
+import { PROJECT_ROLES_KEY } from '../authz/project-roles.decorator';
 import type { AuthRequest } from '../auth/auth.types';
 import { ProjectManagementService } from './project-management.service';
 import { ProjectsController } from './projects.controller';
@@ -14,11 +16,13 @@ describe('ProjectsController', () => {
     const projects = {
       listForUser: jest.fn(),
       getEventsSummary: jest.fn(),
+      getProjectStats: jest.fn(),
     };
     const projectManagement = {
       createForOrg: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      purgeData: jest.fn(),
       listTokens: jest.fn(),
       createToken: jest.fn(),
       revokeToken: jest.fn(),
@@ -49,6 +53,19 @@ describe('ProjectsController', () => {
 
       expect(projects.listForUser).toHaveBeenCalledWith(USER.id);
       expect(body).toEqual({ projects: items });
+    });
+  });
+
+  describe('stats', () => {
+    it('wraps the per-project stats in a { stats } envelope, scoped to the caller', async () => {
+      const { controller, projects } = makeController();
+      const stats = [{ project_id: 'p1', user_count: 5, top_country: 'US' }];
+      projects.getProjectStats.mockResolvedValue(stats);
+
+      const body = await controller.stats(fakeRequest());
+
+      expect(projects.getProjectStats).toHaveBeenCalledWith(USER.id);
+      expect(body).toEqual({ stats });
     });
   });
 
@@ -108,6 +125,38 @@ describe('ProjectsController', () => {
       await controller.remove('p1');
 
       expect(projectManagement.remove).toHaveBeenCalledWith('p1');
+    });
+  });
+
+  describe('purgeData', () => {
+    it('is owner-gated', () => {
+      expect(Reflect.getMetadata(PROJECT_ROLES_KEY, ProjectsController.prototype.purgeData)).toBe(
+        'owner',
+      );
+    });
+
+    it('parses the body and delegates the selected scopes to the service', async () => {
+      const { controller, projectManagement } = makeController();
+      const cleared = { cleared: { analytics: true, revenuecat: false, saved: true } };
+      projectManagement.purgeData.mockResolvedValue(cleared);
+
+      const body = await controller.purgeData('p1', {
+        scopes: { analytics: true, saved: true },
+      });
+
+      expect(projectManagement.purgeData).toHaveBeenCalledWith('p1', {
+        scopes: { analytics: true, saved: true },
+      });
+      expect(body).toEqual(cleared);
+    });
+
+    it('rejects a body that selects no scope before touching the service', async () => {
+      const { controller, projectManagement } = makeController();
+
+      await expect(controller.purgeData('p1', { scopes: {} })).rejects.toMatchObject({
+        problem: { status: 400 },
+      });
+      expect(projectManagement.purgeData).not.toHaveBeenCalled();
     });
   });
 

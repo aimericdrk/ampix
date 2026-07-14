@@ -48,7 +48,15 @@ class FakePrisma {
     delete: async ({ where }: { where: { id: string } }) => {
       this.projects = this.projects.filter((p) => p.id !== where.id);
     },
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.projects.find((p) => p.id === where.id) ?? null,
   };
+
+  subscriptionState = { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) };
+  revenueCatWebhookEvent = { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) };
+  dashboard = { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) };
+  cohort = { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) };
+  savedReport = { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) };
 
   sdkToken = {
     create: async ({ data }: { data: { projectId: string; token: string; label: string } }) => {
@@ -85,12 +93,15 @@ class FakePrisma {
 
 function makeService(prisma: FakePrisma, redis?: Partial<Redis>) {
   const fakeRedis = { del: jest.fn().mockResolvedValue(1), ...redis };
+  const clickhouse = { deleteProjectData: jest.fn().mockResolvedValue(undefined) };
   return {
     service: new ProjectManagementService(
       prisma as unknown as PrismaService,
       fakeRedis as unknown as Redis,
+      clickhouse as unknown as import('../clickhouse/clickhouse.service').ClickHouseService,
     ),
     redis: fakeRedis,
+    clickhouse,
   };
 }
 
@@ -151,6 +162,64 @@ describe('ProjectManagementService', () => {
 
       await service.remove('p1');
       expect(prisma.projects).toHaveLength(0);
+    });
+  });
+
+  describe('purgeData', () => {
+    function seededPrisma() {
+      const prisma = new FakePrisma();
+      prisma.projects.push({ id: 'p1', orgId: 'org-1', name: 'X', timezone: 'UTC' });
+      return prisma;
+    }
+
+    it('404s when the project does not exist, touching nothing', async () => {
+      const prisma = new FakePrisma();
+      const { service, clickhouse } = makeService(prisma);
+
+      await expect(
+        service.purgeData('missing', { scopes: { analytics: true } }),
+      ).rejects.toMatchObject({ problem: { status: 404 } });
+      expect(clickhouse.deleteProjectData).not.toHaveBeenCalled();
+    });
+
+    it('wipes only the analytics scope when only analytics is selected', async () => {
+      const prisma = seededPrisma();
+      const { service, clickhouse } = makeService(prisma);
+
+      const result = await service.purgeData('p1', { scopes: { analytics: true } });
+
+      expect(clickhouse.deleteProjectData).toHaveBeenCalledWith('p1');
+      expect(prisma.subscriptionState.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.dashboard.deleteMany).not.toHaveBeenCalled();
+      expect(result).toEqual({ cleared: { analytics: true, revenuecat: false, saved: false } });
+    });
+
+    it('wipes revenuecat state + journal but keeps the integration row', async () => {
+      const prisma = seededPrisma();
+      const { service, clickhouse } = makeService(prisma);
+
+      const result = await service.purgeData('p1', { scopes: { revenuecat: true } });
+
+      expect(clickhouse.deleteProjectData).not.toHaveBeenCalled();
+      expect(prisma.subscriptionState.deleteMany).toHaveBeenCalledWith({ where: { projectId: 'p1' } });
+      expect(prisma.revenueCatWebhookEvent.deleteMany).toHaveBeenCalledWith({
+        where: { projectId: 'p1' },
+      });
+      expect(result.cleared).toEqual({ analytics: false, revenuecat: true, saved: false });
+    });
+
+    it('wipes saved dashboards, cohorts and reports on the saved scope', async () => {
+      const prisma = seededPrisma();
+      const { service } = makeService(prisma);
+
+      const result = await service.purgeData('p1', {
+        scopes: { analytics: true, revenuecat: true, saved: true },
+      });
+
+      expect(prisma.dashboard.deleteMany).toHaveBeenCalledWith({ where: { projectId: 'p1' } });
+      expect(prisma.cohort.deleteMany).toHaveBeenCalledWith({ where: { projectId: 'p1' } });
+      expect(prisma.savedReport.deleteMany).toHaveBeenCalledWith({ where: { projectId: 'p1' } });
+      expect(result.cleared).toEqual({ analytics: true, revenuecat: true, saved: true });
     });
   });
 

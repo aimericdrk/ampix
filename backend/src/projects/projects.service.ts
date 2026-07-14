@@ -3,7 +3,7 @@ import type { ProjectRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
-import type { EventsSummary, ProjectListItem } from './projects.types';
+import type { EventsSummary, ProjectListItem, ProjectStat } from './projects.types';
 
 /** UUID-shaped path param guard — a malformed id can never match a real project, so short-circuit
  *  to 404 instead of letting Postgres throw on an invalid `uuid` column comparison. */
@@ -78,6 +78,53 @@ export class ProjectsService {
     const by_event = rows.map((row) => ({ event: row.event, count: Number(row.count) }));
     const total = by_event.reduce((sum, row) => sum + row.count, 0);
     return { project_id: projectId, total, by_event };
+  }
+
+  /**
+   * Per-project list stats — distinct user count + the most common `country` super-property value
+   * (the same property HomePage's geo breakdown uses), over `analytics.events`, all-time. Runs one
+   * ClickHouse query set across EVERY project the user holds a membership on rather than N
+   * per-project reads, so the list page stays cheap. Projects with no events (or no country data)
+   * report `user_count: 0` / `top_country: null`.
+   */
+  async getProjectStats(userId: string): Promise<ProjectStat[]> {
+    const memberships = await this.prisma.projectMembership.findMany({
+      where: { userId },
+      select: { projectId: true },
+    });
+    const projectIds = memberships.map((m) => m.projectId);
+    if (projectIds.length === 0) return [];
+
+    const [counts, topCountries] = await Promise.all([
+      this.clickhouse.query<{ project_id: string; user_count: string | number }>(
+        `SELECT project_id, uniqExact(distinct_id) AS user_count
+         FROM events
+         WHERE project_id IN ({projectIds:Array(UUID)})
+         GROUP BY project_id`,
+        { projectIds },
+      ),
+      this.clickhouse.query<{ project_id: string; country: string }>(
+        `SELECT project_id,
+                JSONExtractString(toJSONString(properties), 'country') AS country,
+                uniqExact(distinct_id) AS users
+         FROM events
+         WHERE project_id IN ({projectIds:Array(UUID)})
+           AND JSONExtractString(toJSONString(properties), 'country') != ''
+         GROUP BY project_id, country
+         ORDER BY users DESC
+         LIMIT 1 BY project_id`,
+        { projectIds },
+      ),
+    ]);
+
+    const countByProject = new Map(counts.map((r) => [r.project_id, Number(r.user_count)]));
+    const countryByProject = new Map(topCountries.map((r) => [r.project_id, r.country]));
+
+    return projectIds.map((id) => ({
+      project_id: id,
+      user_count: countByProject.get(id) ?? 0,
+      top_country: countryByProject.get(id) ?? null,
+    }));
   }
 
   /**

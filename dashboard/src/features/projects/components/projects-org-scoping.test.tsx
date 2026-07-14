@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../auth/store';
 import { renderApp } from '../../../test/render-app';
@@ -36,5 +36,23 @@ describe('ProjectsPage — organization scoping', () => {
     currentOrgStore.setCurrentOrg(VIEWER_ORG_ID);
     await waitFor(() => expect(screen.getByText('Viewer Org Project')).toBeInTheDocument());
     expect(screen.queryByText(TEST_PROJECT.name)).not.toBeInTheDocument();
+  });
+
+  it('shows role, org, timezone, project id and a RevenueCat badge on each project row', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    currentOrgStore.setCurrentOrg(TEST_ORG_ID);
+    renderApp('/projects');
+
+    const nameEl = await screen.findByText(TEST_PROJECT.name);
+    const row = within(nameEl.closest('a') as HTMLElement);
+    expect(row.getByText(TEST_PROJECT.role)).toBeInTheDocument(); // role badge ('owner')
+    expect(row.getByText(TEST_PROJECT.org_name)).toBeInTheDocument();
+    expect(row.getByText(TEST_PROJECT.timezone)).toBeInTheDocument();
+    expect(row.getByText(TEST_PROJECT.id)).toBeInTheDocument();
+    // TEST_PROJECT is RevenueCat-connected in the fixture, so the badge shows.
+    expect(row.getByText('RevenueCat')).toBeInTheDocument();
+    // User count + top country come from GET /projects/stats (fixture: 1234 users, US).
+    await waitFor(() => expect(row.getByText('1,234')).toBeInTheDocument());
+    expect(row.getByText(/United States/)).toBeInTheDocument();
   });
 });

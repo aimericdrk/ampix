@@ -2,14 +2,17 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
 import { generateSdkToken } from '../common/sdk-token';
 import { isUuidShaped } from '../common/uuid';
 import { REDIS } from '../redis/redis.module';
 import { sdkTokenCacheKey } from '../ingestion/sdk-token.guard';
+import type { PurgeDataDto } from './project-management.schemas';
 import type {
   CreatedProject,
   CreatedToken,
+  PurgeDataResult,
   SdkTokenListItem,
   UpdatedProject,
 } from './project-management.types';
@@ -31,6 +34,7 @@ export class ProjectManagementService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS) private readonly redis: Redis,
+    private readonly clickhouse: ClickHouseService,
   ) {}
 
   /**
@@ -97,6 +101,49 @@ export class ProjectManagementService {
   /** Cascades to sdk_tokens via the FK's ON DELETE CASCADE; ClickHouse event data is left as-is. */
   async remove(projectId: string): Promise<void> {
     await this.prisma.project.delete({ where: { id: projectId } });
+  }
+
+  /**
+   * Irreversibly wipes the selected data scopes for a project, keeping the project itself
+   * (and its tokens/members) intact. Owner-only (enforced at the controller). Each scope:
+   *  - `analytics`  — all ClickHouse rows for the project (events, profiles, identity mappings,
+   *                   daily rollups).
+   *  - `revenuecat` — the project's SubscriptionState + webhook journal (the integration row,
+   *                   i.e. the connection itself, is kept so a re-sync can repopulate).
+   *  - `saved`      — saved dashboards, cohorts, and reports (dashboard tiles cascade).
+   */
+  async purgeData(projectId: string, dto: PurgeDataDto): Promise<PurgeDataResult> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true },
+    });
+    if (project === null) {
+      throw new ProblemException({ status: 404, title: 'Not Found', detail: 'Project not found' });
+    }
+
+    const cleared: PurgeDataResult['cleared'] = {
+      analytics: false,
+      revenuecat: false,
+      saved: false,
+    };
+
+    if (dto.scopes.analytics === true) {
+      await this.clickhouse.deleteProjectData(projectId);
+      cleared.analytics = true;
+    }
+    if (dto.scopes.revenuecat === true) {
+      await this.prisma.subscriptionState.deleteMany({ where: { projectId } });
+      await this.prisma.revenueCatWebhookEvent.deleteMany({ where: { projectId } });
+      cleared.revenuecat = true;
+    }
+    if (dto.scopes.saved === true) {
+      await this.prisma.dashboard.deleteMany({ where: { projectId } });
+      await this.prisma.cohort.deleteMany({ where: { projectId } });
+      await this.prisma.savedReport.deleteMany({ where: { projectId } });
+      cleared.saved = true;
+    }
+
+    return { cleared };
   }
 
   async listTokens(projectId: string): Promise<SdkTokenListItem[]> {

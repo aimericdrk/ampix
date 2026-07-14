@@ -1,7 +1,10 @@
 import { Link } from '@tanstack/react-router';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
+import { Globe, Users, type LucideIcon } from 'lucide-react';
+import type { ProjectRole } from '../../../lib/api/types';
+import { Badge, type BadgeProps } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Card, CardContent } from '../../../components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -14,10 +17,42 @@ import { useToast } from '../../../components/ui/toast';
 import { useOrgRole } from '../../orgs/api';
 import { useCurrentOrgId } from '../../orgs/store';
 import { ApiError } from '../../../lib/api/problem';
-import { useCreateProject, useProjects } from '../api';
+import { toIso3, iso3Name } from '../../analytics/geo/country-codes';
+import { useCreateProject, useProjects, useProjectStats } from '../api';
+
+/** Your role in a project → badge colour, so the most privileged rows read at a glance. */
+const ROLE_VARIANT: Record<ProjectRole, BadgeProps['variant']> = {
+  owner: 'accent',
+  admin: 'info',
+  analyst: 'default',
+  viewer: 'outline',
+};
+
+/** Friendly country label from a raw `country` super-property value ('US' → 'United States…'). */
+function countryLabel(raw: string): string {
+  const iso3 = toIso3(raw);
+  return iso3 ? iso3Name(iso3) : raw;
+}
+
+/** A headline metric on a project row: an accent-tinted icon, the value, and a micro-label. */
+function StatCell({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 leading-tight">
+        <div className="truncate text-base font-semibold tabular-nums">{value}</div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-text-muted">{label}</div>
+      </div>
+    </div>
+  );
+}
 
 export function ProjectsPage() {
   const { data, isPending, error } = useProjects();
+  const stats = useProjectStats();
+  const statByProject = new Map((stats.data?.stats ?? []).map((s) => [s.project_id, s]));
   const currentOrgId = useCurrentOrgId();
   const role = useOrgRole(currentOrgId ?? undefined);
   const canCreate = role === 'admin' || role === 'owner';
@@ -59,20 +94,60 @@ export function ProjectsPage() {
           {error instanceof ApiError ? error.problem.title : 'Failed to load projects'}
         </p>
       )}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+      {/* One project per full-width row, with enough detail to tell them apart. */}
+      <div className="flex flex-col gap-3">
         {projects.map((project) => (
           <Link
             key={project.id}
-            to="/projects/$projectId"
+            to="/projects/$projectId/home"
             params={{ projectId: project.id }}
-            className="rounded-lg focus-visible:outline-2 focus-visible:outline-accent"
+            className="block rounded-lg focus-visible:outline-2 focus-visible:outline-accent"
           >
-            <Card className="h-full transition-colors hover:border-accent">
-              <CardHeader>
-                <CardTitle>{project.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-text-muted">Timezone: {project.timezone}</p>
+            <Card className="transition-colors hover:border-accent">
+              <CardContent className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
+                {/* Identity: name + your access, then the id and where/when it lives. */}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-lg font-semibold">{project.name}</span>
+                    <Badge variant={ROLE_VARIANT[project.role]} className="capitalize">
+                      {project.role}
+                    </Badge>
+                    {project.integrations?.revenuecat && (
+                      <Badge variant="success">RevenueCat</Badge>
+                    )}
+                  </div>
+                  <p className="mt-1.5 truncate font-mono text-xs text-text-muted">{project.id}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-text-muted">
+                    <span>{project.org_name}</span>
+                    <span aria-hidden>·</span>
+                    <span>{project.timezone}</span>
+                  </div>
+                </div>
+
+                {/* Headline metrics. */}
+                <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+                  <StatCell
+                    icon={Users}
+                    label="Users"
+                    value={
+                      stats.isPending
+                        ? '…'
+                        : (statByProject.get(project.id)?.user_count ?? 0).toLocaleString()
+                    }
+                  />
+                  <StatCell
+                    icon={Globe}
+                    label="Top country"
+                    value={
+                      stats.isPending
+                        ? '…'
+                        : (() => {
+                            const top = statByProject.get(project.id)?.top_country;
+                            return top ? countryLabel(top) : '—';
+                          })()
+                    }
+                  />
+                </div>
               </CardContent>
             </Card>
           </Link>

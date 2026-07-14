@@ -15,11 +15,16 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthRequest } from '../auth/auth.types';
 import { ProjectRoles } from '../authz/project-roles.decorator';
 import { ProjectRolesGuard } from '../authz/project-roles.guard';
-import { createTokenSchema, updateProjectSchema } from './project-management.schemas';
+import { createTokenSchema, purgeDataSchema, updateProjectSchema } from './project-management.schemas';
 import { ProjectManagementService } from './project-management.service';
-import type { CreatedToken, SdkTokenListItem, UpdatedProject } from './project-management.types';
+import type {
+  CreatedToken,
+  PurgeDataResult,
+  SdkTokenListItem,
+  UpdatedProject,
+} from './project-management.types';
 import { ProjectsService } from './projects.service';
-import type { EventsSummary, ProjectListItem } from './projects.types';
+import type { EventsSummary, ProjectListItem, ProjectStat } from './projects.types';
 
 @Controller('api/v1/projects')
 @UseGuards(JwtAuthGuard)
@@ -33,6 +38,12 @@ export class ProjectsController {
   async list(@Req() req: AuthRequest): Promise<{ projects: ProjectListItem[] }> {
     const projects = await this.projects.listForUser(req.user!.id);
     return { projects };
+  }
+
+  @Get('stats')
+  async stats(@Req() req: AuthRequest): Promise<{ stats: ProjectStat[] }> {
+    const stats = await this.projects.getProjectStats(req.user!.id);
+    return { stats };
   }
 
   @Get(':projectId/events/summary')
@@ -60,6 +71,17 @@ export class ProjectsController {
   @HttpCode(204)
   async remove(@Param('projectId') projectId: string): Promise<void> {
     await this.projectManagement.remove(projectId);
+  }
+
+  @Post(':projectId/data/purge')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('owner')
+  async purgeData(
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ): Promise<PurgeDataResult> {
+    const dto = parseOrThrow(purgeDataSchema, body);
+    return this.projectManagement.purgeData(projectId, dto);
   }
 
   @Get(':projectId/tokens')

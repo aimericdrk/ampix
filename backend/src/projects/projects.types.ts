@@ -18,3 +18,10 @@ export interface EventsSummary {
   total: number;
   by_event: { event: string; count: number }[];
 }
+
+/** Per-project list stats: distinct users + the most common `country` super property (or null). */
+export interface ProjectStat {
+  project_id: string;
+  user_count: number;
+  top_country: string | null;
+}

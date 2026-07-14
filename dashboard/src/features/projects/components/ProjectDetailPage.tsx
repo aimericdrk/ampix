@@ -6,6 +6,8 @@ import { Badge } from '../../../components/ui/badge';
 import { Banner } from '../../../components/ui/banner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Checkbox } from '../../../components/ui/checkbox';
+import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import {
   Dialog,
@@ -25,6 +27,7 @@ import type { SdkToken } from '../../../lib/api/types';
 import {
   useCreateToken,
   useDeleteProject,
+  usePurgeProjectData,
   useEventSummary,
   useProjectRole,
   useProjects,
@@ -105,6 +108,7 @@ export function ProjectDetailPage() {
           <Reveal index={6} className="lg:col-span-2">
             <DangerZoneSection
               projectId={project.id}
+              projectName={project.name}
               onDeleted={() => router.history.push('/projects')}
             />
           </Reveal>
@@ -568,15 +572,17 @@ function DataSection({
             {summary.total === 0 ? (
               <EmptyState icon={Inbox} title="No events yet — send some from your app" />
             ) : (
-              <DataTable
-                caption="Events by name"
-                columns={[
-                  { key: 'event', header: 'Event', sortable: true },
-                  { key: 'count', header: 'Count', align: 'right', sortable: true },
-                ]}
-                rows={summary.by_event}
-                rowKey={(row) => row.event}
-              />
+              <CollapsibleSection title="Events by name" defaultOpen={false}>
+                <DataTable
+                  caption="Events by name"
+                  columns={[
+                    { key: 'event', header: 'Event', sortable: true },
+                    { key: 'count', header: 'Count', align: 'right', sortable: true },
+                  ]}
+                  rows={summary.by_event}
+                  rowKey={(row) => row.event}
+                />
+              </CollapsibleSection>
             )}
           </div>
         )}
@@ -601,16 +607,50 @@ function DataSection({
 
 // --- 5) Danger zone -----------------------------------------------------------
 
+const PURGE_SCOPES: Array<{ key: 'analytics' | 'revenuecat' | 'saved'; label: string; hint: string }> =
+  [
+    {
+      key: 'analytics',
+      label: 'Analytics events & profiles',
+      hint: 'All ingested events, user profiles, and identity data. The project keeps working from zero.',
+    },
+    {
+      key: 'revenuecat',
+      label: 'RevenueCat subscription data',
+      hint: 'Subscription status and webhook history. The RevenueCat connection itself is kept.',
+    },
+    {
+      key: 'saved',
+      label: 'Saved dashboards, cohorts & reports',
+      hint: 'Every saved dashboard, cohort, and report for this project.',
+    },
+  ];
+
 function DangerZoneSection({
   projectId,
+  projectName,
   onDeleted,
 }: {
   projectId: string;
+  projectName: string;
   onDeleted: () => void;
 }) {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const deleteProject = useDeleteProject(projectId);
+
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [scopes, setScopes] = useState({ analytics: false, revenuecat: false, saved: false });
+  const [confirmName, setConfirmName] = useState('');
+  const purge = usePurgeProjectData(projectId);
+
+  const anyScope = scopes.analytics || scopes.revenuecat || scopes.saved;
+  const nameMatches = confirmName.trim() === projectName;
+
+  const resetPurge = () => {
+    setScopes({ analytics: false, revenuecat: false, saved: false });
+    setConfirmName('');
+  };
 
   const handleDelete = () => {
     deleteProject.mutate(undefined, {
@@ -629,12 +669,98 @@ function DangerZoneSection({
     });
   };
 
+  const handlePurge = () => {
+    if (!anyScope || !nameMatches) return;
+    purge.mutate(
+      { scopes },
+      {
+        onSuccess: (result) => {
+          const cleared = PURGE_SCOPES.filter((s) => result.cleared[s.key]).map((s) => s.label);
+          setPurgeOpen(false);
+          resetPurge();
+          toast({ title: 'Data deleted', description: cleared.join(', ') });
+        },
+        onError: (error) => {
+          toast({
+            title: 'Could not delete data',
+            description: error instanceof ApiError ? error.problem.title : 'Something went wrong.',
+            variant: 'error',
+          });
+        },
+      },
+    );
+  };
+
   return (
     <Card className="border-danger/40">
       <CardHeader>
         <CardTitle>Danger zone</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {/* Delete data sits above Delete project: wiping data is the less-drastic of the two. */}
+        <Banner variant="danger" role="note">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p>Permanently delete collected data while keeping the project and its tokens.</p>
+            <Dialog
+              open={purgeOpen}
+              onOpenChange={(open) => {
+                setPurgeOpen(open);
+                if (!open) resetPurge();
+              }}
+            >
+              <Button variant="danger" onClick={() => setPurgeOpen(true)}>
+                Delete all data
+              </Button>
+              <DialogContent>
+                <DialogTitle>Delete all data</DialogTitle>
+                <DialogDescription>
+                  Choose what to permanently erase for this project. This cannot be undone.
+                </DialogDescription>
+                <div className="mt-4 space-y-3">
+                  {PURGE_SCOPES.map((scope) => (
+                    <label key={scope.key} className="flex gap-3">
+                      <Checkbox
+                        checked={scopes[scope.key]}
+                        onCheckedChange={(checked) =>
+                          setScopes((prev) => ({ ...prev, [scope.key]: checked === true }))
+                        }
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium">{scope.label}</span>
+                        <span className="block text-xs text-text-muted">{scope.hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  <Label htmlFor="purge-confirm" className="mb-1 block">
+                    Type <span className="font-mono">{projectName}</span> to confirm
+                  </Label>
+                  <Input
+                    id="purge-confirm"
+                    value={confirmName}
+                    onChange={(e) => setConfirmName(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button variant="secondary" onClick={() => setPurgeOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={!anyScope || !nameMatches || purge.isPending}
+                    onClick={handlePurge}
+                  >
+                    {purge.isPending ? 'Deleting…' : 'Delete data'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </Banner>
+
         {/* Permanently-visible framing, not a transient alert — role="note" avoids colliding
             with real role="alert" fetch errors elsewhere on the page. */}
         <Banner variant="danger" role="note">

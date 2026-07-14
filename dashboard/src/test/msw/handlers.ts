@@ -189,6 +189,7 @@ export const LIVE_EVENTS_FIXTURE: LiveEvent[] = Array.from({ length: 30 }, (_, i
 export const USERS_FIXTURE: UserListItem[] = [
   {
     distinct_id: 'user-001',
+    first_seen: '2026-01-05T10:00:00.000Z',
     last_seen: '2026-07-01T10:00:00.000Z',
     event_count: 42,
     name: 'Alex Chen',
@@ -196,6 +197,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-002',
+    first_seen: '2026-02-10T09:30:00.000Z',
     last_seen: '2026-06-30T09:30:00.000Z',
     event_count: 17,
     name: 'Alex Wong',
@@ -203,6 +205,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-003',
+    first_seen: '2026-03-03T08:15:00.000Z',
     last_seen: '2026-06-29T08:15:00.000Z',
     event_count: 5,
     name: 'Priya Singh',
@@ -210,6 +213,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-004',
+    first_seen: '2026-04-01T07:00:00.000Z',
     last_seen: '2026-06-28T07:00:00.000Z',
     event_count: 63,
     name: 'Jordan Lee',
@@ -217,6 +221,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-005',
+    first_seen: '2026-05-05T06:45:00.000Z',
     last_seen: '2026-06-27T06:45:00.000Z',
     event_count: 9,
     name: null,
@@ -226,6 +231,7 @@ export const USERS_FIXTURE: UserListItem[] = [
     const n = i + 6;
     return {
       distinct_id: `user-${String(n).padStart(3, '0')}`,
+      first_seen: `2026-05-${String(26 - i).padStart(2, '0')}T06:00:00.000Z`,
       last_seen: `2026-06-${String(26 - i).padStart(2, '0')}T06:00:00.000Z`,
       event_count: n,
       name: `User ${n}`,
@@ -1450,6 +1456,19 @@ export const handlers = [
       projects: orgsState.projects.map((record) => toProject(record, caller.id)),
     };
     return HttpResponse.json(response);
+  }),
+
+  http.get('/api/v1/projects/stats', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token)) {
+      return problem(401, 'Access token invalid or expired');
+    }
+    const stats = orgsState.projects.map((record) => ({
+      project_id: record.id,
+      user_count: record.id === TEST_PROJECT.id ? 1234 : 0,
+      top_country: record.id === TEST_PROJECT.id ? 'US' : null,
+    }));
+    return HttpResponse.json({ stats });
   }),
 
   http.get('/api/v1/projects/:projectId/events/summary', ({ request, params }) => {

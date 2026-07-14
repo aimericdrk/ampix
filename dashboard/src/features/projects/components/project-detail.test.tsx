@@ -32,6 +32,8 @@ describe('ProjectDetailPage', () => {
     expect(await screen.findByText('Total events')).toBeInTheDocument();
     expect(screen.getByText(String(EVENT_SUMMARY_FIXTURE.total))).toBeInTheDocument();
 
+    // The per-event table is collapsed by default — expand it before asserting the rows.
+    await userEvent.click(within(main).getByRole('button', { name: 'Events by name' }));
     const table = within(main).getByRole('table', { name: 'Events by name' });
     for (const row of EVENT_SUMMARY_FIXTURE.by_event) {
       expect(screen.getByText(row.event)).toBeInTheDocument();
@@ -112,5 +114,37 @@ describe('ProjectDetailPage', () => {
     await waitFor(() => expect(revokedIds).toContain('token-1'));
     expect(createdBodies).toEqual([{ label: 'Default' }]);
     expect(await screen.findByText('Token rotated')).toBeInTheDocument();
+  });
+
+  it('deletes selected data scopes only after a scope is picked and the name is typed', async () => {
+    let purgeBody: unknown;
+    server.use(
+      http.post('/api/v1/projects/:projectId/data/purge', async ({ request }) => {
+        purgeBody = await request.json();
+        return HttpResponse.json({ cleared: { analytics: true, revenuecat: false, saved: false } });
+      }),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete all data' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete all data' });
+
+    // Confirm is blocked until a scope is chosen AND the project name is typed exactly.
+    const confirm = within(dialog).getByRole('button', { name: 'Delete data' });
+    expect(confirm).toBeDisabled();
+
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /Analytics events & profiles/ }));
+    expect(confirm).toBeDisabled(); // scope alone isn't enough
+    await userEvent.type(within(dialog).getByLabelText(/type .* to confirm/i), TEST_PROJECT.name);
+    expect(confirm).toBeEnabled();
+
+    await userEvent.click(confirm);
+
+    await waitFor(() =>
+      expect(purgeBody).toEqual({ scopes: { analytics: true, revenuecat: false, saved: false } }),
+    );
+    expect(await screen.findByText('Data deleted')).toBeInTheDocument();
   });
 });

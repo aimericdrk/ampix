@@ -10,6 +10,9 @@ import type {
   ListProjectMembersResponse,
   ListProjectsResponse,
   ListTokensResponse,
+  ProjectStatsResponse,
+  PurgeProjectDataRequest,
+  PurgeProjectDataResponse,
   UpdatedProjectMember,
   UpdateProjectMemberRoleRequest,
   UpdateProjectRequest,
@@ -17,6 +20,15 @@ import type {
 } from '../../lib/api/types';
 
 export const PROJECTS_QUERY_KEY = ['projects'] as const;
+
+/** Per-project list stats (user count + top country). Loads separately from the project list so
+ *  the list renders immediately and the stats fill in. */
+export function useProjectStats() {
+  return useQuery({
+    queryKey: ['projects', 'stats'],
+    queryFn: () => apiFetch<ProjectStatsResponse>('/api/v1/projects/stats'),
+  });
+}
 
 export function useProjects() {
   return useQuery({
@@ -73,6 +85,27 @@ export function useDeleteProject(projectId: string) {
     mutationFn: () => apiFetch<void>(`/api/v1/projects/${projectId}`, { method: 'DELETE' }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY });
+    },
+  });
+}
+
+/**
+ * Owner-only, irreversible wipe of the selected data scopes for a project. On success we
+ * invalidate every cache the wiped scopes could have populated so the UI reflects the empty
+ * state without a reload.
+ */
+export function usePurgeProjectData(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PurgeProjectDataRequest) =>
+      apiFetch<PurgeProjectDataResponse>(`/api/v1/projects/${projectId}/data/purge`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['analytics', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['revenuecat', projectId] });
     },
   });
 }

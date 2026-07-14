@@ -117,6 +117,31 @@ export class ClickHouseService implements EventSink, OnApplicationShutdown {
     return result.json<T>();
   }
 
+  /** Every ClickHouse table keyed by `project_id` — the full set a project's data lives in. */
+  private static readonly PROJECT_SCOPED_TABLES = [
+    'events',
+    'user_profiles',
+    'identity_mappings',
+    'daily_active_users',
+    'daily_event_counts',
+    'daily_sessions',
+  ] as const;
+
+  /**
+   * Lightweight-deletes every row belonging to one project across all project-scoped tables
+   * (raw events + profiles + identity mappings + the daily rollups). Used by the owner-gated
+   * project data purge. The table list is a fixed constant; `projectId` binds as a param and is
+   * never interpolated.
+   */
+  async deleteProjectData(projectId: string): Promise<void> {
+    for (const table of ClickHouseService.PROJECT_SCOPED_TABLES) {
+      await this.client.command({
+        query: `DELETE FROM ${table} WHERE project_id = {projectId:UUID}`,
+        query_params: { projectId },
+      });
+    }
+  }
+
   async ping(): Promise<boolean> {
     const result = await this.client.ping();
     return result.success;

@@ -280,6 +280,36 @@ export interface UpdateProjectResponse {
   timezone: string;
 }
 
+/** Per-project list stats from GET /projects/stats — distinct users + most common country. */
+export interface ProjectStat {
+  project_id: string;
+  user_count: number;
+  top_country: string | null;
+}
+
+export interface ProjectStatsResponse {
+  stats: ProjectStat[];
+}
+
+/** The selectable data scopes for POST /projects/:id/data/purge (owner-only, irreversible). */
+export interface PurgeProjectDataScopes {
+  analytics?: boolean;
+  revenuecat?: boolean;
+  saved?: boolean;
+}
+
+export interface PurgeProjectDataRequest {
+  scopes: PurgeProjectDataScopes;
+}
+
+export interface PurgeProjectDataResponse {
+  cleared: {
+    analytics: boolean;
+    revenuecat: boolean;
+    saved: boolean;
+  };
+}
+
 export interface SdkToken {
   id: string;
   token: string;
@@ -436,6 +466,7 @@ export interface LiveEventsResponse {
 
 export interface UserListItem {
   distinct_id: string;
+  first_seen: string;
   last_seen: string;
   event_count: number;
   /** From the user's profile (whitelisted keys); null when not set — search also matches these. */

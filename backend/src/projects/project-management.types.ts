@@ -14,6 +14,15 @@ export interface UpdatedProject {
   timezone: string;
 }
 
+/** POST /api/v1/projects/:projectId/data/purge response — which scopes were actually cleared. */
+export interface PurgeDataResult {
+  cleared: {
+    analytics: boolean;
+    revenuecat: boolean;
+    saved: boolean;
+  };
+}
+
 /** GET /api/v1/projects/:projectId/tokens list item (contracts §13) — non-revoked only. */
 export interface SdkTokenListItem {
   id: string;
