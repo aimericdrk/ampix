@@ -34,16 +34,19 @@ describe('ProjectMembersSection — owner (TEST_USER on TEST_PROJECT)', () => {
     expect(options).toEqual(['owner', 'admin', 'analyst', 'viewer']);
   });
 
-  it("disables the last owner's role select and remove button", async () => {
+  it("shows the current user's own role as a read-only badge and disables their remove (last owner)", async () => {
     signInAsOwner();
     renderApp(`/projects/${TEST_PROJECT.id}`);
     await screen.findByRole('heading', { name: TEST_PROJECT.name });
 
-    const roleSelect = await screen.findByLabelText(`Role for ${TEST_USER.name}`);
-    expect(roleSelect).toBeDisabled();
+    await screen.findByText(TEST_USER.email);
+    // Nobody may change their OWN role — the current user's row is a read-only badge, not a select.
+    expect(screen.queryByLabelText(`Role for ${TEST_USER.name}`)).not.toBeInTheDocument();
 
     const main = screen.getByRole('main');
     const row = within(main).getByText(TEST_USER.email).closest('tr') as HTMLElement;
+    expect(within(row).getByText('owner')).toBeInTheDocument();
+    // Still the last owner, so removal stays disabled too.
     expect(within(row).getByRole('button', { name: 'Remove' })).toBeDisabled();
   });
 
@@ -75,6 +78,20 @@ describe('ProjectMembersSection — admin (MFA_USER on TEST_PROJECT)', () => {
     const row = screen.getByText(TEST_USER.email).closest('tr') as HTMLElement;
     expect(within(row).getByText('owner')).toBeInTheDocument();
     expect(within(row).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+  });
+
+  it("shows the admin's OWN role as a read-only badge (cannot change own role)", async () => {
+    signInAsAdmin();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    // MFA_USER is an admin who CAN manage members, but must never edit their own role.
+    expect(screen.queryByLabelText(`Role for ${MFA_USER.name}`)).not.toBeInTheDocument();
+
+    const main = screen.getByRole('main');
+    await within(main).findByText(MFA_USER.email);
+    const row = within(main).getByText(MFA_USER.email).closest('tr') as HTMLElement;
+    expect(within(row).getByText('admin')).toBeInTheDocument();
   });
 
   it('cannot offer "owner" as an add-member role option', async () => {

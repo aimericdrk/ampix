@@ -19,6 +19,7 @@ import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import { PROJECT_ROLES, type ProjectMember, type ProjectRole } from '../../../lib/api/types';
 import { useMembers } from '../../orgs/api';
+import { useAuth } from '../../auth/store';
 import {
   useAddProjectMember,
   useProjectMembers,
@@ -70,6 +71,8 @@ function MembersList({
   isOwner: boolean;
 }) {
   const { data, isPending, error } = useProjectMembers(projectId);
+  const { user } = useAuth();
+  const currentUserId = user?.id;
   const { toast } = useToast();
   const updateRole = useUpdateProjectMemberRole(projectId);
   const removeMember = useRemoveProjectMember(projectId);
@@ -134,8 +137,11 @@ function MembersList({
       key: 'role',
       header: 'Role',
       render: (member) => {
+        const isSelf = member.user.id === currentUserId;
         // Admins can't set/alter the owner role — an owner row is always a read-only badge to them.
-        if (!canManage || (member.role === 'owner' && !isOwner)) {
+        // Nobody may change their OWN role either (the backend returns 403), so the current user's
+        // row is always a read-only badge too.
+        if (!canManage || isSelf || (member.role === 'owner' && !isOwner)) {
           return <Badge variant={roleBadgeVariant(member.role)}>{member.role}</Badge>;
         }
         const isLastOwner = member.role === 'owner' && ownerCount <= 1;
