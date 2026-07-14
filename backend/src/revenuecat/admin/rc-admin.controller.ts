@@ -1,14 +1,14 @@
 import {
   Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Req, UseGuards,
 } from '@nestjs/common';
-import { parseOrThrow } from '../auth/auth.schemas';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { AuthRequest } from '../auth/auth.types';
-import { ProjectRoles } from '../authz/project-roles.decorator';
-import { ProjectRolesGuard } from '../authz/project-roles.guard';
+import { parseOrThrow } from '../../auth/auth.schemas';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import type { AuthRequest } from '../../auth/auth.types';
+import { ProjectRoles } from '../../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../../authz/project-roles.guard';
 import { rcUpsertSchema } from './rc-admin.schema';
 import { RcAdminService } from './rc-admin.service';
-import { RcBackfillService } from './rc-backfill.service';
+import { RcBackfillService } from '../backfill/rc-backfill.service';
 
 /**
  * RevenueCat integration management (spec §4.7). Mounted under

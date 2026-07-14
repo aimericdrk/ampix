@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { ProfileWriter } from '../ingestion/profile-writer';
-import { RcApiClient, RcApiSubscription } from './rc-api.client';
-import { RcIdentityService } from './rc-identity.service';
-import { profileOpsFor } from './rc-event-mapper';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ProfileWriter } from '../../ingestion/profile-writer';
+import { RcApiClient, RcApiSubscription } from '../api/rc-api.client';
+import { RcIdentityService } from '../identity/rc-identity.service';
+import { profileOpsFor } from '../mapping/rc-event-mapper';
 
 /** RC API status → our status (spec §4.6; state only, never CH events). */
 function mapApiStatus(sub: RcApiSubscription): 'trial' | 'active' | 'grace' | 'paused' | 'churned' {

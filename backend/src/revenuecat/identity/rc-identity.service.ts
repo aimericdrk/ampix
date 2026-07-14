@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ClickHouseService } from '../clickhouse/clickhouse.service';
+import { ClickHouseService } from '../../clickhouse/clickhouse.service';
 
 /**
  * Maps a RevenueCat app_user_id to a MyAmpix distinct_id (spec §4.4).

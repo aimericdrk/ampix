@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { ClickHouseService } from '../clickhouse/clickhouse.service';
-import { ProfileWriter } from '../ingestion/profile-writer';
-import { RcIdentityService } from './rc-identity.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ClickHouseService } from '../../clickhouse/clickhouse.service';
+import { ProfileWriter } from '../../ingestion/profile-writer';
+import { RcIdentityService } from '../identity/rc-identity.service';
 import { rcWebhookBodySchema, RcWebhookEvent } from './rc-webhook.schema';
-import { deriveStatePatch, profileOpsFor, rcEventName, toEventRow } from './rc-event-mapper';
+import { deriveStatePatch, profileOpsFor, rcEventName, toEventRow } from '../mapping/rc-event-mapper';
 
 export interface RcIntegrationRef {
   id: string;

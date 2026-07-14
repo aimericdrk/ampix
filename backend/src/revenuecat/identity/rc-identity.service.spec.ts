@@ -1,4 +1,4 @@
-import { ClickHouseService } from '../clickhouse/clickhouse.service';
+import { ClickHouseService } from '../../clickhouse/clickhouse.service';
 import { RcIdentityService } from './rc-identity.service';
 
 function chMock(handler: (sql: string) => unknown[]) {

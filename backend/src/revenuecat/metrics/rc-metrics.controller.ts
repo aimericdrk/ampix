@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
-import type { AuthRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { AuthRequest } from '../../auth/auth.types';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RcMetricsService } from './rc-metrics.service';
 import type { SubscriptionAttributionResponse, SubscriptionsSummaryResponse } from './rc-metrics.service';
 

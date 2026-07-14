@@ -1,6 +1,6 @@
 import type { ProfileOperation } from '@myampix/contracts';
-import { EventRow, toChDateTime64 } from '../clickhouse/clickhouse.service';
-import type { RcWebhookEvent } from './rc-webhook.schema';
+import { EventRow, toChDateTime64 } from '../../clickhouse/clickhouse.service';
+import type { RcWebhookEvent } from '../webhook/rc-webhook.schema';
 
 /** Reserved $rc_* names, module-local literals per codebase convention (see IN_APP_PURCHASE_EVENT). */
 const RC_EVENT_NAMES: Record<string, string> = {

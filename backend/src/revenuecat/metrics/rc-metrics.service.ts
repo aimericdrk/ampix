@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { ClickHouseService, toChDateTime64 } from '../clickhouse/clickhouse.service';
-import { parseDateOnlyUTC } from '../analytics/bucket-grid';
-import { compileFilterClauses } from '../analytics/filter-compiler';
-import { canonicalization, CANONICAL_JOIN_SETTINGS } from '../analytics/identity';
-import { parseFiltersParam, resolveDateOnlyRange } from '../analytics/read-query.util';
-import { ProblemException } from '../common/problem-details';
-import { PrismaService } from '../prisma/prisma.service';
-import { ProjectsService } from '../projects/projects.service';
+import { ClickHouseService, toChDateTime64 } from '../../clickhouse/clickhouse.service';
+import { parseDateOnlyUTC } from '../../analytics/bucket-grid';
+import { compileFilterClauses } from '../../analytics/filter-compiler';
+import { canonicalization, CANONICAL_JOIN_SETTINGS } from '../../analytics/identity';
+import { parseFiltersParam, resolveDateOnlyRange } from '../../analytics/read-query.util';
+import { ProblemException } from '../../common/problem-details';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ProjectsService } from '../../projects/projects.service';
 
 const RC_INITIAL = '$rc_initial_purchase';
 const RC_RENEWAL = '$rc_renewal';

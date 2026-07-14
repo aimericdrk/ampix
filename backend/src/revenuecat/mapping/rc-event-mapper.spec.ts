@@ -5,7 +5,7 @@ import {
   computeMrrCents,
   profileOpsFor,
 } from './rc-event-mapper';
-import { rcWebhookBodySchema } from './rc-webhook.schema';
+import { rcWebhookBodySchema } from '../webhook/rc-webhook.schema';
 
 const BASE = {
   id: 'evt-uuid-1',

@@ -1,8 +1,8 @@
 import 'reflect-metadata';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ProjectRolesGuard } from '../authz/project-roles.guard';
-import { PROJECT_ROLES_KEY } from '../authz/project-roles.decorator';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { ProjectRolesGuard } from '../../authz/project-roles.guard';
+import { PROJECT_ROLES_KEY } from '../../authz/project-roles.decorator';
 import { RcAdminController } from './rc-admin.controller';
 
 describe('RcAdminController authz metadata', () => {
