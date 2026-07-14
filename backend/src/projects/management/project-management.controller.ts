@@ -1,9 +1,9 @@
 import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { parseOrThrow } from '../auth/auth.schemas';
-import type { AuthRequest } from '../auth/auth.types';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../authz/roles.decorator';
-import { RolesGuard } from '../authz/roles.guard';
+import { parseOrThrow } from '../../auth/auth.schemas';
+import type { AuthRequest } from '../../auth/auth.types';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { Roles } from '../../authz/roles.decorator';
+import { RolesGuard } from '../../authz/roles.guard';
 import { createProjectSchema } from './project-management.schemas';
 import { ProjectManagementService } from './project-management.service';
 import type { CreatedProject } from './project-management.types';

@@ -1,5 +1,5 @@
-import type { ClickHouseService } from '../clickhouse/clickhouse.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { ClickHouseService } from '../../clickhouse/clickhouse.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { ProjectsService } from './projects.service';
 
 function makePrisma(overrides: Record<string, unknown> = {}) {

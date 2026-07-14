@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { startPostgresContainer } from '../../test/integration/helpers/containers';
+import { startPostgresContainer } from '../../../test/integration/helpers/containers';
 
 // Container pull + `prisma migrate deploy` easily exceeds Jest's 5s default outside the dedicated
 // test:int config (see test/jest-integration.config.js, testTimeout: 300000).
@@ -10,6 +10,7 @@ jest.setTimeout(180000);
 
 const MIGRATION_SQL_PATH = path.resolve(
   __dirname,
+  '..',
   '..',
   '..',
   'prisma',

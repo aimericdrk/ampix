@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { ProjectRole } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ClickHouseService } from '../clickhouse/clickhouse.service';
-import { ProblemException } from '../common/problem-details';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ClickHouseService } from '../../clickhouse/clickhouse.service';
+import { ProblemException } from '../../common/problem-details';
 import type { EventsSummary, ProjectListItem, ProjectStat } from './projects.types';
 
 /** UUID-shaped path param guard — a malformed id can never match a real project, so short-circuit

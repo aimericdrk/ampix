@@ -1,6 +1,6 @@
 import type { ClickHouseService } from '../clickhouse/clickhouse.service';
 import type { CohortsService } from '../cohorts/cohorts.service';
-import type { ProjectsService } from '../projects/projects.service';
+import type { ProjectsService } from '../projects/core/projects.service';
 import { AnalyticsService } from './analytics.service';
 
 const USER_ID = 'user-1';

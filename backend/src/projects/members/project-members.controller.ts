@@ -1,10 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import { parseOrThrow } from '../auth/auth.schemas';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { AuthRequest } from '../auth/auth.types';
-import { ProjectRoles } from '../authz/project-roles.decorator';
-import { ProjectRolesGuard } from '../authz/project-roles.guard';
-import { ProjectRoleResolverService } from '../authz/project-role-resolver.service';
+import { parseOrThrow } from '../../auth/auth.schemas';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import type { AuthRequest } from '../../auth/auth.types';
+import { ProjectRoles } from '../../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../../authz/project-roles.guard';
+import { ProjectRoleResolverService } from '../../authz/project-role-resolver.service';
 import { addProjectMemberSchema, updateProjectMemberRoleSchema } from './project-members.schemas';
 import { ProjectMembersService } from './project-members.service';
 import type { ProjectMemberListItem, UpdatedProjectMember } from './project-members.types';

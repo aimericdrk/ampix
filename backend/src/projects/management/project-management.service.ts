@@ -1,13 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type Redis from 'ioredis';
-import { PrismaService } from '../prisma/prisma.service';
-import { ClickHouseService } from '../clickhouse/clickhouse.service';
-import { ProblemException } from '../common/problem-details';
-import { generateSdkToken } from '../common/sdk-token';
-import { isUuidShaped } from '../common/uuid';
-import { REDIS } from '../redis/redis.module';
-import { sdkTokenCacheKey } from '../ingestion/sdk-token.guard';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ClickHouseService } from '../../clickhouse/clickhouse.service';
+import { ProblemException } from '../../common/problem-details';
+import { generateSdkToken } from '../../common/sdk-token';
+import { isUuidShaped } from '../../common/uuid';
+import { REDIS } from '../../redis/redis.module';
+import { sdkTokenCacheKey } from '../../ingestion/sdk-token.guard';
 import type { PurgeDataDto } from './project-management.schemas';
 import type {
   CreatedProject,

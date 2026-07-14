@@ -10,19 +10,19 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { parseOrThrow } from '../auth/auth.schemas';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { AuthRequest } from '../auth/auth.types';
-import { ProjectRoles } from '../authz/project-roles.decorator';
-import { ProjectRolesGuard } from '../authz/project-roles.guard';
-import { createTokenSchema, purgeDataSchema, updateProjectSchema } from './project-management.schemas';
-import { ProjectManagementService } from './project-management.service';
+import { parseOrThrow } from '../../auth/auth.schemas';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import type { AuthRequest } from '../../auth/auth.types';
+import { ProjectRoles } from '../../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../../authz/project-roles.guard';
+import { createTokenSchema, purgeDataSchema, updateProjectSchema } from '../management/project-management.schemas';
+import { ProjectManagementService } from '../management/project-management.service';
 import type {
   CreatedToken,
   PurgeDataResult,
   SdkTokenListItem,
   UpdatedProject,
-} from './project-management.types';
+} from '../management/project-management.types';
 import { ProjectsService } from './projects.service';
 import type { EventsSummary, ProjectListItem, ProjectStat } from './projects.types';
 

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
-import { PROJECT_ROLES_KEY } from '../authz/project-roles.decorator';
-import type { AuthRequest } from '../auth/auth.types';
-import { ProjectManagementService } from './project-management.service';
+import { PROJECT_ROLES_KEY } from '../../authz/project-roles.decorator';
+import type { AuthRequest } from '../../auth/auth.types';
+import { ProjectManagementService } from '../management/project-management.service';
 import { ProjectsController } from './projects.controller';
 import type { ProjectsService } from './projects.service';
 

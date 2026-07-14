@@ -1,6 +1,6 @@
 import type Redis from 'ioredis';
-import type { PrismaService } from '../prisma/prisma.service';
-import { sdkTokenCacheKey } from '../ingestion/sdk-token.guard';
+import type { PrismaService } from '../../prisma/prisma.service';
+import { sdkTokenCacheKey } from '../../ingestion/sdk-token.guard';
 import { ProjectManagementService } from './project-management.service';
 
 interface FakeProject {
@@ -98,7 +98,7 @@ function makeService(prisma: FakePrisma, redis?: Partial<Redis>) {
     service: new ProjectManagementService(
       prisma as unknown as PrismaService,
       fakeRedis as unknown as Redis,
-      clickhouse as unknown as import('../clickhouse/clickhouse.service').ClickHouseService,
+      clickhouse as unknown as import('../../clickhouse/clickhouse.service').ClickHouseService,
     ),
     redis: fakeRedis,
     clickhouse,

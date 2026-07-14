@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import type { PrismaService } from '../prisma/prisma.service';
-import { startPostgresContainer } from '../../test/integration/helpers/containers';
+import type { PrismaService } from '../../prisma/prisma.service';
+import { startPostgresContainer } from '../../../test/integration/helpers/containers';
 import { ProjectMembersService } from './project-members.service';
-import { MembersService } from '../orgs/members/members.service';
+import { MembersService } from '../../orgs/members/members.service';
 
 // Container pull + `prisma migrate deploy` easily exceeds Jest's 5s default — see
 // project-membership-backfill.spec.ts for the same rationale.

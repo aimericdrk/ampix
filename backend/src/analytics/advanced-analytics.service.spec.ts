@@ -1,7 +1,7 @@
 import { AdvancedAnalyticsService } from './advanced-analytics.service';
 import type { ClickHouseService } from '../clickhouse/clickhouse.service';
 import type { CohortsService } from '../cohorts/cohorts.service';
-import type { ProjectsService } from '../projects/projects.service';
+import type { ProjectsService } from '../projects/core/projects.service';
 
 const USER = 'user-1';
 const PROJECT = '018f6b2e-0000-7000-8000-0000000000a1';

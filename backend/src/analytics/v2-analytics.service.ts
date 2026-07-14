@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { parseOrThrow } from '../auth/auth.schemas';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
-import { ProjectsService } from '../projects/projects.service';
+import { ProjectsService } from '../projects/core/projects.service';
 import type {
   ClickHeatmapResponse,
   EngagementResponse,

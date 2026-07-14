@@ -1,5 +1,5 @@
 import type { ClickHouseService } from '../clickhouse/clickhouse.service';
-import type { ProjectsService } from '../projects/projects.service';
+import type { ProjectsService } from '../projects/core/projects.service';
 import { V2AnalyticsService } from './v2-analytics.service';
 
 const USER = 'user-1';

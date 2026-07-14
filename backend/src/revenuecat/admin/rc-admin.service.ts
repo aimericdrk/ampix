@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { SubscriptionState } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ProjectsService } from '../../projects/projects.service';
+import { ProjectsService } from '../../projects/core/projects.service';
 import { ProblemException } from '../../common/problem-details';
 import { CohortsService } from '../../cohorts/cohorts.service';
 import { RcWebhookProcessor } from '../webhook/rc-webhook.processor';

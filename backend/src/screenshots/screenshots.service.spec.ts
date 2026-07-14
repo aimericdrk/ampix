@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Readable } from 'node:stream';
 import type { AppConfig } from '../config/app-config';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { ProjectsService } from '../projects/projects.service';
+import type { ProjectsService } from '../projects/core/projects.service';
 import {
   ScreenshotsService,
   StoreScreenshotInput,

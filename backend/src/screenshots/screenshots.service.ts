@@ -3,7 +3,7 @@ import type { Readable } from 'node:stream';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { ProblemException } from '../common/problem-details';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProjectsService } from '../projects/projects.service';
+import { ProjectsService } from '../projects/core/projects.service';
 import { SCREENSHOT_STORAGE, ScreenshotStorage } from './storage/screenshot-storage.port';
 
 /** Normalized, already-extracted screenshot upload (multipart parsing happens in the controller). */

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { projectRoleSchema } from '../authz/project-role.schema';
+import { projectRoleSchema } from '../../authz/project-role.schema';
 
 export const addProjectMemberSchema = z.object({ userId: z.string().uuid(), role: projectRoleSchema });
 export const updateProjectMemberRoleSchema = z.object({ role: projectRoleSchema });

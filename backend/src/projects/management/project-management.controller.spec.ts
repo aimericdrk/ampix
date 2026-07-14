@@ -1,4 +1,4 @@
-import type { AuthRequest } from '../auth/auth.types';
+import type { AuthRequest } from '../../auth/auth.types';
 import { ProjectManagementController } from './project-management.controller';
 import type { ProjectManagementService } from './project-management.service';
 

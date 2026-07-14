@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { AuthzModule } from '../authz/authz.module';
-import { ProjectManagementController } from './project-management.controller';
-import { ProjectManagementService } from './project-management.service';
-import { ProjectMembersController } from './project-members.controller';
-import { ProjectMembersService } from './project-members.service';
-import { ProjectsController } from './projects.controller';
-import { ProjectsService } from './projects.service';
+import { ProjectManagementController } from './management/project-management.controller';
+import { ProjectManagementService } from './management/project-management.service';
+import { ProjectMembersController } from './members/project-members.controller';
+import { ProjectMembersService } from './members/project-members.service';
+import { ProjectsController } from './core/projects.controller';
+import { ProjectsService } from './core/projects.service';
 
 @Module({
   imports: [AuthModule, AuthzModule],

@@ -3,7 +3,7 @@ import type { ProjectRole, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProblemException } from '../../common/problem-details';
 import { isUuidShaped } from '../../common/uuid';
-import { ProjectMembersService } from '../../projects/project-members.service';
+import { ProjectMembersService } from '../../projects/members/project-members.service';
 import type { ListProjectAccessResponse } from './org-project-access.types';
 
 /**

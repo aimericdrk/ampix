@@ -5,7 +5,7 @@ import { canonicalization, CANONICAL_JOIN_SETTINGS } from '../../analytics/ident
 import { resolveDateOnlyRange } from '../../analytics/read-query.util';
 import { ProblemException } from '../../common/problem-details';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ProjectsService } from '../../projects/projects.service';
+import { ProjectsService } from '../../projects/core/projects.service';
 import {
   MS_PER_DAY,
   PERIOD_EXPR,

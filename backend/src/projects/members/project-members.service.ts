@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { ProjectRole } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { ProblemException } from '../common/problem-details';
-import { isUuidShaped } from '../common/uuid';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ProblemException } from '../../common/problem-details';
+import { isUuidShaped } from '../../common/uuid';
 import type { ProjectMemberListItem, UpdatedProjectMember } from './project-members.types';
 
 const SERIALIZATION_FAILURE_CODE = 'P2034';

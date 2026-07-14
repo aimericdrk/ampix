@@ -5,7 +5,7 @@ import { compileFilterClauses } from '../../analytics/filter-compiler';
 import { parseFiltersParam, resolveDateOnlyRange } from '../../analytics/read-query.util';
 import { ProblemException } from '../../common/problem-details';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ProjectsService } from '../../projects/projects.service';
+import { ProjectsService } from '../../projects/core/projects.service';
 import {
   CANCEL_REASON_EXPR,
   EXPIRATION_REASON_EXPR,

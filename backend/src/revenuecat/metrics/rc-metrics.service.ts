@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ClickHouseService } from '../../clickhouse/clickhouse.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ProjectsService } from '../../projects/projects.service';
+import { ProjectsService } from '../../projects/core/projects.service';
 import { RcAttributionService } from './rc-attribution.service';
 import type { SubscriptionAttributionResponse } from './rc-attribution.service';
 import { RcSummaryService } from './rc-summary.service';

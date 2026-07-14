@@ -1,8 +1,8 @@
 import 'reflect-metadata';
-import { PROJECT_ROLES_KEY } from '../authz/project-roles.decorator';
+import { PROJECT_ROLES_KEY } from '../../authz/project-roles.decorator';
 import { ProjectMembersController } from './project-members.controller';
 import type { ProjectMembersService } from './project-members.service';
-import type { ProjectRoleResolverService } from '../authz/project-role-resolver.service';
+import type { ProjectRoleResolverService } from '../../authz/project-role-resolver.service';
 
 describe('ProjectMembersController', () => {
   function makeController() {

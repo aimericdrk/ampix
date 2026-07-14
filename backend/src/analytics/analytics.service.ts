@@ -6,7 +6,7 @@ import {
   toChDateTime64,
 } from '../clickhouse/clickhouse.service';
 import { CohortsService } from '../cohorts/cohorts.service';
-import { ProjectsService } from '../projects/projects.service';
+import { ProjectsService } from '../projects/core/projects.service';
 import type {
   EventsMetaResponse,
   InsightsResponse,
