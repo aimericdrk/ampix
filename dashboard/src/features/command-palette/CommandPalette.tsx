@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
 import { IconSearch } from '../../components/ui/icons';
 import { Kbd } from '../../components/ui/kbd';
 import { useToast } from '../../components/ui/toast';
-import { projectGroups } from '../../components/layout/nav-model';
+import { allGroups } from '../../components/layout/nav-model';
 import { NavIcon, type IconName } from '../../components/layout/NavIcon';
 import { cn } from '../../lib/cn';
 import type { UserListItem } from '../../lib/api/types';
@@ -135,14 +135,9 @@ export function CommandPalette({ projectId }: { projectId: string }) {
   const favorites = useFavorites(projectId);
   const recents = useRecents(projectId);
   const rcEnabled = useRcEnabled(projectId);
-  const navGroups = useMemo(
-    () =>
-      projectGroups().map((g) => ({
-        ...g,
-        items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/rc/overview')),
-      })),
-    [rcEnabled],
-  );
+  // Cross-tool on purpose: the palette's value is jumping to anything, so it is never scoped to
+  // the active tool.
+  const navGroups = useMemo(() => allGroups({ rcEnabled }), [rcEnabled]);
 
   // Dropping stale rows the instant the query empties keeps a since-cleared search from lingering.
   useEffect(() => {

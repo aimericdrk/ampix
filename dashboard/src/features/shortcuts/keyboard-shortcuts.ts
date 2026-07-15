@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
-import { projectGroups } from '../../components/layout/nav-model';
+import { allGroups } from '../../components/layout/nav-model';
 
 /** How long a lone `g` keypress stays "armed" waiting for the next letter. */
 export const G_SEQUENCE_TIMEOUT_MS = 1200;
@@ -33,11 +33,11 @@ export interface ShortcutRoute {
 }
 
 /**
- * The `g`-prefixed navigation shortcuts, derived from `projectGroups()` so they can never drift
+ * The `g`-prefixed navigation shortcuts, derived from `allGroups()` so they can never drift
  * from the sidebar/command palette's routes. This is the one place the letter→route map lives;
  * both `useKeyboardShortcuts` (navigation) and `ShortcutsHelp` (display) read from it.
  */
-export const SHORTCUT_ROUTES: ShortcutRoute[] = projectGroups()
+export const SHORTCUT_ROUTES: ShortcutRoute[] = allGroups()
   .flatMap((group) => group.items)
   .flatMap((item) => {
     const letter = NAV_SHORTCUT_LETTERS[item.label];

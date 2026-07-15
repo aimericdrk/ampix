@@ -16,7 +16,7 @@ import { cn } from '../../lib/cn';
 import { springTransition, useReducedMotion } from '../../lib/motion';
 import { Button } from '../ui/button';
 import { Kbd } from '../ui/kbd';
-import { projectGroups, type NavAccent, type NavItem } from './nav-model';
+import { toolForPathname, toolGroups, type NavAccent, type NavItem } from './nav-model';
 import { NavIcon, type IconName } from './NavIcon';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
@@ -137,18 +137,13 @@ export function AppLayout() {
     }
   };
 
-  const rcEnabled = useRcEnabled(projectId);
-  const groups = useMemo(
-    () =>
-      projectId
-        ? projectGroups().map((g) => ({
-            ...g,
-            items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/rc/overview')),
-          }))
-        : [],
-    [projectId, rcEnabled],
-  );
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const rcEnabled = useRcEnabled(projectId);
+  const activeTool = toolForPathname(pathname);
+  const groups = useMemo(
+    () => (projectId ? toolGroups(activeTool, { rcEnabled }) : []),
+    [projectId, activeTool, rcEnabled],
+  );
   const activeGroupAccent: NavAccent =
     groups.find((group) =>
       group.items.some((item) =>

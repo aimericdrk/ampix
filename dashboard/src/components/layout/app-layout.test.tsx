@@ -70,11 +70,11 @@ describe('AppLayout', () => {
     expect(within(nav).getByText('Saved')).toBeInTheDocument();
   });
 
-  it('marks the Subscriptions nav item active on the RC overview route it now points to', async () => {
-    // Regression test: the item's `to` used to point at `/projects/$projectId/subscriptions`, which
-    // now just redirects to `/rc/overview`. `isHrefActive` compared against the resolved-but-stale
-    // href, so it never matched the post-redirect pathname — no highlight, no NavIndicator, and
-    // aria-current="page" was never set even though the link still navigated correctly.
+  it('marks the MyRevenueCat Overview nav item active on the /rc/overview route', async () => {
+    // Regression test: `isHrefActive` must match the resolved href against the current pathname —
+    // no highlight, no NavIndicator, and aria-current="page" would never be set otherwise, even
+    // though the link still navigates correctly. (Formerly covered the old "Subscriptions" item,
+    // which nav-model's tool split replaced with MyRevenueCat's own "Overview".)
     authState.refreshValid = true;
     renderApp(`/projects/${TEST_PROJECT.id}/rc/overview`);
     const main = within(await screen.findByRole('main'));
@@ -84,9 +84,9 @@ describe('AppLayout', () => {
     await main.findByText('MRR');
 
     const nav = screen.getByRole('navigation', { name: 'Primary' });
-    const subscriptionsLink = await within(nav).findByRole('link', { name: 'Subscriptions' });
-    expect(subscriptionsLink).toHaveAttribute('aria-current', 'page');
-    expect(subscriptionsLink).toHaveAttribute('href', `/projects/${TEST_PROJECT.id}/rc/overview`);
+    const overviewLink = await within(nav).findByRole('link', { name: 'Overview' });
+    expect(overviewLink).toHaveAttribute('aria-current', 'page');
+    expect(overviewLink).toHaveAttribute('href', `/projects/${TEST_PROJECT.id}/rc/overview`);
   });
 
   it('tints the main content region with the active section accent', async () => {

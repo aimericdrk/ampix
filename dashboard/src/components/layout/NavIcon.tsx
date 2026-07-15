@@ -1,23 +1,31 @@
 import {
+  BadgeCheck,
   Building2,
   ChartBar,
   ChartLine,
+  ChartPie,
   CircleDollarSign,
   CircleUser,
   Clock,
+  Contact,
   FileChartLine,
   Filter,
   FolderOpen,
   GitBranch,
   Grid3x3,
   House,
+  Layers,
   LayoutDashboard,
   LayoutTemplate,
+  Package,
+  PanelTop,
   Radio,
   Repeat,
   RefreshCw,
   Settings,
+  Sparkles,
   Tags,
+  Target,
   User,
   UsersRound,
   Zap,
@@ -46,7 +54,18 @@ export type IconName =
   | 'projects'
   | 'org'
   | 'account'
-  | 'settings';
+  | 'settings'
+  | 'tool-amplitude'
+  | 'tool-revenuecat'
+  | 'overview'
+  | 'charts'
+  | 'customers'
+  | 'products'
+  | 'entitlements'
+  | 'offerings'
+  | 'paywalls'
+  | 'conversion'
+  | 'flows';
 
 /** Lucide glyph per nav destination — kept as a lookup so the icon set stays a single source of truth. */
 const ICONS: Record<IconName, LucideIcon> = {
@@ -72,6 +91,17 @@ const ICONS: Record<IconName, LucideIcon> = {
   org: Building2,
   account: CircleUser,
   settings: Settings,
+  'tool-amplitude': ChartLine,
+  'tool-revenuecat': Sparkles,
+  overview: ChartPie,
+  charts: ChartPie,
+  customers: Contact,
+  products: Package,
+  entitlements: BadgeCheck,
+  offerings: Layers,
+  paywalls: PanelTop,
+  conversion: Target,
+  flows: GitBranch,
 };
 
 export function NavIcon({ name }: { name: IconName }) {
