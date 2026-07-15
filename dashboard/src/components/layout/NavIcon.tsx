@@ -3,6 +3,7 @@ import {
   Building2,
   ChartBar,
   ChartLine,
+  ChartNoAxesCombined,
   ChartPie,
   CircleDollarSign,
   CircleUser,
@@ -21,13 +22,13 @@ import {
   PanelTop,
   Radio,
   Repeat,
-  RefreshCw,
   Settings,
   Sparkles,
   Tags,
   Target,
   User,
   UsersRound,
+  Waypoints,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -40,7 +41,6 @@ export type IconName =
   | 'paths'
   | 'heatmap'
   | 'revenue'
-  | 'subscriptions'
   | 'distributions'
   | 'properties'
   | 'events'
@@ -76,7 +76,6 @@ const ICONS: Record<IconName, LucideIcon> = {
   paths: GitBranch,
   heatmap: Grid3x3,
   revenue: CircleDollarSign,
-  subscriptions: RefreshCw,
   distributions: ChartBar,
   properties: Tags,
   events: Zap,
@@ -94,14 +93,14 @@ const ICONS: Record<IconName, LucideIcon> = {
   'tool-amplitude': ChartLine,
   'tool-revenuecat': Sparkles,
   overview: ChartPie,
-  charts: ChartPie,
+  charts: ChartNoAxesCombined,
   customers: Contact,
   products: Package,
   entitlements: BadgeCheck,
   offerings: Layers,
   paywalls: PanelTop,
   conversion: Target,
-  flows: GitBranch,
+  flows: Waypoints,
 };
 
 export function NavIcon({ name }: { name: IconName }) {

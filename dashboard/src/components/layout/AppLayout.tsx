@@ -21,6 +21,7 @@ import { NavIcon, type IconName } from './NavIcon';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { ThemeToggle } from './ThemeToggle';
+import { ToolRail } from './ToolRail';
 
 const NAV_LINK_BASE =
   'relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text-muted transition-colors hover:bg-surface-raised hover:text-text';
@@ -179,80 +180,88 @@ export function AppLayout() {
       </div>
 
       {/* Full-height column: header + bottom cluster stay fixed; only the nav scrolls. */}
-      <aside
+      <div
         id="app-sidebar"
         className={cn(
-          'z-40 w-60 shrink-0 flex-col border-r border-border bg-surface',
-          'md:flex md:sticky md:top-0 md:h-screen',
-          mobileOpen ? 'fixed inset-y-0 left-0 flex' : 'hidden',
+          'z-40 flex shrink-0',
+          'md:sticky md:top-0 md:h-screen',
+          mobileOpen ? 'fixed inset-y-0 left-0 flex' : 'hidden md:flex',
         )}
       >
-        <div className="flex shrink-0 flex-col gap-3 p-4">
-          <div className="hidden md:block">
-            <span className="font-display text-lg font-bold text-gradient-brand">MyAmpix</span>
-          </div>
-          <OrgSwitcher />
-          <ProjectSwitcher />
-          {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
-          {projectId && <CommandPalette projectId={projectId} />}
-        </div>
-
-        <nav
-          aria-label="Primary"
-          className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
-          onClickCapture={() => setMobileOpen(false)}
+        {/* Global column: brand + tools + identity. Project-scoped chrome lives in the aside. */}
+        <div
+          className="flex shrink-0 flex-col items-center gap-2 border-r border-border bg-surface p-2"
+          style={{ width: 'var(--rail-w)' }}
         >
-          <SidebarLink to="/projects" exact icon="projects" label="Projects" />
-
-          {groups.map((group, index) => (
-            <NavSection
-              key={group.heading ?? `group-${index}`}
-              heading={group.heading}
-              accent={group.accent}
-            >
-              {group.items.map((item) => (
-                <NavLink key={item.to} item={item} projectId={projectId} />
-              ))}
-            </NavSection>
-          ))}
-
-          {!projectId && (
-            <p className="mt-4 px-3 text-xs text-text-muted">
-              Pick a project to see its analytics.
-            </p>
-          )}
-        </nav>
-
-        <div className="mt-auto shrink-0 space-y-1 border-t border-border p-4">
-          {currentOrgId && (
-            <SidebarLink
-              to="/orgs/$orgId/settings"
-              params={{ orgId: currentOrgId }}
-              icon="org"
-              label="Organization settings"
-            />
-          )}
-          <SidebarLink to="/account" icon="account" label="Account" />
-          <ThemeToggle />
-          <div className="truncate px-3 pt-1 text-xs text-text-muted">{user?.email}</div>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="w-full"
-            onClick={() => void handleLogout()}
-          >
-            Log out
-          </Button>
-          {/* Subtle, always-available affordance for the shortcut system (feat-12). */}
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            className="w-full truncate px-3 pt-1 text-left text-xs text-text-muted/70 transition-colors hover:text-text-muted"
-          >
-            Press <Kbd>?</Kbd> for shortcuts
-          </button>
+          <span className="py-2 font-display text-lg font-bold text-gradient-brand">M</span>
+          <ToolRail activeTool={activeTool} projectId={projectId} />
         </div>
-      </aside>
+
+        <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
+          <div className="flex shrink-0 flex-col gap-3 p-4">
+            <OrgSwitcher />
+            <ProjectSwitcher />
+            {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
+            {projectId && <CommandPalette projectId={projectId} />}
+          </div>
+
+          <nav
+            aria-label="Primary"
+            className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
+            onClickCapture={() => setMobileOpen(false)}
+          >
+            <SidebarLink to="/projects" exact icon="projects" label="Projects" />
+
+            {groups.map((group, index) => (
+              <NavSection
+                key={group.heading ?? `group-${index}`}
+                heading={group.heading}
+                accent={group.accent}
+              >
+                {group.items.map((item) => (
+                  <NavLink key={item.to} item={item} projectId={projectId} />
+                ))}
+              </NavSection>
+            ))}
+
+            {!projectId && (
+              <p className="mt-4 px-3 text-xs text-text-muted">
+                Pick a project to see its analytics.
+              </p>
+            )}
+          </nav>
+
+          <div className="mt-auto shrink-0 space-y-1 border-t border-border p-4">
+            {currentOrgId && (
+              <SidebarLink
+                to="/orgs/$orgId/settings"
+                params={{ orgId: currentOrgId }}
+                icon="org"
+                label="Organization settings"
+              />
+            )}
+            <SidebarLink to="/account" icon="account" label="Account" />
+            <ThemeToggle />
+            <div className="truncate px-3 pt-1 text-xs text-text-muted">{user?.email}</div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={() => void handleLogout()}
+            >
+              Log out
+            </Button>
+            {/* Subtle, always-available affordance for the shortcut system (feat-12). */}
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="w-full truncate px-3 pt-1 text-left text-xs text-text-muted/70 transition-colors hover:text-text-muted"
+            >
+              Press <Kbd>?</Kbd> for shortcuts
+            </button>
+          </div>
+        </aside>
+      </div>
 
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
 
