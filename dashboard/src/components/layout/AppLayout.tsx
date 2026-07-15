@@ -179,21 +179,26 @@ export function AppLayout() {
         </Button>
       </div>
 
-      {/* Full-height column: header + bottom cluster stay fixed; only the nav scrolls. */}
+      {/* Below `md` the rail and section list stack inside one drawer and share a single scroll
+          container; from `md` up they sit side by side, and the section list's own nav scrolls
+          independently within a sticky, viewport-height column (unchanged from before this task). */}
       <div
         id="app-sidebar"
         className={cn(
-          'z-40 flex shrink-0',
-          'md:sticky md:top-0 md:h-screen',
+          'z-40 flex flex-col shrink-0 overflow-y-auto',
+          'md:sticky md:top-0 md:h-screen md:flex-row md:overflow-visible',
           mobileOpen ? 'fixed inset-y-0 left-0 flex' : 'hidden md:flex',
         )}
       >
-        {/* Global column: brand + tools + identity. Project-scoped chrome lives in the aside. */}
+        {/* Global column: brand + tools + identity. Project-scoped chrome lives in the aside.
+            Full-width when stacked below `md`; fixed at `--rail-w` beside the aside from `md` up. */}
         <div
-          className="flex shrink-0 flex-col items-center gap-2 border-r border-border bg-surface p-2"
-          style={{ width: 'var(--rail-w)' }}
+          data-testid="rail-column"
+          className="flex w-full shrink-0 flex-col items-center gap-2 border-r border-border bg-surface p-2 md:w-[var(--rail-w)]"
         >
-          <span className="py-2 font-display text-lg font-bold text-gradient-brand">M</span>
+          <span aria-hidden="true" className="py-2 font-display text-lg font-bold text-gradient-brand">
+            M
+          </span>
           <ToolRail activeTool={activeTool} projectId={projectId} />
         </div>
 

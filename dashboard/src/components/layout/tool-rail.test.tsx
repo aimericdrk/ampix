@@ -44,10 +44,13 @@ describe('ToolRail', () => {
     expect(rail.getByRole('link', { name: 'MyRevenueCat' })).toBeInTheDocument();
   });
 
-  it('hides the tool buttons with no project selected', async () => {
+  it('hides the tool buttons with no project selected, but keeps the rail column so layout does not jump', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
     expect(screen.queryByRole('navigation', { name: 'Tools' })).not.toBeInTheDocument();
+    // ToolRail itself returns null without a projectId — this asserts the surrounding rail
+    // column (monogram + identity area) still renders, not just that the tool buttons are gone.
+    expect(screen.getByTestId('rail-column')).toBeInTheDocument();
   });
 });
