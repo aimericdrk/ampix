@@ -143,7 +143,7 @@ export function AppLayout() {
       projectId
         ? projectGroups().map((g) => ({
             ...g,
-            items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/subscriptions')),
+            items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/rc/overview')),
           }))
         : [],
     [projectId, rcEnabled],

@@ -70,6 +70,25 @@ describe('AppLayout', () => {
     expect(within(nav).getByText('Saved')).toBeInTheDocument();
   });
 
+  it('marks the Subscriptions nav item active on the RC overview route it now points to', async () => {
+    // Regression test: the item's `to` used to point at `/projects/$projectId/subscriptions`, which
+    // now just redirects to `/rc/overview`. `isHrefActive` compared against the resolved-but-stale
+    // href, so it never matched the post-redirect pathname — no highlight, no NavIndicator, and
+    // aria-current="page" was never set even though the link still navigated correctly.
+    authState.refreshValid = true;
+    renderApp(`/projects/${TEST_PROJECT.id}/rc/overview`);
+    const main = within(await screen.findByRole('main'));
+    // Wait for the real (RC-connected) Overview content, not just the shell — the page shows the
+    // same "Overview" title in its still-loading/disconnected branch, which would let this
+    // assertion race ahead of the nav item's own data-dependent RC-enabled gating.
+    await main.findByText('MRR');
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    const subscriptionsLink = await within(nav).findByRole('link', { name: 'Subscriptions' });
+    expect(subscriptionsLink).toHaveAttribute('aria-current', 'page');
+    expect(subscriptionsLink).toHaveAttribute('href', `/projects/${TEST_PROJECT.id}/rc/overview`);
+  });
+
   it('tints the main content region with the active section accent', async () => {
     authState.refreshValid = true;
     renderApp(`/projects/${TEST_PROJECT.id}/insights`);

@@ -2,7 +2,7 @@ import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { IntegrationsSection } from '../../projects/components/IntegrationsSection';
-import { useProjectRole } from '../../projects/api';
+import { useProjectRole, useProjects } from '../../projects/api';
 
 /**
  * MyRevenueCat → Integration settings. Its own route rather than a link into project settings, so
@@ -12,7 +12,9 @@ import { useProjectRole } from '../../projects/api';
  */
 export function RcSettingsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/settings' });
-  const role = useProjectRole(projectId);
+  const { data: projectsData } = useProjects();
+  const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
+  const role = useProjectRole(project?.id);
   const isAdmin = role === 'admin' || role === 'owner';
 
   return (
@@ -22,9 +24,11 @@ export function RcSettingsPage() {
       description="Connect and manage the RevenueCat integration for this project."
       breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Integration settings' }]}
     >
-      {isAdmin ? (
-        <IntegrationsSection projectId={projectId} />
-      ) : (
+      {/* Mirrors ProjectDetailPage's `project && isAdmin` gating: nothing renders — not even the
+          "only admins" empty state — until `useProjects()` has actually resolved, so a still-loading
+          role is never mistaken for a confirmed non-admin. */}
+      {project && isAdmin && <IntegrationsSection projectId={projectId} />}
+      {project && !isAdmin && (
         <EmptyState
           title="Only admins can manage integrations"
           description="Ask a project admin to connect or change the RevenueCat integration."

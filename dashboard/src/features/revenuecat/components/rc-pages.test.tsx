@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
+import { delay, http, HttpResponse } from 'msw';
 import { renderApp } from '../../../test/render-app';
 import { server } from '../../../test/msw/server';
 import {
@@ -88,5 +89,26 @@ describe('RcSettingsPage', () => {
     const main = within(await screen.findByRole('main'));
     expect(await main.findByRole('heading', { name: 'Integration settings' })).toBeInTheDocument();
     expect(await screen.findByTestId('rc-integration-card')).toBeInTheDocument();
+  });
+
+  // Regression test for a bug where `useProjectRole` resolves to `undefined` while `useProjects()`
+  // is still in flight, which made `isAdmin` compute to `false` and briefly render "Only admins can
+  // manage integrations" to every admin on every page load. Asserting only the final state (as the
+  // test above does) doesn't catch this — `findByTestId` just waits out the swap. This test instead
+  // holds `/api/v1/projects` open with an infinite delay so it can inspect the loading window itself.
+  it('never shows the "only admins" empty state to an admin, including while still loading', async () => {
+    server.use(
+      http.get('/api/v1/projects', async () => {
+        await delay('infinite');
+        return HttpResponse.json({ projects: [] });
+      }),
+    );
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    renderApp(`/projects/${TEST_PROJECT.id}/rc/settings`);
+
+    // The page shell renders immediately (its title is static), while `useProjects()` hangs forever.
+    await screen.findByRole('heading', { name: 'Integration settings' });
+    expect(screen.queryByText(/only admins can manage integrations/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('rc-integration-card')).not.toBeInTheDocument();
   });
 });

@@ -139,7 +139,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
     () =>
       projectGroups().map((g) => ({
         ...g,
-        items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/subscriptions')),
+        items: g.items.filter((i) => rcEnabled || !i.to.endsWith('/rc/overview')),
       })),
     [rcEnabled],
   );
