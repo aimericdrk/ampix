@@ -5,23 +5,19 @@ import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import type {
-  SubscriptionAttributionDriver,
-  SubscriptionAttributionScreen,
   SubscriptionRecentEvent,
-  SubscriptionTimeToConvertBucket,
   SubscriptionsByProduct,
   SubscriptionsByStore,
 } from '../../../lib/api/types';
-import { useRcEnabled, useSubscriptionAttribution, useSubscriptionsSummary } from '../../revenuecat/api';
-import { colorForIndex } from '../palette';
-import { DateRangeControl, useDateRange } from '../date-range';
-import { formatCurrency, formatPercent } from '../format';
-import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
-import { BreakdownChart } from './charts/BreakdownChart';
-import { ChartCard } from './charts/ChartCard';
-import { ComparisonTrend } from './charts/ComparisonTrend';
-import { DonutChart } from './charts/DonutChart';
-import { KpiTile } from './charts/KpiTile';
+import { useRcEnabled, useSubscriptionsSummary } from '../api';
+import { colorForIndex } from '../../analytics/palette';
+import { DateRangeControl, useDateRange } from '../../analytics/date-range';
+import { formatCurrency, formatPercent } from '../../analytics/format';
+import { mergeGlobalFilters, useGlobalFilters } from '../../analytics/global-filters';
+import { ChartCard } from '../../analytics/components/charts/ChartCard';
+import { ComparisonTrend } from '../../analytics/components/charts/ComparisonTrend';
+import { DonutChart } from '../../analytics/components/charts/DonutChart';
+import { KpiTile } from '../../analytics/components/charts/KpiTile';
 
 /** Maps loading/error/empty query state onto `ChartCard`'s `state` prop in one place (mirrors Revenue/Home). */
 function chartState(
@@ -53,27 +49,6 @@ const BY_STORE_COLUMNS: Array<DataTableColumn<SubscriptionsByStore>> = [
   { key: 'active', header: 'Active', sortable: true, align: 'right' },
 ];
 
-const DRIVERS_COLUMNS: Array<DataTableColumn<SubscriptionAttributionDriver>> = [
-  { key: 'event', header: 'Event', sortable: true },
-  { key: 'users', header: 'Users', sortable: true, align: 'right' },
-];
-
-const SCREENS_COLUMNS: Array<DataTableColumn<SubscriptionAttributionScreen>> = [
-  { key: 'screen_name', header: 'Screen', sortable: true },
-  { key: 'users', header: 'Users', sortable: true, align: 'right' },
-];
-
-/** Fixed left-to-right order for the time-to-convert buckets — never trust API row order. */
-const TIME_TO_CONVERT_BUCKET_ORDER = ['<1d', '1-3d', '3-7d', '7-14d', '14-30d', '30d+'];
-
-function sortTimeToConvertBuckets(
-  rows: SubscriptionTimeToConvertBucket[],
-): SubscriptionTimeToConvertBucket[] {
-  return [...rows].sort(
-    (a, b) => TIME_TO_CONVERT_BUCKET_ORDER.indexOf(a.bucket) - TIME_TO_CONVERT_BUCKET_ORDER.indexOf(b.bucket),
-  );
-}
-
 const RECENT_EVENTS_COLUMNS: Array<DataTableColumn<SubscriptionRecentEvent>> = [
   {
     key: 'timestamp',
@@ -94,26 +69,25 @@ const RECENT_EVENTS_COLUMNS: Array<DataTableColumn<SubscriptionRecentEvent>> = [
 ];
 
 /**
- * The Subscriptions page — RevenueCat-derived subscription metrics (MRR, active/trial counts,
- * churn) for the selected range. Gated on `useRcEnabled`: projects without RevenueCat connected
- * see an upsell empty state instead of the dashboard. Mirrors `RevenuePage`'s composition
- * (`chartState` helper, `PageShell` + `DateRangeControl`, `Reveal` indices).
+ * MyRevenueCat → Overview. The RevenueCat-mirrored subscription summary (MRR, active/trial counts,
+ * churn) for the selected range, from `useSubscriptionsSummary`. Attribution lives on the separate
+ * Conversion page — the two are split along the query boundary, so neither straddles a data source.
+ * Gated on `useRcEnabled`: projects without RevenueCat connected see an upsell empty state.
  */
-export function SubscriptionsPage() {
-  const { projectId } = useParams({ from: '/private/projects/$projectId/subscriptions' });
+export function RcOverviewPage() {
+  const { projectId } = useParams({ from: '/private/projects/$projectId/rc/overview' });
   const rcEnabled = useRcEnabled(projectId);
   const { from, to } = useDateRange();
   const { filters: globalFilters } = useGlobalFilters();
   const subscriptions = useSubscriptionsSummary(projectId, from, to, mergeGlobalFilters([], globalFilters));
-  const attribution = useSubscriptionAttribution(projectId, from, to);
 
   if (!rcEnabled) {
     return (
       <PageShell
         projectId={projectId}
-        title="Subscriptions"
+        title="Overview"
         description="Subscription analytics powered by RevenueCat."
-        breadcrumbs={[{ label: 'Explore' }, { label: 'Subscriptions' }]}
+        breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Overview' }]}
       >
         <EmptyState
           title="Connect RevenueCat"
@@ -134,24 +108,12 @@ export function SubscriptionsPage() {
   const trialsStarted = data?.trials_started ?? 0;
   const trialConversionRate = trialsStarted > 0 ? trialsConverted / trialsStarted : 0;
 
-  const attributionData = attribution.data;
-  const driverRows = attributionData?.drivers ?? [];
-  const screenRows = attributionData?.screens ?? [];
-  const timeToConvertChartData = sortTimeToConvertBuckets(attributionData?.time_to_convert ?? []).map((row) => ({
-    label: row.bucket,
-    segments: [{ key: 'users', value: row.users }],
-  }));
-  const trials = attributionData?.trial_funnel.trials ?? 0;
-  const converted = attributionData?.trial_funnel.converted ?? 0;
-  const funnelConversionRate = trials > 0 ? converted / trials : 0;
-  const attributionState = (isEmpty: boolean) => chartState(attribution.isPending, attribution.isError, isEmpty);
-
   return (
     <PageShell
       projectId={projectId}
-      title="Subscriptions"
+      title="Overview"
       description="MRR, active subscribers, trials, and churn for the selected range."
-      breadcrumbs={[{ label: 'Explore' }, { label: 'Subscriptions' }]}
+      breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Overview' }]}
       dateRangeControl={<DateRangeControl />}
     >
       {subscriptions.isPending && (
@@ -250,56 +212,6 @@ export function SubscriptionsPage() {
           </Reveal>
         </>
       )}
-
-      <Reveal index={6}>
-        <ChartCard
-          title="Conversion drivers"
-          description="Events and screens most associated with trial-to-paid conversion."
-          state={attributionState(driverRows.length === 0 && screenRows.length === 0)}
-        >
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <DataTable
-              columns={DRIVERS_COLUMNS}
-              rows={driverRows}
-              caption="Conversion driver events"
-              initialSort={{ key: 'users', dir: 'desc' }}
-              rowKey={(row) => row.event}
-              exportFilename="subscriptions-attribution-drivers"
-            />
-            <DataTable
-              columns={SCREENS_COLUMNS}
-              rows={screenRows}
-              caption="Conversion driver screens"
-              initialSort={{ key: 'users', dir: 'desc' }}
-              rowKey={(row) => row.screen_name}
-              exportFilename="subscriptions-attribution-screens"
-            />
-          </div>
-        </ChartCard>
-      </Reveal>
-
-      <Reveal index={7}>
-        <ChartCard
-          title="Time to convert"
-          description="Elapsed time from trial start to conversion, bucketed."
-          state={attributionState(timeToConvertChartData.length === 0)}
-        >
-          {/* Stacked (single-segment) variant preserves the caller's bucket order — the
-              non-stacked BreakdownChart always re-sorts descending by value, which would
-              scramble this fixed time-bucket axis. */}
-          <BreakdownChart stacked data={timeToConvertChartData} ariaLabel="Trial time-to-convert distribution" />
-        </ChartCard>
-      </Reveal>
-
-      <Reveal index={8}>
-        <ChartCard title="Trial funnel" state={attributionState(trials === 0)}>
-          <SectionGrid>
-            <KpiTile label="Trials" value={trials} />
-            <KpiTile label="Converted" value={converted} />
-            <KpiTile label="Conversion rate" value={formatPercent(funnelConversionRate)} />
-          </SectionGrid>
-        </ChartCard>
-      </Reveal>
     </PageShell>
   );
 }

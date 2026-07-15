@@ -29,7 +29,6 @@ import { DashboardViewPage } from './features/analytics/components/DashboardView
 import { LiveEventsPage } from './features/analytics/components/LiveEventsPage';
 import { SessionsPage } from './features/analytics/components/SessionsPage';
 import { RevenuePage } from './features/analytics/components/RevenuePage';
-import { SubscriptionsPage } from './features/analytics/components/SubscriptionsPage';
 import { DistributionsPage } from './features/analytics/components/DistributionsPage';
 import { PropertyExplorerPage } from './features/analytics/components/PropertyExplorerPage';
 import { EventCatalogPage } from './features/analytics/components/EventCatalogPage';
@@ -37,6 +36,10 @@ import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
+import { RcConversionPage } from './features/revenuecat/components/RcConversionPage';
+import { RcOverviewPage } from './features/revenuecat/components/RcOverviewPage';
+import { RcPlaceholderPage } from './features/revenuecat/components/RcPlaceholderPage';
+import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -266,10 +269,100 @@ const revenueRoute = createRoute({
   component: RevenuePage,
 });
 
-const subscriptionsRoute = createRoute({
+// --- MyRevenueCat (tool rail, 2026-07-16) ---
+// The legacy flat /subscriptions URL is kept as a redirect so existing links and bookmarks survive
+// the move under the /rc/ namespace.
+
+const subscriptionsRedirectRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/subscriptions',
-  component: SubscriptionsPage,
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/projects/$projectId/rc/overview', params });
+  },
+});
+
+const rcOverviewRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/overview',
+  component: RcOverviewPage,
+});
+
+const rcConversionRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/conversion',
+  component: RcConversionPage,
+});
+
+const rcChartsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/charts',
+  component: () => (
+    <RcPlaceholderPage
+      title="Charts"
+      description="Explore MRR, subscribers, and churn over time with custom breakdowns."
+    />
+  ),
+});
+
+const rcCustomersRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/customers',
+  component: () => (
+    <RcPlaceholderPage
+      title="Customers"
+      description="Browse subscribers, their entitlements, and their purchase history."
+    />
+  ),
+});
+
+const rcProductsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/products',
+  component: () => (
+    <RcPlaceholderPage
+      title="Products"
+      description="The store products synced from RevenueCat, with their pricing and performance."
+    />
+  ),
+});
+
+const rcEntitlementsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/entitlements',
+  component: () => (
+    <RcPlaceholderPage
+      title="Entitlements"
+      description="The access levels your products grant, and who currently holds them."
+    />
+  ),
+});
+
+const rcOfferingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/offerings',
+  component: () => (
+    <RcPlaceholderPage
+      title="Offerings"
+      description="The product bundles presented to users, and how each one converts."
+    />
+  ),
+});
+
+const rcPaywallsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/paywalls',
+  component: () => (
+    <RcPlaceholderPage
+      title="Paywalls"
+      description="The paywalls shown to users, and how each one performs."
+    />
+  ),
+});
+
+const rcSettingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/settings',
+  component: RcSettingsPage,
 });
 
 // --- Distribution histograms (feat-09) ---
@@ -344,7 +437,16 @@ export const routeTree = rootRoute.addChildren([
     userProfileRoute,
     sessionsRoute,
     revenueRoute,
-    subscriptionsRoute,
+    subscriptionsRedirectRoute,
+    rcOverviewRoute,
+    rcConversionRoute,
+    rcChartsRoute,
+    rcCustomersRoute,
+    rcProductsRoute,
+    rcEntitlementsRoute,
+    rcOfferingsRoute,
+    rcPaywallsRoute,
+    rcSettingsRoute,
     distributionsRoute,
     propertiesRoute,
     eventsRoute,
