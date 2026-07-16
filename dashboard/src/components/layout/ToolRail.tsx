@@ -32,11 +32,13 @@ export function ToolRail({ activeTool, projectId }: { activeTool: ToolId; projec
             aria-current={active ? 'page' : undefined}
           >
             <NavIcon name={tool.icon} />
-            {/* Fixed 2-line box (not `truncate`): at the rail's narrow width the longest tool
-                label ("MyRevenueCat") doesn't fit on one line, so it wraps instead of clipping.
-                Reserving 2 lines' worth of height for every label — long or short — keeps every
-                button the same height, so a wrapped label doesn't disrupt the rail's rhythm. */}
-            <span className="flex h-[2.5em] w-full items-center justify-center break-words text-center leading-tight">
+            {/* At the rail's narrow width the longest tool label ("MyRevenueCat") doesn't fit on
+                one line even mid-word, so `wrap-anywhere` (overflow-wrap: anywhere) is used
+                instead of `break-words`: unlike break-words, it counts its break opportunities
+                toward min-content, so the label actually wraps instead of overflowing the rail.
+                `min-h-[2.5em]` reserves 2 lines' worth of height so short labels keep the same
+                button height as wrapped ones, without clipping a label that needs a 3rd line. */}
+            <span className="flex min-h-[2.5em] w-full items-center justify-center wrap-anywhere text-center leading-tight">
               {tool.label}
             </span>
           </Link>
