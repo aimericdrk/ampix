@@ -86,9 +86,6 @@ const envSchema = z.object({
   MFA_TOKEN_TTL: z.coerce.number().int().positive().default(300),
   TOTP_ISSUER: z.string().min(1).default('MyAmpix'),
   TOTP_ENC_KEY: z.string().optional(),
-  // P0 (RC parity) — encrypts App store credentials at rest (reuses the aes-gcm helper). Optional:
-  // P0 never writes credentials; P1's connect-store flow requires it before it can.
-  STORE_CREDENTIALS_ENC_KEY: z.string().optional(),
   COOKIE_SECURE: z.preprocess(
     (v) => (v === undefined ? false : isCookieSecureTruthy(v as string)),
     z.boolean(),
@@ -124,10 +121,6 @@ export interface AppConfig {
   // needing an update; loadConfig() always populates both (mistralModel via its zod default).
   mistralApiKey?: string;
   mistralModel?: string;
-  // P0 (RC parity) — encrypts App.storeCredentials at rest. Optional: P0 never writes credentials;
-  // P1's connect-store flow requires it before it can. loadConfig() always populates it (to
-  // undefined when unset).
-  storeCredentialsEncKey?: string;
   // §20 — pino base log level. Optional (rather than required) so pre-existing hand-built AppConfig
   // fixtures outside this task's scope (e.g. test/integration/clickhouse.int-spec.ts) keep compiling
   // without every fixture needing an update. loadConfig() always populates it (default 'info').
@@ -245,7 +238,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: v.LOG_LEVEL,
     mistralApiKey: v.MISTRAL_API_KEY,
     mistralModel: v.MISTRAL_MODEL,
-    storeCredentialsEncKey: v.STORE_CREDENTIALS_ENC_KEY,
     auth: {
       accessTokenTtl,
       refreshTokenTtl,
@@ -324,7 +316,6 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     FIREBASE_STORAGE_BUCKET: config.firebaseStorageBucket ?? '(not set — in-memory screenshot store)',
     MISTRAL_API_KEY: redacted(config.mistralApiKey),
     MISTRAL_MODEL: config.mistralModel ?? 'mistral-small-latest',
-    STORE_CREDENTIALS_ENC_KEY: redacted(config.storeCredentialsEncKey),
     TOTP_ISSUER: auth.totpIssuer,
     TOTP_ENC_KEY: redacted(auth.totpEncKey),
     ACCESS_TOKEN_TTL: String(auth.accessTokenTtl),
