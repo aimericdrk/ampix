@@ -9,7 +9,8 @@ import type {
   SubscriptionAttributionScreen,
   SubscriptionTimeToConvertBucket,
 } from '../../../lib/api/types';
-import { useRcEnabled, useSubscriptionAttribution } from '../api';
+import { useSubscriptionAttribution } from '../api';
+import { useProjects } from '../../projects/api';
 import { DateRangeControl, useDateRange } from '../../analytics/date-range';
 import { formatPercent } from '../../analytics/format';
 import { BreakdownChart } from '../../analytics/components/charts/BreakdownChart';
@@ -48,9 +49,27 @@ function sortTimeToConvertBuckets(
  */
 export function RcConversionPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/conversion' });
-  const rcEnabled = useRcEnabled(projectId);
+  const { data: projectsData } = useProjects();
+  const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
+  const rcEnabled = project?.integrations?.revenuecat ?? false;
   const { from, to } = useDateRange();
   const attribution = useSubscriptionAttribution(projectId, from, to);
+
+  // Same discipline as RcOverviewPage/RcSettingsPage: don't decide "not connected" until
+  // `useProjects()` has actually resolved, or a still-loading project briefly flashes this upsell
+  // at every RC-connected project.
+  if (!project) {
+    return (
+      <PageShell
+        projectId={projectId}
+        title="Conversion"
+        description="What drives trial-to-paid conversion."
+        breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Conversion' }]}
+      >
+        {null}
+      </PageShell>
+    );
+  }
 
   if (!rcEnabled) {
     return (

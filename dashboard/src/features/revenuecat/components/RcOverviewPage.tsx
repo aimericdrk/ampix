@@ -1,6 +1,5 @@
 import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
-import { EmptyState } from '../../../components/ui/empty-state';
 import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
@@ -9,7 +8,9 @@ import type {
   SubscriptionsByProduct,
   SubscriptionsByStore,
 } from '../../../lib/api/types';
-import { useRcEnabled, useSubscriptionsSummary } from '../api';
+import { useSubscriptionsSummary } from '../api';
+import { RcConnectPage } from './RcConnectPage';
+import { useProjects } from '../../projects/api';
 import { colorForIndex } from '../../analytics/palette';
 import { DateRangeControl, useDateRange } from '../../analytics/date-range';
 import { formatCurrency, formatPercent } from '../../analytics/format';
@@ -72,16 +73,21 @@ const RECENT_EVENTS_COLUMNS: Array<DataTableColumn<SubscriptionRecentEvent>> = [
  * MyRevenueCat → Overview. The RevenueCat-mirrored subscription summary (MRR, active/trial counts,
  * churn) for the selected range, from `useSubscriptionsSummary`. Attribution lives on the separate
  * Conversion page — the two are split along the query boundary, so neither straddles a data source.
- * Gated on `useRcEnabled`: projects without RevenueCat connected see an upsell empty state.
+ * Projects without RevenueCat connected land on `RcConnectPage` instead.
  */
 export function RcOverviewPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/overview' });
-  const rcEnabled = useRcEnabled(projectId);
+  const { data: projectsData } = useProjects();
+  const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
+  const rcEnabled = project?.integrations?.revenuecat ?? false;
   const { from, to } = useDateRange();
   const { filters: globalFilters } = useGlobalFilters();
   const subscriptions = useSubscriptionsSummary(projectId, from, to, mergeGlobalFilters([], globalFilters));
 
-  if (!rcEnabled) {
+  // Mirrors RcSettingsPage/RcConnectPage: nothing renders until `useProjects()` has actually
+  // resolved, so a still-loading connection flag is never mistaken for "not connected" — that bug
+  // used to flash the connect screen at every RC-connected project on every load.
+  if (!project) {
     return (
       <PageShell
         projectId={projectId}
@@ -89,13 +95,12 @@ export function RcOverviewPage() {
         description="Subscription analytics powered by RevenueCat."
         breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Overview' }]}
       >
-        <EmptyState
-          title="Connect RevenueCat"
-          description="Connect RevenueCat in project settings to see subscription analytics."
-        />
+        {null}
       </PageShell>
     );
   }
+
+  if (!rcEnabled) return <RcConnectPage />;
 
   const data = subscriptions.data;
 

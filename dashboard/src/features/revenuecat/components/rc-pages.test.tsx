@@ -31,7 +31,7 @@ describe('RcOverviewPage', () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp(OVERVIEW_URL);
     const main = within(await screen.findByRole('main'));
-    expect((await main.findAllByText(/connect revenuecat/i)).length).toBeGreaterThan(0);
+    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
   });
 
   it('does not render attribution sections', async () => {
@@ -69,6 +69,25 @@ describe('RcConversionPage', () => {
     const main = within(await screen.findByRole('main'));
     await main.findByText(/trial funnel/i);
     expect(main.queryByText('Active subscribers')).not.toBeInTheDocument();
+  });
+
+  // Same class of bug as RcOverviewPage/RcSettingsPage (see rc-connect.test.tsx): reading the RC
+  // connection flag off a still-loading `useProjects()` must not be mistaken for "not connected".
+  // Holds `/api/v1/projects` open with an infinite delay to inspect the loading window itself.
+  it('never shows the "connect revenuecat" upsell for an RC-connected project, including while still loading', async () => {
+    server.use(
+      http.get('/api/v1/projects', async () => {
+        await delay('infinite');
+        return HttpResponse.json({ projects: [] });
+      }),
+    );
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    renderApp(CONVERSION_URL);
+
+    await screen.findByRole('heading', { name: 'Conversion' });
+    // `queryAllByText` — the empty state's title AND description both contain "connect revenuecat",
+    // so the singular `queryByText` throws on multiple matches instead of failing cleanly.
+    expect(screen.queryAllByText(/connect revenuecat/i)).toHaveLength(0);
   });
 });
 
