@@ -1,5 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
+import { ProblemException } from '../common/problem-details';
 import type { ProjectAccessService } from './project-access.service';
 import { ProjectAccessGuard } from './project-access.guard';
 
@@ -54,11 +55,37 @@ describe('ProjectAccessGuard', () => {
     ).rejects.toMatchObject({ problem: { status: 403 } });
   });
 
-  it('denies with 403 when ProjectAccessService resolves null (analytics denied the request)', async () => {
+  it('denies with 403 when ProjectAccessService resolves null (analytics denied the request with 403/404)', async () => {
     const { guard } = makeGuard('admin', null);
     await expect(
       guard.canActivate(ctxFor({ projectId: PROJECT_ID }, { authorization: 'Bearer t' })),
     ).rejects.toMatchObject({ problem: { status: 403 } });
+  });
+
+  it('denies with 403 when the resolved role is not a recognized ProjectRole (fail-closed defense in depth)', async () => {
+    const { guard } = makeGuard('admin', 'guest');
+    await expect(
+      guard.canActivate(ctxFor({ projectId: PROJECT_ID }, { authorization: 'Bearer t' })),
+    ).rejects.toMatchObject({ problem: { status: 403 } });
+  });
+
+  it('propagates a 401 thrown by ProjectAccessService (analytics rejected the credentials)', async () => {
+    const reflector = { getAllAndOverride: jest.fn().mockReturnValue('admin') };
+    const projectAccess = {
+      getProjectRole: jest
+        .fn()
+        .mockRejectedValue(
+          new ProblemException({ status: 401, title: 'Unauthorized', detail: 'analytics rejected credentials' }),
+        ),
+    };
+    const guard = new ProjectAccessGuard(
+      reflector as unknown as Reflector,
+      projectAccess as unknown as ProjectAccessService,
+    );
+
+    await expect(
+      guard.canActivate(ctxFor({ projectId: PROJECT_ID }, { authorization: 'Bearer t' })),
+    ).rejects.toMatchObject({ problem: { status: 401 } });
   });
 
   it('denies with 401 (not 403) when the Authorization header is missing — checked before calling the service', async () => {
