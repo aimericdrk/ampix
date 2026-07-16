@@ -75,11 +75,11 @@ function SidebarLink({
       to={to}
       params={params}
       // Mirror `isHrefActive`'s own exact/non-exact semantics onto TanStack's matching, instead
-      // of leaving it on the library default (non-exact prefix match). Without this, `Link`
-      // computes its own `aria-current` and — because it's spread in after our own props — wins
-      // whenever it disagrees with `active`, silently marking ancestor links (e.g. "Projects",
-      // "Project settings") current on every descendant route even though they're `exact: true`
-      // and not tinted.
+      // of leaving it on the library default (non-exact prefix match). `Link` computes its own
+      // `aria-current` and, because it's spread in after our own props, the two are unioned, not
+      // overridden — TanStack's value only ever ADDS `page`, never removes it. So without this,
+      // an ancestor link (e.g. "Projects", "Project settings") would get `aria-current="page"`
+      // added on every descendant route, even though it's `exact: true` and not tinted.
       activeOptions={{ exact }}
       className={cn(NAV_LINK_BASE, active && NAV_LINK_ACTIVE)}
       aria-current={active ? 'page' : undefined}
@@ -207,6 +207,9 @@ export function AppLayout() {
           <span aria-hidden="true" className="py-2 font-display text-lg font-bold text-gradient-brand">
             M
           </span>
+          {/* The monogram above is decorative; this is the only accessible brand text at `md+`
+              now that the top bar's "MyAmpix" wordmark is `md:hidden`. */}
+          <span className="sr-only">MyAmpix</span>
           <ToolRail activeTool={activeTool} projectId={projectId} />
           <div className="mt-auto flex flex-col items-center gap-1">
             <ThemeToggle compact />

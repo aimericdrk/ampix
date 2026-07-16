@@ -89,6 +89,39 @@ describe('RcConversionPage', () => {
     // so the singular `queryByText` throws on multiple matches instead of failing cleanly.
     expect(screen.queryAllByText(/connect revenuecat/i)).toHaveLength(0);
   });
+
+  // Regression test: the disconnected branch used to render a stale EmptyState pointing at
+  // project settings, which is wrong now that `/rc/settings` exists specifically so configuring
+  // RevenueCat doesn't eject you from the tool. It must give the same connect surface as
+  // RcOverviewPage instead.
+  it('shows the same connect surface as RcOverviewPage when RC is not connected, not the old project-settings copy', async () => {
+    server.use(projectsHandlerWithoutRc());
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    renderApp(CONVERSION_URL);
+    const main = within(await screen.findByRole('main'));
+    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
+    expect(await main.findByRole('button', { name: /connect/i })).toBeInTheDocument();
+    expect(main.queryByText(/project settings/i)).not.toBeInTheDocument();
+  });
+
+  // Regression test: `ChartCard`'s error branch has no live region, so a failed attribution fetch
+  // used to be silent to screen readers (and rendered three identical error messages for sighted
+  // users). This page must announce the failure at the page level, mirroring RcOverviewPage.
+  it('announces attribution load failures at the page level, not just inside each chart', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/metrics/subscriptions/attribution', () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Internal server error', status: 500 },
+          { status: 500, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    );
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    renderApp(CONVERSION_URL);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/failed to load conversion analytics/i);
+    expect(screen.queryByText(/conversion drivers/i)).not.toBeInTheDocument();
+  });
 });
 
 describe('RcPlaceholderPage', () => {

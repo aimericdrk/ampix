@@ -34,6 +34,18 @@ describe('AppLayout', () => {
     expect(await screen.findByText(TEST_USER.email)).toBeInTheDocument();
   });
 
+  // Regression test: the rail's monogram is `aria-hidden`, and the wordmark in the top bar is
+  // `md:hidden` — without an sr-only label in the rail column, assistive tech has no accessible
+  // brand text at all at `md+`.
+  it('gives the rail column accessible brand text now that the top-bar wordmark is `md:hidden`', async () => {
+    authState.refreshValid = true;
+    renderApp('/projects');
+    await screen.findByRole('heading', { name: 'Projects' });
+
+    const rail = screen.getByTestId('rail-column');
+    expect(within(rail).getByText('MyAmpix')).toHaveClass('sr-only');
+  });
+
   it('places Organization settings in the rail identity menu as a nav item', async () => {
     authState.refreshValid = true;
     renderApp('/projects');

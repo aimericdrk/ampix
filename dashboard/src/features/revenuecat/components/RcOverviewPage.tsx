@@ -100,7 +100,7 @@ export function RcOverviewPage() {
     );
   }
 
-  if (!rcEnabled) return <RcConnectPage />;
+  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
 
   const data = subscriptions.data;
 

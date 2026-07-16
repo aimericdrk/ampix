@@ -28,6 +28,12 @@ export function ToolRail({ activeTool, projectId }: { activeTool: ToolId; projec
             key={tool.id}
             to={tool.home}
             params={{ projectId }}
+            // Without this, TanStack's own non-exact prefix match can independently decide a
+            // link is active and OR its `aria-current="page"` into ours (see SidebarLink's
+            // comment on the union semantics) — today no tool's `home` route is a prefix of
+            // another tool's routes, so this is latent rather than visibly broken, but a future
+            // tool homed at a shared prefix would silently double-mark the rail.
+            activeOptions={{ exact: true }}
             className={cn(TOOL_LINK_BASE, active && TOOL_LINK_ACTIVE)}
             aria-current={active ? 'page' : undefined}
           >

@@ -1,4 +1,3 @@
-import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { IntegrationsSection } from '../../projects/components/IntegrationsSection';
@@ -14,11 +13,13 @@ import { useProjectRole, useProjects } from '../../projects/api';
  *
  * Mirrors `RcSettingsPage`'s `project && isAdmin` gate: nothing renders — not even the "ask an
  * admin" empty state — until `useProjects()` has actually resolved, so a still-loading role is
- * never mistaken for a confirmed non-admin. (`RcOverviewPage`, this page's only caller, applies the
- * same discipline one level up before deciding to render this page at all.)
+ * never mistaken for a confirmed non-admin. (`RcOverviewPage` and `RcConversionPage`, this page's
+ * callers, apply the same discipline one level up before deciding to render this page at all.)
+ *
+ * Takes `projectId` as a prop rather than reading it off `useParams` — every RC page that renders
+ * this needs to work, and pinning a route here would throw whenever it mounted under any other one.
  */
-export function RcConnectPage() {
-  const { projectId } = useParams({ from: '/private/projects/$projectId/rc/overview' });
+export function RcConnectPage({ projectId }: { projectId: string }) {
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
   const role = useProjectRole(project?.id);

@@ -44,6 +44,20 @@ describe('ToolRail', () => {
     expect(rail.getByRole('link', { name: 'MyRevenueCat' })).toBeInTheDocument();
   });
 
+  // Regression test: `Link`'s own (non-exact, prefix-based) active match is unioned into our
+  // `aria-current`, not overridden by it — see the comment on `ToolRail`'s `activeOptions`. Without
+  // `activeOptions={{ exact: true }}`, a future tool whose home route is a prefix of another tool's
+  // routes would silently get two rail links marked current at once.
+  it('marks exactly one rail link as the current page', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    renderApp(`/projects/${TEST_PROJECT.id}/rc/overview`);
+    const rail = within(await screen.findByRole('navigation', { name: 'Tools' }));
+    const current = (await rail.findAllByRole('link')).filter(
+      (link) => link.getAttribute('aria-current') === 'page',
+    );
+    expect(current).toHaveLength(1);
+  });
+
   it('hides the tool buttons with no project selected, but keeps the rail column so layout does not jump', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp('/projects');

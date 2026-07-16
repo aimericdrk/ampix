@@ -1,6 +1,5 @@
 import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
-import { EmptyState } from '../../../components/ui/empty-state';
 import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
@@ -11,6 +10,7 @@ import type {
 } from '../../../lib/api/types';
 import { useSubscriptionAttribution } from '../api';
 import { useProjects } from '../../projects/api';
+import { RcConnectPage } from './RcConnectPage';
 import { DateRangeControl, useDateRange } from '../../analytics/date-range';
 import { formatPercent } from '../../analytics/format';
 import { BreakdownChart } from '../../analytics/components/charts/BreakdownChart';
@@ -71,21 +71,10 @@ export function RcConversionPage() {
     );
   }
 
-  if (!rcEnabled) {
-    return (
-      <PageShell
-        projectId={projectId}
-        title="Conversion"
-        description="What drives trial-to-paid conversion."
-        breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Conversion' }]}
-      >
-        <EmptyState
-          title="Connect RevenueCat"
-          description="Connect RevenueCat in project settings to see conversion analytics."
-        />
-      </PageShell>
-    );
-  }
+  // Same connect surface as RcOverviewPage's disconnected state — `/rc/settings` exists precisely
+  // so configuring RevenueCat doesn't eject you from the MyRevenueCat tool, so this page must not
+  // point back at project settings.
+  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
 
   const data = attribution.data;
   const driverRows = data?.drivers ?? [];
@@ -108,55 +97,79 @@ export function RcConversionPage() {
       breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Conversion' }]}
       dateRangeControl={<DateRangeControl />}
     >
-      <Reveal index={0}>
-        <ChartCard
-          title="Conversion drivers"
-          description="Events and screens most associated with trial-to-paid conversion."
-          state={state(driverRows.length === 0 && screenRows.length === 0)}
-        >
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <DataTable
-              columns={DRIVERS_COLUMNS}
-              rows={driverRows}
-              caption="Conversion driver events"
-              initialSort={{ key: 'users', dir: 'desc' }}
-              rowKey={(row) => row.event}
-              exportFilename="subscriptions-attribution-drivers"
-            />
-            <DataTable
-              columns={SCREENS_COLUMNS}
-              rows={screenRows}
-              caption="Conversion driver screens"
-              initialSort={{ key: 'users', dir: 'desc' }}
-              rowKey={(row) => row.screen_name}
-              exportFilename="subscriptions-attribution-screens"
-            />
-          </div>
-        </ChartCard>
-      </Reveal>
+      {/* Page-level loading/error announcement, mirroring RcOverviewPage: `ChartCard`'s own error
+          branch has no live region, so without this a failed fetch here was silent to screen
+          readers. Split from Overview, these two pages should not disagree on this. */}
+      {attribution.isPending && (
+        <Reveal index={0}>
+          <p role="status">Loading conversion analytics…</p>
+        </Reveal>
+      )}
+      {attribution.isError && (
+        <Reveal index={0}>
+          <p role="alert" className="text-danger">
+            Failed to load conversion analytics
+          </p>
+        </Reveal>
+      )}
 
-      <Reveal index={1}>
-        <ChartCard
-          title="Time to convert"
-          description="Elapsed time from trial start to conversion, bucketed."
-          state={state(timeToConvertChartData.length === 0)}
-        >
-          {/* Stacked (single-segment) variant preserves the caller's bucket order — the
-              non-stacked BreakdownChart always re-sorts descending by value, which would
-              scramble this fixed time-bucket axis. */}
-          <BreakdownChart stacked data={timeToConvertChartData} ariaLabel="Trial time-to-convert distribution" />
-        </ChartCard>
-      </Reveal>
+      {data && (
+        <>
+          <Reveal index={0}>
+            <ChartCard
+              title="Conversion drivers"
+              description="Events and screens most associated with trial-to-paid conversion."
+              state={state(driverRows.length === 0 && screenRows.length === 0)}
+            >
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <DataTable
+                  columns={DRIVERS_COLUMNS}
+                  rows={driverRows}
+                  caption="Conversion driver events"
+                  initialSort={{ key: 'users', dir: 'desc' }}
+                  rowKey={(row) => row.event}
+                  exportFilename="subscriptions-attribution-drivers"
+                />
+                <DataTable
+                  columns={SCREENS_COLUMNS}
+                  rows={screenRows}
+                  caption="Conversion driver screens"
+                  initialSort={{ key: 'users', dir: 'desc' }}
+                  rowKey={(row) => row.screen_name}
+                  exportFilename="subscriptions-attribution-screens"
+                />
+              </div>
+            </ChartCard>
+          </Reveal>
 
-      <Reveal index={2}>
-        <ChartCard title="Trial funnel" state={state(trials === 0)}>
-          <SectionGrid>
-            <KpiTile label="Trials" value={trials} />
-            <KpiTile label="Converted" value={converted} />
-            <KpiTile label="Conversion rate" value={formatPercent(funnelConversionRate)} />
-          </SectionGrid>
-        </ChartCard>
-      </Reveal>
+          <Reveal index={1}>
+            <ChartCard
+              title="Time to convert"
+              description="Elapsed time from trial start to conversion, bucketed."
+              state={state(timeToConvertChartData.length === 0)}
+            >
+              {/* Stacked (single-segment) variant preserves the caller's bucket order — the
+                  non-stacked BreakdownChart always re-sorts descending by value, which would
+                  scramble this fixed time-bucket axis. */}
+              <BreakdownChart
+                stacked
+                data={timeToConvertChartData}
+                ariaLabel="Trial time-to-convert distribution"
+              />
+            </ChartCard>
+          </Reveal>
+
+          <Reveal index={2}>
+            <ChartCard title="Trial funnel" state={state(trials === 0)}>
+              <SectionGrid>
+                <KpiTile label="Trials" value={trials} />
+                <KpiTile label="Converted" value={converted} />
+                <KpiTile label="Conversion rate" value={formatPercent(funnelConversionRate)} />
+              </SectionGrid>
+            </ChartCard>
+          </Reveal>
+        </>
+      )}
     </PageShell>
   );
 }
