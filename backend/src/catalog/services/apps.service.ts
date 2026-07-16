@@ -22,6 +22,7 @@ export class AppsService {
           packageName: input.packageName ?? null,
           publicSdkKey: generatePublicSdkKey(),
         },
+        omit: { storeCredentials: true },
       });
     } catch (e) {
       if (isUniqueViolation(e)) throw new ProblemException({ status: 409, title: 'App already exists' });
@@ -30,17 +31,31 @@ export class AppsService {
   }
 
   list(projectId: string) {
-    return this.prisma.app.findMany({ where: { projectId }, orderBy: { createdAt: 'asc' } });
+    return this.prisma.app.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'asc' },
+      omit: { storeCredentials: true },
+    });
   }
 
   async remove(projectId: string, appId: string) {
     const app = await this.prisma.app.findFirst({ where: { id: appId, projectId } });
     if (!app) throw new ProblemException({ status: 404, title: 'App not found' });
-    await this.prisma.app.delete({ where: { id: appId } });
+    try {
+      await this.prisma.app.delete({ where: { id: appId } });
+    } catch (e) {
+      if (isForeignKeyViolation(e)) throw new ProblemException({ status: 409, title: 'App is referenced by a package' });
+      throw e;
+    }
   }
 }
 
 /** Prisma P2002 = unique constraint violation. */
 function isUniqueViolation(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
+}
+
+/** Prisma P2003 = foreign key constraint violation. */
+function isForeignKeyViolation(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2003';
 }
