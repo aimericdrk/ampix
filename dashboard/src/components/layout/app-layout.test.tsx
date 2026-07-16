@@ -67,6 +67,26 @@ describe('AppLayout', () => {
     );
   });
 
+  it('marks exactly one Primary nav link aria-current="page" on a nested project route', async () => {
+    // Regression test: `SidebarLink` computes its own `active` state (via `isHrefActive`) and
+    // passes it through as `aria-current`, but TanStack's `Link` computes its OWN `aria-current`
+    // from `activeOptions` (defaulting to non-exact prefix matching) and that wins whenever it
+    // disagrees — so on a nested route like `/flows`, "Projects" and "Project settings" (both
+    // meant to be exact-only) were ALSO marked current alongside "Flows", the one actually
+    // tinted. A screen reader would announce three "current pages" at once.
+    authState.refreshValid = true;
+    renderApp(`/projects/${TEST_PROJECT.id}/flows`);
+    await screen.findByRole('heading', { name: 'Flows' });
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    const current = within(nav)
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('aria-current') === 'page');
+
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveAccessibleName('Flows');
+  });
+
   it('renders every section heading in the sidebar', async () => {
     authState.refreshValid = true;
     renderApp(`/projects/${TEST_PROJECT.id}/insights`);

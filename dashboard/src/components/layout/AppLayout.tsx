@@ -74,6 +74,13 @@ function SidebarLink({
     <Link
       to={to}
       params={params}
+      // Mirror `isHrefActive`'s own exact/non-exact semantics onto TanStack's matching, instead
+      // of leaving it on the library default (non-exact prefix match). Without this, `Link`
+      // computes its own `aria-current` and — because it's spread in after our own props — wins
+      // whenever it disagrees with `active`, silently marking ancestor links (e.g. "Projects",
+      // "Project settings") current on every descendant route even though they're `exact: true`
+      // and not tinted.
+      activeOptions={{ exact }}
       className={cn(NAV_LINK_BASE, active && NAV_LINK_ACTIVE)}
       aria-current={active ? 'page' : undefined}
     >

@@ -302,7 +302,7 @@ export function FlowsPage() {
       projectId={projectId}
       title="Flows"
       description="Explore the common paths users take before or after a key event."
-      breadcrumbs={[{ label: 'Explore' }, { label: 'Paths' }]}
+      breadcrumbs={[{ label: 'Explore' }, { label: 'Flows' }]}
       dateRangeControl={<DateRangeControl />}
       actions={<CopyLinkButton />}
     >
