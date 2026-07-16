@@ -213,9 +213,11 @@ export function AppLayout() {
           className="flex w-full shrink-0 flex-col gap-3 border-r border-border bg-surface p-4 md:w-60 md:overflow-y-auto"
         >
           <span className="font-display text-lg font-bold text-gradient-brand">MyAmpix</span>
-          <ToolRail activeTool={activeTool} projectId={projectId} />
           <OrgSwitcher />
           <ProjectSwitcher />
+          {/* Tool switcher sits under the workspace + project pickers: choose a workspace, then a
+              project, then which product to view it through. */}
+          <ToolRail activeTool={activeTool} projectId={projectId} />
           {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
           {projectId && <CommandPalette projectId={projectId} />}
           {/* Its own indicator layout group so the active bar never animates across to the section
