@@ -60,6 +60,24 @@ services:
       timeout: 3s
       retries: 12
 
+  # Standalone Postgres for the mobile-purchase (RevenueCat-style) service — genuinely separate
+  # from the analytics `postgres` service above (own port, own credentials, own volume).
+  mobile-purchase-postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: mobile_purchase
+      POSTGRES_PASSWORD: mobile_purchase_dev
+      POSTGRES_DB: mobile_purchase
+    volumes:
+      - mobile_purchase_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobile_purchase"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   # Web-based Postgres explorer — browse and edit data at http://localhost:8082
   # Login: System "PostgreSQL", Server "postgres", user "myampix" / pass "myampix_dev", db "myampix"
   adminer:
@@ -91,3 +109,4 @@ volumes:
   clickhouse_data:
   postgres_data:
   redis_data:
+  mobile_purchase_postgres_data:

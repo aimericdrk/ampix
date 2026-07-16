@@ -1,0 +1,11 @@
+// Mobile Purchase service — standalone Postgres database (see infra/docker-compose.yml,
+// service "mobile-purchase-postgres", port 5433). No models yet: this increment only proves
+// the service boots and can reach its own Postgres via `SELECT 1` (see src/health).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

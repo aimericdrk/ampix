@@ -1,4 +1,5 @@
 packages:
   - backend
+  - backend/mobile_purchase
   - dashboard
   - packages/*
