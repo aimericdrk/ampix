@@ -29,15 +29,23 @@ describe('AppLayout', () => {
     expect(projectSelector).toBeEnabled();
     expect(within(projectSelector).getByText('All projects')).toBeInTheDocument();
 
-    expect(screen.getByText(TEST_USER.email)).toBeInTheDocument();
+    // The signed-in user now lives behind the rail's identity menu.
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+    expect(await screen.findByText(TEST_USER.email)).toBeInTheDocument();
   });
 
-  it('places Organization settings in the bottom sidebar cluster as a nav item', async () => {
+  it('places Organization settings in the rail identity menu as a nav item', async () => {
     authState.refreshValid = true;
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
 
-    const link = await screen.findByRole('link', { name: 'Organization settings' });
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+
+    // Radix's DropdownMenuItem asChild intentionally overrides the wrapped <Link>'s implicit
+    // "link" role with "menuitem" — every actionable item inside role="menu" must expose
+    // menuitem/menuitemradio/menuitemcheckbox per the ARIA menu pattern. Same role used below
+    // for "Log out".
+    const link = await screen.findByRole('menuitem', { name: 'Organization settings' });
     expect(link).toHaveAttribute('href', `/orgs/${TEST_ORG_ID}/settings`);
   });
 
@@ -138,7 +146,8 @@ describe('AppLayout', () => {
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Log out' }));
 
     expect(await screen.findByRole('heading', { name: 'Log in to MyAmpix' })).toBeInTheDocument();
     expect(authStore.getState().status).toBe('anonymous');
@@ -158,7 +167,8 @@ describe('AppLayout', () => {
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Log out' }));
 
     expect(await screen.findByRole('heading', { name: 'Log in to MyAmpix' })).toBeInTheDocument();
     expect(authStore.getState().status).toBe('anonymous');

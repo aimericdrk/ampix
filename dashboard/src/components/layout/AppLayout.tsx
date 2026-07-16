@@ -20,6 +20,7 @@ import { toolForPathname, toolGroups, type NavAccent, type NavItem } from './nav
 import { NavIcon, type IconName } from './NavIcon';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
+import { RailIdentityMenu } from './RailIdentityMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { ToolRail } from './ToolRail';
 
@@ -200,6 +201,10 @@ export function AppLayout() {
             M
           </span>
           <ToolRail activeTool={activeTool} projectId={projectId} />
+          <div className="mt-auto flex flex-col items-center gap-1">
+            <ThemeToggle compact />
+            <RailIdentityMenu email={user?.email} orgId={currentOrgId} onLogout={() => void handleLogout()} />
+          </div>
         </div>
 
         <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
@@ -236,31 +241,12 @@ export function AppLayout() {
             )}
           </nav>
 
-          <div className="mt-auto shrink-0 space-y-1 border-t border-border p-4">
-            {currentOrgId && (
-              <SidebarLink
-                to="/orgs/$orgId/settings"
-                params={{ orgId: currentOrgId }}
-                icon="org"
-                label="Organization settings"
-              />
-            )}
-            <SidebarLink to="/account" icon="account" label="Account" />
-            <ThemeToggle />
-            <div className="truncate px-3 pt-1 text-xs text-text-muted">{user?.email}</div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full"
-              onClick={() => void handleLogout()}
-            >
-              Log out
-            </Button>
+          <div className="mt-auto shrink-0 border-t border-border p-4">
             {/* Subtle, always-available affordance for the shortcut system (feat-12). */}
             <button
               type="button"
               onClick={() => setHelpOpen(true)}
-              className="w-full truncate px-3 pt-1 text-left text-xs text-text-muted/70 transition-colors hover:text-text-muted"
+              className="w-full truncate px-3 text-left text-xs text-text-muted/70 transition-colors hover:text-text-muted"
             >
               Press <Kbd>?</Kbd> for shortcuts
             </button>
