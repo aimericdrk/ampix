@@ -217,9 +217,6 @@ export function AppLayout() {
           <ProjectSwitcher />
           {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
           {projectId && <CommandPalette projectId={projectId} />}
-          {/* Tool switcher sits under the workspace/project pickers and the search box: pick a
-              workspace, a project, then which product to view it through. */}
-          <ToolRail activeTool={activeTool} projectId={projectId} />
           {/* Its own indicator layout group so the active bar never animates across to the section
               nav in the other column. */}
           <SidebarLink
@@ -229,6 +226,8 @@ export function AppLayout() {
             label="Projects"
             indicatorId="global-nav-indicator"
           />
+          {/* Tool switcher sits below the Projects link, above the identity cluster. */}
+          <ToolRail activeTool={activeTool} projectId={projectId} />
           <div className="mt-auto flex flex-col gap-1 pt-2">
             <ThemeToggle />
             <RailIdentityMenu email={user?.email} orgId={currentOrgId} onLogout={() => void handleLogout()} />
