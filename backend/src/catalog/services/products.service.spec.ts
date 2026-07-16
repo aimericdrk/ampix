@@ -123,6 +123,27 @@ describe('ProductsService', () => {
     });
   });
 
+  it('404s attaching an entitlement that exists but belongs to a different project (cross-tenant guard)', async () => {
+    const otherOrg = await prisma.organization.create({ data: { name: 'O-foreign-entitlement' } });
+    const otherProject = await prisma.project.create({ data: { orgId: otherOrg.id, name: 'P-foreign-entitlement' } });
+    const foreignEntitlement = await prisma.entitlement.create({
+      data: { projectId: otherProject.id, identifier: 'foreign-pro', displayName: 'Foreign Pro' },
+    });
+    const product = await service.create(projectId, {
+      appId,
+      storeProductId: 'foreign.entitlement.product',
+      type: 'CONSUMABLE',
+      displayName: 'ForeignEntitlement',
+    });
+
+    // The entitlement is REAL (not a random UUID) but scoped to `otherProject`, not `projectId`.
+    // If the service ever drops the `projectId` filter on the entitlement lookup, this attach
+    // would wrongly succeed, letting a product pull in another tenant's entitlement.
+    await expect(service.attachEntitlement(projectId, product.id, foreignEntitlement.id)).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+  });
+
   it('detachEntitlement is idempotent', async () => {
     const product = await service.create(projectId, {
       appId,
