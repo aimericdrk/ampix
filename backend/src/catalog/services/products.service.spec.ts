@@ -171,4 +171,21 @@ describe('ProductsService', () => {
     await expect(service.remove(otherProject.id, product.id)).rejects.toMatchObject({ problem: { status: 404 } });
     await expect(service.remove(projectId, randomUUID())).rejects.toMatchObject({ problem: { status: 404 } });
   });
+
+  it('remove() 409s (not 500) when the product is referenced by a package (FK P2003, Package.product is onDelete: Restrict)', async () => {
+    const product = await service.create(projectId, {
+      appId,
+      storeProductId: 'referenced.by.package.product',
+      type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+      displayName: 'ReferencedByPackage',
+    });
+    const offering = await prisma.offering.create({
+      data: { projectId, identifier: 'fk-guard-offering', displayName: 'FK Guard Offering' },
+    });
+    await prisma.package.create({
+      data: { offeringId: offering.id, identifier: 'fk-guard-package', packageType: 'MONTHLY', productId: product.id },
+    });
+
+    await expect(service.remove(projectId, product.id)).rejects.toMatchObject({ problem: { status: 409 } });
+  });
 });

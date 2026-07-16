@@ -40,7 +40,12 @@ export class ProductsService {
   async remove(projectId: string, productId: string) {
     const p = await this.prisma.product.findFirst({ where: { id: productId, projectId } });
     if (!p) throw new ProblemException({ status: 404, title: 'Product not found' });
-    await this.prisma.product.delete({ where: { id: productId } });
+    try {
+      await this.prisma.product.delete({ where: { id: productId } });
+    } catch (e) {
+      if (isForeignKeyViolation(e)) throw new ProblemException({ status: 409, title: 'Product is referenced by a package' });
+      throw e;
+    }
   }
 
   async attachEntitlement(projectId: string, productId: string, entitlementId: string) {
@@ -67,4 +72,8 @@ export class ProductsService {
 
 function isUniqueViolation(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
+}
+
+function isForeignKeyViolation(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2003';
 }
