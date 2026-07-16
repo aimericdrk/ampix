@@ -15,9 +15,9 @@ const TILE_INNER_IDLE =
 
 /**
  * The tool switcher: one app-launcher tile per product surface (MyAmplitude, MyRevenueCat) — a
- * square icon with its label beneath, like a mobile home screen. Adding a tool is one entry in
- * `TOOLS`; nothing here is per-tool. Sits under the workspace + project pickers in the global
- * sidebar.
+ * square icon with its label beneath, like a mobile home screen. Stacked in a single column under
+ * the search box in the global sidebar. Adding a tool is one entry in `TOOLS`; nothing here is
+ * per-tool.
  *
  * Deliberately always renders every tool, including ones the project hasn't connected: hiding
  * MyRevenueCat until RevenueCat is set up makes the feature undiscoverable to exactly the people
@@ -28,7 +28,7 @@ export function ToolRail({ activeTool, projectId }: { activeTool: ToolId; projec
   if (!projectId) return null;
 
   return (
-    <nav aria-label="Tools" className="grid grid-cols-2 gap-2">
+    <nav aria-label="Tools" className="flex flex-col gap-1">
       {TOOLS.map((tool) => {
         const active = tool.id === activeTool;
         return (
