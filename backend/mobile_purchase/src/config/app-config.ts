@@ -8,6 +8,19 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65535).default(8090),
   DATABASE_URL: z.string().regex(/^postgresql:\/\//, 'must be a postgresql:// URL'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  // Cross-service authz seam (contracts: mobile_purchase holds NO JWT secret): base URL of the
+  // analytics backend's internal role-resolution endpoint. Default matches its local dev PORT.
+  ANALYTICS_INTERNAL_URL: z
+    .string()
+    .refine((value) => {
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'must be a valid URL')
+    .default('http://localhost:8088'),
 });
 
 export interface AppConfig {
@@ -15,6 +28,7 @@ export interface AppConfig {
   port: number;
   databaseUrl: string;
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
+  analyticsInternalUrl: string;
 }
 
 /**
@@ -40,6 +54,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port: v.PORT,
     databaseUrl: v.DATABASE_URL,
     logLevel: v.LOG_LEVEL,
+    analyticsInternalUrl: v.ANALYTICS_INTERNAL_URL,
   };
 }
 
@@ -75,5 +90,6 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     DATABASE_HOST: db.host,
     DATABASE_NAME: db.name,
     DATABASE_URL: redacted(config.databaseUrl),
+    ANALYTICS_INTERNAL_URL: config.analyticsInternalUrl,
   };
 }

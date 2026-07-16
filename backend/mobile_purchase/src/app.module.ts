@@ -5,6 +5,7 @@ import { APP_CONFIG, AppConfig } from './config/app-config';
 import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
+import { AuthzModule } from './authz/authz.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { HealthModule } from './health/health.module';
     }),
     PrismaModule,
     HealthModule,
+    AuthzModule,
   ],
 })
 export class AppModule {}

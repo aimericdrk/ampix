@@ -19,6 +19,7 @@ import { DashboardsModule } from './dashboards/dashboards.module';
 import { TemplatesModule } from './templates/templates.module';
 import { ScreenshotsModule } from './screenshots/screenshots.module';
 import { RevenueCatModule } from './revenuecat/revenuecat.module';
+import { InternalModule } from './internal/internal.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { RevenueCatModule } from './revenuecat/revenuecat.module';
     TemplatesModule,
     ScreenshotsModule,
     RevenueCatModule,
+    InternalModule,
   ],
 })
 export class AppModule {}
