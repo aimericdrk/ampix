@@ -34,16 +34,15 @@ describe('AppLayout', () => {
     expect(await screen.findByText(TEST_USER.email)).toBeInTheDocument();
   });
 
-  // Regression test: the rail's monogram is `aria-hidden`, and the wordmark in the top bar is
-  // `md:hidden` — without an sr-only label in the rail column, assistive tech has no accessible
-  // brand text at all at `md+`.
-  it('gives the rail column accessible brand text now that the top-bar wordmark is `md:hidden`', async () => {
+  // The global sidebar carries the visible "MyAmpix" wordmark at `md+` (the top bar's copy is
+  // `md:hidden`), so assistive tech always has accessible brand text.
+  it('shows the MyAmpix wordmark in the global sidebar', async () => {
     authState.refreshValid = true;
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
 
-    const rail = screen.getByTestId('rail-column');
-    expect(within(rail).getByText('MyAmpix')).toHaveClass('sr-only');
+    const sidebar = screen.getByTestId('global-sidebar');
+    expect(within(sidebar).getByText('MyAmpix')).toBeInTheDocument();
   });
 
   it('places Organization settings in the rail identity menu as a nav item', async () => {

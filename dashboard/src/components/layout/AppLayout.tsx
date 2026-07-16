@@ -47,11 +47,14 @@ function isHrefActive(pathname: string, href: string, exact: boolean): boolean {
 }
 
 /** Sliding accent indicator — a shared `layoutId` so it glides between whichever sidebar link is
- * active, instead of popping. Renders as a plain bar (no layout animation) under reduced motion. */
-function NavIndicator() {
+ * active, instead of popping. Renders as a plain bar (no layout animation) under reduced motion.
+ * The `layoutId` is a parameter so links in different columns can opt into separate layout groups:
+ * the section nav shares one id (the bar slides between sections), while the lone global "Projects"
+ * link uses its own, so its indicator never flies diagonally across to the section-nav column. */
+function NavIndicator({ layoutId = 'nav-indicator' }: { layoutId?: string }) {
   const reducedMotion = useReducedMotion();
   if (reducedMotion) return <span className={NAV_INDICATOR_CLASS} />;
-  return <m.span layoutId="nav-indicator" className={NAV_INDICATOR_CLASS} transition={springTransition} />;
+  return <m.span layoutId={layoutId} className={NAV_INDICATOR_CLASS} transition={springTransition} />;
 }
 
 function SidebarLink({
@@ -60,12 +63,15 @@ function SidebarLink({
   exact = false,
   icon,
   label,
+  indicatorId,
 }: {
   to: string;
   params?: Record<string, string | undefined>;
   exact?: boolean;
   icon: IconName;
   label: string;
+  /** Layout-group id for the active indicator; omit to share the section nav's sliding bar. */
+  indicatorId?: string;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const active = isHrefActive(pathname, resolveHref(to, params), exact);
@@ -84,7 +90,7 @@ function SidebarLink({
       className={cn(NAV_LINK_BASE, active && NAV_LINK_ACTIVE)}
       aria-current={active ? 'page' : undefined}
     >
-      {active && <NavIndicator />}
+      {active && <NavIndicator layoutId={indicatorId} />}
       <NavIcon name={icon} />
       <span>{label}</span>
     </Link>
@@ -198,40 +204,41 @@ export function AppLayout() {
           mobileOpen ? 'fixed inset-y-0 left-0 flex' : 'hidden md:flex',
         )}
       >
-        {/* Global column: brand + tools + identity. Project-scoped chrome lives in the aside.
-            Full-width when stacked below `md`; fixed at `--rail-w` beside the aside from `md` up. */}
+        {/* Global sidebar: brand, tool switcher, and the project-scoped chrome (workspace, project,
+            search, Projects) all live on the left, so everything global sits in one column. The
+            aside beside it holds only the active tool's section nav. Full-width when stacked below
+            `md`; a fixed 240px column beside the aside from `md` up, scrolling on its own if tall. */}
         <div
-          data-testid="rail-column"
-          className="flex w-full shrink-0 flex-col items-center gap-2 border-r border-border bg-surface p-2 md:w-[var(--rail-w)]"
+          data-testid="global-sidebar"
+          className="flex w-full shrink-0 flex-col gap-3 border-r border-border bg-surface p-4 md:w-60 md:overflow-y-auto"
         >
-          <span aria-hidden="true" className="py-2 font-display text-lg font-bold text-gradient-brand">
-            M
-          </span>
-          {/* The monogram above is decorative; this is the only accessible brand text at `md+`
-              now that the top bar's "MyAmpix" wordmark is `md:hidden`. */}
-          <span className="sr-only">MyAmpix</span>
+          <span className="font-display text-lg font-bold text-gradient-brand">MyAmpix</span>
           <ToolRail activeTool={activeTool} projectId={projectId} />
-          <div className="mt-auto flex flex-col items-center gap-1">
-            <ThemeToggle compact />
+          <OrgSwitcher />
+          <ProjectSwitcher />
+          {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
+          {projectId && <CommandPalette projectId={projectId} />}
+          {/* Its own indicator layout group so the active bar never animates across to the section
+              nav in the other column. */}
+          <SidebarLink
+            to="/projects"
+            exact
+            icon="projects"
+            label="Projects"
+            indicatorId="global-nav-indicator"
+          />
+          <div className="mt-auto flex flex-col gap-1 pt-2">
+            <ThemeToggle />
             <RailIdentityMenu email={user?.email} orgId={currentOrgId} onLogout={() => void handleLogout()} />
           </div>
         </div>
 
         <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
-          <div className="flex shrink-0 flex-col gap-3 p-4">
-            <OrgSwitcher />
-            <ProjectSwitcher />
-            {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
-            {projectId && <CommandPalette projectId={projectId} />}
-          </div>
-
           <nav
             aria-label="Primary"
-            className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
+            className="min-h-0 flex-1 overflow-y-auto p-4"
             onClickCapture={() => setMobileOpen(false)}
           >
-            <SidebarLink to="/projects" exact icon="projects" label="Projects" />
-
             {groups.map((group, index) => (
               <NavSection
                 key={group.heading ?? `group-${index}`}

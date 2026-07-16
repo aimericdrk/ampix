@@ -23,9 +23,6 @@
   --accent-fg: oklch(99% 0 0);
   --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
 
-  /* Tool rail width. The section list beside it stays the hardcoded w-60 it has always been. */
-  --rail-w: 4.5rem;
-
   --success: oklch(52% 0.15 155);
   --warning: oklch(58% 0.13 80);
   --danger: oklch(52% 0.2 25);
