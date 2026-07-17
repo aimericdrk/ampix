@@ -24,6 +24,17 @@ const envSchema = z.object({
   // Encryption key for App.storeCredentials (encrypted-at-rest, populated by a later
   // connect-store flow). Optional here: P0 ships the column, not the writer.
   STORE_CREDENTIALS_ENC_KEY: z.string().optional(),
+  // Apple ASSN v2 verifier config (design §1.1/§8). M2a is single-tenant/config-driven (no
+  // App-by-bundleId DB resolution yet — that is M2b); comma-separated so more than one bundleId
+  // can be accepted meanwhile. Dev default is an obviously-fake placeholder, never a real app.
+  APPLE_BUNDLE_IDS: z.string().default('com.myampix.app'),
+  // The app's numeric App Store Connect id. Apple's library requires this for the Production
+  // environment (omitted/undefined is valid, and required, for Sandbox-only verification).
+  APPLE_APP_APPLE_ID: z.coerce.number().int().positive().optional(),
+  // Directory of trust-anchor root certs (PEM or DER) for AppleNotificationVerifier — see
+  // src/webhooks/apple/certs/README.md. Optional: unset falls back to the in-repo certs/ dir
+  // next to the verifier (src or dist, resolved via __dirname so it works either way).
+  APPLE_ROOT_CERT_DIR: z.string().optional(),
 });
 
 export interface AppConfig {
@@ -36,6 +47,11 @@ export interface AppConfig {
   // task's scope keep compiling without every fixture needing an update. loadConfig() always
   // populates it (to undefined when unset).
   storeCredentialsEncKey?: string;
+  // Apple ASSN v2 verifier config — see envSchema comments above. Optional for the same
+  // hand-built-fixture-compatibility reason as storeCredentialsEncKey.
+  appleBundleIds?: string[];
+  appleAppAppleId?: number;
+  appleRootCertDir?: string;
 }
 
 /**
@@ -63,6 +79,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     logLevel: v.LOG_LEVEL,
     analyticsInternalUrl: v.ANALYTICS_INTERNAL_URL,
     storeCredentialsEncKey: v.STORE_CREDENTIALS_ENC_KEY,
+    appleBundleIds: v.APPLE_BUNDLE_IDS.split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+    appleAppAppleId: v.APPLE_APP_APPLE_ID,
+    appleRootCertDir: v.APPLE_ROOT_CERT_DIR,
   };
 }
 
@@ -99,5 +120,7 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     DATABASE_NAME: db.name,
     DATABASE_URL: redacted(config.databaseUrl),
     ANALYTICS_INTERNAL_URL: config.analyticsInternalUrl,
+    APPLE_BUNDLE_IDS: (config.appleBundleIds ?? []).join(',') || 'MISSING',
+    APPLE_ROOT_CERT_DIR: config.appleRootCertDir ?? '(default: certs/ next to the verifier)',
   };
 }
