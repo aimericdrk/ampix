@@ -21,6 +21,9 @@ const envSchema = z.object({
       }
     }, 'must be a valid URL')
     .default('http://localhost:8088'),
+  // Encryption key for App.storeCredentials (encrypted-at-rest, populated by a later
+  // connect-store flow). Optional here: P0 ships the column, not the writer.
+  STORE_CREDENTIALS_ENC_KEY: z.string().optional(),
 });
 
 export interface AppConfig {
@@ -29,6 +32,10 @@ export interface AppConfig {
   databaseUrl: string;
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   analyticsInternalUrl: string;
+  // Optional (rather than required) so pre-existing hand-built AppConfig fixtures outside this
+  // task's scope keep compiling without every fixture needing an update. loadConfig() always
+  // populates it (to undefined when unset).
+  storeCredentialsEncKey?: string;
 }
 
 /**
@@ -55,6 +62,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     databaseUrl: v.DATABASE_URL,
     logLevel: v.LOG_LEVEL,
     analyticsInternalUrl: v.ANALYTICS_INTERNAL_URL,
+    storeCredentialsEncKey: v.STORE_CREDENTIALS_ENC_KEY,
   };
 }
 

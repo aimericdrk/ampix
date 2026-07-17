@@ -1,6 +1,7 @@
 // Mobile Purchase service — standalone Postgres database (see infra/docker-compose.yml,
-// service "mobile-purchase-postgres", port 5433). No models yet: this increment only proves
-// the service boots and can reach its own Postgres via `SELECT 1` (see src/health).
+// service "mobile-purchase-postgres", port 5433). Owns the catalog domain: apps, products,
+// entitlements, offerings, and packages for a project. This service has NO Project/Org/User
+// tables of its own — projectId is a plain, unenforced-by-FK column, scoped by the caller.
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,4 +9,135 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum AppPlatform {
+  IOS
+  ANDROID
+  // Reserved for later platform phases — modeled now so the enum is stable, unused today.
+  MACOS
+  AMAZON
+  WEB
+}
+
+enum ProductType {
+  AUTO_RENEWABLE_SUBSCRIPTION
+  NON_RENEWING_SUBSCRIPTION
+  CONSUMABLE
+  NON_CONSUMABLE
+}
+
+// RevenueCat's PackageType, verbatim so the SDK contract matches.
+enum PackageType {
+  UNKNOWN
+  CUSTOM
+  LIFETIME
+  ANNUAL
+  SIX_MONTH
+  THREE_MONTH
+  TWO_MONTH
+  MONTHLY
+  WEEKLY
+}
+
+model App {
+  id        String      @id @default(uuid(7)) @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  name      String
+  platform  AppPlatform
+  // Store identity: one is set depending on platform (validated at the boundary, not the DB).
+  bundleId    String? @map("bundle_id") // iOS
+  packageName String? @map("package_name") // Android
+  // Public SDK key — safe to ship in a client; generated on create. Format: `mp_pub_<random>`.
+  publicSdkKey String @unique @map("public_sdk_key")
+  // Store credentials, encrypted at rest. Column modeled now; POPULATED by a later connect-store
+  // flow (nullable until then). Encryption uses a dedicated key (STORE_CREDENTIALS_ENC_KEY).
+  storeCredentials String?  @map("store_credentials") // encrypted JSON blob, null until connected
+  createdAt        DateTime @default(now()) @map("created_at")
+  products          Product[]
+
+  @@unique([projectId, platform, bundleId])
+  @@unique([projectId, platform, packageName])
+  @@index([projectId])
+  @@map("apps")
+}
+
+model Product {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  projectId      String      @map("project_id") @db.Uuid
+  appId          String      @map("app_id") @db.Uuid
+  storeProductId String      @map("store_product_id") // App Store / Play product identifier
+  type           ProductType
+  displayName    String      @map("display_name")
+  // Imported price/duration SNAPSHOT (real pricing is store-authoritative; this is a cached
+  // config value, refreshed by a later import). Nullable until imported.
+  priceCents          Int?     @map("price_cents")
+  currency            String?
+  durationIso8601     String?  @map("duration_iso8601") // e.g. P1M, P1Y; null for non-subs
+  subscriptionGroupId String?  @map("subscription_group_id") // iOS upgrade/downgrade scope
+  createdAt           DateTime @default(now()) @map("created_at")
+  app                 App                  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  entitlements        ProductEntitlement[]
+  packages            Package[]
+
+  @@unique([appId, storeProductId])
+  @@index([projectId])
+  @@map("products")
+}
+
+model Entitlement {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  identifier  String // e.g. "pro" — unique per project, stable, used by the SDK
+  displayName String   @map("display_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+  products    ProductEntitlement[]
+
+  @@unique([projectId, identifier])
+  @@index([projectId])
+  @@map("entitlements")
+}
+
+model ProductEntitlement {
+  productId     String      @map("product_id") @db.Uuid
+  entitlementId String      @map("entitlement_id") @db.Uuid
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  entitlement   Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  @@id([productId, entitlementId])
+  @@index([entitlementId])
+  @@map("product_entitlements")
+}
+
+model Offering {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  identifier  String // e.g. "default"
+  displayName String   @map("display_name")
+  isCurrent   Boolean  @default(false) @map("is_current")
+  metadata    Json? // arbitrary client-readable JSON (RC Offering.metadata)
+  createdAt   DateTime @default(now()) @map("created_at")
+  packages    Package[]
+
+  @@unique([projectId, identifier])
+  // At most one current offering per project — enforced in the service AND a partial unique
+  // index on (projectId) WHERE is_current is added via raw SQL in the migration (Prisma can't
+  // express partial indexes natively).
+  @@index([projectId])
+  @@map("offerings")
+}
+
+model Package {
+  id          String      @id @default(uuid(7)) @db.Uuid
+  offeringId  String      @map("offering_id") @db.Uuid
+  identifier  String // e.g. "$rc_monthly"
+  packageType PackageType @map("package_type")
+  productId   String      @map("product_id") @db.Uuid
+  sortOrder   Int         @default(0) @map("sort_order")
+  offering    Offering    @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([offeringId, identifier])
+  @@index([productId])
+  @@map("packages")
 }
