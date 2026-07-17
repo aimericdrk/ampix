@@ -1,0 +1,56 @@
+group 'com.myampix.purchases'
+version '1.0-SNAPSHOT'
+
+buildscript {
+    ext.kotlin_version = '2.2.20'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.11.1'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.myampix.purchases'
+    compileSdk 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    sourceSets {
+        main.kotlin.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        minSdk 24
+    }
+}
+
+dependencies {
+    // Google Play Billing — used ACTIVELY here (unlike the analytics SDK's
+    // passive observer): this plugin fetches ProductDetails, launches the
+    // billing flow, acknowledges/consumes, and replays purchases on connect.
+    // The billing AAR merges the `com.android.vending.BILLING` permission via
+    // manifest merging, so AndroidManifest.xml declares nothing itself.
+    implementation 'com.android.billingclient:billing:7.1.1'
+}
