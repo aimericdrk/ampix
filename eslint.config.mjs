@@ -12,6 +12,8 @@ export default tseslint.config(
       '**/dist/**',
       '**/build/**',
       '**/coverage/**',
+      // Generated Prisma client — not source, do not lint
+      'backend/mobile_purchase/generated/**',
       // Dart package — linted by flutter_lints, not ESLint
       'sdk/**',
       // Browser app — lints itself via dashboard/eslint.config.js (browser globals)

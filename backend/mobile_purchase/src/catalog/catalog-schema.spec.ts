@@ -1,21 +1,27 @@
 import { randomUUID } from 'node:crypto';
-import { AppPlatform, PackageType, PrismaClient, ProductType } from '@prisma/client';
+import { AppPlatform, PackageType, PrismaClient, ProductType } from '../../generated/client';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { startPostgresContainer } from '../../test/integration/helpers/containers';
 import { generatePublicSdkKey } from './support/key-generator';
 
-// Smoke test against a real Postgres — no Testcontainers helper exists in this service yet, and
-// spinning one up here would duplicate infra/docker-compose.yml's mobile-purchase-postgres
-// service (already the canonical way this service gets a database, see prisma/migrations).
-// Bring it up first: `docker compose -f infra/docker-compose.yml up -d mobile-purchase-postgres`.
-const DEFAULT_DATABASE_URL = 'postgresql://mobile_purchase:mobile_purchase_dev@localhost:5433/mobile_purchase';
+jest.setTimeout(180000);
 
+// Smoke test against a real, self-contained Postgres (Testcontainers) — no dependency on
+// infra/docker-compose.yml's mobile-purchase-postgres service being up.
 describe('catalog schema (smoke)', () => {
-  const prisma = new PrismaClient({
-    datasources: { db: { url: process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL } },
-  });
+  let container: StartedPostgreSqlContainer;
+  let prisma: PrismaClient;
   const projectId = randomUUID();
+
+  beforeAll(async () => {
+    const started = await startPostgresContainer();
+    container = started.container;
+    prisma = new PrismaClient({ datasources: { db: { url: started.url } } });
+  });
 
   afterAll(async () => {
     await prisma.$disconnect();
+    await container.stop();
   });
 
   it('persists one row per catalog table plus the product<->entitlement mapping', async () => {

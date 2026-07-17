@@ -1,4 +1,4 @@
-import type { PackageType, ProductType } from '@prisma/client';
+import type { PackageType, ProductType } from '../../generated/client';
 
 export interface ResolvedPackage {
   identifier: string;

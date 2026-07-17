@@ -4,6 +4,7 @@
 // tables of its own — projectId is a plain, unenforced-by-FK column, scoped by the caller.
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/client"
 }
 
 datasource db {

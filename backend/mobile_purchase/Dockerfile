@@ -12,7 +12,7 @@ WORKDIR /app
 # of the install.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY dashboard/package.json dashboard/package.json
-COPY backend/package.json backend/package.json
+COPY backend/mobile_analytics/package.json backend/mobile_analytics/package.json
 COPY packages/contracts packages/contracts
 COPY backend/mobile_purchase backend/mobile_purchase
 
@@ -39,11 +39,15 @@ COPY --from=builder --chown=app:app /out /app
 
 # The Prisma migration CLI for the entrypoint's `migrate deploy`. `pnpm deploy --prod` prunes the
 # devDependency `prisma`, so install it globally at build time (network available then; none needed
-# at container start). Pinned to the service's prisma dependency.
-RUN npm install -g prisma@6.8.0 && npm cache clean --force
+# at container start). Pinned to the service's prisma dependency (see pnpm-lock.yaml — keep in sync,
+# a mismatch against the installed @prisma/client version breaks `prisma generate` below).
+RUN npm install -g prisma@6.19.3 && npm cache clean --force
 
-# Regenerate the Prisma client into the deployed node_modules so it is guaranteed present in the
-# final image regardless of whether `pnpm deploy` carried the generated output.
+# Regenerate the Prisma client into its package-local output (backend/mobile_purchase/generated/client,
+# per prisma/schema.prisma's generator `output`) as a defensive rebuild: `pnpm deploy` already
+# reruns the `prepare` script (prisma generate) against /out, but this guarantees a client matching
+# the exact engine/runtime bundled with the globally-installed prisma CLI above is present
+# regardless of how the deploy step's own generation behaves.
 RUN prisma generate --schema prisma/schema.prisma
 
 COPY --chown=app:app backend/mobile_purchase/docker-entrypoint.sh /app/docker-entrypoint.sh
