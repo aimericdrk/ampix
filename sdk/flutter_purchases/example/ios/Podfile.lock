@@ -1,0 +1,29 @@
+PODS:
+  - Flutter (1.0.0)
+  - myampix_purchases (0.1.0):
+    - Flutter
+  - shared_preferences_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - myampix_purchases (from `.symlinks/plugins/myampix_purchases/ios`)
+  - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  myampix_purchases:
+    :path: ".symlinks/plugins/myampix_purchases/ios"
+  shared_preferences_foundation:
+    :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  myampix_purchases: bc29519c47c745bbfb21ff9d28d3ee3546cf6e49
+  shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
+
+PODFILE CHECKSUM: 344cd2285a847bb9a810fb18e70433d94ae67fb3
+
+COCOAPODS: 1.16.2
