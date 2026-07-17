@@ -55,6 +55,10 @@ import { GoogleIngestService } from './google/google-ingest.service';
       useFactory: (prisma: PrismaService) => buildGoogleStoreClient(prisma),
     },
   ],
-  exports: [StoreNotificationJournalService],
+  // M5b: `AppleNotificationVerifier`/`AppleIngestService`/`GoogleIngestService`/`GOOGLE_STORE_CLIENT`
+  // are additionally exported so `ReceiptsModule` (`POST /v1/receipts`) can reuse the exact same
+  // Apple JWS verifier, both stores' `processJournaledNotification` replay entry points, and the
+  // Google `StoreClient` — instead of re-registering a second, divergent instance of each.
+  exports: [StoreNotificationJournalService, AppleNotificationVerifier, AppleIngestService, GoogleIngestService, GOOGLE_STORE_CLIENT],
 })
 export class WebhooksModule {}

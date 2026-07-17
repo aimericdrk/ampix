@@ -10,6 +10,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CustomersModule } from './customers/customers.module';
 import { SubscribersModule } from './subscribers/subscribers.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { ReceiptsModule } from './receipts/receipts.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     CustomersModule,
     SubscribersModule,
     WebhooksModule,
+    ReceiptsModule,
   ],
 })
 export class AppModule {}

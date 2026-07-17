@@ -204,10 +204,15 @@ model Customer {
   subscriptions        Subscription[]
   transactions         Transaction[]
 
+  // M5b: a given store token must map to at most ONE Customer per project (previously unenforced —
+  // `findByStoreToken` was a plain `findFirst`). Plain (non-partial) unique indexes are sufficient:
+  // Postgres never treats two NULLs as colliding on a unique index, so unbound customers (both
+  // columns NULL) never conflict with each other. Supersedes the old single-column indexes below
+  // (this composite already covers the `(projectId, token)` lookup `findByStoreToken` performs).
   @@unique([projectId, appUserId])
+  @@unique([projectId, appleAppAccountToken])
+  @@unique([projectId, googleObfuscatedId])
   @@index([projectId])
-  @@index([appleAppAccountToken])
-  @@index([googleObfuscatedId])
   @@map("customers")
 }
 

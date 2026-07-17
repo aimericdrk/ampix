@@ -224,4 +224,71 @@ describe('AppleNotificationVerifier', () => {
       gracePeriodExpiresDate: new Date('2026-08-20T00:00:00Z'),
     });
   });
+
+  describe('verifyAndDecodeTransactionJws (M5b: a bare StoreKit2 transaction JWS, no wrapping notification)', () => {
+    it('verifies and decodes a standalone transaction JWS via verifyAndDecodeTransaction directly (no verifyAndDecodeNotification call)', async () => {
+      const av = fakeVerifier();
+      const decoded = await new AppleNotificationVerifier([av]).verifyAndDecodeTransactionJws('bare-transaction-jws');
+
+      expect(decoded).toEqual({
+        transactionId: 'txn-1',
+        originalTransactionId: 'orig-txn-1',
+        productId: 'com.myampix.premium.monthly',
+        purchaseDate: new Date('2026-07-15T00:00:00Z'),
+        expiresDate: new Date('2026-08-15T00:00:00Z'),
+        type: 'Auto-Renewable Subscription',
+        inAppOwnershipType: 'PURCHASED',
+        offerType: undefined,
+        revocationDate: undefined,
+        price: 999,
+        currency: 'USD',
+        appAccountToken: 'app-account-token-uuid',
+        environment: undefined,
+      });
+      expect(av.verifyAndDecodeTransaction).toHaveBeenCalledWith('bare-transaction-jws');
+      expect(av.verifyAndDecodeNotification).not.toHaveBeenCalled();
+    });
+
+    it('carries the transaction JWS own environment field through (no wrapping notification to read data.environment from)', async () => {
+      const av = fakeVerifier({ verifyAndDecodeTransaction: jest.fn().mockResolvedValue(txnPayload({ environment: 'Production' })) });
+      const decoded = await new AppleNotificationVerifier([av]).verifyAndDecodeTransactionJws('bare-transaction-jws');
+      expect(decoded.environment).toBe('Production');
+    });
+
+    it('throws AppleSignatureError when the transaction JWS fails verification', async () => {
+      const av = fakeVerifier({
+        verifyAndDecodeTransaction: jest.fn().mockRejectedValue(new VerificationException(VerificationStatus.VERIFICATION_FAILURE)),
+      });
+      await expect(new AppleNotificationVerifier([av]).verifyAndDecodeTransactionJws('tampered-jws')).rejects.toBeInstanceOf(
+        AppleSignatureError,
+      );
+    });
+
+    it('tries the next configured bundleId/environment when one rejects with a VerificationException', async () => {
+      const rejecting = fakeVerifier({
+        verifyAndDecodeTransaction: jest.fn().mockRejectedValue(new VerificationException(VerificationStatus.INVALID_APP_IDENTIFIER)),
+      });
+      const accepting = fakeVerifier();
+      const decoded = await new AppleNotificationVerifier([rejecting, accepting]).verifyAndDecodeTransactionJws('signed-jws');
+
+      expect(decoded.transactionId).toBe('txn-1');
+      expect(rejecting.verifyAndDecodeTransaction).toHaveBeenCalledTimes(1);
+      expect(accepting.verifyAndDecodeTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws AppleSignatureError when zero verifiers are configured', async () => {
+      await expect(new AppleNotificationVerifier([]).verifyAndDecodeTransactionJws('signed-jws')).rejects.toBeInstanceOf(
+        AppleSignatureError,
+      );
+    });
+
+    it('throws ApplePayloadError (not retried against another verifier) when the decoded transaction is missing productId/purchaseDate', async () => {
+      const badShape = fakeVerifier({ verifyAndDecodeTransaction: jest.fn().mockResolvedValue(txnPayload({ productId: undefined })) });
+      const otherConfigured = fakeVerifier();
+      const verifier = new AppleNotificationVerifier([badShape, otherConfigured]);
+
+      await expect(verifier.verifyAndDecodeTransactionJws('signed-jws')).rejects.toBeInstanceOf(ApplePayloadError);
+      expect(otherConfigured.verifyAndDecodeTransaction).not.toHaveBeenCalled();
+    });
+  });
 });

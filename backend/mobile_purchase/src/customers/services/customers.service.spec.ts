@@ -100,4 +100,61 @@ describe('CustomersService', () => {
       await expect(service.findByStoreToken(projectId, Store.APP_STORE, token)).resolves.toBeNull();
     });
   });
+
+  describe('bindStoreToken', () => {
+    it('writes the Apple appAccountToken onto the Customer', async () => {
+      const customer = await service.getOrCreateCustomer(projectId, 'apple-bind-user');
+      const token = randomUUID();
+
+      const bound = await service.bindStoreToken(projectId, customer.id, Store.APP_STORE, token);
+
+      expect(bound.appleAppAccountToken).toBe(token);
+      await expect(service.findByStoreToken(projectId, Store.APP_STORE, token)).resolves.toMatchObject({ id: customer.id });
+    });
+
+    it('writes the Google obfuscatedExternalAccountId onto the Customer', async () => {
+      const customer = await service.getOrCreateCustomer(projectId, 'google-bind-user');
+      const token = 'g-' + randomUUID();
+
+      const bound = await service.bindStoreToken(projectId, customer.id, Store.PLAY_STORE, token);
+
+      expect(bound.googleObfuscatedId).toBe(token);
+      await expect(service.findByStoreToken(projectId, Store.PLAY_STORE, token)).resolves.toMatchObject({ id: customer.id });
+    });
+
+    it('rebinding the SAME token to the SAME customer is a harmless no-op', async () => {
+      const customer = await service.getOrCreateCustomer(projectId, 'rebind-user');
+      const token = randomUUID();
+
+      await service.bindStoreToken(projectId, customer.id, Store.APP_STORE, token);
+      const second = await service.bindStoreToken(projectId, customer.id, Store.APP_STORE, token);
+
+      expect(second.appleAppAccountToken).toBe(token);
+    });
+
+    it('rejects (409) when a DIFFERENT customer already owns the token — fail-closed, no reassignment', async () => {
+      const token = randomUUID();
+      const first = await service.getOrCreateCustomer(projectId, 'owner-user');
+      await service.bindStoreToken(projectId, first.id, Store.APP_STORE, token);
+
+      const second = await service.getOrCreateCustomer(projectId, 'claimant-user');
+
+      await expect(service.bindStoreToken(projectId, second.id, Store.APP_STORE, token)).rejects.toMatchObject({
+        problem: { status: 409 },
+      });
+
+      // the original binding is untouched
+      await expect(service.findByStoreToken(projectId, Store.APP_STORE, token)).resolves.toMatchObject({ id: first.id });
+    });
+
+    it('the SAME token may be bound by different customers in DIFFERENT projects (uniqueness is per-project)', async () => {
+      const token = randomUUID();
+      const otherProjectId = randomUUID();
+      const mine = await service.getOrCreateCustomer(projectId, 'proj-a-user');
+      const theirs = await service.getOrCreateCustomer(otherProjectId, 'proj-b-user');
+
+      await expect(service.bindStoreToken(projectId, mine.id, Store.APP_STORE, token)).resolves.toMatchObject({ id: mine.id });
+      await expect(service.bindStoreToken(otherProjectId, theirs.id, Store.APP_STORE, token)).resolves.toMatchObject({ id: theirs.id });
+    });
+  });
 });

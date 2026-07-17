@@ -386,7 +386,7 @@ function isRevenueEvent(
  * trial; otherwise a present `offerId` (or an "intro" tag) -> intro; otherwise a normal paid
  * purchase. Revisit once a real Play offer catalog is available to validate against.
  */
-function toGoogleSubscriptionFacts(lineItem: GoogleSubscriptionLineItem): GoogleSubscriptionFacts {
+export function toGoogleSubscriptionFacts(lineItem: GoogleSubscriptionLineItem): GoogleSubscriptionFacts {
   const offerTags = (lineItem.offerDetails?.offerTags ?? []).map((tag) => tag.toLowerCase());
   const isTrial = offerTags.some((tag) => tag.includes('trial'));
   const isIntro = !isTrial && (offerTags.some((tag) => tag.includes('intro')) || Boolean(lineItem.offerDetails?.offerId));
@@ -410,7 +410,12 @@ function toGoogleSubscriptionFacts(lineItem: GoogleSubscriptionLineItem): Google
  * subscription's `startTime`, so the notification's own event time is the closest available signal
  * for "when this specific charge happened."
  */
-function buildSubscriptionTransactionFacts(
+/** Exported for M5b's `POST /v1/receipts` (`src/receipts/support/google-receipt-validator.ts`),
+ * which builds the identical `TransactionFacts` shape from the SAME authoritative
+ * `subscriptionsv2.get()` fetch a receipt intake performs itself — reused rather than
+ * re-implemented so the two entry points (webhook RTDN vs. synchronous receipt) never drift on
+ * how a fetched `GoogleSubscriptionV2` becomes a `Transaction` row. */
+export function buildSubscriptionTransactionFacts(
   fetched: GoogleSubscriptionV2,
   lineItem: GoogleSubscriptionLineItem,
   event: Extract<SubscriptionLifecycleEvent, { type: 'INITIAL_PURCHASE' | 'RENEWED' }>,

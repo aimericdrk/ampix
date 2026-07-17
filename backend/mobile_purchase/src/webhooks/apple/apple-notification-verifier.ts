@@ -121,6 +121,47 @@ export class AppleNotificationVerifier {
     );
   }
 
+  /**
+   * M5b: verifies+decodes a BARE StoreKit2 transaction JWS — `POST /v1/receipts`'s `fetch_token`,
+   * not a wrapping ASSN v2 notification (no `signedPayload` envelope, no `notificationUUID`, no
+   * `signedRenewalInfo`). `SignedDataVerifier.verifyAndDecodeTransaction` already performs the
+   * exact same x5c-chain + ES256 + bundleId/environment verification whether the transaction JWS
+   * arrives nested inside a notification (`assembleNotification` above) or standalone from a
+   * device/App Store Server API — so this reuses the identical per-verifier call and the identical
+   * multi-verifier retry loop as `verifyAndDecode`, just without an outer notification to unwrap.
+   * Same fail-closed contract: no configured verifiers, or a signature/identity mismatch against
+   * every configured verifier, throws `AppleSignatureError` (→ the receipts controller's 402 — the
+   * store rejected this receipt). A shape defect on an otherwise-genuinely-signed transaction
+   * throws `ApplePayloadError` and is NOT retried against another verifier (mirrors
+   * `assembleNotification`'s "this verifier's identity matched — any failure from here on is
+   * specific to this notification" rule).
+   */
+  async verifyAndDecodeTransactionJws(signedTransactionInfo: string): Promise<AppleDecodedTransactionInfo> {
+    if (this.verifiers.length === 0) {
+      throw new AppleSignatureError('no Apple trust-anchor verifiers configured (missing root cert / bundleId config)');
+    }
+
+    let lastVerificationError: unknown;
+    for (const verifier of this.verifiers) {
+      let decoded: JWSTransactionDecodedPayload;
+      try {
+        decoded = await verifier.verifyAndDecodeTransaction(signedTransactionInfo);
+      } catch (e) {
+        if (e instanceof VerificationException) {
+          lastVerificationError = e;
+          continue; // try the next configured bundleId/environment combination
+        }
+        throw e; // unexpected — do not mask as a signature failure
+      }
+      return toDecodedTransaction(decoded); // may throw ApplePayloadError — a real Apple call, not a wrong-guess retry
+    }
+
+    throw new AppleSignatureError(
+      'Apple transaction JWS signature verification failed for all configured bundleId/environment combinations',
+      lastVerificationError,
+    );
+  }
+
   private async assembleNotification(
     verifier: AppleVerifierLike,
     outer: ResponseBodyV2DecodedPayload,
@@ -228,6 +269,7 @@ function toDecodedTransaction(t: JWSTransactionDecodedPayload): AppleDecodedTran
     price: t.price === undefined ? undefined : applyPriceMilliunitsToCents(t.price),
     currency: t.currency,
     appAccountToken: t.appAccountToken,
+    environment: t.environment,
   };
 }
 

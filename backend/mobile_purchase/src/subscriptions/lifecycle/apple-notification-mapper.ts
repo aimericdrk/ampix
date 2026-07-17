@@ -39,6 +39,13 @@ export interface AppleDecodedTransactionInfo {
    * `/v1/receipts` binding (M5) triggers a replay. Unused by this mapper — carried through for
    * M2b's customer resolution only. */
   appAccountToken?: string;
+  /** Apple's raw `environment` string (`"Sandbox" | "Production"`), carried on the transaction
+   * payload itself (distinct from a wrapping notification's `data.environment` — M2b's
+   * `VerifiedAppleNotification` already carries that separately). M5b needs this because a bare
+   * StoreKit2 transaction JWS (`POST /v1/receipts`'s `fetch_token`) has no wrapping notification to
+   * read `data.environment` from — the transaction's own `environment` field is the only source.
+   * Unused by this mapper — carried through for M5b's `Transaction`/`Subscription.environment`. */
+  environment?: string;
 }
 
 /** The already-decoded `JWSRenewalInfoDecodedPayload` facts (design §1.1). */
