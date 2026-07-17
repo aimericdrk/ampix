@@ -7,6 +7,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthzModule } from './authz/authz.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CustomersModule } from './customers/customers.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { CatalogModule } from './catalog/catalog.module';
     HealthModule,
     AuthzModule,
     CatalogModule,
+    CustomersModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}
