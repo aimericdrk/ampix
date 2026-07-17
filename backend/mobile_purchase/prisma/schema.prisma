@@ -279,6 +279,9 @@ model Transaction {
 
   @@unique([projectId, store, storeTransactionId]) // transaction-level idempotency
   @@index([projectId])
+  // Revenue time-series scans (MetricsService.revenue): filter by projectId + environment,
+  // bucket/sort by purchasedAt.
+  @@index([projectId, environment, purchasedAt])
   @@index([originalTransactionId])
   @@index([subscriptionId])
   @@map("transactions")
