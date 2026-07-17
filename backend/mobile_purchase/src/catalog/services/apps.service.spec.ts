@@ -68,6 +68,22 @@ describe('AppsService', () => {
     await expect(service.remove(projectId, app.id)).rejects.toMatchObject({ problem: { status: 409 } });
   });
 
+  describe('findIdentifiers', () => {
+    it('returns publicSdkKey, bundleId, and packageName for an existing App', async () => {
+      const app = await service.create(projectId, { name: 'iOS', platform: 'IOS', bundleId: 'com.myampix.ids' });
+
+      await expect(service.findIdentifiers(app.id)).resolves.toEqual({
+        publicSdkKey: app.publicSdkKey,
+        bundleId: 'com.myampix.ids',
+        packageName: null,
+      });
+    });
+
+    it('401s for an unknown appId', async () => {
+      await expect(service.findIdentifiers(randomUUID())).rejects.toMatchObject({ problem: { status: 401 } });
+    });
+  });
+
   describe('findByBundleId', () => {
     it('resolves an iOS app by bundleId, returning just id + projectId', async () => {
       const app = await service.create(projectId, { name: 'iOS', platform: 'IOS', bundleId: 'com.myampix.resolve' });

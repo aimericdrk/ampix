@@ -42,6 +42,29 @@ export class AppsService {
     });
   }
 
+  /**
+   * Loads the identifiers design §3's "app_user_id must not equal the App's own store
+   * identifier" rule needs (`publicSdkKey`/`bundleId`/`packageName`) — used by M5a's
+   * `GET /v1/subscribers/:appUserId` (and M5b's `POST /v1/receipts` next) to build
+   * `reservedStoreIds` after `PublicApiKeyGuard` has already resolved `req.sdkApp.id`. Throws the
+   * same 401 the guard would if the App has vanished between the guard's lookup and this call —
+   * should not happen in practice, since the guard just verified the App exists.
+   */
+  async findIdentifiers(appId: string): Promise<{
+    publicSdkKey: string;
+    bundleId: string | null;
+    packageName: string | null;
+  }> {
+    const app = await this.prisma.app.findUnique({
+      where: { id: appId },
+      select: { publicSdkKey: true, bundleId: true, packageName: true },
+    });
+    if (!app) {
+      throw new ProblemException({ status: 401, title: 'Unauthorized', detail: 'Invalid or missing SDK key' });
+    }
+    return app;
+  }
+
   async create(projectId: string, input: CreateApp) {
     try {
       return await this.prisma.app.create({

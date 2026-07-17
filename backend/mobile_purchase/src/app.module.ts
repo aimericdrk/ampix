@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { AuthzModule } from './authz/authz.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CustomersModule } from './customers/customers.module';
+import { SubscribersModule } from './subscribers/subscribers.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
@@ -43,6 +44,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     AuthzModule,
     CatalogModule,
     CustomersModule,
+    SubscribersModule,
     WebhooksModule,
   ],
 })
