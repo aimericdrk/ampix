@@ -21,6 +21,17 @@ function forbidden(required: ProjectRole): ProblemException {
   });
 }
 
+/** Default-deny: a handler behind this guard with no `@RequireProjectRole(...)` metadata is a
+ * bug (an undecorated method on a guarded controller), not an intentionally public route. Failing
+ * closed here means a future undecorated method never accidentally ships public. */
+function noRoleConfigured(): ProblemException {
+  return new ProblemException({
+    status: 403,
+    title: 'Forbidden',
+    detail: 'This route has no @RequireProjectRole(...) configured',
+  });
+}
+
 /**
  * Cross-service authz seam: enforces `@RequireProjectRole(...)` on `:projectId`-scoped routes
  * by delegating the role check to ProjectAccessService, which in turn asks the analytics
@@ -40,7 +51,7 @@ export class ProjectAccessGuard implements CanActivate {
       REQUIRE_PROJECT_ROLE_KEY,
       [context.getHandler(), context.getClass()],
     );
-    if (!required) return true;
+    if (!required) throw noRoleConfigured();
 
     const req = context.switchToHttp().getRequest<Request>();
     const authHeader = req.headers.authorization;

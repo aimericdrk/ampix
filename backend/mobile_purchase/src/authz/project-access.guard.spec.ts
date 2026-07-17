@@ -26,11 +26,11 @@ function makeGuard(required: string | undefined, role: string | null) {
 }
 
 describe('ProjectAccessGuard', () => {
-  it('allows the route through untouched when it has no @RequireProjectRole metadata', async () => {
+  it('default-denies (403) an undecorated handler under @UseGuards(ProjectAccessGuard) with no @RequireProjectRole metadata', async () => {
     const { guard, projectAccess } = makeGuard(undefined, 'admin');
     await expect(
       guard.canActivate(ctxFor({ projectId: PROJECT_ID }, { authorization: 'Bearer t' })),
-    ).resolves.toBe(true);
+    ).rejects.toMatchObject({ problem: { status: 403 } });
     expect(projectAccess.getProjectRole).not.toHaveBeenCalled();
   });
 
