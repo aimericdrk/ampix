@@ -6,6 +6,7 @@ import 'package:myampix_purchases/src/models/customer_info.dart';
 import 'package:myampix_purchases/src/models/purchases_error.dart';
 import 'package:myampix_purchases/src/myampix_purchases.dart';
 
+import 'helpers/fake_store_channel.dart';
 import 'helpers/in_memory_key_value_store.dart';
 import 'helpers/subscriber_fixtures.dart';
 
@@ -36,6 +37,7 @@ void main() {
           httpClient: client,
           keyValueStore: keyValueStore,
           uuidFactory: uuidFactory ?? (() => 'anon0001'),
+          storeChannel: FakeStoreChannel(),
         ),
       );
 

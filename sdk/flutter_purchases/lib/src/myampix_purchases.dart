@@ -16,6 +16,7 @@ import 'network/purchases_api_client.dart';
 import 'offerings_service.dart';
 import 'purchase_controller.dart';
 import 'store/app_account_token_store.dart';
+import 'store/method_channel_store_channel.dart';
 import 'store/store_channel.dart';
 
 /// Callback fired with the latest [CustomerInfo] whenever it changes (login,
@@ -75,26 +76,25 @@ class MyAmpixPurchases {
 
   /// Configures the SDK (design §4). Resolves the app-user-id (explicit id
   /// via [AppUserIdStore.setId], else the persisted/minted anonymous
-  /// `$RCAnonymousID:` via [AppUserIdStore.currentId]) and, when
-  /// [SdkOverrides.storeChannel] is supplied, wires [OfferingsService] /
-  /// [PurchaseController] and starts the out-of-band transaction
-  /// subscription. Does not block on the network. Never throws: on failure
-  /// the SDK stays unconfigured and later calls throw/no-op with
+  /// `$RCAnonymousID:` via [AppUserIdStore.currentId]) and wires
+  /// [OfferingsService] / [PurchaseController] against a [StoreChannel] —
+  /// [SdkOverrides.storeChannel] when supplied (tests), else a real
+  /// [MethodChannelStoreChannel] (production) — then starts the out-of-band
+  /// transaction subscription. Does not block on the network. Never throws:
+  /// on failure the SDK stays unconfigured and later calls throw/no-op with
   /// `configurationError`.
   ///
-  /// StoreChannel wiring: unlike [httpClient]/[keyValueStore], there is
-  /// deliberately no `?? MethodChannelStoreChannel()` fallback here. Calling
+  /// StoreChannel wiring: unlike [httpClient]/[keyValueStore], the
+  /// `?? MethodChannelStoreChannel()` fallback only became safe once
+  /// [PurchaseController.start] guarded its `.listen()` call — calling
   /// `.listen()` on a real `EventChannel` with no live platform binding
   /// (e.g. a plain `flutter test` unit test that never calls
-  /// `TestWidgetsFlutterBinding.ensureInitialized()`) throws — and, worse,
-  /// can leave the channel's internal broadcast controller in a state that
-  /// reports a *second*, unguardable async error later, failing an unrelated
-  /// test. Because [SdkOverrides.storeChannel] is `@visibleForTesting`, this
-  /// currently leaves no production path to a real [StoreChannel] — a
-  /// follow-up (P3.5/P3.6/P3.7, once a real host app with a live binding
-  /// exists) needs to either add a public, non-testing way to supply one or
-  /// default to `MethodChannelStoreChannel` and defer the `.listen()` call
-  /// until the binding is guaranteed ready. See the P3.4 report.
+  /// `TestWidgetsFlutterBinding.ensureInitialized()`) can throw and leave the
+  /// channel's internal broadcast controller reporting a *second*,
+  /// hard-to-trace async error later, failing an unrelated test. Real apps
+  /// call [configure] after `WidgetsFlutterBinding.ensureInitialized()`, so
+  /// `.listen()` works there; the guard only protects the binding-less
+  /// unit-test case. See the P3.4 report.
   static Future<void> configure(
     PurchasesConfiguration configuration, {
     @visibleForTesting SdkOverrides? overrides,
@@ -122,11 +122,12 @@ class MyAmpixPurchases {
         apiKey: configuration.apiKey,
         nowIso8601: overrides?.nowIso8601,
       );
-      // No default here (unlike httpClient/keyValueStore): a store channel
-      // is only present when the caller injects one via overrides. See the
-      // "StoreChannel wiring" note on this method for why this stays
-      // opt-in rather than defaulting to MethodChannelStoreChannel().
-      final storeChannel = overrides?.storeChannel;
+      // Same default pattern as httpClient/keyValueStore: tests inject a
+      // fake via overrides, production gets the real MethodChannel/
+      // EventChannel implementation. See the "StoreChannel wiring" note on
+      // this method for why the real channel's `.listen()` (in
+      // PurchaseController.start) needed to be made binding-safe first.
+      final storeChannel = overrides?.storeChannel ?? MethodChannelStoreChannel();
 
       // Any subscription from a previous configure() (e.g. a reconfigure
       // without an intervening shutdown) is replaced, never leaked.
@@ -134,33 +135,28 @@ class MyAmpixPurchases {
 
       instance._apiClient = apiClient;
       instance._appUserIdStore = appUserIdStore;
-      if (storeChannel != null) {
-        instance._offerings =
-            OfferingsService(apiClient: apiClient, store: storeChannel);
-        instance._purchases = PurchaseController(
-          apiClient: apiClient,
-          store: storeChannel,
-          appUserId: appUserIdStore.currentId,
-          onCustomerInfoUpdated: (info) {
-            instance._cachedCustomerInfo = info;
-            instance._dispatchUpdate(info);
-          },
-          appAccountTokens: AppAccountTokenStore(
-            store: keyValueStore,
-            uuidFactory: overrides?.uuidFactory,
-          ),
-          logger: (message, [error, stackTrace]) => instance._log(
-            MyAmpixLogLevel.error,
-            message,
-            error,
-            stackTrace,
-          ),
-        );
-        instance._purchases!.start();
-      } else {
-        instance._offerings = null;
-        instance._purchases = null;
-      }
+      instance._offerings =
+          OfferingsService(apiClient: apiClient, store: storeChannel);
+      instance._purchases = PurchaseController(
+        apiClient: apiClient,
+        store: storeChannel,
+        appUserId: appUserIdStore.currentId,
+        onCustomerInfoUpdated: (info) {
+          instance._cachedCustomerInfo = info;
+          instance._dispatchUpdate(info);
+        },
+        appAccountTokens: AppAccountTokenStore(
+          store: keyValueStore,
+          uuidFactory: overrides?.uuidFactory,
+        ),
+        logger: (message, [error, stackTrace]) => instance._log(
+          MyAmpixLogLevel.error,
+          message,
+          error,
+          stackTrace,
+        ),
+      );
+      instance._purchases!.start();
       instance._cachedCustomerInfo = null;
       instance._logLevel = configuration.logLevel;
       instance._configured = true;
@@ -335,9 +331,11 @@ class MyAmpixPurchases {
     }
   }
 
-  /// The offerings/purchase orchestration, present only when [configure] was
-  /// given a [StoreChannel] (see the "StoreChannel wiring" note on
-  /// [configure]). Call after [_requireConfigured] passes.
+  /// The offerings/purchase orchestration, wired by every successful
+  /// [configure] call (see the "StoreChannel wiring" note on [configure]).
+  /// Call after [_requireConfigured] passes; the null-check below is a
+  /// defensive guard against future wiring changes rather than a real,
+  /// reachable case today.
   (OfferingsService, PurchaseController) _requireStore() {
     final offerings = _offerings;
     final purchases = _purchases;

@@ -222,9 +222,13 @@ void main() {
     );
   });
 
-  test('a configured SDK with no injected StoreChannel throws '
-      'PurchasesError(storeProblemError) from the store-dependent methods',
-      () async {
+  test('store-dependent methods surface a typed PurchasesError (never a raw '
+      'throwable) when the default real StoreChannel has no live platform '
+      'binding (e.g. a unit test without one)', () async {
+    // No storeChannel override → configure() defaults to the real
+    // MethodChannelStoreChannel; under `flutter test` its platform calls fail,
+    // and the facade must map that raw failure to a typed PurchasesError, not
+    // leak it.
     await MyAmpixPurchases.configure(
       PurchasesConfiguration(
           apiKey: 'mp_pub_test', serverUrl: 'http://localhost:8080'),
@@ -239,12 +243,12 @@ void main() {
     await expectLater(
       MyAmpixPurchases.getOfferings(),
       throwsA(isA<PurchasesError>().having(
-          (e) => e.code, 'code', PurchasesErrorCode.storeProblemError)),
+          (e) => e.code, 'code', PurchasesErrorCode.unknownError)),
     );
     await expectLater(
       MyAmpixPurchases.restorePurchases(),
       throwsA(isA<PurchasesError>().having(
-          (e) => e.code, 'code', PurchasesErrorCode.storeProblemError)),
+          (e) => e.code, 'code', PurchasesErrorCode.unknownError)),
     );
   });
 

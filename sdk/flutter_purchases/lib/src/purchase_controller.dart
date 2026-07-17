@@ -60,15 +60,33 @@ class PurchaseController {
   StreamSubscription<StoreTransactionEvent>? _subscription;
 
   /// Subscribes to the native out-of-band transaction stream (renewals /
-  /// interrupted purchases / restore replays). Idempotent. A stream-level
-  /// error is logged and never propagates.
+  /// interrupted purchases / restore replays). Idempotent. Never throws:
+  /// starting the subscription is wrapped in a try/catch and the
+  /// subscription's `onError` is always set, so neither a synchronous setup
+  /// failure nor a later stream-level error can escape [start] or crash the
+  /// caller — this matters because `StoreChannel.transactions` is backed by
+  /// a real platform `EventChannel` in production, and calling `.listen()`
+  /// on one with no live platform binding (e.g. a host app that hasn't yet
+  /// called `WidgetsFlutterBinding.ensureInitialized()`, or a unit test
+  /// exercising the real channel without a live `TestWidgetsFlutterBinding`)
+  /// can throw. A caught failure leaves [_subscription] unset so a later
+  /// [start] call retries.
   void start() {
-    _subscription ??= _store.transactions.listen(
-      handleOutOfBandTransaction,
-      onError: (Object error, StackTrace stackTrace) {
-        _logger('StoreChannel transaction stream error', error, stackTrace);
-      },
-    );
+    if (_subscription != null) return;
+    try {
+      _subscription = _store.transactions.listen(
+        handleOutOfBandTransaction,
+        onError: (Object error, StackTrace stackTrace) {
+          _logger('StoreChannel transaction stream error', error, stackTrace);
+        },
+      );
+    } on Object catch (error, stackTrace) {
+      _logger(
+        'StoreChannel transaction stream failed to start',
+        error,
+        stackTrace,
+      );
+    }
   }
 
   /// Cancels the out-of-band subscription (if any). Safe to call more than

@@ -40,7 +40,9 @@ void main() {
           httpClient: client ?? neverCalled(),
           keyValueStore: keyValueStore,
           uuidFactory: uuidFactory ?? (() => 'anon0001'),
-          storeChannel: storeChannel,
+          // Default to a fake so configure() never wires the real
+          // MethodChannelStoreChannel (no platform binding under `flutter test`).
+          storeChannel: storeChannel ?? FakeStoreChannel(),
         ),
       );
 
