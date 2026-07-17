@@ -7,6 +7,8 @@ const d = (iso: string): Date => new Date(iso);
  * fields without TS widening them to `| undefined`. */
 function baseTransaction(overrides: Partial<AppleDecodedTransactionInfo> = {}): AppleDecodedTransactionInfo {
   return {
+    transactionId: 'txn-1',
+    originalTransactionId: 'orig-txn-1',
     productId: 'com.myampix.premium.monthly',
     purchaseDate: d('2026-07-15T00:00:00Z'),
     expiresDate: d('2026-08-15T00:00:00Z'),

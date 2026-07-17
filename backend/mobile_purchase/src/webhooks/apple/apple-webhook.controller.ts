@@ -1,8 +1,9 @@
-import { Body, Controller, HttpCode, Logger, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, UnauthorizedException } from '@nestjs/common';
 import { z } from 'zod';
 import { parseOrThrow } from '../../common/zod';
 import { ProblemException } from '../../common/problem-details';
 import { AppleNotificationVerifier, AppleSignatureError, ApplePayloadError } from './apple-notification-verifier';
+import { AppleIngestService } from './apple-ingest.service';
 
 const appleWebhookBodySchema = z.object({
   // Bounded before any crypto runs: a real ASSN v2 JWS (with nested transaction/renewal JWS) is a
@@ -15,14 +16,19 @@ const appleWebhookBodySchema = z.object({
  * Apple App Store Server Notifications V2 ingest (design §1.1/§6): public, store-authenticated —
  * the JWS x5c signature verification IS the auth, no JWT/guard on this route.
  *
- * M2a scope: transport + verify + decode only. `// M2b:` marks the seam where journal-first
- * persistence, App-by-bundleId resolution, and the lifecycle/entitlement pipeline plug in.
+ * M2a verifies+decodes; M2b (`AppleIngestService`) does the journal-first persistence,
+ * App-by-bundleId resolution, and lifecycle/entitlement pipeline. `AppleIngestService` never
+ * throws for a processing failure (it journals FAILED and returns) — the only errors this
+ * controller ever sees are verification/payload-shape failures from the verifier itself, so the
+ * 200 status contract (design §1.1: "a verified notification is always 200 once journaled") holds
+ * without this controller needing to special-case ingest failures.
  */
 @Controller('webhooks/apple')
 export class AppleWebhookController {
-  private readonly logger = new Logger(AppleWebhookController.name);
-
-  constructor(private readonly verifier: AppleNotificationVerifier) {}
+  constructor(
+    private readonly verifier: AppleNotificationVerifier,
+    private readonly ingest: AppleIngestService,
+  ) {}
 
   @Post()
   @HttpCode(200)
@@ -31,13 +37,7 @@ export class AppleWebhookController {
 
     try {
       const decoded = await this.verifier.verifyAndDecode(signedPayload);
-      // M2b: journal (StoreNotificationJournalService.record, keyed by decoded.notificationUUID)
-      // + App-by-bundleId resolution + appleNotificationToEvent + entitlement engine. M2a stops
-      // at verify+decode — no persistence yet.
-      this.logger.debug(
-        `Apple notification verified: ${decoded.notificationType}${decoded.subtype ? `/${decoded.subtype}` : ''} ` +
-          `(${decoded.notificationUUID}, bundleId=${decoded.bundleId}) — not yet persisted (M2b)`,
-      );
+      await this.ingest.handleVerifiedAppleNotification(decoded);
       return { received: true };
     } catch (e) {
       if (e instanceof AppleSignatureError) {

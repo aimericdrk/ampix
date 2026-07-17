@@ -4,12 +4,28 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ProblemException } from '../../common/problem-details';
 import { generatePublicSdkKey } from '../support/key-generator';
 import type { createAppSchema } from '../support/catalog.schemas';
+import { AppPlatform } from '../../../generated/client';
 
 type CreateApp = z.infer<typeof createAppSchema>;
 
 @Injectable()
 export class AppsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Resolves the iOS App a webhook's `bundleId` belongs to (design §1.1: "App mapping:
+   * `App.findFirst({ projectId?: any, platform: IOS, bundleId })`"). `projectId` is unknown at
+   * this point in the Apple ingest flow — resolving it IS the point of this lookup — so this
+   * intentionally queries across all projects by `(platform, bundleId)` alone. Returns just the
+   * two fields M2b's ingest handler needs; `null` on an unknown bundleId (the notification is then
+   * journaled `SKIPPED`, design §1.1).
+   */
+  findByBundleId(bundleId: string): Promise<{ id: string; projectId: string } | null> {
+    return this.prisma.app.findFirst({
+      where: { platform: AppPlatform.IOS, bundleId },
+      select: { id: true, projectId: true },
+    });
+  }
 
   async create(projectId: string, input: CreateApp) {
     try {

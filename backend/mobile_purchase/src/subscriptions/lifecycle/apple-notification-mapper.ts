@@ -7,6 +7,14 @@ import type { InitialPurchaseEvent, SubscriptionLifecycleEvent } from './subscri
  * already trusted.
  */
 export interface AppleDecodedTransactionInfo {
+  /** Apple `transactionId` — the unique per-transaction identifier (renewal/restore gets its own).
+   * Unused by this mapper's own logic (the reducer never needs identity fields — M2b owns
+   * resolving *which* Transaction/Subscription row an event applies to) but required for M2b's
+   * `Transaction.storeTransactionId` idempotency key. */
+  transactionId: string;
+  /** Apple `originalTransactionId` — stable across renewals, required for M2b's
+   * `Subscription.originalTransactionId` identity key (design §2/§7). */
+  originalTransactionId: string;
   productId: string;
   purchaseDate: Date;
   expiresDate?: Date;
@@ -25,6 +33,12 @@ export interface AppleDecodedTransactionInfo {
   revocationDate?: Date;
   price?: number;
   currency?: string;
+  /** Apple `appAccountToken` — the UUID an app optionally sets at purchase time to self-attribute
+   * the transaction to a Customer (design §10/§7). Absent when the purchasing app didn't set it;
+   * M2b then journals the notification `UNLINKED` and defers the Subscription until a later
+   * `/v1/receipts` binding (M5) triggers a replay. Unused by this mapper — carried through for
+   * M2b's customer resolution only. */
+  appAccountToken?: string;
 }
 
 /** The already-decoded `JWSRenewalInfoDecodedPayload` facts (design §1.1). */

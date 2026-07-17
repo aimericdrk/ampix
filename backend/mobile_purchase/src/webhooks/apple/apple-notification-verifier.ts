@@ -208,7 +208,15 @@ function toDecodedTransaction(t: JWSTransactionDecodedPayload): AppleDecodedTran
   if (!t.productId || t.purchaseDate === undefined) {
     throw new ApplePayloadError('decoded Apple transaction missing required field(s): productId/purchaseDate');
   }
+  // M2b needs the two identity fields (Transaction/Subscription idempotency keys — design §2/§7);
+  // every genuine Apple transaction carries both, so their absence is a payload-shape defect, same
+  // treatment as the productId/purchaseDate check above — not a signature-verification concern.
+  if (!t.transactionId || !t.originalTransactionId) {
+    throw new ApplePayloadError('decoded Apple transaction missing required field(s): transactionId/originalTransactionId');
+  }
   return {
+    transactionId: t.transactionId,
+    originalTransactionId: t.originalTransactionId,
     productId: t.productId,
     purchaseDate: new Date(t.purchaseDate),
     expiresDate: toOptionalDate(t.expiresDate),
@@ -219,6 +227,7 @@ function toDecodedTransaction(t: JWSTransactionDecodedPayload): AppleDecodedTran
     revocationDate: toOptionalDate(t.revocationDate),
     price: t.price === undefined ? undefined : applyPriceMilliunitsToCents(t.price),
     currency: t.currency,
+    appAccountToken: t.appAccountToken,
   };
 }
 

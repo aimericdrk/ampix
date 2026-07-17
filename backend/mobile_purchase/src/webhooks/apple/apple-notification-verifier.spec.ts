@@ -80,6 +80,8 @@ describe('AppleNotificationVerifier', () => {
       environment: 'Sandbox',
       appAppleId: undefined,
       transaction: {
+        transactionId: 'txn-1',
+        originalTransactionId: 'orig-txn-1',
         productId: 'com.myampix.premium.monthly',
         purchaseDate: new Date('2026-07-15T00:00:00Z'),
         expiresDate: new Date('2026-08-15T00:00:00Z'),
@@ -89,6 +91,7 @@ describe('AppleNotificationVerifier', () => {
         revocationDate: undefined,
         price: 999, // 9990 milliunits -> 999 cents
         currency: 'USD',
+        appAccountToken: 'app-account-token-uuid',
       },
       renewal: {
         autoRenewStatus: 1,
@@ -190,6 +193,22 @@ describe('AppleNotificationVerifier', () => {
   it('throws ApplePayloadError when the decoded transaction is missing productId/purchaseDate', async () => {
     const av = fakeVerifier({ verifyAndDecodeTransaction: jest.fn().mockResolvedValue(txnPayload({ productId: undefined })) });
     await expect(new AppleNotificationVerifier([av]).verifyAndDecode('signed-payload')).rejects.toBeInstanceOf(ApplePayloadError);
+  });
+
+  it('throws ApplePayloadError when the decoded transaction is missing transactionId/originalTransactionId', async () => {
+    const av = fakeVerifier({ verifyAndDecodeTransaction: jest.fn().mockResolvedValue(txnPayload({ transactionId: undefined })) });
+    await expect(new AppleNotificationVerifier([av]).verifyAndDecode('signed-payload')).rejects.toBeInstanceOf(ApplePayloadError);
+  });
+
+  it('passes through appAccountToken (M2b customer self-attribution) when present, and omits it when absent', async () => {
+    const withToken = await new AppleNotificationVerifier([fakeVerifier()]).verifyAndDecode('signed-payload');
+    expect(withToken.transaction?.appAccountToken).toBe('app-account-token-uuid');
+
+    const withoutToken = fakeVerifier({
+      verifyAndDecodeTransaction: jest.fn().mockResolvedValue(txnPayload({ appAccountToken: undefined })),
+    });
+    const decoded = await new AppleNotificationVerifier([withoutToken]).verifyAndDecode('signed-payload');
+    expect(decoded.transaction?.appAccountToken).toBeUndefined();
   });
 
   it('passes through the raw 0/1 autoRenewStatus and gracePeriodExpiresDate for the reducer/mapper', async () => {

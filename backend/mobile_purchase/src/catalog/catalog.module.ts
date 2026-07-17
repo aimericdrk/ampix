@@ -16,12 +16,13 @@ import { PublicApiKeyGuard } from './public-api-key.guard';
  * Mounts the catalog domain's controllers. AuthzModule provides ProjectAccessGuard (used by every
  * admin-facing controller below); PrismaModule is @Global() so PrismaService needs no import
  * here. OfferingResolverService is exported so a future purchase-recording flow can resolve the
- * current offering without re-mounting this module.
+ * current offering without re-mounting this module. AppsService is exported so M2b's Apple ingest
+ * (WebhooksModule) can resolve an App by bundleId without re-mounting this module.
  */
 @Module({
   imports: [AuthzModule],
   controllers: [AppsController, EntitlementsController, ProductsController, OfferingsController, PublicOfferingsController],
   providers: [AppsService, EntitlementsService, ProductsService, OfferingsService, OfferingResolverService, PublicApiKeyGuard],
-  exports: [OfferingResolverService],
+  exports: [OfferingResolverService, AppsService],
 })
 export class CatalogModule {}

@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AppleWebhookController } from './apple-webhook.controller';
 import { AppleSignatureError, ApplePayloadError, type AppleNotificationVerifier, type VerifiedAppleNotification } from './apple-notification-verifier';
+import type { AppleIngestService } from './apple-ingest.service';
 
 function decodedFixture(overrides: Partial<VerifiedAppleNotification> = {}): VerifiedAppleNotification {
   return {
@@ -14,13 +15,33 @@ function decodedFixture(overrides: Partial<VerifiedAppleNotification> = {}): Ver
   };
 }
 
-function makeController(verifyAndDecode: jest.Mock): AppleWebhookController {
+function makeController(verifyAndDecode: jest.Mock, handleVerifiedAppleNotification: jest.Mock = jest.fn().mockResolvedValue(undefined)): AppleWebhookController {
   const verifier = { verifyAndDecode } as unknown as AppleNotificationVerifier;
-  return new AppleWebhookController(verifier);
+  const ingest = { handleVerifiedAppleNotification } as unknown as AppleIngestService;
+  return new AppleWebhookController(verifier, ingest);
 }
 
 describe('AppleWebhookController', () => {
   it('200s with { received: true } on a valid, verified notification', async () => {
+    const controller = makeController(jest.fn().mockResolvedValue(decodedFixture()));
+
+    await expect(controller.receive({ signedPayload: 'valid-jws' })).resolves.toEqual({ received: true });
+  });
+
+  it('hands the verified notification to AppleIngestService.handleVerifiedAppleNotification', async () => {
+    const handle = jest.fn().mockResolvedValue(undefined);
+    const decoded = decodedFixture();
+    const controller = makeController(jest.fn().mockResolvedValue(decoded), handle);
+
+    await controller.receive({ signedPayload: 'valid-jws' });
+
+    expect(handle).toHaveBeenCalledWith(decoded);
+  });
+
+  it('still 200s even though AppleIngestService itself never throws for a processing failure (it journals FAILED internally)', async () => {
+    // AppleIngestService.handleVerifiedAppleNotification catches and journals its own processing
+    // errors — it should never reject. This test documents that the controller's 200 contract does
+    // not depend on any try/catch around the ingest call beyond what verification already needs.
     const controller = makeController(jest.fn().mockResolvedValue(decodedFixture()));
 
     await expect(controller.receive({ signedPayload: 'valid-jws' })).resolves.toEqual({ received: true });

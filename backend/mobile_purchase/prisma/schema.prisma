@@ -80,6 +80,14 @@ enum JournalStatus {
   SKIPPED
 }
 
+// Apple `inAppOwnershipType` (M2b): whether the transaction was purchased by the customer or is
+// available to them through Family Sharing — persisted so the entitlement engine (M4b) can report
+// it on EntitlementInfo.ownershipType.
+enum OwnershipType {
+  PURCHASED
+  FAMILY_SHARED
+}
+
 model App {
   id               String      @id @default(uuid(7)) @db.Uuid
   projectId        String      @map("project_id") @db.Uuid
@@ -215,6 +223,7 @@ model Subscription {
   environment            Environment
   status                 SubscriptionStatus
   periodType             PeriodType         @default(NORMAL) @map("period_type")
+  ownershipType          OwnershipType      @default(PURCHASED) @map("ownership_type")
   // Store identity (one is set per store; see design §7 on Google token rotation):
   originalTransactionId  String?            @map("original_transaction_id") // Apple: stable across renewals
   purchaseToken          String?            @map("purchase_token") // Google: latest; linkedPurchaseToken chains upgrades

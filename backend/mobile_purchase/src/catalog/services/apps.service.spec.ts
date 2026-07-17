@@ -67,4 +67,24 @@ describe('AppsService', () => {
 
     await expect(service.remove(projectId, app.id)).rejects.toMatchObject({ problem: { status: 409 } });
   });
+
+  describe('findByBundleId', () => {
+    it('resolves an iOS app by bundleId, returning just id + projectId', async () => {
+      const app = await service.create(projectId, { name: 'iOS', platform: 'IOS', bundleId: 'com.myampix.resolve' });
+
+      await expect(service.findByBundleId('com.myampix.resolve')).resolves.toEqual({
+        id: app.id,
+        projectId,
+      });
+    });
+
+    it('returns null for an unknown bundleId', async () => {
+      await expect(service.findByBundleId('com.unknown.bundle')).resolves.toBeNull();
+    });
+
+    it('does not resolve an ANDROID app even if packageName happens to match the bundleId query', async () => {
+      await service.create(projectId, { name: 'Android', platform: 'ANDROID', packageName: 'com.myampix.cross' });
+      await expect(service.findByBundleId('com.myampix.cross')).resolves.toBeNull();
+    });
+  });
 });
