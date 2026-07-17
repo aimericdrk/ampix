@@ -21,6 +21,35 @@ class StoreProductMetadata {
   final String title;
   final String description;
   final String? subscriptionPeriodIso8601;
+
+  /// Defensive parse of one native `getProducts` entry (a platform-channel
+  /// map). Returns null (never throws) for anything without a non-empty
+  /// `storeProductId`; optional fields default to empty/zero.
+  static StoreProductMetadata? parse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['storeProductId'];
+    if (id is! String || id.isEmpty) return null;
+    final period = raw['subscriptionPeriodIso8601'];
+    return StoreProductMetadata(
+      storeProductId: id,
+      priceString: _asString(raw['priceString']),
+      price: _asDouble(raw['price']) ?? 0,
+      currencyCode: _asString(raw['currencyCode']),
+      title: _asString(raw['title']),
+      description: _asString(raw['description']),
+      subscriptionPeriodIso8601:
+          period is String && period.isNotEmpty ? period : null,
+    );
+  }
+
+  static String _asString(Object? value) => value is String ? value : '';
+
+  static double? _asDouble(Object? value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
 }
 
 /// The receipt of a native store purchase, before server validation (design §5).
@@ -37,6 +66,29 @@ class StorePurchase {
   final String fetchToken;
   final String storeProductId;
   final String? transactionId;
+
+  /// Defensive parse of a native `purchase` result (a platform-channel map).
+  /// Returns null (never throws) when `platform`/`fetchToken`/`storeProductId`
+  /// are missing or wrongly typed; `transactionId` is optional (nullable —
+  /// e.g. a Play Billing purchase pending acknowledgement).
+  static StorePurchase? parse(Object? raw) {
+    if (raw is! Map) return null;
+    final platform = raw['platform'];
+    final fetchToken = raw['fetchToken'];
+    final storeProductId = raw['storeProductId'];
+    if (platform != 'APP_STORE' && platform != 'PLAY_STORE') return null;
+    if (fetchToken is! String || fetchToken.isEmpty) return null;
+    if (storeProductId is! String || storeProductId.isEmpty) return null;
+    final transactionId = raw['transactionId'];
+    return StorePurchase(
+      platform: platform,
+      fetchToken: fetchToken,
+      storeProductId: storeProductId,
+      transactionId: transactionId is String && transactionId.isNotEmpty
+          ? transactionId
+          : null,
+    );
+  }
 }
 
 /// An out-of-band transaction pushed on the native EventChannel (design §5):
@@ -62,6 +114,32 @@ class StoreTransactionEvent {
   final String storeProductId;
   final String transactionId;
   final String reason; // "purchase" | "renewal" | "restore"
+
+  /// Defensive parse of a raw EventChannel payload (design §5). Returns null
+  /// (never throws) on any missing/wrongly-typed required field. An
+  /// absent/unrecognized `reason` falls back to `"purchase"` (a direct-buy
+  /// result carries no reason).
+  static StoreTransactionEvent? parse(Object? raw) {
+    if (raw is! Map) return null;
+    final platform = raw['platform'];
+    final fetchToken = raw['fetchToken'];
+    final storeProductId = raw['storeProductId'];
+    final transactionId = raw['transactionId'];
+    if (platform != 'APP_STORE' && platform != 'PLAY_STORE') return null;
+    if (fetchToken is! String || fetchToken.isEmpty) return null;
+    if (storeProductId is! String || storeProductId.isEmpty) return null;
+    if (transactionId is! String || transactionId.isEmpty) return null;
+    final reason = raw['reason'];
+    return StoreTransactionEvent(
+      platform: platform,
+      fetchToken: fetchToken,
+      storeProductId: storeProductId,
+      transactionId: transactionId,
+      reason: reason == 'renewal' || reason == 'restore'
+          ? reason as String
+          : 'purchase',
+    );
+  }
 }
 
 /// Dart-side contract for the native store layer (StoreKit 2 / Play Billing).

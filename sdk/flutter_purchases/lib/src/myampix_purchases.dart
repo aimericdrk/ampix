@@ -7,8 +7,15 @@ import 'configuration.dart';
 import 'identity/app_user_id_store.dart';
 import 'models/customer_info.dart';
 import 'models/login_result.dart';
+import 'models/offerings.dart';
+import 'models/package.dart';
+import 'models/purchase_result.dart';
 import 'models/purchases_error.dart';
+import 'models/store_product.dart';
 import 'network/purchases_api_client.dart';
+import 'offerings_service.dart';
+import 'purchase_controller.dart';
+import 'store/app_account_token_store.dart';
 import 'store/store_channel.dart';
 
 /// Callback fired with the latest [CustomerInfo] whenever it changes (login,
@@ -53,10 +60,8 @@ class MyAmpixPurchases {
   PurchasesApiClient? _apiClient;
   AppUserIdStore? _appUserIdStore;
   CustomerInfo? _cachedCustomerInfo;
-  // P3.4 stores its own StoreChannel reference once it adds the methods
-  // (getOfferings/purchase*) that call it directly; P3.3 only needs the
-  // transaction-stream subscription below.
-  StreamSubscription<StoreTransactionEvent>? _transactionsSubscription;
+  OfferingsService? _offerings;
+  PurchaseController? _purchases;
   final List<CustomerInfoUpdateListener> _listeners =
       <CustomerInfoUpdateListener>[];
 
@@ -70,10 +75,26 @@ class MyAmpixPurchases {
 
   /// Configures the SDK (design §4). Resolves the app-user-id (explicit id
   /// via [AppUserIdStore.setId], else the persisted/minted anonymous
-  /// `$RCAnonymousID:` via [AppUserIdStore.currentId]) and wires the
-  /// (optional, fake-in-tests) [StoreChannel]'s transaction stream. Does not
-  /// block on the network. Never throws: on failure the SDK stays
-  /// unconfigured and later calls throw/no-op with `configurationError`.
+  /// `$RCAnonymousID:` via [AppUserIdStore.currentId]) and, when
+  /// [SdkOverrides.storeChannel] is supplied, wires [OfferingsService] /
+  /// [PurchaseController] and starts the out-of-band transaction
+  /// subscription. Does not block on the network. Never throws: on failure
+  /// the SDK stays unconfigured and later calls throw/no-op with
+  /// `configurationError`.
+  ///
+  /// StoreChannel wiring: unlike [httpClient]/[keyValueStore], there is
+  /// deliberately no `?? MethodChannelStoreChannel()` fallback here. Calling
+  /// `.listen()` on a real `EventChannel` with no live platform binding
+  /// (e.g. a plain `flutter test` unit test that never calls
+  /// `TestWidgetsFlutterBinding.ensureInitialized()`) throws — and, worse,
+  /// can leave the channel's internal broadcast controller in a state that
+  /// reports a *second*, unguardable async error later, failing an unrelated
+  /// test. Because [SdkOverrides.storeChannel] is `@visibleForTesting`, this
+  /// currently leaves no production path to a real [StoreChannel] — a
+  /// follow-up (P3.5/P3.6/P3.7, once a real host app with a live binding
+  /// exists) needs to either add a public, non-testing way to supply one or
+  /// default to `MethodChannelStoreChannel` and defer the `.listen()` call
+  /// until the binding is guaranteed ready. See the P3.4 report.
   static Future<void> configure(
     PurchasesConfiguration configuration, {
     @visibleForTesting SdkOverrides? overrides,
@@ -101,29 +122,45 @@ class MyAmpixPurchases {
         apiKey: configuration.apiKey,
         nowIso8601: overrides?.nowIso8601,
       );
+      // No default here (unlike httpClient/keyValueStore): a store channel
+      // is only present when the caller injects one via overrides. See the
+      // "StoreChannel wiring" note on this method for why this stays
+      // opt-in rather than defaulting to MethodChannelStoreChannel().
       final storeChannel = overrides?.storeChannel;
 
       // Any subscription from a previous configure() (e.g. a reconfigure
       // without an intervening shutdown) is replaced, never leaked.
-      await instance._transactionsSubscription?.cancel();
+      await instance._purchases?.stop();
 
       instance._apiClient = apiClient;
       instance._appUserIdStore = appUserIdStore;
-      instance._transactionsSubscription = storeChannel?.transactions.listen(
-        (_) {
-          // P3.4 turns an out-of-band transaction into a receipt submission
-          // + cache refresh + listener dispatch; P3.3 only wires the
-          // subscription so there is something to cancel on shutdown.
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          instance._log(
+      if (storeChannel != null) {
+        instance._offerings =
+            OfferingsService(apiClient: apiClient, store: storeChannel);
+        instance._purchases = PurchaseController(
+          apiClient: apiClient,
+          store: storeChannel,
+          appUserId: appUserIdStore.currentId,
+          onCustomerInfoUpdated: (info) {
+            instance._cachedCustomerInfo = info;
+            instance._dispatchUpdate(info);
+          },
+          appAccountTokens: AppAccountTokenStore(
+            store: keyValueStore,
+            uuidFactory: overrides?.uuidFactory,
+          ),
+          logger: (message, [error, stackTrace]) => instance._log(
             MyAmpixLogLevel.error,
-            'StoreChannel transaction stream error',
+            message,
             error,
             stackTrace,
-          );
-        },
-      );
+          ),
+        );
+        instance._purchases!.start();
+      } else {
+        instance._offerings = null;
+        instance._purchases = null;
+      }
       instance._cachedCustomerInfo = null;
       instance._logLevel = configuration.logLevel;
       instance._configured = true;
@@ -242,6 +279,51 @@ class MyAmpixPurchases {
         return info;
       });
 
+  // ---- offerings & purchases ----
+
+  /// Fetches offerings from `mobile_purchase` and enriches each product with
+  /// native store metadata (design §4). Cached after the first successful
+  /// fetch. Throws [PurchasesErrorCode.configurationError] before
+  /// [configure].
+  static Future<Offerings> getOfferings() =>
+      _instance._serialize<Offerings>('getOfferings', () async {
+        _instance._requireConfigured();
+        final (offerings, _) = _instance._requireStore();
+        return offerings.getOfferings();
+      });
+
+  /// Purchases [packageToPurchase]'s underlying [StoreProduct] (design §4).
+  /// Throws [PurchasesErrorCode.configurationError] before [configure]; a
+  /// store or server failure surfaces as a typed [PurchasesError] (design
+  /// §6).
+  static Future<PurchaseResult> purchasePackage(Package packageToPurchase) =>
+      _instance._serialize<PurchaseResult>('purchasePackage', () async {
+        _instance._requireConfigured();
+        final (_, purchases) = _instance._requireStore();
+        return purchases.purchasePackage(packageToPurchase);
+      });
+
+  /// Purchases [product] directly (design §4). Throws
+  /// [PurchasesErrorCode.configurationError] before [configure]; a store or
+  /// server failure surfaces as a typed [PurchasesError] (design §6).
+  static Future<PurchaseResult> purchaseStoreProduct(StoreProduct product) =>
+      _instance._serialize<PurchaseResult>('purchaseStoreProduct', () async {
+        _instance._requireConfigured();
+        final (_, purchases) = _instance._requireStore();
+        return purchases.purchaseStoreProduct(product);
+      });
+
+  /// Restores the user's entitlements (design §4): triggers the native
+  /// restore, waits for any replayed transactions to be posted, then
+  /// refetches [CustomerInfo]. Throws
+  /// [PurchasesErrorCode.configurationError] before [configure].
+  static Future<CustomerInfo> restorePurchases() =>
+      _instance._serialize<CustomerInfo>('restorePurchases', () async {
+        _instance._requireConfigured();
+        final (_, purchases) = _instance._requireStore();
+        return purchases.restorePurchases();
+      });
+
   // ---- internals ----
 
   void _requireConfigured() {
@@ -251,6 +333,22 @@ class MyAmpixPurchases {
         'MyAmpixPurchases.configure has not been called.',
       );
     }
+  }
+
+  /// The offerings/purchase orchestration, present only when [configure] was
+  /// given a [StoreChannel] (see the "StoreChannel wiring" note on
+  /// [configure]). Call after [_requireConfigured] passes.
+  (OfferingsService, PurchaseController) _requireStore() {
+    final offerings = _offerings;
+    final purchases = _purchases;
+    if (offerings == null || purchases == null) {
+      throw const PurchasesError(
+        PurchasesErrorCode.storeProblemError,
+        'No StoreChannel was supplied to MyAmpixPurchases.configure — '
+        'offerings/purchases are unavailable.',
+      );
+    }
+    return (offerings, purchases);
   }
 
   /// Serializes a value-returning throwing op on [_tail]. A [PurchasesError]
@@ -333,17 +431,18 @@ class MyAmpixPurchases {
     instance._apiClient = null;
     instance._appUserIdStore = null;
     instance._cachedCustomerInfo = null;
-    instance._transactionsSubscription = null;
+    instance._offerings = null;
+    instance._purchases = null;
     instance._logLevel = MyAmpixLogLevel.warn;
     instance._listeners.clear();
     instance._tail = Future<void>.value();
   }
 
-  /// Tears the SDK down between tests: cancels the transaction subscription
-  /// (if any) before resetting all other state.
+  /// Tears the SDK down between tests: cancels the out-of-band transaction
+  /// subscription (if any) before resetting all other state.
   @visibleForTesting
   static Future<void> shutdownForTesting() async {
-    await _instance._transactionsSubscription?.cancel();
+    await _instance._purchases?.stop();
     resetForTesting();
   }
 }
