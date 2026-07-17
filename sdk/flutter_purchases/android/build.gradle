@@ -52,5 +52,9 @@ dependencies {
     // billing flow, acknowledges/consumes, and replays purchases on connect.
     // The billing AAR merges the `com.android.vending.BILLING` permission via
     // manifest merging, so AndroidManifest.xml declares nothing itself.
-    implementation 'com.android.billingclient:billing:7.1.1'
+    // `api` (not `implementation`): the plugin's registered class implements Play
+    // Billing's PurchasesUpdatedListener, so the billing types are part of this
+    // module's public API and must be exported, or a consumer (the app's
+    // GeneratedPluginRegistrant) can't compile against the plugin class.
+    api 'com.android.billingclient:billing:7.1.1'
 }
