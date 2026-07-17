@@ -87,4 +87,24 @@ describe('AppsService', () => {
       await expect(service.findByBundleId('com.myampix.cross')).resolves.toBeNull();
     });
   });
+
+  describe('findByPackageName', () => {
+    it('resolves an Android app by packageName, returning just id + projectId', async () => {
+      const app = await service.create(projectId, { name: 'Android', platform: 'ANDROID', packageName: 'com.myampix.resolve' });
+
+      await expect(service.findByPackageName('com.myampix.resolve')).resolves.toEqual({
+        id: app.id,
+        projectId,
+      });
+    });
+
+    it('returns null for an unknown packageName', async () => {
+      await expect(service.findByPackageName('com.unknown.package')).resolves.toBeNull();
+    });
+
+    it('does not resolve an IOS app even if bundleId happens to match the packageName query', async () => {
+      await service.create(projectId, { name: 'iOS', platform: 'IOS', bundleId: 'com.myampix.cross2' });
+      await expect(service.findByPackageName('com.myampix.cross2')).resolves.toBeNull();
+    });
+  });
 });

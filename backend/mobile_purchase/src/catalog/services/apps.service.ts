@@ -27,6 +27,21 @@ export class AppsService {
     });
   }
 
+  /**
+   * Resolves the Android App a Google RTDN's `packageName` belongs to (design §1.2: "App
+   * mapping: `App.findFirst({ platform: ANDROID, packageName })`") — the sibling of
+   * `findByBundleId` for the Google ingest flow (M3). Same shape, same rationale: `projectId` is
+   * unknown until this lookup resolves it, so it intentionally queries across all projects by
+   * `(platform, packageName)` alone. `null` on an unknown packageName (the notification is then
+   * journaled `SKIPPED` — M3b, design §1.2).
+   */
+  findByPackageName(packageName: string): Promise<{ id: string; projectId: string } | null> {
+    return this.prisma.app.findFirst({
+      where: { platform: AppPlatform.ANDROID, packageName },
+      select: { id: true, projectId: true },
+    });
+  }
+
   async create(projectId: string, input: CreateApp) {
     try {
       return await this.prisma.app.create({

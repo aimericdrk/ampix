@@ -35,6 +35,14 @@ const envSchema = z.object({
   // src/webhooks/apple/certs/README.md. Optional: unset falls back to the in-repo certs/ dir
   // next to the verifier (src or dist, resolved via __dirname so it works either way).
   APPLE_ROOT_CERT_DIR: z.string().optional(),
+  // Google Pub/Sub push auth mode (design §1.2/§6/§10) — `oidc` is deferred to X1 (see
+  // google-oidc-authenticator.ts) and always fails closed today; `shared_secret` is the working
+  // pre-deploy mode. Default matches the design's "shared-secret acceptable for early sandbox".
+  GOOGLE_PUSH_AUTH_MODE: z.enum(['shared_secret', 'oidc']).default('shared_secret'),
+  // High-entropy shared-secret token for Google Pub/Sub push auth (?token=... query param,
+  // constant-time compared). No dev default on purpose — unset means every Google push is
+  // rejected (401), never a fail-open default (design brief's non-negotiable).
+  GOOGLE_PUBSUB_SHARED_SECRET: z.string().optional(),
 });
 
 export interface AppConfig {
@@ -52,6 +60,12 @@ export interface AppConfig {
   appleBundleIds?: string[];
   appleAppAppleId?: number;
   appleRootCertDir?: string;
+  // Google Pub/Sub push auth config — see envSchema comments above. loadConfig() always populates
+  // googlePushAuthMode (schema default 'shared_secret'); optional here for the same hand-built-
+  // fixture-compatibility reason as the Apple fields (e.g. project-access.service.spec.ts's
+  // makeConfig()). googlePubsubSharedSecret stays optional/undefined until configured either way.
+  googlePushAuthMode?: 'shared_secret' | 'oidc';
+  googlePubsubSharedSecret?: string;
 }
 
 /**
@@ -84,6 +98,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .filter((id) => id.length > 0),
     appleAppAppleId: v.APPLE_APP_APPLE_ID,
     appleRootCertDir: v.APPLE_ROOT_CERT_DIR,
+    googlePushAuthMode: v.GOOGLE_PUSH_AUTH_MODE,
+    googlePubsubSharedSecret: v.GOOGLE_PUBSUB_SHARED_SECRET,
   };
 }
 
@@ -122,5 +138,7 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     ANALYTICS_INTERNAL_URL: config.analyticsInternalUrl,
     APPLE_BUNDLE_IDS: (config.appleBundleIds ?? []).join(',') || 'MISSING',
     APPLE_ROOT_CERT_DIR: config.appleRootCertDir ?? '(default: certs/ next to the verifier)',
+    GOOGLE_PUSH_AUTH_MODE: config.googlePushAuthMode ?? 'shared_secret',
+    GOOGLE_PUBSUB_SHARED_SECRET: redacted(config.googlePubsubSharedSecret),
   };
 }
