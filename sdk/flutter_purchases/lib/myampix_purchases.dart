@@ -4,6 +4,7 @@
 /// configuration, and log-level exports are added by P3.3.
 library;
 
+export 'src/configuration.dart' show MyAmpixLogLevel, PurchasesConfiguration;
 export 'src/models/customer_info.dart' show CustomerInfo;
 export 'src/models/entitlement_info.dart' show EntitlementInfo, EntitlementInfos;
 export 'src/models/enums.dart'
@@ -15,4 +16,12 @@ export 'src/models/package.dart' show Package;
 export 'src/models/purchase_result.dart' show PurchaseResult, StoreTransaction;
 export 'src/models/purchases_error.dart' show PurchasesError, PurchasesErrorCode;
 export 'src/models/store_product.dart' show StoreProduct;
+export 'src/myampix_purchases.dart'
+    show CustomerInfoUpdateListener, MyAmpixPurchases, SdkOverrides;
+export 'src/store/store_channel.dart'
+    show
+        StoreChannel,
+        StoreProductMetadata,
+        StorePurchase,
+        StoreTransactionEvent;
 export 'src/version.dart';
