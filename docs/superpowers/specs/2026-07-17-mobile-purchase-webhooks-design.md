@@ -313,7 +313,7 @@ EntitlementInfo {
         Google pause ──▶ ( PAUSED ) ──resume──▶ (ACTIVE)                                              
                                                                                                      
    any state ──REFUND / REVOKE / VOIDED / voided-chargeback──▶ ( REVOKED )  [isActive=false immediately]
-   REVOKED ──REFUND_REVERSED──▶ (restore prior computed state)
+   REVOKED ──REFUND_REVERSED──▶ (restore from the notification's authoritative renewal info: Apple sends full signedRenewalInfo; recompute ACTIVE/CANCELLED/EXPIRED from expiresAt+autoRenewStatus)
 ```
 
 - **trial → active**: renewal after a trial (`DID_RENEW`, Google `RENEWED` with paid line item).
