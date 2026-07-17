@@ -11,6 +11,7 @@ import { CustomersModule } from './customers/customers.module';
 import { SubscribersModule } from './subscribers/subscribers.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { ReceiptsModule } from './receipts/receipts.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { ReceiptsModule } from './receipts/receipts.module';
     SubscribersModule,
     WebhooksModule,
     ReceiptsModule,
+    MetricsModule,
   ],
 })
 export class AppModule {}
