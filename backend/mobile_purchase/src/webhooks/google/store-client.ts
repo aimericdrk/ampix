@@ -79,9 +79,15 @@ export interface GoogleSubscriptionV2 {
 
 /** The authoritative one-time-product purchase shape (Play Developer API v3
  * `purchases.products.get`, design §1.2 "One-time products use `purchases.products.get`").
- * `purchaseState`: 0 = purchased, 1 = canceled, 2 = pending. */
+ * `purchaseState`: 0 = purchased, 1 = canceled, 2 = pending.
+ *
+ * `orderId` (M3b addition — the real API returns it, M3a's transport-focused card didn't need it):
+ * the Google order identifier for this purchase, required as `Transaction.storeTransactionId`
+ * (design §2 — "Google's `storeTransactionId` = orderId", stated there for the subscription case
+ * but equally true for one-time products; there is no other unique-enough field on this shape). */
 export interface GoogleOneTimeProductPurchase {
   kind?: string;
+  orderId?: string;
   purchaseTimeMillis?: string;
   purchaseState?: number;
   consumptionState?: number;

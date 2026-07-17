@@ -3,24 +3,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StoreNotificationJournalService } from '../journal/store-notification-journal.service';
 import { CustomersService } from '../../customers/services/customers.service';
 import { AppsService } from '../../catalog/services/apps.service';
-import { JournalStatus, Prisma, Store, type Customer } from '../../../generated/client';
+import { JournalStatus, Prisma, Store } from '../../../generated/client';
 import type { VerifiedAppleNotification } from './apple-notification-verifier';
-import {
-  appleNotificationToEvent,
-  type AppleDecodedTransactionInfo,
-} from '../../subscriptions/lifecycle/apple-notification-mapper';
-import { applyLifecycleEvent } from '../../subscriptions/lifecycle/subscription-lifecycle-reducer';
-import {
-  toPersistableSubscriptionState,
-  type SubscriptionState,
-} from '../../subscriptions/lifecycle/subscription-lifecycle.types';
-import { toSubscriptionState } from './to-subscription-state';
+import { appleNotificationToEvent } from '../../subscriptions/lifecycle/apple-notification-mapper';
+import { persistLifecycleEvent, type ResolvedApp, type TransactionFacts } from '../shared/persist-lifecycle-event';
 import { mapAppleEnvironment, mapAppleTransactionType, mapOwnershipType } from './apple-ingest.mappings';
-
-interface ResolvedApp {
-  id: string;
-  projectId: string;
-}
 
 /**
  * M2b: the Apple ingest BUSINESS pipeline — journal-first record, App-by-bundleId resolution,
@@ -79,12 +66,14 @@ export class AppleIngestService {
   }
 
   /**
-   * The re-runnable core: resolves the customer, upserts the Transaction (always, once we have
-   * transaction facts — RC records revenue immediately, even before a customer link exists), then
-   * runs the M4a state machine and upserts the Subscription only when a customer is resolved
-   * (`Subscription.customerId` is required — it cannot be created unlinked). Never throws: any
-   * failure is caught and journaled FAILED (replayable) — a verified, journaled notification is
-   * always 200 (design §1.1/§7), and the controller relies on that.
+   * The re-runnable core: resolves the customer, then hands off to the shared, store-agnostic
+   * persistence core (`persistLifecycleEvent`, M3b extraction of what used to be this method's own
+   * body) — upsert Transaction (always, once we have transaction facts — RC records revenue
+   * immediately, even before a customer link exists), then run the M4a state machine and upsert the
+   * Subscription only when a customer is resolved (`Subscription.customerId` is required — it
+   * cannot be created unlinked). Never throws: any failure is caught and journaled FAILED
+   * (replayable) — a verified, journaled notification is always 200 (design §1.1/§7), and the
+   * controller relies on that.
    */
   async processJournaledNotification(journalRowId: string, app: ResolvedApp, decoded: VerifiedAppleNotification): Promise<void> {
     try {
@@ -92,14 +81,13 @@ export class AppleIngestService {
 
       // CONSUMPTION_REQUEST/TEST/REFUND_DECLINED/an unrecognized (sub)type — design §1.1: journal
       // only, no Transaction/Subscription side effects, even when the notification happens to
-      // carry transaction info (CONSUMPTION_REQUEST does).
+      // carry transaction info (CONSUMPTION_REQUEST does). Checked here (not left to
+      // `persistLifecycleEvent`'s own NO_OP branch) because the "no transaction info" throw below
+      // must NOT fire for these — Apple's TEST notification carries no transaction at all.
       if (event.type === 'NO_OP') {
         await this.journal.markProcessed(journalRowId);
         return;
       }
-
-      const token = decoded.transaction?.appAccountToken;
-      const customer = token ? await this.customers.findByStoreToken(app.projectId, Store.APP_STORE, token) : null;
 
       const transaction = decoded.transaction;
       if (!transaction) {
@@ -112,123 +100,40 @@ export class AppleIngestService {
         );
       }
 
-      // Always upsert the Transaction — the immutable revenue ledger and the unlinked-replay
-      // anchor (design §7/§10): RC records revenue immediately even before the customer is
-      // attributed. Idempotent on [projectId, store, storeTransactionId]; a replay after the
-      // customer resolves re-upserts the SAME row, filling customerId from null.
-      const persistedTransaction = await this.upsertTransaction(app, decoded, transaction, customer);
+      const token = transaction.appAccountToken;
+      const customer = token ? await this.customers.findByStoreToken(app.projectId, Store.APP_STORE, token) : null;
 
-      if (event.type === 'ONE_TIME_CHARGE') {
-        // Non-renewing/consumable — Transaction only, no Subscription row (design §2/§4).
-        await this.journal.markProcessed(journalRowId);
-        return;
-      }
+      const transactionFacts: TransactionFacts = {
+        storeTransactionId: transaction.transactionId,
+        originalTransactionId: transaction.originalTransactionId,
+        storeProductId: transaction.productId,
+        type: mapAppleTransactionType(transaction.type),
+        purchasedAt: transaction.purchaseDate,
+        expiresAt: transaction.expiresDate ?? null,
+        priceCents: transaction.price ?? null,
+        currency: transaction.currency ?? null,
+        revokedAt: transaction.revocationDate ?? null,
+        rawPayload: toJsonPayload(decoded),
+      };
 
-      if (!customer) {
-        // No appAccountToken, or the token isn't bound to any Customer yet. The Transaction is
-        // already persisted above with customerId=null; defer the Subscription (its customerId is
-        // required) — a later replay of THIS SAME method, once M5's /v1/receipts binds the token,
-        // resolves the customer and creates it.
-        await this.journal.markUnlinked(journalRowId);
-        return;
-      }
-
-      const currentRow = await this.prisma.subscription.findUnique({
-        where: {
-          projectId_store_originalTransactionId: {
-            projectId: app.projectId,
-            store: Store.APP_STORE,
-            originalTransactionId: transaction.originalTransactionId,
-          },
-        },
+      await persistLifecycleEvent({
+        prisma: this.prisma,
+        journal: this.journal,
+        journalRowId,
+        app,
+        store: Store.APP_STORE,
+        environment: mapAppleEnvironment(decoded.environment),
+        event,
+        customerId: customer?.id ?? null,
+        transactionFacts,
+        subscriptionIdentity: { kind: 'originalTransactionId', value: transaction.originalTransactionId },
+        ownershipType: mapOwnershipType(transaction.inAppOwnershipType),
       });
-      // Throws only when currentRow is null and the event isn't INITIAL_PURCHASE (a mid-lifecycle
-      // event with no prior subscription — "haven't seen the initial buy yet"); caught below, same
-      // FAILED/replayable treatment as any other processing error.
-      const next = applyLifecycleEvent(currentRow ? toSubscriptionState(currentRow) : null, event);
-
-      if (next) {
-        const subscription = await this.upsertSubscription(app, decoded, transaction, next, customer.id);
-        if (persistedTransaction.subscriptionId !== subscription.id) {
-          await this.prisma.transaction.update({
-            where: { id: persistedTransaction.id },
-            data: { subscriptionId: subscription.id },
-          });
-        }
-      }
-
-      await this.journal.markProcessed(journalRowId);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       this.logger.warn(`Apple notification journal row ${journalRowId} failed processing (replayable): ${message}`);
       await this.journal.markFailed(journalRowId, message);
     }
-  }
-
-  private upsertTransaction(
-    app: ResolvedApp,
-    decoded: VerifiedAppleNotification,
-    transaction: AppleDecodedTransactionInfo,
-    customer: Customer | null,
-  ) {
-    const data = {
-      projectId: app.projectId,
-      customerId: customer?.id ?? null,
-      appId: app.id,
-      store: Store.APP_STORE,
-      environment: mapAppleEnvironment(decoded.environment),
-      storeTransactionId: transaction.transactionId,
-      originalTransactionId: transaction.originalTransactionId,
-      storeProductId: transaction.productId,
-      type: mapAppleTransactionType(transaction.type),
-      purchasedAt: transaction.purchaseDate,
-      expiresAt: transaction.expiresDate ?? null,
-      priceCents: transaction.price ?? null,
-      currency: transaction.currency ?? null,
-      revokedAt: transaction.revocationDate ?? null,
-      rawPayload: toJsonPayload(decoded),
-    };
-    return this.prisma.transaction.upsert({
-      where: {
-        projectId_store_storeTransactionId: {
-          projectId: app.projectId,
-          store: Store.APP_STORE,
-          storeTransactionId: transaction.transactionId,
-        },
-      },
-      create: data,
-      update: data,
-    });
-  }
-
-  private upsertSubscription(
-    app: ResolvedApp,
-    decoded: VerifiedAppleNotification,
-    transaction: AppleDecodedTransactionInfo,
-    next: SubscriptionState,
-    customerId: string,
-  ) {
-    const data = {
-      ...toPersistableSubscriptionState(next),
-      projectId: app.projectId,
-      customerId,
-      appId: app.id,
-      store: Store.APP_STORE,
-      environment: mapAppleEnvironment(decoded.environment),
-      originalTransactionId: transaction.originalTransactionId,
-      ownershipType: mapOwnershipType(transaction.inAppOwnershipType),
-    };
-    return this.prisma.subscription.upsert({
-      where: {
-        projectId_store_originalTransactionId: {
-          projectId: app.projectId,
-          store: Store.APP_STORE,
-          originalTransactionId: transaction.originalTransactionId,
-        },
-      },
-      create: data,
-      update: data,
-    });
   }
 }
 

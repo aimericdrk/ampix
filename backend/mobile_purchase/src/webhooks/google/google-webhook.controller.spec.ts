@@ -2,6 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { GoogleWebhookController } from './google-webhook.controller';
 import type { GooglePushAuthenticator } from './google-push-authenticator';
 import type { AppsService } from '../../catalog/services/apps.service';
+import type { GoogleIngestService } from './google-ingest.service';
 
 function toBase64(value: unknown): string {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64');
@@ -28,28 +29,46 @@ const testNotificationData = toBase64({
 function makeController(
   authenticate: jest.Mock = jest.fn().mockReturnValue(true),
   findByPackageName: jest.Mock = jest.fn().mockResolvedValue({ id: 'app-1', projectId: 'project-1' }),
-): { controller: GoogleWebhookController; authenticate: jest.Mock; findByPackageName: jest.Mock } {
+  handleDeveloperNotification: jest.Mock = jest.fn().mockResolvedValue(undefined),
+): {
+  controller: GoogleWebhookController;
+  authenticate: jest.Mock;
+  findByPackageName: jest.Mock;
+  handleDeveloperNotification: jest.Mock;
+} {
   const authenticator = { authenticate } as unknown as GooglePushAuthenticator;
   const apps = { findByPackageName } as unknown as AppsService;
-  return { controller: new GoogleWebhookController(authenticator, apps), authenticate, findByPackageName };
+  const ingest = { handleDeveloperNotification } as unknown as GoogleIngestService;
+  return { controller: new GoogleWebhookController(authenticator, apps, ingest), authenticate, findByPackageName, handleDeveloperNotification };
 }
 
 describe('GoogleWebhookController', () => {
   it('200s with { received: true } for an authenticated, decodable notification for a known App', async () => {
-    const { controller } = makeController();
+    const { controller, handleDeveloperNotification } = makeController();
 
     await expect(controller.receive(pushBody(testNotificationData), 'correct-token', undefined)).resolves.toEqual({
       received: true,
     });
+    // Hands the decoded notification, the resolved App, and the Pub/Sub messageId (the journal
+    // idempotency key, design §1.2/§7) off to GoogleIngestService.
+    expect(handleDeveloperNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ packageName: 'com.myampix.app' }),
+      { id: 'app-1', projectId: 'project-1' },
+      'msg-1',
+    );
   });
 
-  it('200s even when the App resolves to null (unknown packageName) — the SKIPPED path is M3b, decode still succeeded', async () => {
-    const { controller, findByPackageName } = makeController(jest.fn().mockReturnValue(true), jest.fn().mockResolvedValue(null));
+  it('200s even when the App resolves to null (unknown packageName) — the SKIPPED path is GoogleIngestService, decode still succeeded', async () => {
+    const { controller, findByPackageName, handleDeveloperNotification } = makeController(
+      jest.fn().mockReturnValue(true),
+      jest.fn().mockResolvedValue(null),
+    );
 
     await expect(controller.receive(pushBody(testNotificationData), 'correct-token', undefined)).resolves.toEqual({
       received: true,
     });
     expect(findByPackageName).toHaveBeenCalledWith('com.myampix.app');
+    expect(handleDeveloperNotification).toHaveBeenCalledWith(expect.anything(), null, 'msg-1');
   });
 
   it('resolves the App by the decoded packageName', async () => {

@@ -6,6 +6,7 @@ import { AppsService } from '../../catalog/services/apps.service';
 import type { GooglePushAuthenticator } from './google-push-authenticator';
 import { GOOGLE_PUSH_AUTHENTICATOR } from './google-push-auth.factory';
 import { GoogleEnvelopeError, decodeDeveloperNotification } from './google-notification-envelope';
+import { GoogleIngestService } from './google-ingest.service';
 
 const googlePushBodySchema = z.object({
   message: z.object({
@@ -24,14 +25,16 @@ const googlePushBodySchema = z.object({
  * JWT/guard on this route, mirroring `AppleWebhookController`'s shape.
  *
  * M3a: push auth + envelope decode + base64→JSON→`DeveloperNotification` + App-by-packageName
- * resolution. M3b (not built here) is the journal-first persistence, the authoritative
- * `StoreClient.getSubscriptionV2`/`getProduct` fetch, and the M4a lifecycle pipeline — see the
- * `// M3b:` seam below, matching how M2a stubbed the Apple ingest handoff.
+ * resolution. M3b: `GoogleIngestService` — journal-first persistence, the authoritative
+ * `StoreClient.getSubscriptionV2`/`getProduct` fetch, and the M4a lifecycle pipeline (the Google
+ * analog of `AppleWebhookController` handing off to `AppleIngestService`).
  *
  * Status contract (design §1.2): bad push auth → `401` (no journal — not a real Pub/Sub call);
  * unparseable envelope → `400`; decoded (including a `testNotification`) → `200`, always, once
  * auth + decode succeed — the same "journal-first, so 200 as soon as we have something to journal"
- * contract Apple uses, except M3a itself journals nothing yet (M3b's job).
+ * contract Apple uses. `GoogleIngestService` never throws (any processing failure is caught and
+ * journaled FAILED, replayable — design §1.2/§7), so this controller relies on that to keep the
+ * 200 contract regardless of what happens downstream of a successful decode.
  */
 @Controller('webhooks/google')
 export class GoogleWebhookController {
@@ -40,6 +43,7 @@ export class GoogleWebhookController {
   constructor(
     @Inject(GOOGLE_PUSH_AUTHENTICATOR) private readonly authenticator: GooglePushAuthenticator,
     private readonly apps: AppsService,
+    private readonly ingest: GoogleIngestService,
   ) {}
 
   @Post()
@@ -75,20 +79,19 @@ export class GoogleWebhookController {
       throw e;
     }
 
-    // design §1.2 App mapping: App.findFirst({ platform: ANDROID, packageName }). M3a resolves the
-    // App to prove this seam is wired end-to-end; M3b decides what to do with the result —
-    // including journaling SKIPPED for an unresolved App (kept in M3b to mirror M2b, per the
-    // task brief) and running the authoritative-fetch + lifecycle pipeline for a resolved one.
+    // design §1.2 App mapping: App.findFirst({ platform: ANDROID, packageName }).
     const app = await this.apps.findByPackageName(notification.packageName);
     if (!app) {
       this.logger.debug(
-        `Google RTDN for unknown packageName "${notification.packageName}" (messageId ${message.messageId}) — SKIPPED handling is M3b's job`,
+        `Google RTDN for unknown packageName "${notification.packageName}" (messageId ${message.messageId}) — journaling SKIPPED`,
       );
     }
 
     // M3b: journal-first persistence, StoreClient.getSubscriptionV2()/getProduct() authoritative
     // fetch, and the M4a googleNotificationToEvent lifecycle pipeline — mirrors
-    // AppleIngestService.handleVerifiedAppleNotification / processJournaledNotification.
+    // AppleIngestService.handleVerifiedAppleNotification / processJournaledNotification. Never
+    // throws (see class docstring), so the 200 below is always reached once we get this far.
+    await this.ingest.handleDeveloperNotification(notification, app, message.messageId);
 
     return { received: true };
   }
