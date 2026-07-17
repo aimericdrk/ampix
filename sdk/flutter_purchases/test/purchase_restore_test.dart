@@ -172,6 +172,82 @@ void main() {
     expect(notified.last, info); // refetch also fires the listener
   });
 
+  test(
+      'restorePurchases returns the POST-restore CustomerInfo even though '
+      'native pushes the restore replay ASYNCHRONOUSLY (the real-device '
+      'timing FakeStoreChannel.restore() now simulates) — final-review I-1: '
+      'a Duration.zero-based wait would race ahead of the receipt post below '
+      'and return the stale pre-restore CustomerInfo instead', () async {
+    store.restoreEmissions = const [
+      StoreTransactionEvent(
+        platform: 'APP_STORE',
+        fetchToken: 'r1',
+        storeProductId: 'com.myampix.pro_month',
+        transactionId: 'tx_r1',
+        reason: 'restore',
+      ),
+    ];
+    final preRestore = <String, Object?>{
+      'entitlements': {'all': <String, dynamic>{}, 'active': <String, dynamic>{}},
+      'subscriptions': <dynamic>[],
+      'firstSeen': '2026-07-01T00:00:00Z',
+      'managementURL': null,
+    };
+    final api = PurchasesApiClient(
+      client: MockClient((request) async {
+        if (request.method == 'POST' && request.url.path == '/v1/receipts') {
+          receiptPosts.add(request);
+          return http.Response(
+            jsonEncode({'customerInfo': customerInfoJson()}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path.startsWith('/v1/subscribers/')) {
+          subscriberGets.add(request);
+          // Honest server behavior: the restored entitlement only shows up
+          // once its receipt has actually posted — unlike the shared api()
+          // helper, which returns the same canned body regardless of order
+          // and so can't distinguish a premature fetch from a correct one.
+          final body = receiptPosts.isEmpty ? preRestore : customerInfoJson();
+          return http.Response(
+            jsonEncode({'customerInfo': body}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+      serverUrl: 'http://localhost:8080',
+      apiKey: 'mp_pub_test',
+    );
+    final controller = PurchaseController(
+      apiClient: api,
+      store: store,
+      appUserId: () async => 'user-1',
+      onCustomerInfoUpdated: notified.add,
+      appAccountTokens: AppAccountTokenStore(
+        store: InMemoryKeyValueStore(),
+        uuidFactory: () => 'tok',
+      ),
+    )..start();
+    addTearDown(controller.stop);
+
+    final info = await controller.restorePurchases();
+
+    // Both would have already been asserted true even under the old bug (the
+    // receipt eventually posts, and getSubscriber eventually runs) — the
+    // regression is specifically that the OLD code called getSubscriber too
+    // early, so `info` reflects the last delivered subscriber body, not the
+    // receipt-posted one, whenever the two race. Reflecting the restored
+    // entitlement in the very info this call resolves with — never a stale
+    // pre-restore one — is exactly what the fix guarantees.
+    expect(receiptPosts, hasLength(1));
+    expect(info.entitlements.all, contains('pro'));
+    expect(info.entitlements.active, contains('pro'));
+  });
+
   test('restorePurchases with no emissions still refetches the subscriber',
       () async {
     final controller = build()..start();

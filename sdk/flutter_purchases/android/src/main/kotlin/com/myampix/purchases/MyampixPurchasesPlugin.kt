@@ -522,13 +522,26 @@ class MyampixPurchasesPlugin :
         }
     }
 
-    /** restore() -> null; re-emits ALL current purchases on the EventChannel. */
+    /**
+     * restore() -> null; re-emits ALL current purchases on the EventChannel,
+     * then (final-review I-1) a `reason: "restore_complete"` sentinel once
+     * every purchase has been queried and (if owned) emitted.
+     *
+     * `result.success(null)` acks BEFORE the SUBS/INAPP queries below settle
+     * — matching iOS/StoreKit 2's immediate ack — so Dart cannot treat this
+     * method's return as "the replay is done". [replayPurchases]' onComplete
+     * callback fires only after BOTH product-type queries have returned,
+     * regardless of how long Play Billing takes; Dart's `restorePurchases()`
+     * waits for the sentinel instead of a fixed delay.
+     */
     private fun restore(result: MethodChannel.Result) {
         runWhenReady(result) { client ->
             // A deliberate restore re-binds everything to the (possibly new)
             // app-user-id, so clear the de-dupe and emit every purchase.
             seenTokens.clear()
-            replayPurchases(client, REASON_RESTORE, onlyUnacknowledged = false)
+            replayPurchases(client, REASON_RESTORE, onlyUnacknowledged = false) {
+                emit(mapOf("reason" to REASON_RESTORE_COMPLETE))
+            }
             result.success(null)
         }
     }
@@ -547,8 +560,23 @@ class MyampixPurchasesPlugin :
      * Queries owned purchases (SUBS + INAPP) and emits each on the EventChannel.
      * `onlyUnacknowledged` restricts a connect replay to genuinely interrupted
      * purchases (still awaiting a server grant); restore() passes false to emit all.
+     *
+     * `onComplete` (final-review I-1), when given, fires exactly once, after
+     * BOTH product-type queries have settled (success, failure, or a thrown
+     * exception) — regardless of order. Only `restore()` uses it today; the
+     * connect-time/reconnect replays don't need a completion signal.
      */
-    private fun replayPurchases(client: BillingClient, reason: String, onlyUnacknowledged: Boolean) {
+    private fun replayPurchases(
+        client: BillingClient,
+        reason: String,
+        onlyUnacknowledged: Boolean,
+        onComplete: (() -> Unit)? = null,
+    ) {
+        var remaining = 2
+        fun settleOne() {
+            remaining -= 1
+            if (remaining == 0) onComplete?.invoke()
+        }
         for (type in listOf(BillingClient.ProductType.SUBS, BillingClient.ProductType.INAPP)) {
             try {
                 val params = QueryPurchasesParams.newBuilder().setProductType(type).build()
@@ -560,9 +588,11 @@ class MyampixPurchasesPlugin :
                             emitPurchase(p, reason)
                         }
                     }
+                    settleOne()
                 }
             } catch (_: Throwable) {
                 // Best-effort only.
+                settleOne()
             }
         }
     }
@@ -630,6 +660,7 @@ class MyampixPurchasesPlugin :
         const val PLATFORM = "PLAY_STORE"
         const val REASON_RENEWAL = "renewal"
         const val REASON_RESTORE = "restore"
+        const val REASON_RESTORE_COMPLETE = "restore_complete"
         const val ERR_USER_CANCELLED = "userCancelled"
         const val ERR_PAYMENT_PENDING = "paymentPending"
         const val ERR_PRODUCT_NOT_AVAILABLE = "productNotAvailable"

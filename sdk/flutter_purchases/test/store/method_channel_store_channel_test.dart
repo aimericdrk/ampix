@@ -171,4 +171,31 @@ void main() {
     await sub.cancel();
     await controller.close();
   });
+
+  test(
+      'transactions surfaces the restore_complete sentinel native pushes '
+      'after a restore replay (final-review I-1)', () async {
+    final controller = StreamController<dynamic>.broadcast();
+    final store = MethodChannelStoreChannel(transactionEvents: controller.stream);
+    final seen = <StoreTransactionEvent>[];
+    final sub = store.transactions.listen(seen.add);
+
+    controller
+      ..add(<Object?, Object?>{
+        'platform': 'APP_STORE',
+        'fetchToken': 'jws',
+        'storeProductId': 'sku',
+        'transactionId': 'tx1',
+        'reason': 'restore',
+      })
+      ..add(<Object?, Object?>{'reason': 'restore_complete'});
+    await pumpEventQueue();
+
+    expect(seen, hasLength(2));
+    expect(seen.first.reason, 'restore');
+    expect(seen.first.isRestoreComplete, isFalse);
+    expect(seen.last.isRestoreComplete, isTrue);
+    await sub.cancel();
+    await controller.close();
+  });
 }

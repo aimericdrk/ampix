@@ -59,6 +59,13 @@ class PurchaseController {
 
   StreamSubscription<StoreTransactionEvent>? _subscription;
 
+  /// Fires once per [StoreTransactionEvent.restoreComplete] sentinel
+  /// received on [StoreChannel.transactions] (final-review I-1). A broadcast
+  /// stream so a concurrent [restorePurchases] call can each take their own
+  /// `.first`.
+  final StreamController<void> _restoreComplete =
+      StreamController<void>.broadcast();
+
   /// Subscribes to the native out-of-band transaction stream (renewals /
   /// interrupted purchases / restore replays). Idempotent. Never throws:
   /// starting the subscription is wrapped in a try/catch and the
@@ -75,7 +82,7 @@ class PurchaseController {
     if (_subscription != null) return;
     try {
       _subscription = _store.transactions.listen(
-        handleOutOfBandTransaction,
+        _dispatchTransactionEvent,
         onError: (Object error, StackTrace stackTrace) {
           _logger('StoreChannel transaction stream error', error, stackTrace);
         },
@@ -87,6 +94,22 @@ class PurchaseController {
         stackTrace,
       );
     }
+  }
+
+  /// Routes one [StoreChannel.transactions] event: the
+  /// [StoreTransactionEvent.restoreComplete] sentinel signals
+  /// [_restoreComplete] (consumed by [restorePurchases]) instead of being
+  /// posted as a receipt; every other event is a real out-of-band
+  /// transaction handled by [handleOutOfBandTransaction]. Because both this
+  /// listener and the sentinel arrive on one ordered stream, by the time the
+  /// sentinel is dispatched here every preceding restore transaction has
+  /// already been enqueued on [_tail] (final-review I-1).
+  void _dispatchTransactionEvent(StoreTransactionEvent event) {
+    if (event.isRestoreComplete) {
+      _restoreComplete.add(null);
+      return;
+    }
+    handleOutOfBandTransaction(event);
   }
 
   /// Cancels the out-of-band subscription (if any). Safe to call more than
@@ -171,11 +194,27 @@ class PurchaseController {
   /// re-emits the user's current transactions as `reason: restore` events on
   /// `StoreChannel.transactions`, each handled by [handleOutOfBandTransaction]),
   /// then refetches the subscriber as the authoritative [CustomerInfo].
+  ///
+  /// final-review I-1: on a real device, `_store.restore()` ACKS immediately
+  /// — native pushes the replay (and the terminating
+  /// [StoreTransactionEvent.restoreComplete] sentinel) asynchronously
+  /// afterward, possibly well after this method's `await` returns. A fixed
+  /// `Future.delayed(Duration.zero)` yield used to stand in for "the replay
+  /// is done", which only ever worked against a fake that pushed its events
+  /// synchronously; on real async native it let [_apiClient.getSubscriber]
+  /// race ahead of the restore receipts and return stale pre-restore info.
+  /// Waiting for the sentinel instead is correct regardless of how long the
+  /// native replay takes.
   Future<CustomerInfo> restorePurchases() async {
+    // Subscribe BEFORE triggering restore so the sentinel can never be
+    // missed (start() already listens; this just takes that same ordered
+    // stream's next completion event).
+    final restoreComplete = _restoreComplete.stream.first;
     await _store.restore();
-    // Yield once so any restore transactions the native side already pushed
-    // synchronously are enqueued on [_tail] before we drain it.
-    await Future<void>.delayed(Duration.zero);
+    await restoreComplete;
+    // Every restore transaction that preceded the sentinel has therefore
+    // already been enqueued via [_dispatchTransactionEvent]; drain their
+    // receipt posts before refetching.
     await _tail;
     final customerInfo = await _apiClient.getSubscriber(await _appUserId());
     _onCustomerInfoUpdated(customerInfo);

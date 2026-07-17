@@ -320,6 +320,15 @@ extension MyampixPurchasesPlugin {
   /// entitlement is pushed as a `reason: "restore"` event, which Dart binds to
   /// the current app-user-id by POSTing to /v1/receipts (design §4
   /// `restorePurchases()`), then refetches CustomerInfo.
+  ///
+  /// final-review I-1: because this ack is immediate and the entitlements
+  /// above are pushed asynchronously afterward, Dart cannot tell "the replay
+  /// is done" from the `restore()` method result alone. Once
+  /// `Transaction.currentEntitlements` is exhausted, emit one more
+  /// `reason: "restore_complete"` sentinel on the SAME EventChannel — Dart's
+  /// `restorePurchases()` waits for it (see `PurchaseController`) instead of
+  /// a fixed delay, which is correct regardless of how long the replay above
+  /// takes on a real device.
   func handleRestore(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     succeed(result, nil)
     Task { [weak self] in
@@ -334,6 +343,7 @@ extension MyampixPurchasesPlugin {
           "reason": "restore",
         ])
       }
+      self.emit(["reason": "restore_complete"])
     }
   }
 }

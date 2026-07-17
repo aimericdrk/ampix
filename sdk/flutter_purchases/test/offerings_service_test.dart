@@ -75,6 +75,21 @@ void main() {
     expect(product.title, ''); // native-only field, empty without native
   });
 
+  test(
+      'a total getProducts failure falls back to server prices instead of '
+      'failing the whole call (M-2)', () async {
+    store.getProductsError = StateError('native store unavailable');
+
+    final offerings = await build(apiWith(offeringsWire())).getOfferings();
+
+    final product = offerings.current!.availablePackages.single.storeProduct;
+    // Server fallback (StoreProduct.fromJson: priceCents 999 / currency USD)
+    // — untouched, since getProducts never returned a usable result.
+    expect(product.currencyCode, 'USD');
+    expect(product.price, 9.99);
+    expect(product.title, ''); // native-only field, empty without native
+  });
+
   test('caches after first fetch (second call issues no new HTTP nor '
       'getProducts)', () async {
     store.productsResult = const [];

@@ -220,15 +220,31 @@ void main() {
       throwsA(isA<PurchasesError>().having(
           (e) => e.code, 'code', PurchasesErrorCode.configurationError)),
     );
+    await expectLater(
+      MyAmpixPurchases.canMakePayments(),
+      throwsA(isA<PurchasesError>().having(
+          (e) => e.code, 'code', PurchasesErrorCode.configurationError)),
+    );
   });
 
-  test('store-dependent methods surface a typed PurchasesError (never a raw '
-      'throwable) when the default real StoreChannel has no live platform '
-      'binding (e.g. a unit test without one)', () async {
+  test('canMakePayments delegates to the store channel through the facade '
+      '(M-1)', () async {
+    await configure();
+    expect(await MyAmpixPurchases.canMakePayments(), isTrue);
+    expect(store.canMakePaymentsCalls, 1);
+  });
+
+  test('store-dependent methods with no fallback surface a typed '
+      'PurchasesError (never a raw throwable) when the default real '
+      'StoreChannel has no live platform binding (e.g. a unit test without '
+      'one); getOfferings instead falls back to server prices (M-2)',
+      () async {
     // No storeChannel override → configure() defaults to the real
-    // MethodChannelStoreChannel; under `flutter test` its platform calls fail,
-    // and the facade must map that raw failure to a typed PurchasesError, not
-    // leak it.
+    // MethodChannelStoreChannel; under `flutter test` its platform calls fail.
+    // getOfferings() has a fallback for exactly this (a total native
+    // getProducts failure, M-2) and resolves with the server-parsed prices
+    // rather than throwing; restorePurchases() has no such fallback and must
+    // still map the raw failure to a typed PurchasesError, never leak it.
     await MyAmpixPurchases.configure(
       PurchasesConfiguration(
           apiKey: 'mp_pub_test', serverUrl: 'http://localhost:8080'),
@@ -240,11 +256,13 @@ void main() {
     );
     expect(await MyAmpixPurchases.isConfigured, isTrue);
 
-    await expectLater(
-      MyAmpixPurchases.getOfferings(),
-      throwsA(isA<PurchasesError>().having(
-          (e) => e.code, 'code', PurchasesErrorCode.unknownError)),
-    );
+    final offerings = await MyAmpixPurchases.getOfferings();
+    final product = offerings.current!.availablePackages.single.storeProduct;
+    // Server fallback (offeringsWire(): priceCents 999 / currency USD) —
+    // never enriched, since native getProducts had no live binding to call.
+    expect(product.currencyCode, 'USD');
+    expect(product.price, 9.99);
+
     await expectLater(
       MyAmpixPurchases.restorePurchases(),
       throwsA(isA<PurchasesError>().having(

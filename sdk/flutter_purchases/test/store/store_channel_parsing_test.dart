@@ -205,5 +205,30 @@ void main() {
         isNull,
       );
     });
+
+    test(
+        'the restore_complete sentinel parses even with none of the other '
+        'fields present (final-review I-1)', () {
+      final event = StoreTransactionEvent.parse(
+          <Object?, Object?>{'reason': 'restore_complete'});
+      expect(event, isNotNull);
+      expect(event!.isRestoreComplete, isTrue);
+      expect(event.reason, StoreTransactionEvent.restoreCompleteReason);
+
+      expect(
+        const StoreTransactionEvent.restoreComplete().isRestoreComplete,
+        isTrue,
+      );
+      expect(
+        const StoreTransactionEvent(
+          platform: 'APP_STORE',
+          fetchToken: 't',
+          storeProductId: 's',
+          transactionId: 'x',
+          reason: 'restore',
+        ).isRestoreComplete,
+        isFalse,
+      );
+    });
   });
 }

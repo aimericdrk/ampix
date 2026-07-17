@@ -10,7 +10,11 @@ import 'store/store_channel.dart';
 /// layer supplies the localized priceString/title/description/period —
 /// merged on top via [StoreProduct.copyWith]. When the native side returns
 /// nothing for a product, the server-parsed values are left untouched.
-/// Cached in memory after the first successful fetch.
+/// When native `getProducts` fails ENTIRELY (a thrown exception, e.g. iOS's
+/// `Product.products(for:)` throwing on a store/network problem — final-review
+/// M-2) offerings still resolve, unenriched, on the server's
+/// priceCents/currency/durationIso8601 fallback rather than the whole call
+/// failing. Cached in memory after the first successful fetch.
 class OfferingsService {
   OfferingsService({
     required PurchasesApiClient apiClient,
@@ -41,9 +45,18 @@ class OfferingsService {
     }.toList();
     if (ids.isEmpty) return offerings;
 
+    List<StoreProductMetadata> products;
+    try {
+      products = await _store.getProducts(ids);
+    } on Object catch (_) {
+      // Total native failure (design §4/M-2): fall back to the
+      // already-parsed server prices on [offerings] instead of losing the
+      // whole catalog.
+      return offerings;
+    }
+
     final metadataById = <String, StoreProductMetadata>{
-      for (final metadata in await _store.getProducts(ids))
-        metadata.storeProductId: metadata,
+      for (final metadata in products) metadata.storeProductId: metadata,
     };
     if (metadataById.isEmpty) return offerings;
 

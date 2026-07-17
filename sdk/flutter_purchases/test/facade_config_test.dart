@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -89,6 +90,25 @@ void main() {
     expect(channel.purchaseCalls, 0);
     expect(channel.canMakePaymentsCalls, 0);
     await channel.dispose();
+  });
+
+  test('setLogLevel takes effect immediately, even before configure (M-1)',
+      () async {
+    final messages = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) messages.add(message);
+    };
+    addTearDown(() => debugPrint = original);
+
+    // Default level (warn) suppresses this debug-level internal log.
+    await MyAmpixPurchases.invalidateCustomerInfoCache();
+    expect(messages, isEmpty);
+
+    // Never throws pre-configure, and takes effect for the very next log.
+    MyAmpixPurchases.setLogLevel(MyAmpixLogLevel.debug);
+    await MyAmpixPurchases.invalidateCustomerInfoCache();
+    expect(messages, isNotEmpty);
   });
 
   test('a failed configure leaves the SDK unconfigured (never throws)',

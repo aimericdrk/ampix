@@ -63,6 +63,7 @@ class MyAmpixPurchases {
   CustomerInfo? _cachedCustomerInfo;
   OfferingsService? _offerings;
   PurchaseController? _purchases;
+  StoreChannel? _storeChannel;
   final List<CustomerInfoUpdateListener> _listeners =
       <CustomerInfoUpdateListener>[];
 
@@ -135,6 +136,7 @@ class MyAmpixPurchases {
 
       instance._apiClient = apiClient;
       instance._appUserIdStore = appUserIdStore;
+      instance._storeChannel = storeChannel;
       instance._offerings =
           OfferingsService(apiClient: apiClient, store: storeChannel);
       instance._purchases = PurchaseController(
@@ -320,6 +322,29 @@ class MyAmpixPurchases {
         return purchases.restorePurchases();
       });
 
+  /// Whether the device/user is allowed to make payments (RevenueCat parity,
+  /// design §2 — final-review M-1). Delegates to the native store layer
+  /// (`AppStore.canMakePayments` / Play Billing's `SUBSCRIPTIONS` feature
+  /// check). Guarded like every other store-backed call: throws
+  /// [PurchasesErrorCode.configurationError] before [configure], never a raw
+  /// throwable.
+  static Future<bool> canMakePayments() =>
+      _instance._serialize<bool>('canMakePayments', () async {
+        _instance._requireConfigured();
+        return _instance._requireStoreChannel().canMakePayments();
+      });
+
+  /// Sets the verbosity of the SDK's internal debug-only logging (design §7
+  /// — final-review M-1). Takes effect immediately for every subsequent
+  /// [_log] call; safe to call before or after [configure] and never throws.
+  /// Note a LATER [configure] call resets the level to its
+  /// [PurchasesConfiguration.logLevel] (defaults to [MyAmpixLogLevel.warn]),
+  /// the same way it always has — call this again after reconfiguring if a
+  /// non-default level should persist across it.
+  static void setLogLevel(MyAmpixLogLevel level) {
+    _instance._logLevel = level;
+  }
+
   // ---- internals ----
 
   void _requireConfigured() {
@@ -347,6 +372,22 @@ class MyAmpixPurchases {
       );
     }
     return (offerings, purchases);
+  }
+
+  /// The active [StoreChannel], wired by every successful [configure] call
+  /// (final-review M-1's [canMakePayments]). Call after [_requireConfigured]
+  /// passes; the null-check below is a defensive guard against future wiring
+  /// changes, mirroring [_requireStore].
+  StoreChannel _requireStoreChannel() {
+    final store = _storeChannel;
+    if (store == null) {
+      throw const PurchasesError(
+        PurchasesErrorCode.storeProblemError,
+        'No StoreChannel was supplied to MyAmpixPurchases.configure — '
+        'canMakePayments is unavailable.',
+      );
+    }
+    return store;
   }
 
   /// Serializes a value-returning throwing op on [_tail]. A [PurchasesError]
@@ -431,6 +472,7 @@ class MyAmpixPurchases {
     instance._cachedCustomerInfo = null;
     instance._offerings = null;
     instance._purchases = null;
+    instance._storeChannel = null;
     instance._logLevel = MyAmpixLogLevel.warn;
     instance._listeners.clear();
     instance._tail = Future<void>.value();

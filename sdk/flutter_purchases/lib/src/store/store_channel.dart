@@ -109,18 +109,42 @@ class StoreTransactionEvent {
     required this.reason,
   });
 
+  /// The sentinel event native pushes on the SAME EventChannel, strictly
+  /// after every entitlement/transaction of one [StoreChannel.restore] call
+  /// (design §5, final-review I-1). Its non-`reason` fields are unused
+  /// placeholders — see [isRestoreComplete].
+  const StoreTransactionEvent.restoreComplete()
+      : platform = '',
+        fetchToken = '',
+        storeProductId = '',
+        transactionId = '',
+        reason = restoreCompleteReason;
+
   final String platform; // "APP_STORE" | "PLAY_STORE"
   final String fetchToken;
   final String storeProductId;
   final String transactionId;
-  final String reason; // "purchase" | "renewal" | "restore"
+  final String reason; // "purchase" | "renewal" | "restore" | "restore_complete"
+
+  /// The `reason` marking the [StoreTransactionEvent.restoreComplete]
+  /// sentinel rather than a real transaction.
+  static const String restoreCompleteReason = 'restore_complete';
+
+  /// Whether this is the [restoreCompleteReason] sentinel, not a real
+  /// transaction — see [PurchaseController.restorePurchases].
+  bool get isRestoreComplete => reason == restoreCompleteReason;
 
   /// Defensive parse of a raw EventChannel payload (design §5). Returns null
   /// (never throws) on any missing/wrongly-typed required field. An
   /// absent/unrecognized `reason` falls back to `"purchase"` (a direct-buy
-  /// result carries no reason).
+  /// result carries no reason). The [restoreCompleteReason] sentinel is
+  /// recognized before the other fields are validated — it carries none of
+  /// them.
   static StoreTransactionEvent? parse(Object? raw) {
     if (raw is! Map) return null;
+    if (raw['reason'] == restoreCompleteReason) {
+      return const StoreTransactionEvent.restoreComplete();
+    }
     final platform = raw['platform'];
     final fetchToken = raw['fetchToken'];
     final storeProductId = raw['storeProductId'];
@@ -155,6 +179,16 @@ abstract interface class StoreChannel {
     required String appAccountToken,
   });
   Future<void> finishTransaction(String transactionId);
+
+  /// Triggers a native restore. On a real device the returned future
+  /// resolves as soon as native ACKS the call — it does NOT wait for the
+  /// replay: every current entitlement/transaction is pushed asynchronously
+  /// afterward on [transactions], terminated by one
+  /// [StoreTransactionEvent.restoreComplete] sentinel on the SAME channel
+  /// (design §5, final-review I-1). Callers that need to know when the
+  /// replay is done — [PurchaseController.restorePurchases] — must listen
+  /// for that sentinel; awaiting this future alone is NOT sufficient and
+  /// must never be used as a completion signal (that was the I-1 bug).
   Future<void> restore();
   Future<bool> canMakePayments();
   Stream<StoreTransactionEvent> get transactions;
