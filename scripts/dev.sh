@@ -22,9 +22,9 @@ command -v pnpm >/dev/null || die "pnpm is required — run 'corepack enable'"
   info "installing dependencies…"
   pnpm install
 }
-[ -f backend/.env ] || {
-  cp backend/.env.example backend/.env
-  info "created backend/.env from backend/.env.example"
+[ -f backend/mobile_analytics/.env ] || {
+  cp backend/mobile_analytics/.env.example backend/mobile_analytics/.env
+  info "created backend/mobile_analytics/.env from backend/mobile_analytics/.env.example"
 }
 
 # 2. databases (waits for healthchecks)
@@ -33,12 +33,12 @@ docker compose -f infra/docker-compose.yml up -d --wait
 
 # 3. schema + demo data
 info "applying database migrations…"
-pnpm --filter @myampix/backend exec prisma migrate deploy
+pnpm --filter @myampix/mobile-analytics exec prisma migrate deploy
 info "seeding demo project + ingest token…"
-pnpm --filter @myampix/backend exec prisma db seed
+pnpm --filter @myampix/mobile-analytics exec prisma db seed
 
 # 4. app processes — backend logs on the left, dashboard logs on the right
-BACKEND_CMD='pnpm --filter @myampix/backend start:dev'
+BACKEND_CMD='pnpm --filter @myampix/mobile-analytics start:dev'
 DASHBOARD_CMD='pnpm --filter dashboard dev'
 info "starting backend (http://localhost:8088) + dashboard (http://localhost:5173)…"
 

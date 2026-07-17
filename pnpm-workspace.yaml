@@ -1,5 +1,5 @@
 packages:
-  - backend
+  - backend/mobile_analytics
   - backend/mobile_purchase
   - dashboard
   - packages/*

@@ -1,4 +1,4 @@
-// Local dev (README quick start): load backend/.env before anything reads process.env.
+// Local dev (README quick start): load backend/mobile_analytics/.env before anything reads process.env.
 // Real environment variables take precedence — loadEnvFile never overrides vars that are
 // already set — and production/CI (no .env file) falls through to the real environment.
 try {

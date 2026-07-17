@@ -13,26 +13,29 @@ RUN apt-get update \
 WORKDIR /app
 
 # Workspace root + the packages the backend needs. dashboard's manifest is copied so the workspace
-# is structurally valid, but `--filter @myampix/backend...` keeps dashboard's deps out of the install.
+# is structurally valid, but `--filter @myampix/mobile-analytics...` keeps dashboard's deps out of
+# the install. mobile_purchase's manifest is copied for the same structural-validity reason (the
+# workspace now lists backend/mobile_purchase too) — its own deps stay out of the install as well.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY dashboard/package.json dashboard/package.json
+COPY backend/mobile_purchase/package.json backend/mobile_purchase/package.json
 COPY packages/contracts packages/contracts
-COPY backend backend
+COPY backend/mobile_analytics backend/mobile_analytics
 
 # Full source is copied before install because both backend (`prepare`: prisma generate) and
 # contracts (`prepare`: tsc) run their prepare scripts during install and need their sources present.
-RUN pnpm install --frozen-lockfile --filter @myampix/backend...
+RUN pnpm install --frozen-lockfile --filter @myampix/mobile-analytics...
 
 # Build order: contracts (dist consumed by backend) → prisma client (needed to typecheck) → Nest build.
 RUN pnpm --filter @myampix/contracts build
-RUN pnpm --filter @myampix/backend exec prisma generate
-RUN pnpm --filter @myampix/backend build
+RUN pnpm --filter @myampix/mobile-analytics exec prisma generate
+RUN pnpm --filter @myampix/mobile-analytics build
 
 # Self-contained, symlink-free, prod-only deploy of the backend into /out — the clean answer to
 # pnpm workspace symlinks not surviving a naive copy into the runtime stage. `--legacy` is required
 # because pnpm 10 otherwise only deploys workspaces with `inject-workspace-packages=true`; the legacy
 # path copies the resolved deps (incl. the built @myampix/contracts) from the store into /out.
-RUN pnpm --filter=@myampix/backend deploy --prod --legacy /out
+RUN pnpm --filter=@myampix/mobile-analytics deploy --prod --legacy /out
 
 # ---------- runtime ----------
 FROM node:22-bookworm-slim AS runtime
@@ -52,7 +55,7 @@ RUN npm install -g prisma@6.8.0 && npm cache clean --force
 # final image regardless of whether `pnpm deploy` carried the generated output.
 RUN prisma generate --schema prisma/schema.prisma
 
-COPY --chown=app:app backend/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --chown=app:app backend/mobile_analytics/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 USER app

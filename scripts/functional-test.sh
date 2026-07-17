@@ -34,9 +34,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # 1. backend env
-[ -f backend/.env ] || {
-  cp backend/.env.example backend/.env
-  info "created backend/.env from backend/.env.example"
+[ -f backend/mobile_analytics/.env ] || {
+  cp backend/mobile_analytics/.env.example backend/mobile_analytics/.env
+  info "created backend/mobile_analytics/.env from backend/mobile_analytics/.env.example"
 }
 
 # 2. infra (ClickHouse, Postgres, Redis) — waits for healthchecks
@@ -45,15 +45,15 @@ docker compose -f infra/docker-compose.yml up -d --wait
 
 # 3. schema
 info "applying database migrations…"
-pnpm --filter @myampix/backend exec prisma migrate deploy
+pnpm --filter @myampix/mobile-analytics exec prisma migrate deploy
 
 # 4. build + boot the real backend
 info "building backend…"
-pnpm --filter @myampix/backend build
+pnpm --filter @myampix/mobile-analytics build
 
 info "starting backend (http://localhost:8080)…"
 : >"$BACKEND_LOG"
-(cd backend && exec node dist/main.js) >"$BACKEND_LOG" 2>&1 &
+(cd backend/mobile_analytics && exec node dist/main.js) >"$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 
 info "waiting for backend health…"

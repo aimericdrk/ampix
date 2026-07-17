@@ -1,5 +1,5 @@
 {
-  "name": "@myampix/backend",
+  "name": "@myampix/mobile-analytics",
   "version": "0.1.0",
   "private": true,
   "description": "MyAmpix NestJS backend — ingestion, analytics queries, auth",

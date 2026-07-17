@@ -6,7 +6,7 @@ services:
   backend:
     build:
       context: ..
-      dockerfile: backend/Dockerfile
+      dockerfile: backend/mobile_analytics/Dockerfile
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -15,14 +15,14 @@ services:
       redis:
         condition: service_healthy
     # Dev secrets (JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, TOTP_ENC_KEY) come from the gitignored
-    # backend/.env — never committed. Path is relative to this compose file (infra/).
+    # backend/mobile_analytics/.env — never committed. Path is relative to this compose file (infra/).
     env_file:
-      - ../backend/.env
+      - ../backend/mobile_analytics/.env
     environment:
       NODE_ENV: development
       PORT: "8088"
-      # DB hosts point at the Compose service names (the localhost values in backend/.env don't
-      # resolve inside the container; `environment` overrides `env_file`). Dev creds match
+      # DB hosts point at the Compose service names (the localhost values in backend/mobile_analytics/.env
+      # don't resolve inside the container; `environment` overrides `env_file`). Dev creds match
       # infra/docker-compose.yml and are dev-only.
       DATABASE_URL: postgresql://myampix:myampix_dev@postgres:5432/myampix
       CLICKHOUSE_URL: http://clickhouse:8123
