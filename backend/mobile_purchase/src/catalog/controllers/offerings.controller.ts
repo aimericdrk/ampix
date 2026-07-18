@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { parseOrThrow } from '../../common/zod';
 import { ProjectAccessGuard } from '../../authz/project-access.guard';
 import { RequireProjectRole } from '../../authz/require-project-role.decorator';
-import { createOfferingSchema, createPackageSchema } from '../support/catalog.schemas';
+import { createOfferingSchema, createPackageSchema, updateOfferingSchema } from '../support/catalog.schemas';
 import { OfferingsService } from '../services/offerings.service';
 
 @Controller('api/v1/projects/:projectId/catalog/offerings')
@@ -27,6 +27,12 @@ export class OfferingsController {
   @RequireProjectRole('admin')
   setCurrent(@Param('projectId') projectId: string, @Param('offeringId') offeringId: string) {
     return this.service.setCurrent(projectId, offeringId);
+  }
+
+  @Patch(':offeringId')
+  @RequireProjectRole('admin')
+  update(@Param('projectId') projectId: string, @Param('offeringId') offeringId: string, @Body() body: unknown) {
+    return this.service.update(projectId, offeringId, parseOrThrow(updateOfferingSchema, body));
   }
 
   @Delete(':offeringId')

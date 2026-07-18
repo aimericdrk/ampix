@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '../../../generated/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { startPostgresContainer } from '../../../test/integration/helpers/containers';
+import { updateOfferingSchema } from '../support/catalog.schemas';
+import { parseOrThrow } from '../../common/zod';
+import { ProblemException } from '../../common/problem-details';
 import { OfferingsService } from './offerings.service';
 
 jest.setTimeout(180000);
@@ -187,5 +190,57 @@ describe('OfferingsService', () => {
     await service.remove(projectId, offering.id);
     const found = await prisma.offering.findUnique({ where: { id: offering.id } });
     expect(found).toBeNull();
+  });
+
+  it('updates an offering’s displayName and metadata', async () => {
+    const offering = await service.create(projectId, { identifier: 'update-happy', displayName: 'Before' });
+
+    const updated = await service.update(projectId, offering.id, {
+      displayName: 'After',
+      metadata: { banner: 'summer-sale' },
+    });
+
+    expect(updated).toMatchObject({ id: offering.id, displayName: 'After', metadata: { banner: 'summer-sale' } });
+  });
+
+  it('update() 404s for a cross-project or non-existent offering', async () => {
+    const otherProjectId = randomUUID();
+    const offering = await service.create(projectId, { identifier: 'update-guard', displayName: 'Guarded' });
+
+    await expect(service.update(otherProjectId, offering.id, { displayName: 'Nope' })).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+    await expect(service.update(projectId, randomUUID(), { displayName: 'Nope' })).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+  });
+
+  it('updateOfferingSchema rejects an empty body (400)', () => {
+    let caught: unknown;
+    try {
+      parseOrThrow(updateOfferingSchema, {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ProblemException);
+    expect((caught as ProblemException).problem).toMatchObject({ status: 400 });
+  });
+
+  it('updateOfferingSchema strips immutable fields (identifier, isCurrent), so they survive an update untouched', async () => {
+    const offering = await service.create(projectId, {
+      identifier: 'update-immutable',
+      displayName: 'Before',
+      isCurrent: true,
+    });
+
+    const patch = parseOrThrow(updateOfferingSchema, {
+      identifier: 'hijacked-identifier',
+      isCurrent: false,
+      displayName: 'After',
+    });
+    expect(patch).toEqual({ displayName: 'After' });
+
+    const updated = await service.update(projectId, offering.id, patch);
+    expect(updated).toMatchObject({ identifier: 'update-immutable', isCurrent: true, displayName: 'After' });
   });
 });

@@ -2,10 +2,11 @@ import { Injectable } from '@nestjs/common';
 import type { z } from 'zod';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProblemException } from '../../common/problem-details';
-import type { createOfferingSchema, createPackageSchema } from '../support/catalog.schemas';
+import type { createOfferingSchema, createPackageSchema, updateOfferingSchema } from '../support/catalog.schemas';
 
 type CreateOffering = z.infer<typeof createOfferingSchema>;
 type CreatePackage = z.infer<typeof createPackageSchema>;
+type UpdateOffering = z.infer<typeof updateOfferingSchema>;
 
 @Injectable()
 export class OfferingsService {
@@ -44,6 +45,15 @@ export class OfferingsService {
 
   list(projectId: string) {
     return this.prisma.offering.findMany({ where: { projectId }, include: { packages: true }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async update(projectId: string, offeringId: string, patch: UpdateOffering) {
+    const existing = await this.prisma.offering.findFirst({ where: { id: offeringId, projectId } });
+    if (!existing) throw new ProblemException({ status: 404, title: 'Offering not found' });
+    return this.prisma.offering.update({
+      where: { id: offeringId },
+      data: { displayName: patch.displayName, metadata: patch.metadata as never },
+    });
   }
 
   async remove(projectId: string, offeringId: string) {

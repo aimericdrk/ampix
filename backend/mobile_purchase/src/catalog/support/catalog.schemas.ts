@@ -53,6 +53,13 @@ export const createOfferingSchema = z.object({
   metadata: z.unknown().optional(),
 });
 
+export const updateOfferingSchema = z
+  .object({
+    displayName: z.string().min(1).max(256).optional(),
+    metadata: z.unknown().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+
 export const createPackageSchema = z.object({
   identifier,
   packageType: z.enum(['UNKNOWN', 'CUSTOM', 'LIFETIME', 'ANNUAL', 'SIX_MONTH', 'THREE_MONTH', 'TWO_MONTH', 'MONTHLY', 'WEEKLY']),
