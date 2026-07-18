@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { parseOrThrow } from '../../common/zod';
 import { ProjectAccessGuard } from '../../authz/project-access.guard';
 import { RequireProjectRole } from '../../authz/require-project-role.decorator';
-import { attachEntitlementSchema, createProductSchema } from '../support/catalog.schemas';
+import { attachEntitlementSchema, createProductSchema, updateProductSchema } from '../support/catalog.schemas';
 import { ProductsService } from '../services/products.service';
 
 @Controller('api/v1/projects/:projectId/catalog/products')
@@ -20,6 +20,12 @@ export class ProductsController {
   @RequireProjectRole('admin')
   create(@Param('projectId') projectId: string, @Body() body: unknown) {
     return this.service.create(projectId, parseOrThrow(createProductSchema, body));
+  }
+
+  @Patch(':productId')
+  @RequireProjectRole('admin')
+  update(@Param('projectId') projectId: string, @Param('productId') productId: string, @Body() body: unknown) {
+    return this.service.update(projectId, productId, parseOrThrow(updateProductSchema, body));
   }
 
   @Delete(':productId')

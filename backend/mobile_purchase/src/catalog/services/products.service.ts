@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common';
 import type { z } from 'zod';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProblemException } from '../../common/problem-details';
-import type { createProductSchema } from '../support/catalog.schemas';
+import type { createProductSchema, updateProductSchema } from '../support/catalog.schemas';
 
 type CreateProduct = z.infer<typeof createProductSchema>;
+type UpdateProduct = z.infer<typeof updateProductSchema>;
 
 @Injectable()
 export class ProductsService {
@@ -39,6 +40,12 @@ export class ProductsService {
       include: { entitlements: true },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  async update(projectId: string, productId: string, patch: UpdateProduct) {
+    const existing = await this.prisma.product.findFirst({ where: { id: productId, projectId } });
+    if (!existing) throw new ProblemException({ status: 404, title: 'Product not found' });
+    return this.prisma.product.update({ where: { id: productId }, data: patch });
   }
 
   async remove(projectId: string, productId: string) {

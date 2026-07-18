@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '../../../generated/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { startPostgresContainer } from '../../../test/integration/helpers/containers';
+import { updateProductSchema } from '../support/catalog.schemas';
+import { parseOrThrow } from '../../common/zod';
+import { ProblemException } from '../../common/problem-details';
 import { ProductsService } from './products.service';
 
 jest.setTimeout(180000);
@@ -188,5 +191,89 @@ describe('ProductsService', () => {
     });
 
     await expect(service.remove(projectId, product.id)).rejects.toMatchObject({ problem: { status: 409 } });
+  });
+
+  it('updates a product’s editable fields', async () => {
+    const product = await service.create(projectId, {
+      appId,
+      storeProductId: 'update.happy.product',
+      type: 'CONSUMABLE',
+      displayName: 'Original',
+    });
+
+    const updated = await service.update(projectId, product.id, {
+      displayName: 'Updated Name',
+      priceCents: 1999,
+      currency: 'USD',
+    });
+
+    expect(updated).toMatchObject({
+      id: product.id,
+      displayName: 'Updated Name',
+      priceCents: 1999,
+      currency: 'USD',
+    });
+  });
+
+  it('update() 404s for a cross-project or non-existent product', async () => {
+    const otherProjectId = randomUUID();
+    const product = await service.create(projectId, {
+      appId,
+      storeProductId: 'update.guard.product',
+      type: 'CONSUMABLE',
+      displayName: 'Guarded',
+    });
+
+    await expect(service.update(otherProjectId, product.id, { displayName: 'Nope' })).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+    await expect(service.update(projectId, randomUUID(), { displayName: 'Nope' })).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+  });
+
+  it('updateProductSchema rejects an empty body (400)', () => {
+    let caught: unknown;
+    try {
+      parseOrThrow(updateProductSchema, {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ProblemException);
+    expect((caught as ProblemException).problem).toMatchObject({ status: 400 });
+  });
+
+  it('updateProductSchema strips immutable fields (appId, storeProductId, type), so they survive an update untouched', async () => {
+    const product = await service.create(projectId, {
+      appId,
+      storeProductId: 'update.immutable.product',
+      type: 'CONSUMABLE',
+      displayName: 'Before',
+    });
+    const otherApp = await prisma.app.create({
+      data: {
+        projectId,
+        name: 'Other App',
+        platform: 'ANDROID',
+        packageName: `com.other.${randomUUID()}`,
+        publicSdkKey: `mp_pub_test_${randomUUID()}`,
+      },
+    });
+
+    const patch = parseOrThrow(updateProductSchema, {
+      appId: otherApp.id,
+      storeProductId: 'hijacked.id',
+      type: 'NON_CONSUMABLE',
+      displayName: 'After',
+    });
+    expect(patch).toEqual({ displayName: 'After' });
+
+    const updated = await service.update(projectId, product.id, patch);
+    expect(updated).toMatchObject({
+      appId,
+      storeProductId: 'update.immutable.product',
+      type: 'CONSUMABLE',
+      displayName: 'After',
+    });
   });
 });

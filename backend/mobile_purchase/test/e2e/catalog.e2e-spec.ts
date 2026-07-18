@@ -138,4 +138,50 @@ describe('Catalog e2e — module wiring, both guards, public SDK offerings endpo
     await request(http).get('/v1/offerings').set('Authorization', 'Bearer not-a-real-key').expect(401);
     await request(http).get('/v1/offerings').expect(401);
   });
+
+  it('PATCH products/:productId — 200 as admin (updates editable fields), 403 as viewer, 404 for unknown id', async () => {
+    fakeAccess.role = 'admin';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+
+    const patchApp = await prisma.app.create({
+      data: {
+        projectId,
+        name: 'Patch App',
+        platform: 'IOS',
+        bundleId: `com.patch.${randomUUID()}`,
+        publicSdkKey: generatePublicSdkKey(),
+      },
+    });
+    const product = await prisma.product.create({
+      data: {
+        projectId,
+        appId: patchApp.id,
+        storeProductId: 'patch.monthly',
+        type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        displayName: 'Monthly',
+      },
+    });
+
+    const res = await request(http)
+      .patch(`/api/v1/projects/${projectId}/catalog/products/${product.id}`)
+      .set('Authorization', 'Bearer admin-token')
+      .send({ displayName: 'Monthly Plus', priceCents: 1999, currency: 'USD' })
+      .expect(200);
+    expect(res.body).toMatchObject({ id: product.id, displayName: 'Monthly Plus', priceCents: 1999, currency: 'USD' });
+
+    fakeAccess.role = 'viewer';
+    await request(http)
+      .patch(`/api/v1/projects/${projectId}/catalog/products/${product.id}`)
+      .set('Authorization', 'Bearer viewer-token')
+      .send({ displayName: 'Blocked' })
+      .expect(403);
+
+    fakeAccess.role = 'admin';
+    await request(http)
+      .patch(`/api/v1/projects/${projectId}/catalog/products/${randomUUID()}`)
+      .set('Authorization', 'Bearer admin-token')
+      .send({ displayName: 'Nope' })
+      .expect(404);
+  });
 });
