@@ -41,6 +41,7 @@ import { RcOverviewPage } from './features/revenuecat/components/RcOverviewPage'
 import { RcPlaceholderPage } from './features/revenuecat/components/RcPlaceholderPage';
 import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage';
 import { RcChartsPage } from './features/revenuecat/components/RcChartsPage';
+import { RcEntitlementsPage } from './features/revenuecat/components/RcEntitlementsPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -325,12 +326,7 @@ const rcProductsRoute = createRoute({
 const rcEntitlementsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/entitlements',
-  component: () => (
-    <RcPlaceholderPage
-      title="Entitlements"
-      description="The access levels your products grant, and who currently holds them."
-    />
-  ),
+  component: RcEntitlementsPage,
 });
 
 const rcOfferingsRoute = createRoute({
