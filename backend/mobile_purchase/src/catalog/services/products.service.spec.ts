@@ -82,7 +82,7 @@ describe('ProductsService', () => {
     ).rejects.toMatchObject({ problem: { status: 409 } });
   });
 
-  it('attaches two entitlements to a product and returns both via findUnique include', async () => {
+  it('attaches two entitlements to a product and list() returns both as { id, identifier, displayName }, sorted by identifier', async () => {
     const product = await service.create(projectId, {
       appId,
       storeProductId: 'multi.ent.product',
@@ -94,8 +94,28 @@ describe('ProductsService', () => {
     await service.attachEntitlement(projectId, product.id, entitlementId);
     await service.attachEntitlement(projectId, product.id, ent2.id);
 
-    const found = await prisma.product.findUnique({ where: { id: product.id }, include: { entitlements: true } });
-    expect(found?.entitlements.map((e) => e.entitlementId).sort()).toEqual([entitlementId, ent2.id].sort());
+    const list = await service.list(projectId);
+    const found = list.find((p) => p.id === product.id);
+    // `entitlementId` (the join column) must never leak into the response — only the nested
+    // `Entitlement` row shape (`id`/`identifier`/`displayName`) that the dashboard `RcEntitlement`
+    // type and admin API spec §9 document.
+    expect(found?.entitlements).toEqual([
+      { id: ent2.id, identifier: 'plus', displayName: 'Plus' },
+      { id: entitlementId, identifier: 'pro', displayName: 'Pro' },
+    ]);
+  });
+
+  it('list() returns an empty entitlements array for a product with none attached', async () => {
+    const product = await service.create(projectId, {
+      appId,
+      storeProductId: 'no.ent.product',
+      type: 'CONSUMABLE',
+      displayName: 'NoEnt',
+    });
+
+    const list = await service.list(projectId);
+    const found = list.find((p) => p.id === product.id);
+    expect(found?.entitlements).toEqual([]);
   });
 
   it('rejects attaching the same entitlement to a product twice', async () => {

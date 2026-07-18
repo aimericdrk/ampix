@@ -34,12 +34,27 @@ export class ProductsService {
     }
   }
 
-  list(projectId: string) {
-    return this.prisma.product.findMany({
+  async list(projectId: string) {
+    const products = await this.prisma.product.findMany({
       where: { projectId },
-      include: { entitlements: true },
+      include: { entitlements: { include: { entitlement: true } } },
       orderBy: { createdAt: 'asc' },
     });
+    // Map the join rows (`ProductEntitlement { productId, entitlementId }`) down to the shape the
+    // admin API contract (spec §9, dashboard `RcProduct.entitlements: RcEntitlement[]`) documents:
+    // `{ id, identifier, displayName }[]`, sorted deterministically for stable list rendering.
+    // Only pick those three fields — the full `Entitlement` row also carries `projectId`/`createdAt`,
+    // which are not part of the documented contract.
+    return products.map(({ entitlements, ...product }) => ({
+      ...product,
+      entitlements: entitlements
+        .map(({ entitlement }) => ({
+          id: entitlement.id,
+          identifier: entitlement.identifier,
+          displayName: entitlement.displayName,
+        }))
+        .sort((a, b) => a.identifier.localeCompare(b.identifier)),
+    }));
   }
 
   async update(projectId: string, productId: string, patch: UpdateProduct) {

@@ -298,4 +298,62 @@ describe('Catalog e2e — module wiring, both guards, public SDK offerings endpo
       .send({ sortOrder: 9 })
       .expect(404);
   });
+
+  it('POST products/:productId/entitlements — 204 (not 201/empty-body-201), the entitlement round-trips onto GET products as { id, identifier, displayName }, and DELETE removes it again', async () => {
+    fakeAccess.role = 'admin';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+
+    const entApp = await prisma.app.create({
+      data: {
+        projectId,
+        name: 'Entitlement App',
+        platform: 'IOS',
+        bundleId: `com.ent.${randomUUID()}`,
+        publicSdkKey: generatePublicSdkKey(),
+      },
+    });
+    const product = await prisma.product.create({
+      data: {
+        projectId,
+        appId: entApp.id,
+        storeProductId: 'attach.e2e.monthly',
+        type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        displayName: 'Monthly',
+      },
+    });
+    const entitlement = await prisma.entitlement.create({
+      data: { projectId, identifier: 'e2e-pro', displayName: 'E2E Pro' },
+    });
+
+    // Attach must return 204 with an empty body (dashboard's `useAttachEntitlement` parses via
+    // `purchaseApiFetch<void>`, which throws on a non-empty/JSON body for a 2xx response).
+    const attachRes = await request(http)
+      .post(`/api/v1/projects/${projectId}/catalog/products/${product.id}/entitlements`)
+      .set('Authorization', 'Bearer admin-token')
+      .send({ entitlementId: entitlement.id })
+      .expect(204);
+    expect(attachRes.body).toEqual({});
+    expect(attachRes.text).toBe('');
+
+    const listAfterAttach = await request(http)
+      .get(`/api/v1/projects/${projectId}/catalog/products`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200);
+    const found = listAfterAttach.body.find((p: { id: string }) => p.id === product.id);
+    expect(found.entitlements).toEqual([
+      { id: entitlement.id, identifier: 'e2e-pro', displayName: 'E2E Pro' },
+    ]);
+
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/catalog/products/${product.id}/entitlements/${entitlement.id}`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(204);
+
+    const listAfterDetach = await request(http)
+      .get(`/api/v1/projects/${projectId}/catalog/products`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200);
+    expect(listAfterDetach.body.find((p: { id: string }) => p.id === product.id).entitlements).toEqual([]);
+  });
 });

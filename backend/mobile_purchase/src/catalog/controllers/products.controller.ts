@@ -36,6 +36,7 @@ export class ProductsController {
   }
 
   @Post(':productId/entitlements')
+  @HttpCode(204)
   @RequireProjectRole('admin')
   attachEntitlement(
     @Param('projectId') projectId: string,
