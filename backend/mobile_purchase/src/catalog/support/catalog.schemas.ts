@@ -38,6 +38,12 @@ export const createEntitlementSchema = z.object({
   displayName: z.string().min(1).max(256),
 });
 
+export const updateEntitlementSchema = z
+  .object({
+    displayName: z.string().min(1).max(256).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
+
 export const attachEntitlementSchema = z.object({ entitlementId: z.string().uuid() });
 
 export const createOfferingSchema = z.object({

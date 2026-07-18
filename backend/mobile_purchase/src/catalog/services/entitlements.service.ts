@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common';
 import type { z } from 'zod';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProblemException } from '../../common/problem-details';
-import type { createEntitlementSchema } from '../support/catalog.schemas';
+import type { createEntitlementSchema, updateEntitlementSchema } from '../support/catalog.schemas';
 
 type CreateEntitlement = z.infer<typeof createEntitlementSchema>;
+type UpdateEntitlement = z.infer<typeof updateEntitlementSchema>;
 
 @Injectable()
 export class EntitlementsService {
@@ -27,6 +28,12 @@ export class EntitlementsService {
 
   list(projectId: string) {
     return this.prisma.entitlement.findMany({ where: { projectId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async update(projectId: string, entitlementId: string, patch: UpdateEntitlement) {
+    const existing = await this.prisma.entitlement.findFirst({ where: { id: entitlementId, projectId } });
+    if (!existing) throw new ProblemException({ status: 404, title: 'Entitlement not found' });
+    return this.prisma.entitlement.update({ where: { id: entitlementId }, data: patch });
   }
 
   async remove(projectId: string, entitlementId: string) {
