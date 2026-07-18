@@ -42,6 +42,7 @@ import { RcPlaceholderPage } from './features/revenuecat/components/RcPlaceholde
 import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage';
 import { RcChartsPage } from './features/revenuecat/components/RcChartsPage';
 import { RcEntitlementsPage } from './features/revenuecat/components/RcEntitlementsPage';
+import { RcProductsPage } from './features/revenuecat/components/RcProductsPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -315,12 +316,7 @@ const rcCustomersRoute = createRoute({
 const rcProductsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/products',
-  component: () => (
-    <RcPlaceholderPage
-      title="Products"
-      description="The store products synced from RevenueCat, with their pricing and performance."
-    />
-  ),
+  component: RcProductsPage,
 });
 
 const rcEntitlementsRoute = createRoute({
