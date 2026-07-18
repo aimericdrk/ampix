@@ -40,6 +40,7 @@ import { RcConversionPage } from './features/revenuecat/components/RcConversionP
 import { RcOverviewPage } from './features/revenuecat/components/RcOverviewPage';
 import { RcPlaceholderPage } from './features/revenuecat/components/RcPlaceholderPage';
 import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage';
+import { RcChartsPage } from './features/revenuecat/components/RcChartsPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -296,12 +297,7 @@ const rcConversionRoute = createRoute({
 const rcChartsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/charts',
-  component: () => (
-    <RcPlaceholderPage
-      title="Charts"
-      description="Explore MRR, subscribers, and churn over time with custom breakdowns."
-    />
-  ),
+  component: RcChartsPage,
 });
 
 const rcCustomersRoute = createRoute({
