@@ -43,6 +43,11 @@ const envSchema = z.object({
   // constant-time compared). No dev default on purpose — unset means every Google push is
   // rejected (401), never a fail-open default (design brief's non-negotiable).
   GOOGLE_PUBSUB_SHARED_SECRET: z.string().optional(),
+  // CORS allowlist for the dashboard→mobile_purchase reach (design §2): comma-separated list of
+  // dashboard origin(s) permitted to send credentialed (Authorization) cross-origin requests. Dev
+  // default is the dashboard dev server origin (dashboard/vite.config.ts); X1 sets the prod
+  // origin(s). Empty → no origin is allowed (CORS effectively closed).
+  DASHBOARD_ORIGINS: z.string().default('http://localhost:5173'),
 });
 
 export interface AppConfig {
@@ -66,6 +71,9 @@ export interface AppConfig {
   // makeConfig()). googlePubsubSharedSecret stays optional/undefined until configured either way.
   googlePushAuthMode?: 'shared_secret' | 'oidc';
   googlePubsubSharedSecret?: string;
+  // CORS allowlist — see envSchema comment above. Optional for the same hand-built-fixture-
+  // compatibility reason as the Apple/Google fields; loadConfig() always populates it.
+  dashboardOrigins?: string[];
 }
 
 /**
@@ -100,6 +108,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     appleRootCertDir: v.APPLE_ROOT_CERT_DIR,
     googlePushAuthMode: v.GOOGLE_PUSH_AUTH_MODE,
     googlePubsubSharedSecret: v.GOOGLE_PUBSUB_SHARED_SECRET,
+    dashboardOrigins: v.DASHBOARD_ORIGINS.split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0),
   };
 }
 
@@ -140,5 +151,6 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     APPLE_ROOT_CERT_DIR: config.appleRootCertDir ?? '(default: certs/ next to the verifier)',
     GOOGLE_PUSH_AUTH_MODE: config.googlePushAuthMode ?? 'shared_secret',
     GOOGLE_PUBSUB_SHARED_SECRET: redacted(config.googlePubsubSharedSecret),
+    DASHBOARD_ORIGINS: (config.dashboardOrigins ?? []).join(',') || 'MISSING',
   };
 }
