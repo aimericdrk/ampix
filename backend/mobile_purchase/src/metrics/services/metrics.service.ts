@@ -83,11 +83,12 @@ export class MetricsService {
     };
   }
 
-  /** CURRENT MRR (dominant currency) = Σ monthlyCents over active subs, normalizing priceCents to a
+  /** CURRENT MRR (as of `to`, dominant currency) = Σ monthlyCents over subs active at `to`
+   * (purchasedAt<=to and (expiresAt IS NULL or expiresAt>to)), normalizing priceCents to a
    * monthly figure via the sub's Product.durationIso8601. Subs with no productId / unresolvable
-   * period / null price are excluded and counted in unattributedActiveCount (never silently dropped).
-   * Series is window-approximated (spec §0): a sub counts at bucket T when purchasedAt<=T and
-   * (expiresAt IS NULL or expiresAt>T). */
+   * period / null price are excluded and counted in unattributedActiveCount (never silently dropped)
+   * regardless of the as-of-`to` window. Series is window-approximated (spec §0): a sub counts at
+   * bucket T when purchasedAt<=T and (expiresAt IS NULL or expiresAt>T). */
   async mrr(projectId: string, query: MetricsQuery): Promise<MrrMetrics> {
     const { from, to, granularity, environment } = query;
     const subs = await this.fetchActiveSubs(projectId, environment);
@@ -105,7 +106,8 @@ export class MetricsService {
       }
       const monthlyCents = Math.round(s.priceCents * multiplier);
       attributable.push({ monthlyCents, currency: s.currency, purchasedAt: s.purchasedAt, expiresAt: s.expiresAt });
-      if (s.currency !== null) {
+      const activeAtTo = s.purchasedAt <= to && (s.expiresAt === null || s.expiresAt > to);
+      if (s.currency !== null && activeAtTo) {
         monthlyByCurrency.set(s.currency, (monthlyByCurrency.get(s.currency) ?? 0) + monthlyCents);
       }
     }

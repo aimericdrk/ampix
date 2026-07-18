@@ -98,6 +98,45 @@ describe('MetricsService (Testcontainers)', () => {
     expect(result.series.map((p) => p.mrrCents)).toEqual([5000, 5000, 5000]);
   });
 
+  it('mrr: headline is as-of `to` — excludes subs purchased after `to` or expired at/before `to`, matching the last series bucket', async () => {
+    const projectId = randomUUID();
+    const app = await makeApp(projectId);
+    const customer = await makeCustomer(projectId);
+    const monthly = await prisma.product.create({
+      data: { projectId, appId: app.id, storeProductId: 'm', type: 'AUTO_RENEWABLE_SUBSCRIPTION', displayName: 'm', durationIso8601: 'P1M' },
+    });
+
+    const sub = (over: Record<string, unknown>) => ({
+      projectId, customerId: customer.id, appId: app.id, store: 'APP_STORE' as const, environment: 'PRODUCTION' as const,
+      storeProductId: 's', status: 'ACTIVE' as const, productId: monthly.id, currency: 'USD',
+      purchasedAt: new Date(), expiresAt: null as Date | null, priceCents: 0,
+      ...over,
+    });
+    // sActive: purchased well before `to`, expires well after `to` — active across the whole window.
+    await prisma.subscription.create({
+      data: sub({ purchasedAt: new Date('2026-06-01T00:00:00Z'), expiresAt: new Date('2027-01-01T00:00:00Z'), priceCents: 1000, originalTransactionId: `w1-${randomUUID()}` }),
+    });
+    // sFuture: status is still ACTIVE, but purchasedAt is AFTER `to` — must be excluded from the as-of-`to` headline.
+    await prisma.subscription.create({
+      data: sub({ purchasedAt: new Date('2026-07-03T12:00:00Z'), expiresAt: null, priceCents: 2000, originalTransactionId: `w2-${randomUUID()}` }),
+    });
+    // sExpiredAtTo: status is still ACTIVE, but expiresAt is exactly `to` — predicate requires expiresAt > to, so excluded.
+    await prisma.subscription.create({
+      data: sub({ purchasedAt: new Date('2026-06-01T00:00:00Z'), expiresAt: new Date('2026-07-03T00:00:00Z'), priceCents: 1500, originalTransactionId: `w3-${randomUUID()}` }),
+    });
+
+    const q = query({ from: '2026-07-01T00:00:00Z', to: '2026-07-03T00:00:00Z', granularity: 'day' });
+    const result = await service.mrr(projectId, q);
+
+    // Old "sum all active regardless of window" behavior would have reported 4500 (1000 + 2000 + 1500).
+    expect(result.currency).toBe('USD');
+    expect(result.mrrCents).toBe(1000);
+    expect(result.mrrCents).toBe(result.series[result.series.length - 1].mrrCents); // matches the last series bucket (at `to`)
+
+    const active = await service.activeSubscriptions(projectId, q);
+    expect(active.current).toBe(1); // consistent with activeSubscriptions.current (only sActive)
+  });
+
   it('active-subscriptions: window predicate at bucket boundaries, EXPIRED excluded, current as-of to', async () => {
     const projectId = randomUUID();
     const app = await makeApp(projectId);
