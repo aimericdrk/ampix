@@ -2,11 +2,17 @@ import { Injectable } from '@nestjs/common';
 import type { z } from 'zod';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProblemException } from '../../common/problem-details';
-import type { createOfferingSchema, createPackageSchema, updateOfferingSchema } from '../support/catalog.schemas';
+import type {
+  createOfferingSchema,
+  createPackageSchema,
+  updateOfferingSchema,
+  updatePackageSchema,
+} from '../support/catalog.schemas';
 
 type CreateOffering = z.infer<typeof createOfferingSchema>;
 type CreatePackage = z.infer<typeof createPackageSchema>;
 type UpdateOffering = z.infer<typeof updateOfferingSchema>;
+type UpdatePackage = z.infer<typeof updatePackageSchema>;
 
 @Injectable()
 export class OfferingsService {
@@ -83,6 +89,17 @@ export class OfferingsService {
       if (isUniqueViolation(e)) throw new ProblemException({ status: 409, title: 'Package identifier already exists in this offering' });
       throw e;
     }
+  }
+
+  async updatePackage(projectId: string, offeringId: string, packageId: string, patch: UpdatePackage) {
+    const offering = await this.prisma.offering.findFirst({ where: { id: offeringId, projectId } });
+    if (!offering) throw new ProblemException({ status: 404, title: 'Offering not found' });
+    const pkg = await this.prisma.package.findFirst({ where: { id: packageId, offeringId } });
+    if (!pkg) throw new ProblemException({ status: 404, title: 'Package not found' });
+    return this.prisma.package.update({
+      where: { id: packageId },
+      data: { packageType: patch.packageType, sortOrder: patch.sortOrder },
+    });
   }
 
   async removePackage(projectId: string, offeringId: string, packageId: string) {

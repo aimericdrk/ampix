@@ -2,7 +2,12 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards 
 import { parseOrThrow } from '../../common/zod';
 import { ProjectAccessGuard } from '../../authz/project-access.guard';
 import { RequireProjectRole } from '../../authz/require-project-role.decorator';
-import { createOfferingSchema, createPackageSchema, updateOfferingSchema } from '../support/catalog.schemas';
+import {
+  createOfferingSchema,
+  createPackageSchema,
+  updateOfferingSchema,
+  updatePackageSchema,
+} from '../support/catalog.schemas';
 import { OfferingsService } from '../services/offerings.service';
 
 @Controller('api/v1/projects/:projectId/catalog/offerings')
@@ -46,6 +51,17 @@ export class OfferingsController {
   @RequireProjectRole('admin')
   addPackage(@Param('projectId') projectId: string, @Param('offeringId') offeringId: string, @Body() body: unknown) {
     return this.service.addPackage(projectId, offeringId, parseOrThrow(createPackageSchema, body));
+  }
+
+  @Patch(':offeringId/packages/:packageId')
+  @RequireProjectRole('admin')
+  updatePackage(
+    @Param('projectId') projectId: string,
+    @Param('offeringId') offeringId: string,
+    @Param('packageId') packageId: string,
+    @Body() body: unknown,
+  ) {
+    return this.service.updatePackage(projectId, offeringId, packageId, parseOrThrow(updatePackageSchema, body));
   }
 
   @Delete(':offeringId/packages/:packageId')

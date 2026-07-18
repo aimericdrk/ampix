@@ -66,3 +66,12 @@ export const createPackageSchema = z.object({
   productId: z.string().uuid(),
   sortOrder: z.number().int().optional(),
 });
+
+export const updatePackageSchema = z
+  .object({
+    packageType: z
+      .enum(['UNKNOWN', 'CUSTOM', 'LIFETIME', 'ANNUAL', 'SIX_MONTH', 'THREE_MONTH', 'TWO_MONTH', 'MONTHLY', 'WEEKLY'])
+      .optional(),
+    sortOrder: z.number().int().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });

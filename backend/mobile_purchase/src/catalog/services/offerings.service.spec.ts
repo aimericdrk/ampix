@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '../../../generated/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { startPostgresContainer } from '../../../test/integration/helpers/containers';
-import { updateOfferingSchema } from '../support/catalog.schemas';
+import { updateOfferingSchema, updatePackageSchema } from '../support/catalog.schemas';
 import { parseOrThrow } from '../../common/zod';
 import { ProblemException } from '../../common/problem-details';
 import { OfferingsService } from './offerings.service';
@@ -242,5 +242,90 @@ describe('OfferingsService', () => {
 
     const updated = await service.update(projectId, offering.id, patch);
     expect(updated).toMatchObject({ identifier: 'update-immutable', isCurrent: true, displayName: 'After' });
+  });
+
+  it('updates a package’s packageType and sortOrder', async () => {
+    const offering = await service.create(projectId, { identifier: 'pkg-update-happy', displayName: 'Pkg Update' });
+    const pkg = await service.addPackage(projectId, offering.id, {
+      identifier: '$rc_monthly',
+      packageType: 'MONTHLY',
+      productId,
+    });
+
+    const updated = await service.updatePackage(projectId, offering.id, pkg.id, {
+      packageType: 'ANNUAL',
+      sortOrder: 3,
+    });
+
+    expect(updated).toMatchObject({ id: pkg.id, packageType: 'ANNUAL', sortOrder: 3 });
+  });
+
+  it('updatePackage() 404s for a cross-project/non-existent offering, or a package from a different offering', async () => {
+    const otherProjectId = randomUUID();
+    const offering = await service.create(projectId, { identifier: 'pkg-update-guard', displayName: 'Guard' });
+    const pkg = await service.addPackage(projectId, offering.id, {
+      identifier: '$rc_monthly',
+      packageType: 'MONTHLY',
+      productId,
+    });
+    const otherOffering = await service.create(projectId, { identifier: 'pkg-update-guard-2', displayName: 'Guard 2' });
+
+    await expect(service.updatePackage(otherProjectId, offering.id, pkg.id, { sortOrder: 1 })).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+    await expect(service.updatePackage(projectId, randomUUID(), pkg.id, { sortOrder: 1 })).rejects.toMatchObject({
+      problem: { status: 404 },
+    });
+    await expect(
+      service.updatePackage(projectId, otherOffering.id, pkg.id, { sortOrder: 1 }),
+    ).rejects.toMatchObject({ problem: { status: 404 } });
+  });
+
+  it('updatePackageSchema rejects an empty body (400)', () => {
+    let caught: unknown;
+    try {
+      parseOrThrow(updatePackageSchema, {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ProblemException);
+    expect((caught as ProblemException).problem).toMatchObject({ status: 400 });
+  });
+
+  it('updatePackageSchema strips immutable fields (identifier, productId), so they survive an update untouched', async () => {
+    const offering = await service.create(projectId, { identifier: 'pkg-update-immutable', displayName: 'Immutable' });
+    const pkg = await service.addPackage(projectId, offering.id, {
+      identifier: '$rc_monthly',
+      packageType: 'MONTHLY',
+      productId,
+    });
+    const otherApp = await prisma.app.create({
+      data: {
+        projectId,
+        name: 'Other App',
+        platform: 'ANDROID',
+        packageName: `com.other.pkgtest.${randomUUID()}`,
+        publicSdkKey: `mp_pub_test_${randomUUID()}`,
+      },
+    });
+    const otherProduct = await prisma.product.create({
+      data: {
+        projectId,
+        appId: otherApp.id,
+        storeProductId: 'other.product',
+        type: 'CONSUMABLE',
+        displayName: 'Other Product',
+      },
+    });
+
+    const patch = parseOrThrow(updatePackageSchema, {
+      identifier: 'hijacked-identifier',
+      productId: otherProduct.id,
+      sortOrder: 5,
+    });
+    expect(patch).toEqual({ sortOrder: 5 });
+
+    const updated = await service.updatePackage(projectId, offering.id, pkg.id, patch);
+    expect(updated).toMatchObject({ identifier: '$rc_monthly', productId, sortOrder: 5 });
   });
 });

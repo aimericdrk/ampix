@@ -246,4 +246,56 @@ describe('Catalog e2e — module wiring, both guards, public SDK offerings endpo
       .send({ displayName: 'Nope' })
       .expect(404);
   });
+
+  it('PATCH offerings/:offeringId/packages/:packageId — 200 as admin (updates packageType/sortOrder), 403 as viewer, 404 for unknown id', async () => {
+    fakeAccess.role = 'admin';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+
+    const pkgApp = await prisma.app.create({
+      data: {
+        projectId,
+        name: 'Pkg App',
+        platform: 'IOS',
+        bundleId: `com.pkg.${randomUUID()}`,
+        publicSdkKey: generatePublicSdkKey(),
+      },
+    });
+    const product = await prisma.product.create({
+      data: {
+        projectId,
+        appId: pkgApp.id,
+        storeProductId: 'pkg.monthly',
+        type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        displayName: 'Monthly',
+      },
+    });
+    const offering = await prisma.offering.create({
+      data: { projectId, identifier: 'pkg-patch-offering', displayName: 'Pkg Patch' },
+    });
+    const pkg = await prisma.package.create({
+      data: { offeringId: offering.id, identifier: '$rc_monthly', packageType: 'MONTHLY', productId: product.id },
+    });
+
+    const res = await request(http)
+      .patch(`/api/v1/projects/${projectId}/catalog/offerings/${offering.id}/packages/${pkg.id}`)
+      .set('Authorization', 'Bearer admin-token')
+      .send({ packageType: 'ANNUAL', sortOrder: 2 })
+      .expect(200);
+    expect(res.body).toMatchObject({ id: pkg.id, packageType: 'ANNUAL', sortOrder: 2 });
+
+    fakeAccess.role = 'viewer';
+    await request(http)
+      .patch(`/api/v1/projects/${projectId}/catalog/offerings/${offering.id}/packages/${pkg.id}`)
+      .set('Authorization', 'Bearer viewer-token')
+      .send({ sortOrder: 9 })
+      .expect(403);
+
+    fakeAccess.role = 'admin';
+    await request(http)
+      .patch(`/api/v1/projects/${projectId}/catalog/offerings/${offering.id}/packages/${randomUUID()}`)
+      .set('Authorization', 'Bearer admin-token')
+      .send({ sortOrder: 9 })
+      .expect(404);
+  });
 });
