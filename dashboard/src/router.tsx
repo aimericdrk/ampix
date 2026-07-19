@@ -43,6 +43,7 @@ import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage'
 import { RcChartsPage } from './features/revenuecat/components/RcChartsPage';
 import { RcEntitlementsPage } from './features/revenuecat/components/RcEntitlementsPage';
 import { RcProductsPage } from './features/revenuecat/components/RcProductsPage';
+import { RcOfferingsPage } from './features/revenuecat/components/RcOfferingsPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -328,12 +329,7 @@ const rcEntitlementsRoute = createRoute({
 const rcOfferingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/offerings',
-  component: () => (
-    <RcPlaceholderPage
-      title="Offerings"
-      description="The product bundles presented to users, and how each one converts."
-    />
-  ),
+  component: RcOfferingsPage,
 });
 
 const rcPaywallsRoute = createRoute({
