@@ -45,6 +45,7 @@ import { RcEntitlementsPage } from './features/revenuecat/components/RcEntitleme
 import { RcProductsPage } from './features/revenuecat/components/RcProductsPage';
 import { RcOfferingsPage } from './features/revenuecat/components/RcOfferingsPage';
 import { RcCustomersPage } from './features/revenuecat/components/RcCustomersPage';
+import { RcCustomerDetailPage } from './features/revenuecat/components/RcCustomerDetailPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -310,6 +311,12 @@ const rcCustomersRoute = createRoute({
   component: RcCustomersPage,
 });
 
+const rcCustomerDetailRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/customers/$customerId',
+  component: RcCustomerDetailPage,
+});
+
 const rcProductsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/products',
@@ -422,6 +429,7 @@ export const routeTree = rootRoute.addChildren([
     rcConversionRoute,
     rcChartsRoute,
     rcCustomersRoute,
+    rcCustomerDetailRoute,
     rcProductsRoute,
     rcEntitlementsRoute,
     rcOfferingsRoute,
