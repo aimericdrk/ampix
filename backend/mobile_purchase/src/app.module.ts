@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { AuthzModule } from './authz/authz.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CustomersModule } from './customers/customers.module';
+import { CustomerWritesModule } from './customers/customer-writes.module';
 import { SubscribersModule } from './subscribers/subscribers.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { ReceiptsModule } from './receipts/receipts.module';
@@ -46,6 +47,7 @@ import { MetricsModule } from './metrics/metrics.module';
     AuthzModule,
     CatalogModule,
     CustomersModule,
+    CustomerWritesModule,
     SubscribersModule,
     WebhooksModule,
     ReceiptsModule,
