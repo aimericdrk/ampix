@@ -41,6 +41,7 @@ interface SubInRangeRow {
 interface RevenueTxRow {
   priceCents: number | null;
   purchasedAt: Date;
+  currency: string | null;
 }
 
 interface RecentTxRow {
@@ -92,7 +93,7 @@ export class SummaryService {
         }),
         this.prisma.transaction.findMany({
           where: { projectId, environment, revokedAt: null, priceCents: { not: null }, purchasedAt: { gte: from, lte: to } },
-          select: { priceCents: true, purchasedAt: true },
+          select: { priceCents: true, purchasedAt: true, currency: true },
         }) as Promise<RevenueTxRow[]>,
         this.prisma.transaction.findMany({
           where: { projectId, environment, purchasedAt: { gte: from, lte: to } },
@@ -106,7 +107,8 @@ export class SummaryService {
       ]);
 
     const trials_converted = await this.countConvertedTrials(convertedCandidates.map((c) => c.id));
-    const by_product = await this.buildByProduct(projectId, activeAsOfTo);
+    const dominantCurrency = mrrResult.currency;
+    const by_product = await this.buildByProduct(projectId, activeAsOfTo, dominantCurrency);
     const recent_events = await this.buildRecentEvents(recentTx);
 
     const in_trial = activeAsOfTo.filter((s) => s.periodType === 'TRIAL' || s.periodType === 'INTRO').length;
@@ -127,7 +129,7 @@ export class SummaryService {
       churned: churnedSubs.length,
       trials_started,
       trials_converted,
-      by_day: this.buildByDay(from, to, subsInRange, churnedSubs, revenueTx),
+      by_day: this.buildByDay(from, to, subsInRange, churnedSubs, revenueTx, dominantCurrency),
       by_product,
       by_store,
       churn_reasons: buildChurnReasons(churnedSubs),
@@ -181,9 +183,16 @@ export class SummaryService {
 
   /** `by_product` groups by `storeProductId` (never null, unlike the nullable catalog `productId`
    * FK) so every active sub is represented even before its store product is imported into the
-   * catalog; `mrr_cents` sums only the subs whose catalog Product resolves a period (same
-   * unattributed-exclusion rule as `MetricsService.mrr`). */
-  private async buildByProduct(projectId: string, activeAsOfTo: ActiveAsOfToRow[]): Promise<SubscriptionsByProduct[]> {
+   * catalog; `active` is a currency-agnostic count. `mrr_cents` sums only the subs whose catalog
+   * Product resolves a period (same unattributed-exclusion rule as `MetricsService.mrr`) AND whose
+   * `currency` matches `dominantCurrency` — the same dominant currency `MetricsService.mrr` picked
+   * for the headline `mrr_cents`, so the two never mix currencies together. Subs in other
+   * currencies still count toward `active` but contribute 0 to `mrr_cents`. */
+  private async buildByProduct(
+    projectId: string,
+    activeAsOfTo: ActiveAsOfToRow[],
+    dominantCurrency: string | null,
+  ): Promise<SubscriptionsByProduct[]> {
     const productIds = [...new Set(activeAsOfTo.map((s) => s.productId).filter((id): id is string => id !== null))];
     const products = productIds.length
       ? await this.prisma.product.findMany({ where: { id: { in: productIds }, projectId }, select: { id: true, durationIso8601: true } })
@@ -195,7 +204,7 @@ export class SummaryService {
       const acc = byProduct.get(s.storeProductId) ?? { active: 0, mrrCents: 0 };
       acc.active += 1;
       const multiplier = s.productId ? multiplierByProductId.get(s.productId) ?? null : null;
-      if (multiplier !== null && s.priceCents !== null) {
+      if (multiplier !== null && s.priceCents !== null && dominantCurrency !== null && s.currency === dominantCurrency) {
         acc.mrrCents += Math.round(s.priceCents * multiplier);
       }
       byProduct.set(s.storeProductId, acc);
@@ -203,12 +212,17 @@ export class SummaryService {
     return [...byProduct.entries()].map(([product_id, acc]) => ({ product_id, active: acc.active, mrr_cents: acc.mrrCents }));
   }
 
+  /** `new_subscriptions`/`churned` per bucket are currency-agnostic counts. `revenue` sums
+   * `Transaction.priceCents` only for transactions in `dominantCurrency` — the same dominant
+   * currency `MetricsService.mrr` picked for the headline `mrr_cents` — so other-currency
+   * transactions don't get mixed into the figure. */
   private buildByDay(
     from: Date,
     to: Date,
     subsInRange: SubInRangeRow[],
     churnedSubs: ChurnedSubRow[],
     revenueTx: RevenueTxRow[],
+    dominantCurrency: string | null,
   ): SubscriptionsByDay[] {
     const buckets = generateBuckets(from, to, 'day');
     const key = (d: Date) => truncateUtc(d, 'day').toISOString();
@@ -229,6 +243,7 @@ export class SummaryService {
 
     const revenueByBucket = new Map<string, number>();
     for (const t of revenueTx) {
+      if (dominantCurrency === null || t.currency !== dominantCurrency) continue;
       const k = key(t.purchasedAt);
       revenueByBucket.set(k, (revenueByBucket.get(k) ?? 0) + (t.priceCents ?? 0));
     }
@@ -260,7 +275,7 @@ export class SummaryService {
     return recentTx.map((t) => ({
       insert_id: t.id,
       event: inferEventName(t),
-      distinct_id: (t.customerId && appUserIdByCustomerId.get(t.customerId)) || '',
+      distinct_id: (t.customerId && appUserIdByCustomerId.get(t.customerId)) ?? '',
       timestamp: t.purchasedAt.toISOString(),
       product_id: t.storeProductId,
       price: (t.priceCents ?? 0) / 100,

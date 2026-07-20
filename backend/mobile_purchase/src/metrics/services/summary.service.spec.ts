@@ -150,9 +150,14 @@ describe('SummaryService (Testcontainers)', () => {
     const projectId = randomUUID();
     const app = await makeApp(projectId);
     const customer = await makeCustomer(projectId, `u_${randomUUID()}`);
+    // A resolvable product + priceCents/currency on the subs so MetricsService.mrr can pick a
+    // dominant currency (USD) — by_day.revenue only counts transactions in that currency.
+    const monthly = await prisma.product.create({
+      data: { projectId, appId: app.id, storeProductId: 's', type: 'AUTO_RENEWABLE_SUBSCRIPTION', displayName: 'Monthly', durationIso8601: 'P1M' },
+    });
     const sub = (over: Record<string, unknown>) => ({
       projectId, customerId: customer.id, appId: app.id, store: 'APP_STORE' as const, environment: 'PRODUCTION' as const,
-      storeProductId: 's', status: 'ACTIVE' as const, periodType: 'NORMAL' as const,
+      storeProductId: 's', status: 'ACTIVE' as const, periodType: 'NORMAL' as const, productId: monthly.id, priceCents: 1000, currency: 'USD',
       purchasedAt: new Date('2026-07-01T09:00:00Z'), expiresAt: null as Date | null,
       ...over,
     });
@@ -217,6 +222,72 @@ describe('SummaryService (Testcontainers)', () => {
       ]),
     );
     expect(result.by_store).toHaveLength(2);
+  });
+
+  it('multi-currency: by_product.mrr_cents/by_day.revenue reflect only the dominant currency, by_product.active stays currency-agnostic', async () => {
+    const projectId = randomUUID();
+    const app = await makeApp(projectId);
+    const customer = await makeCustomer(projectId, `u_${randomUUID()}`);
+    const monthly = await prisma.product.create({
+      data: { projectId, appId: app.id, storeProductId: 'monthly', type: 'AUTO_RENEWABLE_SUBSCRIPTION', displayName: 'Monthly', durationIso8601: 'P1M' },
+    });
+    const sub = (over: Record<string, unknown>) => ({
+      projectId, customerId: customer.id, appId: app.id, environment: 'PRODUCTION' as const, status: 'ACTIVE' as const, periodType: 'NORMAL' as const,
+      store: 'APP_STORE' as const, productId: monthly.id, storeProductId: 'monthly', purchasedAt: new Date('2026-06-01T00:00:00Z'), expiresAt: null as Date | null,
+      ...over,
+    });
+
+    // USD total = 2000, EUR total = 1500 -> USD is dominant (larger total wins).
+    await prisma.subscription.create({ data: sub({ priceCents: 1000, currency: 'USD', originalTransactionId: `mc-u1-${randomUUID()}` }) });
+    await prisma.subscription.create({ data: sub({ priceCents: 1000, currency: 'USD', originalTransactionId: `mc-u2-${randomUUID()}` }) });
+    await prisma.subscription.create({ data: sub({ priceCents: 1500, currency: 'EUR', originalTransactionId: `mc-e1-${randomUUID()}` }) });
+
+    await prisma.transaction.create({
+      data: { projectId, customerId: customer.id, appId: app.id, store: 'APP_STORE', environment: 'PRODUCTION',
+        storeTransactionId: `mc-tx-usd-${randomUUID()}`, storeProductId: 'monthly', type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        purchasedAt: new Date('2026-07-01T10:00:00Z'), priceCents: 700, currency: 'USD', rawPayload: {} },
+    });
+    await prisma.transaction.create({
+      data: { projectId, customerId: customer.id, appId: app.id, store: 'APP_STORE', environment: 'PRODUCTION',
+        storeTransactionId: `mc-tx-eur-${randomUUID()}`, storeProductId: 'monthly', type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        purchasedAt: new Date('2026-07-01T11:00:00Z'), priceCents: 400, currency: 'EUR', rawPayload: {} },
+    });
+
+    const result = await service.summary(projectId, query({ from: '2026-07-01T00:00:00Z', to: '2026-07-03T00:00:00Z' }));
+
+    expect(result.mrr_cents).toBe(2000);
+    expect(result.by_product).toEqual([{ product_id: 'monthly', active: 3, mrr_cents: 2000 }]);
+    expect(result.by_day[0]).toEqual({ t: '2026-07-01T00:00:00.000Z', new_subscriptions: 0, churned: 0, revenue: 700 });
+  });
+
+  it('in_trial/trials_started count an INTRO-period sub; a bare billingIssueDetectedAt (no other terminal signal) does not count as churned', async () => {
+    const projectId = randomUUID();
+    const app = await makeApp(projectId);
+    const customer = await makeCustomer(projectId, `u_${randomUUID()}`);
+
+    await prisma.subscription.create({
+      data: {
+        projectId, customerId: customer.id, appId: app.id, store: 'APP_STORE', environment: 'PRODUCTION',
+        storeProductId: 's', status: 'ACTIVE', periodType: 'INTRO',
+        purchasedAt: new Date('2026-07-02T00:00:00Z'), expiresAt: null,
+        originalTransactionId: `intro-${randomUUID()}`,
+      },
+    });
+    await prisma.subscription.create({
+      data: {
+        projectId, customerId: customer.id, appId: app.id, store: 'APP_STORE', environment: 'PRODUCTION',
+        storeProductId: 's', status: 'ACTIVE', periodType: 'NORMAL',
+        purchasedAt: new Date('2026-06-01T00:00:00Z'), expiresAt: null,
+        billingIssueDetectedAt: new Date('2026-07-02T00:00:00Z'),
+        originalTransactionId: `billing-only-${randomUUID()}`,
+      },
+    });
+
+    const result = await service.summary(projectId, query({ from: '2026-07-01T00:00:00Z', to: '2026-07-03T00:00:00Z' }));
+
+    expect(result.in_trial).toBe(1);
+    expect(result.trials_started).toBe(1);
+    expect(result.churned).toBe(0);
   });
 
   it('recent_events: newest-first, joins Customer.appUserId, price = priceCents/100, event inferred', async () => {
