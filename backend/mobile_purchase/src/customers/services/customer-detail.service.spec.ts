@@ -93,9 +93,38 @@ describe('CustomerDetailService', () => {
         purchasedAt: new Date('2026-02-01T00:00:00.000Z'),
       },
     });
+    const olderTransaction = await prisma.transaction.create({
+      data: {
+        projectId,
+        customerId: customer.id,
+        appId: app.id,
+        store: 'APP_STORE',
+        environment: 'PRODUCTION',
+        storeTransactionId: `txn-old-${randomUUID()}`,
+        storeProductId: 'p1',
+        type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        purchasedAt: new Date('2026-01-01T00:00:00.000Z'),
+        rawPayload: {},
+      },
+    });
+    const newerTransaction = await prisma.transaction.create({
+      data: {
+        projectId,
+        customerId: customer.id,
+        appId: app.id,
+        store: 'APP_STORE',
+        environment: 'PRODUCTION',
+        storeTransactionId: `txn-new-${randomUUID()}`,
+        storeProductId: 'p1',
+        type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        purchasedAt: new Date('2026-02-01T00:00:00.000Z'),
+        rawPayload: {},
+      },
+    });
 
     const detail = await service.getDetail(projectId, customer.id);
     expect(detail.subscriptions.map((s) => s.id)).toEqual([newer.id, older.id]);
+    expect(detail.transactions.map((t) => t.id)).toEqual([newerTransaction.id, olderTransaction.id]);
   });
 
   it('includes promotional entitlements (active + revoked) and reflects an active grant in customerInfo', async () => {
