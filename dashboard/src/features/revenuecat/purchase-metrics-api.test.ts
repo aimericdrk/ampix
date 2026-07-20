@@ -6,11 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../test/msw/server';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../test/msw/handlers';
 import { authStore } from '../auth/store';
+import type { SubscriptionsSummaryResponse } from '../../lib/api/types';
 import {
   rcMetricsKey,
   useRcActiveSubscriptions,
   useRcMrr,
   useRcRevenue,
+  useRcSummary,
   type RcActiveSubscriptionsResponse,
   type RcMrrResponse,
   type RcRevenueResponse,
@@ -40,6 +42,30 @@ const ACTIVE: RcActiveSubscriptionsResponse = {
   current: 42,
   series: [{ bucket: '2026-07-01', count: 40 }],
   approximate: true,
+};
+const SUMMARY: SubscriptionsSummaryResponse = {
+  mrr_cents: 4995,
+  active: 5,
+  in_trial: 2,
+  grace: 1,
+  new_subscriptions: 3,
+  churned: 1,
+  trials_started: 4,
+  trials_converted: 2,
+  by_day: [{ t: '2026-07-01', new_subscriptions: 1, churned: 0, revenue: 999 }],
+  by_product: [{ product_id: 'pro_monthly', active: 3, mrr_cents: 2997 }],
+  by_store: [{ store: 'app_store', active: 3 }],
+  churn_reasons: [{ reason: 'voluntary', count: 1 }],
+  recent_events: [
+    {
+      insert_id: 'rcevt-1',
+      event: '$rc_initial_purchase',
+      distinct_id: 'user-001',
+      timestamp: '2026-07-01T09:58:00.000Z',
+      product_id: 'pro_monthly',
+      price: 9.99,
+    },
+  ],
 };
 
 function wrapper() {
@@ -111,6 +137,25 @@ describe('purchase metrics hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.current).toBe(42);
+  });
+
+  it('useRcSummary hits /metrics/summary on the purchase service and returns the parsed body', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    let seenUrl = '';
+    server.use(
+      http.get(`/api/v1/projects/${PID}/metrics/summary`, ({ request }) => {
+        seenUrl = request.url;
+        return HttpResponse.json(SUMMARY);
+      }),
+    );
+
+    const { result } = renderHook(() => useRcSummary(PID, FROM, TO), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(SUMMARY);
+    const url = new URL(seenUrl);
+    expect(url.searchParams.get('from')).toBe(FROM);
+    expect(url.searchParams.get('to')).toBe(TO);
   });
 
   it('stays idle (no fetch) until both range bounds are set', () => {

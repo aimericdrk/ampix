@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { purchaseApiFetch } from '../../lib/api/purchase-client';
+import type { SubscriptionsSummaryResponse } from '../../lib/api/types';
 
 /** Bucket granularity for the purchase-service time series (spec §1.1 common query params). */
 export type RcGranularity = 'day' | 'week' | 'month';
@@ -44,7 +45,7 @@ export interface RcActiveSubscriptionsResponse {
   approximate: true;
 }
 
-type RcMetric = 'revenue' | 'mrr' | 'active-subscriptions';
+type RcMetric = 'revenue' | 'mrr' | 'active-subscriptions' | 'summary';
 
 interface RcMetricOptions {
   /** Force-disable the query (e.g. RC not connected). Defaults to enabled once the range is set. */
@@ -73,6 +74,11 @@ function metricsUrl(
   granularity: RcGranularity,
 ): string {
   return `${purchaseMetricsBase(projectId)}/${metric}?from=${from}&to=${to}&granularity=${granularity}`;
+}
+
+/** `/metrics/summary` (spec §1.1) has no `granularity` query param — unlike revenue/mrr/active-subscriptions. */
+function summaryUrl(projectId: string, from: string, to: string): string {
+  return `${purchaseMetricsBase(projectId)}/summary?from=${from}&to=${to}`;
 }
 
 /** Auto-loads once both range bounds are set (mirrors `useSubscriptionsSummary`); `opts.enabled`
@@ -124,6 +130,26 @@ export function useRcActiveSubscriptions(
       purchaseApiFetch<RcActiveSubscriptionsResponse>(
         metricsUrl(projectId, 'active-subscriptions', from, to, granularity),
       ),
+    enabled: isEnabled(from, to, opts),
+  });
+}
+
+/**
+ * `GET /metrics/summary` (spec §1.1/§2) — the Overview page's subscription summary. Returns the
+ * exact `SubscriptionsSummaryResponse` shape (`lib/api/types.ts`) so `RcOverviewPage` renders it
+ * unchanged. Auto-loads once both range bounds are set (mirrors the other three metrics); the
+ * URL carries no `granularity`, but the query key still pins it to `'day'` so `rcMetricsKey`'s
+ * shape stays uniform across every purchase-metrics hook.
+ */
+export function useRcSummary(
+  projectId: string,
+  from: string,
+  to: string,
+  opts: RcMetricOptions = {},
+) {
+  return useQuery({
+    queryKey: rcMetricsKey(projectId, 'summary', from, to, 'day'),
+    queryFn: () => purchaseApiFetch<SubscriptionsSummaryResponse>(summaryUrl(projectId, from, to)),
     enabled: isEnabled(from, to, opts),
   });
 }
