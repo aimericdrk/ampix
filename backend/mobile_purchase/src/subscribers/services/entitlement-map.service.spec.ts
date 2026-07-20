@@ -104,4 +104,71 @@ describe('EntitlementMapService', () => {
     const map = await service.resolveEntitlementMap(appId);
     expect(map.has('com.a.b.other-app-product')).toBe(false);
   });
+
+  describe('resolveEntitlementMapForProject', () => {
+    it('merges the entitlement mapping across every App in the project', async () => {
+      const androidApp = await prisma.app.create({
+        data: {
+          projectId,
+          name: 'Android',
+          platform: 'ANDROID',
+          packageName: `com.a.b.android.${randomUUID()}`,
+          publicSdkKey: `mp_pub_test_${randomUUID()}`,
+        },
+      });
+      const iosProduct = await prisma.product.create({
+        data: { projectId, appId, storeProductId: 'ios.monthly', type: 'AUTO_RENEWABLE_SUBSCRIPTION', displayName: 'iOS Monthly' },
+      });
+      const androidProduct = await prisma.product.create({
+        data: {
+          projectId,
+          appId: androidApp.id,
+          storeProductId: 'android.monthly',
+          type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+          displayName: 'Android Monthly',
+        },
+      });
+      const pro = await prisma.entitlement.create({ data: { projectId, identifier: 'pro', displayName: 'Pro' } });
+      await prisma.productEntitlement.create({ data: { productId: iosProduct.id, entitlementId: pro.id } });
+      await prisma.productEntitlement.create({ data: { productId: androidProduct.id, entitlementId: pro.id } });
+
+      const map = await service.resolveEntitlementMapForProject(projectId);
+
+      expect(map.get('ios.monthly')).toEqual(['pro']);
+      expect(map.get('android.monthly')).toEqual(['pro']);
+    });
+
+    it('scopes to the given project — a product in another project is excluded', async () => {
+      const otherProjectId = randomUUID();
+      const otherApp = await prisma.app.create({
+        data: {
+          projectId: otherProjectId,
+          name: 'Other',
+          platform: 'IOS',
+          bundleId: `com.other.${randomUUID()}`,
+          publicSdkKey: `mp_pub_test_${randomUUID()}`,
+        },
+      });
+      const otherProduct = await prisma.product.create({
+        data: {
+          projectId: otherProjectId,
+          appId: otherApp.id,
+          storeProductId: 'other.monthly',
+          type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+          displayName: 'Other',
+        },
+      });
+      const otherEnt = await prisma.entitlement.create({
+        data: { projectId: otherProjectId, identifier: 'other', displayName: 'Other' },
+      });
+      await prisma.productEntitlement.create({ data: { productId: otherProduct.id, entitlementId: otherEnt.id } });
+
+      const map = await service.resolveEntitlementMapForProject(projectId);
+      expect(map.has('other.monthly')).toBe(false);
+    });
+
+    it('returns an empty map for a project with no products', async () => {
+      await expect(service.resolveEntitlementMapForProject(projectId)).resolves.toEqual(new Map());
+    });
+  });
 });

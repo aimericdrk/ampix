@@ -13,7 +13,13 @@ import {
 
 export interface AssembleCustomerInfoParams {
   projectId: string;
-  appId: string;
+  /** Optional (MyRevenueCat Customers design §1.3 — dashboard detail read): when provided,
+   * entitlement resolution is scoped to that single App (the SDK's existing single-App request
+   * context). When omitted, the customer's entitlements are resolved PROJECT-WIDE (every App in
+   * the project) — the shape a dashboard customer detail read needs, since Customer has no single
+   * `appId` of its own (a customer can hold subscriptions across every App in a project, e.g. the
+   * same app_user_id used on both the iOS and Android build of one mobile app). */
+  appId?: string;
   customer: Customer;
 }
 
@@ -24,7 +30,8 @@ export interface AssembleCustomerInfoParams {
  * SDK-facing endpoints — the impurity (DB I/O, `nowMs` as an injected argument) lives here so
  * `computeCustomerInfo` itself stays pure. Shared by every endpoint that needs a customer's
  * current CustomerInfo: M5a's read today, M5b's receipt intake, and design §1.2's dashboard
- * customer-detail read — promotional grants automatically apply to all of them.
+ * customer-detail read (`appId` omitted — project-wide resolution) — promotional grants
+ * automatically apply to all of them.
  */
 @Injectable()
 export class CustomerInfoAssemblerService {
@@ -43,7 +50,7 @@ export class CustomerInfoAssemblerService {
         where: { projectId, customerId: customer.id, revokedAt: null },
         include: { entitlement: { select: { identifier: true } } },
       }),
-      this.entitlementMap.resolveEntitlementMap(appId),
+      appId ? this.entitlementMap.resolveEntitlementMap(appId) : this.entitlementMap.resolveEntitlementMapForProject(projectId),
     ]);
 
     return computeCustomerInfo(

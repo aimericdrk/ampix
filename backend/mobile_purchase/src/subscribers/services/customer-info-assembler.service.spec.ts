@@ -128,4 +128,54 @@ describe('CustomerInfoAssemblerService', () => {
       expirationDate: new Date('2026-08-01T00:00:00.000Z'),
     });
   });
+
+  it('resolves entitlements project-wide when appId is omitted — a subscription on a DIFFERENT App in the same project still resolves', async () => {
+    const androidApp = await prisma.app.create({
+      data: {
+        projectId,
+        name: 'Android',
+        platform: 'ANDROID',
+        packageName: `com.a.b.android.${randomUUID()}`,
+        publicSdkKey: `mp_pub_test_${randomUUID()}`,
+      },
+    });
+    const androidProduct = await prisma.product.create({
+      data: {
+        projectId,
+        appId: androidApp.id,
+        storeProductId: 'com.a.b.android.monthly',
+        type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        displayName: 'Android Monthly',
+      },
+    });
+    const entitlement = await prisma.entitlement.create({
+      data: { projectId, identifier: 'cross-platform', displayName: 'Cross-platform' },
+    });
+    await prisma.productEntitlement.create({ data: { productId: androidProduct.id, entitlementId: entitlement.id } });
+
+    const customer = await prisma.customer.create({ data: { projectId, appUserId: 'cross-platform-user' } });
+    await prisma.subscription.create({
+      data: {
+        projectId,
+        customerId: customer.id,
+        appId: androidApp.id,
+        productId: androidProduct.id,
+        storeProductId: 'com.a.b.android.monthly',
+        store: 'PLAY_STORE',
+        environment: 'PRODUCTION',
+        status: 'ACTIVE',
+        periodType: 'NORMAL',
+        purchaseToken: `token-${randomUUID()}`,
+        purchasedAt: new Date('2026-05-01T00:00:00.000Z'),
+        expiresAt: new Date('2026-07-01T00:00:00.000Z'),
+        autoRenewStatus: true,
+      },
+    });
+
+    // No `appId` in params — this customer's App is Android, not the `appId` iOS App created in
+    // beforeEach; a single-App-scoped resolution would miss this entitlement entirely.
+    const info = await service.assemble({ projectId, customer }, NOW);
+
+    expect(Object.keys(info.entitlements.active)).toEqual(['cross-platform']);
+  });
 });

@@ -138,4 +138,56 @@ describe('Customers e2e — list + detail', () => {
       .set('Authorization', 'Bearer stranger-token')
       .expect(403);
   });
+
+  it('GET /customers/:customerId — 200 as viewer, includes customer/customerInfo/subscriptions/transactions/promotionalEntitlements', async () => {
+    fakeAccess.role = 'viewer';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+
+    const customer = await prisma.customer.create({ data: { projectId, appUserId: 'detail-user' } });
+
+    const res = await request(http)
+      .get(`/api/v1/projects/${projectId}/customers/${customer.id}`)
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      customer: { id: customer.id, appUserId: 'detail-user' },
+      customerInfo: { entitlements: { active: {}, all: {} }, subscriptions: [] },
+      subscriptions: [],
+      transactions: [],
+      promotionalEntitlements: [],
+    });
+  });
+
+  it('GET /customers/:customerId — 403 when the caller is not a project member', async () => {
+    fakeAccess.role = null;
+    const projectId = randomUUID();
+    const customer = await prisma.customer.create({ data: { projectId, appUserId: 'forbidden-user' } });
+    const http = app.getHttpServer();
+
+    await request(http)
+      .get(`/api/v1/projects/${projectId}/customers/${customer.id}`)
+      .set('Authorization', 'Bearer stranger-token')
+      .expect(403);
+  });
+
+  it('GET /customers/:customerId — 404 for an unknown customerId, and 404 for a customer in a different project', async () => {
+    fakeAccess.role = 'viewer';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+
+    await request(http)
+      .get(`/api/v1/projects/${projectId}/customers/${randomUUID()}`)
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(404);
+
+    const otherProjectCustomer = await prisma.customer.create({
+      data: { projectId: randomUUID(), appUserId: 'someone-elses' },
+    });
+    await request(http)
+      .get(`/api/v1/projects/${projectId}/customers/${otherProjectCustomer.id}`)
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(404);
+  });
 });
