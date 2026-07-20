@@ -125,11 +125,11 @@ describe('RcConversionPage', () => {
 });
 
 describe('RcPlaceholderPage', () => {
-  it('renders a not-built-yet state for Customers', async () => {
+  it('renders a not-built-yet state for Paywalls (the remaining placeholder route)', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
-    renderApp(`/projects/${TEST_PROJECT.id}/rc/customers`);
+    renderApp(`/projects/${TEST_PROJECT.id}/rc/paywalls`);
     const main = within(await screen.findByRole('main'));
-    expect(await main.findByRole('heading', { name: 'Customers' })).toBeInTheDocument();
+    expect(await main.findByRole('heading', { name: 'Paywalls' })).toBeInTheDocument();
     expect(main.getByText(/not built yet/i)).toBeInTheDocument();
   });
 });
