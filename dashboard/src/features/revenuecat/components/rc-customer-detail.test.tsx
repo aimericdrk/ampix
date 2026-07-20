@@ -281,6 +281,47 @@ describe('RcCustomerDetailPage', () => {
     expect(within(vipEntitlementRow).getByText('Promotional')).toBeInTheDocument();
   });
 
+  it('grants the first entitlement on a first-open Grant click, without touching the Entitlement select', async () => {
+    // Regression test: `GrantEntitlementDialog` mounts (unconditionally, behind `canManage`) before
+    // `useRcEntitlements` resolves, so its `useState(entitlements[0]?.id ?? '')` initializer used to
+    // lock `entitlementId` to '' forever — even after entitlements loaded and the native <select>
+    // visually showed the first option. An admin who opened the dialog and clicked "Grant" without
+    // manually re-selecting got a false "Choose an entitlement." error. This exercises exactly that
+    // path: no `userEvent.selectOptions` call before submit.
+    signInOwner();
+    mockCustomerDetail([
+      {
+        id: 'grant-legacy',
+        entitlementIdentifier: 'legacy',
+        grantedAt: '2026-01-01T00:00:00.000Z',
+        startsAt: '2026-01-01T00:00:00.000Z',
+        expiresAt: '2026-02-01T00:00:00.000Z',
+        revokedAt: '2026-02-01T00:00:00.000Z',
+        note: null,
+      },
+    ]);
+    renderApp(DETAIL_URL);
+    const main = within(await screen.findByRole('main'));
+    await main.findByText('user-42');
+
+    await userEvent.click(main.getByRole('button', { name: 'Grant promotional entitlement' }));
+    const dialog = within(await screen.findByRole('dialog'));
+
+    // Confirm the select has already pre-populated with the first (only) entitlement — this is the
+    // state the buggy version also reached visually, while `entitlementId` silently stayed ''.
+    const entitlementSelect = (await dialog.findByLabelText('Entitlement')) as HTMLSelectElement;
+    await waitFor(() => expect(entitlementSelect.value).toBe(ENTITLEMENT_VIP.id));
+
+    await userEvent.click(dialog.getByRole('button', { name: 'Grant' }));
+
+    // The buggy path shows "Choose an entitlement." and keeps the dialog open instead of granting.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const grantsTable = within(screen.getByRole('table', { name: 'Promotional entitlement grants' }));
+    const vipGrantRow = (await grantsTable.findByText('vip')).closest('tr') as HTMLElement;
+    expect(within(vipGrantRow).getByText('Active')).toBeInTheDocument();
+  });
+
   it('revokes an active promotional grant', async () => {
     signInOwner();
     mockCustomerDetail([

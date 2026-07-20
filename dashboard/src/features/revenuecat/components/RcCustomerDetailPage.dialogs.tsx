@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   AlertDialog,
@@ -81,6 +81,18 @@ export function GrantEntitlementDialog({
   const [duration, setDuration] = useState<RcPromotionalDuration>('monthly');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // `entitlements` loads asynchronously (useRcEntitlements), after the useState initializer above
+  // already ran with an empty list — so the native <select> below visually defaults to the first
+  // <option> while `entitlementId` stays ''. Sync the two once entitlements are available so a
+  // first-open Grant (without touching the select) submits that same first entitlement instead of
+  // hitting the "Choose an entitlement." guard.
+  useEffect(() => {
+    const first = entitlements[0];
+    if (!first) return;
+    if (entitlementId && entitlements.some((entitlement) => entitlement.id === entitlementId)) return;
+    setEntitlementId(first.id);
+  }, [entitlements, entitlementId]);
 
   const reset = () => {
     setEntitlementId(entitlements[0]?.id ?? '');
