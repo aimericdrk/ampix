@@ -48,6 +48,9 @@ export class CustomersQueryService {
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
+      // Only the columns the row shape needs — skips the `attributes` JSON blob + store-token
+      // columns per page (Minor fix, Task B2.1).
+      select: { id: true, appUserId: true, createdAt: true, lastSeenAt: true },
     });
 
     const hasMore = rows.length > limit;

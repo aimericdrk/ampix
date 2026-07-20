@@ -215,6 +215,10 @@ model Customer {
   @@unique([projectId, appleAppAccountToken])
   @@unique([projectId, googleObfuscatedId])
   @@index([projectId])
+  // Covers the customers LIST keyset query (`CustomersQueryService.list`, design §1.3):
+  // `WHERE projectId = ... ORDER BY createdAt DESC, id DESC` — without this, Postgres scans by
+  // projectId then sorts in memory; with it, the sort is satisfied directly from the index.
+  @@index([projectId, createdAt, id])
   @@map("customers")
 }
 

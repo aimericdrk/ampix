@@ -104,6 +104,18 @@ describe('Customers e2e — list + detail', () => {
     expect(page2.body.nextCursor).toBeNull();
   });
 
+  it('GET /customers — 400 for a garbage cursor', async () => {
+    fakeAccess.role = 'admin';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+
+    await request(http)
+      .get(`/api/v1/projects/${projectId}/customers`)
+      .query({ cursor: 'not-a-valid-cursor' })
+      .set('Authorization', 'Bearer admin-token')
+      .expect(400);
+  });
+
   it('GET /customers — 400 for a limit over the max (100)', async () => {
     fakeAccess.role = 'viewer';
     const projectId = randomUUID();

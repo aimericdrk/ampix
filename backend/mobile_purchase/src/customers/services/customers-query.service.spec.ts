@@ -94,6 +94,27 @@ describe('CustomersQueryService', () => {
     expect(page3.nextCursor).toBeNull();
   });
 
+  it('breaks ties on id DESC when two customers share the exact same createdAt — no gap, no overlap across pages', async () => {
+    const sharedCreatedAt = new Date('2026-03-01T00:00:00.000Z');
+    const [a, b] = await Promise.all([
+      prisma.customer.create({ data: { projectId, appUserId: 'tie-a', createdAt: sharedCreatedAt } }),
+      prisma.customer.create({ data: { projectId, appUserId: 'tie-b', createdAt: sharedCreatedAt } }),
+    ]);
+    // Expected order is id DESC (the tiebreak) — larger uuid string first.
+    const expectedIds = [a.id, b.id].sort().reverse();
+
+    const page1 = await service.list(projectId, { limit: 1 });
+    expect(page1.items.map((i) => i.id)).toEqual(expectedIds.slice(0, 1));
+    expect(page1.nextCursor).not.toBeNull();
+
+    const page2 = await service.list(projectId, { limit: 1, cursor: page1.nextCursor! });
+    expect(page2.items.map((i) => i.id)).toEqual(expectedIds.slice(1, 2));
+    expect(page2.nextCursor).toBeNull();
+
+    // No gap, no overlap: the two pages together are exactly {a, b}, each exactly once.
+    expect([...page1.items, ...page2.items].map((i) => i.id).sort()).toEqual([a.id, b.id].sort());
+  });
+
   it('counts activeSubscriptionCount only for TRIAL/INTRO/ACTIVE/CANCELLED/GRACE_PERIOD statuses', async () => {
     const app = await prisma.app.create({
       data: { projectId, name: 'iOS', platform: 'IOS', bundleId: `com.a.${randomUUID()}`, publicSdkKey: `mp_pub_test_${randomUUID()}` },
