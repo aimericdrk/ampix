@@ -140,6 +140,7 @@ model Entitlement {
   displayName String               @map("display_name")
   createdAt   DateTime             @default(now()) @map("created_at")
   products    ProductEntitlement[]
+  promotionalEntitlements PromotionalEntitlement[]
 
   @@unique([projectId, identifier])
   @@index([projectId])
@@ -203,6 +204,7 @@ model Customer {
   lastSeenAt           DateTime?      @map("last_seen_at")
   subscriptions        Subscription[]
   transactions         Transaction[]
+  promotionalEntitlements PromotionalEntitlement[]
 
   // M5b: a given store token must map to at most ONE Customer per project (previously unenforced —
   // `findByStoreToken` was a plain `findFirst`). Plain (non-partial) unique indexes are sufficient:
@@ -285,6 +287,27 @@ model Transaction {
   @@index([originalTransactionId])
   @@index([subscriptionId])
   @@map("transactions")
+}
+
+// Admin-granted entitlement not backed by a store purchase (design §1.1 of the MyRevenueCat
+// Customers spec). Coexists with store-derived entitlements on the same customer/entitlement
+// pair — `computeCustomerInfo` (M4b, extended) unions both, later-expiration-wins.
+model PromotionalEntitlement {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  projectId     String      @map("project_id") @db.Uuid
+  customerId    String      @map("customer_id") @db.Uuid
+  entitlementId String      @map("entitlement_id") @db.Uuid
+  grantedAt     DateTime    @default(now()) @map("granted_at")
+  startsAt      DateTime    @default(now()) @map("starts_at") // when the grant becomes active
+  expiresAt     DateTime?   @map("expires_at") // null = lifetime
+  revokedAt     DateTime?   @map("revoked_at") // null = active; set on revoke
+  note          String? // optional admin note
+  customer      Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  entitlement   Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, customerId])
+  @@index([customerId])
+  @@map("promotional_entitlements")
 }
 
 // Webhook journal - journal-first, idempotent by store event id, replayable. Mirrors the RC pattern.
