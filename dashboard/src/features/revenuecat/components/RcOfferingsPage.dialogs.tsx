@@ -10,11 +10,11 @@ import {
 } from '../../../components/ui/alert-dialog';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../../components/ui/dialog';
-import { Input } from '../../../components/ui/input';
+import { fieldLook, Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
 import { ApiError } from '../../../lib/api/problem';
+import { cn } from '../../../lib/cn';
 import {
   useAddPackage,
   useCreateRcOffering,
@@ -346,34 +346,34 @@ export function PackageFormDialog({
             )}
             <div>
               <Label className="mb-1 block">Package type</Label>
-              <Select value={packageType} onValueChange={(value) => setPackageType(value as RcPackageType)}>
-                <SelectTrigger aria-label="Package type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PACKAGE_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                aria-label="Package type"
+                className={cn(fieldLook, 'w-full')}
+                value={packageType}
+                onChange={(event) => setPackageType(event.target.value as RcPackageType)}
+              >
+                {PACKAGE_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
             {!isEdit && (
               <div>
                 <Label className="mb-1 block">Product</Label>
-                <Select value={productId} onValueChange={setProductId}>
-                  <SelectTrigger aria-label="Product">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {productLabel(product)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  aria-label="Product"
+                  className={cn(fieldLook, 'w-full')}
+                  value={productId}
+                  onChange={(event) => setProductId(event.target.value)}
+                >
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {productLabel(product)}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
             <div>

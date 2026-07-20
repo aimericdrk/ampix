@@ -96,11 +96,11 @@ function mockCatalog(offerings: RcOffering[], products: RcProduct[]) {
       return new HttpResponse(null, { status: 204 });
     }),
     http.patch(`${base}/offerings/:offeringId`, async ({ params, request }) => {
-      const index = state.offerings.findIndex((o) => o.id === params.offeringId);
-      if (index === -1) return problem(404, 'Offering not found');
+      const offering = state.offerings.find((o) => o.id === params.offeringId);
+      if (!offering) return problem(404, 'Offering not found');
       const body = (await request.json()) as { displayName?: string; metadata?: unknown };
-      state.offerings[index] = { ...state.offerings[index], ...body };
-      return HttpResponse.json(state.offerings[index]);
+      Object.assign(offering, body); // in-place merge (mock read-your-writes)
+      return HttpResponse.json(offering);
     }),
     http.delete(`${base}/offerings/:offeringId`, ({ params }) => {
       state.offerings = state.offerings.filter((o) => o.id !== params.offeringId);
@@ -128,11 +128,11 @@ function mockCatalog(offerings: RcOffering[], products: RcProduct[]) {
     http.patch(`${base}/offerings/:offeringId/packages/:packageId`, async ({ params, request }) => {
       const offering = state.offerings.find((o) => o.id === params.offeringId);
       if (!offering) return problem(404, 'Offering not found');
-      const index = offering.packages.findIndex((p) => p.id === params.packageId);
-      if (index === -1) return problem(404, 'Package not found');
+      const pkg = offering.packages.find((p) => p.id === params.packageId);
+      if (!pkg) return problem(404, 'Package not found');
       const body = (await request.json()) as { packageType?: RcPackageType; sortOrder?: number };
-      offering.packages[index] = { ...offering.packages[index], ...body };
-      return HttpResponse.json(offering.packages[index]);
+      Object.assign(pkg, body); // in-place merge (mock read-your-writes)
+      return HttpResponse.json(pkg);
     }),
     http.delete(`${base}/offerings/:offeringId/packages/:packageId`, ({ params }) => {
       const offering = state.offerings.find((o) => o.id === params.offeringId);
@@ -217,8 +217,7 @@ describe('RcOfferingsPage', () => {
     const dialog = within(await screen.findByRole('dialog'));
     await userEvent.type(dialog.getByLabelText('Identifier'), '$rc_annual');
 
-    await userEvent.click(dialog.getByRole('combobox', { name: 'Product' }));
-    await userEvent.click(await screen.findByRole('option', { name: /Annual Pro/ }), { pointerEventsCheck: 0 });
+    await userEvent.selectOptions(dialog.getByLabelText('Product'), PRODUCT_ANNUAL.id);
 
     await userEvent.click(dialog.getByRole('button', { name: 'Add package' }));
 
@@ -237,8 +236,7 @@ describe('RcOfferingsPage', () => {
     await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }));
     const dialog = within(await screen.findByRole('dialog'));
 
-    await userEvent.click(dialog.getByRole('combobox', { name: 'Package type' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'ANNUAL' }), { pointerEventsCheck: 0 });
+    await userEvent.selectOptions(dialog.getByLabelText('Package type'), 'ANNUAL');
 
     const sortOrderInput = dialog.getByLabelText('Sort order');
     await userEvent.clear(sortOrderInput);
