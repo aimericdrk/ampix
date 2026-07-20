@@ -42,7 +42,7 @@ describe('Metrics e2e — module wiring + ProjectAccessGuard', () => {
     await container.stop();
   });
 
-  const routes = ['revenue', 'mrr', 'active-subscriptions'];
+  const routes = ['revenue', 'mrr', 'active-subscriptions', 'summary'];
 
   it('viewer gets 200 with the documented shape on every metrics route (empty project -> zeros)', async () => {
     fakeAccess.role = 'viewer';
@@ -66,6 +66,26 @@ describe('Metrics e2e — module wiring + ProjectAccessGuard', () => {
       .set('Authorization', 'Bearer viewer-token')
       .expect(200);
     expect(active.body).toMatchObject({ current: 0, approximate: true });
+
+    const summary = await request(http)
+      .get(`/api/v1/projects/${projectId}/metrics/summary`)
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(200);
+    expect(summary.body).toEqual({
+      mrr_cents: 0,
+      active: 0,
+      in_trial: 0,
+      grace: 0,
+      new_subscriptions: 0,
+      churned: 0,
+      trials_started: 0,
+      trials_converted: 0,
+      by_day: expect.any(Array),
+      by_product: [],
+      by_store: [],
+      churn_reasons: [],
+      recent_events: [],
+    });
   });
 
   it('missing Authorization header -> 401 on every metrics route (guard runs before the handler)', async () => {
@@ -82,5 +102,19 @@ describe('Metrics e2e — module wiring + ProjectAccessGuard', () => {
       .get(`/api/v1/projects/${randomUUID()}/metrics/revenue`)
       .set('Authorization', 'Bearer viewer-token')
       .expect(403);
+    await request(app.getHttpServer())
+      .get(`/api/v1/projects/${randomUUID()}/metrics/summary`)
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(403);
+  });
+
+  it('summary — 400 when from is after to', async () => {
+    fakeAccess.role = 'viewer';
+    const projectId = randomUUID();
+    await request(app.getHttpServer())
+      .get(`/api/v1/projects/${projectId}/metrics/summary`)
+      .query({ from: '2026-07-10T00:00:00Z', to: '2026-07-01T00:00:00Z' })
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(400);
   });
 });
