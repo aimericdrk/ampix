@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { renderApp } from '../../../test/render-app';
 import { server } from '../../../test/msw/server';
-import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN, projectsHandlerWithoutRc } from '../../../test/msw/handlers';
+import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
 import { authStore } from '../../auth/store';
 import type { RcOffering, RcPackageType, RcProduct } from '../catalog-api';
 
@@ -288,15 +288,5 @@ describe('RcOfferingsPage', () => {
     expect(main.queryAllByRole('button', { name: 'Remove' })).toHaveLength(0);
     // The read-only "View packages" toggle is still available.
     expect(main.getAllByRole('button', { name: 'View packages' }).length).toBeGreaterThan(0);
-  });
-
-  it('shows the connect upsell (not the offerings table) when RevenueCat is not connected', async () => {
-    server.use(projectsHandlerWithoutRc());
-    signInOwner();
-    renderApp(OFFERINGS_URL);
-    const main = within(await screen.findByRole('main'));
-
-    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
-    expect(main.queryByText('New offering')).not.toBeInTheDocument();
   });
 });

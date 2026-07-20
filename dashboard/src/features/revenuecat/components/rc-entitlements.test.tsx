@@ -11,7 +11,6 @@ import {
   TEST_PROJECT,
   TEST_USER,
   VALID_ACCESS_TOKEN,
-  projectsHandlerWithoutRc,
 } from '../../../test/msw/handlers';
 import { authStore } from '../../auth/store';
 import type { RcEntitlement } from '../catalog-api';
@@ -154,15 +153,5 @@ describe('RcEntitlementsPage', () => {
     expect(main.queryByRole('button', { name: 'New entitlement' })).not.toBeInTheDocument();
     expect(main.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(main.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
-  });
-
-  it('shows the connect upsell (not the entitlements table) when RevenueCat is not connected', async () => {
-    server.use(projectsHandlerWithoutRc());
-    signInAsOwner();
-    renderApp(ENTITLEMENTS_URL);
-    const main = within(await screen.findByRole('main'));
-
-    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
-    expect(main.queryByText('pro')).not.toBeInTheDocument();
   });
 });

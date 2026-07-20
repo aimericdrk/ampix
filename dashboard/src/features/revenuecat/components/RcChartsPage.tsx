@@ -10,8 +10,6 @@ import { formatCurrency } from '../../analytics/format';
 import { ChartCard } from '../../analytics/components/charts/ChartCard';
 import { ComparisonTrend } from '../../analytics/components/charts/ComparisonTrend';
 import { KpiTile } from '../../analytics/components/charts/KpiTile';
-import { useRcEnabled } from '../api';
-import { RcConnectPage } from './RcConnectPage';
 import {
   useRcActiveSubscriptions,
   useRcMrr,
@@ -40,26 +38,24 @@ function chartState(
  * MyRevenueCat → Charts. The first dashboard surface wired to the billing-authority `mobile_purchase`
  * service (via `purchaseApiFetch`), rather than the legacy `mobile_analytics` RC mirror the Overview/
  * Conversion pages read. Three time series — exact Revenue, approximated MRR, approximated Active
- * Subscriptions — plus their headline KPIs, mirroring `RcOverviewPage`'s composition. Projects without
- * RevenueCat connected land on `RcConnectPage`, exactly like the sibling RC pages.
+ * Subscriptions — plus their headline KPIs, mirroring `RcOverviewPage`'s composition.
  */
 export function RcChartsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/charts' });
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
-  const rcEnabled = useRcEnabled(projectId);
   const { from, to } = useDateRange();
   const [granularity, setGranularity] = useState<RcGranularity>('day');
 
-  // Don't fire the purchase-service queries for a disconnected project, and don't start until the
-  // range is set. Hooks are called unconditionally (rules of hooks); the early returns come after.
-  const enabled = rcEnabled && from.length > 0 && to.length > 0;
+  // Don't start the purchase-service queries until the range is set. Hooks are called
+  // unconditionally (rules of hooks); the early return comes after.
+  const enabled = from.length > 0 && to.length > 0;
   const revenue = useRcRevenue(projectId, from, to, granularity, { enabled });
   const mrr = useRcMrr(projectId, from, to, granularity, { enabled });
   const activeSubs = useRcActiveSubscriptions(projectId, from, to, granularity, { enabled });
 
-  // Same discipline as RcOverviewPage/RcConversionPage: don't decide "not connected" until
-  // `useProjects()` has resolved, or a still-loading flag briefly flashes the connect upsell.
+  // Don't render below until `useProjects()` has resolved, or a still-loading flag briefly
+  // flashes an empty shell.
   if (!project) {
     return (
       <PageShell
@@ -72,8 +68,6 @@ export function RcChartsPage() {
       </PageShell>
     );
   }
-
-  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
 
   const anyPending = revenue.isPending || mrr.isPending || activeSubs.isPending;
   const anyError = revenue.isError || mrr.isError || activeSubs.isError;

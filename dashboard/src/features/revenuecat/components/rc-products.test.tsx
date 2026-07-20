@@ -8,7 +8,6 @@ import {
   MFA_ACCESS_TOKEN,
   MFA_USER,
   orgsState,
-  projectsHandlerWithoutRc,
   TEST_PROJECT,
   TEST_USER,
   VALID_ACCESS_TOKEN,
@@ -243,15 +242,6 @@ beforeEach(() => {
 });
 
 describe('RcProductsPage', () => {
-  it('shows the connect upsell (not products) when RevenueCat is not connected', async () => {
-    server.use(projectsHandlerWithoutRc());
-    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
-    renderApp(PRODUCTS_URL);
-    const main = within(await screen.findByRole('main'));
-    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
-    expect(main.queryByLabelText('App')).not.toBeInTheDocument();
-  });
-
   it('lists the apps in the selector and filters products to the selected app', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp(PRODUCTS_URL);

@@ -8,7 +8,6 @@ import { DataTable, type DataTableColumn } from '../../../components/ui/DataTabl
 import { EmptyState } from '../../../components/ui/empty-state';
 import { useToast } from '../../../components/ui/toast';
 import { useProjectRole, useProjects } from '../../projects/api';
-import { useRcEnabled } from '../api';
 import { useRcOfferings, useRcProducts, useSetCurrentOffering, type RcOffering, type RcPackage } from '../catalog-api';
 import {
   apiErrorMessage,
@@ -18,7 +17,6 @@ import {
   RemovePackageAlertDialog,
   resolveProductLabel,
 } from './RcOfferingsPage.dialogs';
-import { RcConnectPage } from './RcConnectPage';
 
 /**
  * MyRevenueCat → Offerings (design §3.3). Master-detail: the offerings `DataTable` up top
@@ -34,10 +32,9 @@ export function RcOfferingsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/offerings' });
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
-  const rcEnabled = useRcEnabled(projectId);
 
-  // Same discipline as RcEntitlementsPage/RcProductsPage/RcChartsPage: don't decide "not connected"
-  // until `useProjects()` has resolved, or a still-loading flag briefly flashes the connect upsell.
+  // Don't mount the catalog hooks below until `useProjects()` has resolved, or a still-loading
+  // flag briefly flashes an empty shell.
   if (!project) {
     return (
       <PageShell
@@ -51,13 +48,6 @@ export function RcOfferingsPage() {
     );
   }
 
-  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
-
-  // Split into a child component so the catalog hooks below only ever mount once RC is confirmed
-  // connected. Unlike `purchase-metrics-api.ts`'s hooks (`useRcRevenue`/`useRcMrr`/...),
-  // `catalog-api.ts`'s `useRcOfferings`/`useRcProducts` have no `opts.enabled` gate of their own —
-  // calling them unconditionally up here would fire catalog requests the API never expects for a
-  // disconnected project.
   return <OfferingsManager projectId={projectId} />;
 }
 

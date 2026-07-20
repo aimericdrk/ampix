@@ -18,7 +18,6 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { ApiError } from '../../../lib/api/problem';
 import { useProjectRole, useProjects } from '../../projects/api';
-import { useRcEnabled } from '../api';
 import {
   useCreateRcEntitlement,
   useDeleteRcEntitlement,
@@ -26,7 +25,6 @@ import {
   useUpdateRcEntitlement,
   type RcEntitlement,
 } from '../catalog-api';
-import { RcConnectPage } from './RcConnectPage';
 
 /** Renders an `ApiError`'s problem detail (falling back to its title) so a failed dialog submit
  *  shows the server's actual reason inline and keeps the dialog open (design §4); any other error
@@ -46,10 +44,9 @@ export function RcEntitlementsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/entitlements' });
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
-  const rcEnabled = useRcEnabled(projectId);
 
-  // Same discipline as RcChartsPage: don't decide "not connected" until `useProjects()` has
-  // resolved, or a still-loading flag briefly flashes the connect upsell.
+  // Don't mount the catalog hooks below until `useProjects()` has resolved, or a still-loading
+  // flag briefly flashes an empty shell.
   if (!project) {
     return (
       <PageShell
@@ -63,13 +60,6 @@ export function RcEntitlementsPage() {
     );
   }
 
-  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
-
-  // Split into a child component so the catalog hooks below only ever mount once RC is confirmed
-  // connected. Unlike `purchase-metrics-api.ts`'s hooks (`useRcRevenue`/`useRcMrr`/...),
-  // `catalog-api.ts`'s `useRcEntitlements` has no `opts.enabled` gate of its own — calling it
-  // unconditionally up here would fire a catalog request the API never expects for a disconnected
-  // project.
   return <EntitlementsManager projectId={projectId} />;
 }
 

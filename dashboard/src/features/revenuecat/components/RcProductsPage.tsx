@@ -23,7 +23,6 @@ import { ApiError } from '../../../lib/api/problem';
 import { cn } from '../../../lib/cn';
 import { formatCurrency } from '../../analytics/format';
 import { useProjectRole, useProjects } from '../../projects/api';
-import { useRcEnabled } from '../api';
 import {
   useAttachEntitlement,
   useCreateRcApp,
@@ -41,7 +40,6 @@ import {
   type RcProduct,
   type RcProductType,
 } from '../catalog-api';
-import { RcConnectPage } from './RcConnectPage';
 
 /** Every `App.platform` value `createAppSchema` accepts (`backend/mobile_purchase/src/catalog/support/catalog.schemas.ts`). */
 const APP_PLATFORMS: RcAppPlatform[] = ['IOS', 'ANDROID', 'MACOS', 'AMAZON', 'WEB'];
@@ -95,10 +93,9 @@ export function RcProductsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/products' });
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
-  const rcEnabled = useRcEnabled(projectId);
 
-  // Same discipline as RcEntitlementsPage/RcChartsPage: don't decide "not connected" until
-  // `useProjects()` has resolved, or a still-loading flag briefly flashes the connect upsell.
+  // Don't mount the catalog hooks below until `useProjects()` has resolved, or a still-loading
+  // flag briefly flashes an empty shell.
   if (!project) {
     return (
       <PageShell
@@ -112,13 +109,6 @@ export function RcProductsPage() {
     );
   }
 
-  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
-
-  // Split into a child component so the catalog hooks below only ever mount once RC is confirmed
-  // connected. Unlike `purchase-metrics-api.ts`'s hooks (`useRcRevenue`/`useRcMrr`/...),
-  // `catalog-api.ts`'s `useRcApps`/`useRcProducts`/`useRcEntitlements` have no `opts.enabled` gate
-  // of their own — calling them unconditionally up here would fire catalog requests the API never
-  // expects for a disconnected project.
   return <ProductsManager projectId={projectId} />;
 }
 

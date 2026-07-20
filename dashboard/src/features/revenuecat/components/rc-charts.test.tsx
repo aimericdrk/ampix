@@ -3,12 +3,7 @@ import { screen, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { renderApp } from '../../../test/render-app';
 import { server } from '../../../test/msw/server';
-import {
-  TEST_PROJECT,
-  TEST_USER,
-  VALID_ACCESS_TOKEN,
-  projectsHandlerWithoutRc,
-} from '../../../test/msw/handlers';
+import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
 import { authStore } from '../../auth/store';
 
 const CHARTS_URL = `/projects/${TEST_PROJECT.id}/rc/charts`;
@@ -154,15 +149,5 @@ describe('RcChartsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/purchase service/i);
     // The alert plus the three ChartCard error slots all carry the same message.
     expect(screen.getAllByText(/purchase service/i).length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('shows the connect upsell (not charts) when RevenueCat is not connected', async () => {
-    server.use(projectsHandlerWithoutRc());
-    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
-    renderApp(CHARTS_URL);
-    const main = within(await screen.findByRole('main'));
-
-    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
-    expect(main.queryByText('Revenue over time')).not.toBeInTheDocument();
   });
 });
