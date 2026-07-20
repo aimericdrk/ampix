@@ -52,15 +52,29 @@ export interface TransactionProjection {
  */
 export type EntitlementLookup = Map<string, readonly string[]>;
 
+/**
+ * Design §1.2 — the pure projection of a customer's non-revoked promotional grant. The caller
+ * (`CustomerInfoAssemblerService`) filters `revokedAt: null` before building this array; this
+ * engine only ever sees active-or-expired grants, never revoked ones — revocation itself is not
+ * a compute-on-read concern here, only expiry is (same as subscriptions/transactions).
+ * `expiresAtMs` is `null` for a lifetime grant.
+ */
+export interface PromotionalEntitlementProjection {
+  entitlementIdentifier: string;
+  expiresAtMs: number | null;
+}
+
 export interface ComputeCustomerInfoInput {
   customer: CustomerProjection;
   subscriptions: readonly SubscriptionProjection[];
   transactions: readonly TransactionProjection[];
+  promotionalEntitlements: readonly PromotionalEntitlementProjection[];
   entitlementsByStoreProductId: EntitlementLookup;
 }
 
-/** RC's `store` string, exactly as the SDK returns it (design §4 rule 6). */
-export type Store = 'app_store' | 'play_store';
+/** RC's `store` string, exactly as the SDK returns it (design §4 rule 6), plus the
+ * `'promotional'` sentinel for admin-granted entitlements (design §1.2). */
+export type Store = 'app_store' | 'play_store' | 'promotional';
 
 /** RC's `periodType` string, exactly as the SDK returns it (design §4 rule 7). */
 export type EntitlementPeriodType = 'normal' | 'trial' | 'intro' | 'promo';

@@ -56,6 +56,7 @@ function input(overrides: Partial<ComputeCustomerInfoInput> = {}): ComputeCustom
     customer: customer(),
     subscriptions: [],
     transactions: [],
+    promotionalEntitlements: [],
     entitlementsByStoreProductId: lookup({}),
     ...overrides,
   };

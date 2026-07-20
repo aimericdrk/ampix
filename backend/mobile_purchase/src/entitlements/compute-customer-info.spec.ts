@@ -43,6 +43,7 @@ function input(overrides: Partial<ComputeCustomerInfoInput> = {}): ComputeCustom
     customer: customer(),
     subscriptions: [],
     transactions: [],
+    promotionalEntitlements: [],
     entitlementsByStoreProductId: lookup({}),
     ...overrides,
   };
@@ -214,5 +215,113 @@ describe('willRenew (design §4 rule 2)', () => {
       NOW,
     );
     expect(result.entitlements.active.premium.willRenew).toBe(false);
+  });
+});
+
+describe('promotional entitlements (design §1.2)', () => {
+  it('a promotional grant produces an active, promotionally-sourced entitlement', () => {
+    const result = computeCustomerInfo(
+      input({
+        promotionalEntitlements: [
+          { entitlementIdentifier: 'premium', expiresAtMs: d('2026-08-01T00:00:00Z').getTime() },
+        ],
+      }),
+      NOW,
+    );
+    expect(result.entitlements.active.premium).toEqual({
+      isActive: true,
+      willRenew: false,
+      periodType: 'normal',
+      latestPurchaseDate: new Date(NOW),
+      originalPurchaseDate: new Date(NOW),
+      expirationDate: d('2026-08-01T00:00:00Z'),
+      store: 'promotional',
+      productIdentifier: 'promotional',
+      unsubscribeDetectedAt: null,
+      billingIssueDetectedAt: null,
+      ownershipType: 'PURCHASED',
+    });
+  });
+
+  it('a lifetime promotional grant (expiresAtMs: null) is active with a null expirationDate', () => {
+    const result = computeCustomerInfo(
+      input({ promotionalEntitlements: [{ entitlementIdentifier: 'premium', expiresAtMs: null }] }),
+      NOW,
+    );
+    expect(result.entitlements.active.premium.isActive).toBe(true);
+    expect(result.entitlements.active.premium.expirationDate).toBeNull();
+  });
+
+  it('an expired promotional grant (expiresAtMs in the past) contributes nothing, not even to `.all`', () => {
+    const result = computeCustomerInfo(
+      input({
+        promotionalEntitlements: [
+          { entitlementIdentifier: 'premium', expiresAtMs: d('2026-07-01T00:00:00Z').getTime() },
+        ],
+      }),
+      NOW,
+    );
+    expect(result.entitlements.active).toEqual({});
+    expect(result.entitlements.all).toEqual({});
+  });
+
+  it('treats expiresAtMs exactly equal to nowMs as expired (strict > boundary, same as subscriptions)', () => {
+    const result = computeCustomerInfo(
+      input({ promotionalEntitlements: [{ entitlementIdentifier: 'premium', expiresAtMs: NOW }] }),
+      NOW,
+    );
+    expect(result.entitlements.active).toEqual({});
+  });
+
+  it('a revoked grant never reaches the engine — the caller\'s revokedAt: null query keeps it out of the array, so it contributes nothing', () => {
+    const result = computeCustomerInfo(input({ promotionalEntitlements: [] }), NOW);
+    expect(result.entitlements.active).toEqual({});
+    expect(result.entitlements.all).toEqual({});
+  });
+
+  it('merge: when the promotional grant expires after the store subscription, the promotional backing wins', () => {
+    const sub = subscription({ status: 'ACTIVE', expiresAt: d('2026-08-01T00:00:00Z') });
+    const result = computeCustomerInfo(
+      input({
+        subscriptions: [sub],
+        promotionalEntitlements: [
+          { entitlementIdentifier: 'premium', expiresAtMs: d('2026-09-01T00:00:00Z').getTime() },
+        ],
+        entitlementsByStoreProductId: lookup({ 'com.myampix.premium.monthly': ['premium'] }),
+      }),
+      NOW,
+    );
+    expect(result.entitlements.active.premium.store).toBe('promotional');
+    expect(result.entitlements.active.premium.expirationDate).toEqual(d('2026-09-01T00:00:00Z'));
+  });
+
+  it('merge: when the store subscription expires after the promotional grant, the store backing wins', () => {
+    const sub = subscription({ status: 'ACTIVE', expiresAt: d('2026-09-01T00:00:00Z') });
+    const result = computeCustomerInfo(
+      input({
+        subscriptions: [sub],
+        promotionalEntitlements: [
+          { entitlementIdentifier: 'premium', expiresAtMs: d('2026-08-01T00:00:00Z').getTime() },
+        ],
+        entitlementsByStoreProductId: lookup({ 'com.myampix.premium.monthly': ['premium'] }),
+      }),
+      NOW,
+    );
+    expect(result.entitlements.active.premium.store).toBe('app_store');
+    expect(result.entitlements.active.premium.expirationDate).toEqual(d('2026-09-01T00:00:00Z'));
+  });
+
+  it('merge: a lifetime promotional grant (expiresAtMs: null) always wins over a dated store subscription', () => {
+    const sub = subscription({ status: 'ACTIVE', expiresAt: d('2099-01-01T00:00:00Z') });
+    const result = computeCustomerInfo(
+      input({
+        subscriptions: [sub],
+        promotionalEntitlements: [{ entitlementIdentifier: 'premium', expiresAtMs: null }],
+        entitlementsByStoreProductId: lookup({ 'com.myampix.premium.monthly': ['premium'] }),
+      }),
+      NOW,
+    );
+    expect(result.entitlements.active.premium.store).toBe('promotional');
+    expect(result.entitlements.active.premium.expirationDate).toBeNull();
   });
 });

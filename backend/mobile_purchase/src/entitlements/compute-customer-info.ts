@@ -4,6 +4,7 @@ import type {
   CustomerInfoSubscription,
   EntitlementInfo,
   EntitlementPeriodType,
+  PromotionalEntitlementProjection,
   Store,
   SubscriptionProjection,
   TransactionProjection,
@@ -117,6 +118,46 @@ function transactionToEntitlementInfo(tx: TransactionProjection): EntitlementInf
   };
 }
 
+/**
+ * Design §1.2 — a promotional grant is "active" purely by its own expiry (no status machine like
+ * subscriptions/transactions have): `null` means lifetime (never expires), otherwise strictly
+ * after `nowMs`, matching the subscription/transaction compute-on-read boundary (rule 1's `>
+ * nowMs`, not `>=`). Revocation is NOT re-checked here — design §1.2 says the engine only ever
+ * receives "the customer's non-revoked grants"; the caller (`CustomerInfoAssemblerService`)
+ * enforces that with a `revokedAt: null` query before this function is ever called.
+ */
+function isPromotionalEntitlementActive(grant: PromotionalEntitlementProjection, nowMs: number): boolean {
+  return grant.expiresAtMs === null || grant.expiresAtMs > nowMs;
+}
+
+/**
+ * Design §1.2 — an active promotional grant's `EntitlementInfo`. Promotionally-sourced
+ * entitlements carry no store product or renewal, so `productIdentifier`/`store` are the literal
+ * `'promotional'` sentinel and `willRenew` is always `false`. The pure input carries no
+ * grant/purchase timestamp (the input shape is just `{ entitlementIdentifier, expiresAtMs }`), so
+ * `nowMs` — the same reference clock every other compute-on-read decision uses — stands in for
+ * both purchase dates; this is a synthesized, not a persisted, timestamp.
+ */
+function promotionalEntitlementToEntitlementInfo(
+  grant: PromotionalEntitlementProjection,
+  nowMs: number,
+): EntitlementInfo {
+  const grantedAsOf = new Date(nowMs);
+  return {
+    isActive: true,
+    willRenew: false,
+    periodType: 'normal',
+    latestPurchaseDate: grantedAsOf,
+    originalPurchaseDate: grantedAsOf,
+    expirationDate: grant.expiresAtMs === null ? null : new Date(grant.expiresAtMs),
+    store: 'promotional',
+    productIdentifier: 'promotional',
+    unsubscribeDetectedAt: null,
+    billingIssueDetectedAt: null,
+    ownershipType: 'PURCHASED',
+  };
+}
+
 function entitlementIdsFor(input: ComputeCustomerInfoInput, storeProductId: string): readonly string[] {
   // Design §4 rule 5 — a storeProductId absent from the map is an unimported product; the caller
   // (M5) never populates an entry for it, so a missing key IS the "grants nothing" signal.
@@ -209,6 +250,12 @@ export function computeCustomerInfo(input: ComputeCustomerInfoInput, nowMs: numb
     for (const entitlementId of entitlementIds) {
       addBacking(backingsByEntitlement, entitlementId, backing);
     }
+  }
+
+  for (const grant of input.promotionalEntitlements) {
+    if (!isPromotionalEntitlementActive(grant, nowMs)) continue; // expired — contributes nothing (design §1.2)
+    const backing = promotionalEntitlementToEntitlementInfo(grant, nowMs);
+    addBacking(backingsByEntitlement, grant.entitlementIdentifier, backing);
   }
 
   const all: Record<string, EntitlementInfo> = {};

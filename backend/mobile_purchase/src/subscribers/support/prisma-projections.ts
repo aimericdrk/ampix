@@ -1,6 +1,7 @@
 import type { Customer, Subscription, Transaction } from '../../../generated/client';
 import type {
   CustomerProjection,
+  PromotionalEntitlementProjection,
   SubscriptionProjection,
   TransactionProjection,
 } from '../../entitlements/customer-info.types';
@@ -43,5 +44,21 @@ export function projectTransaction(transaction: Transaction): TransactionProject
     purchasedAt: transaction.purchasedAt,
     expiresAt: transaction.expiresAt,
     revokedAt: transaction.revokedAt,
+  };
+}
+
+/**
+ * Narrows a `PromotionalEntitlement` row (joined with its catalog `Entitlement.identifier`) to
+ * the pure shape `computeCustomerInfo` (M4b, extended) accepts — design §1.2's assembler step.
+ * Typed structurally against just the fields the caller's `include`/`select` produces, not the
+ * full Prisma payload.
+ */
+export function projectPromotionalEntitlement(grant: {
+  expiresAt: Date | null;
+  entitlement: { identifier: string };
+}): PromotionalEntitlementProjection {
+  return {
+    entitlementIdentifier: grant.entitlement.identifier,
+    expiresAtMs: grant.expiresAt === null ? null : grant.expiresAt.getTime(),
   };
 }

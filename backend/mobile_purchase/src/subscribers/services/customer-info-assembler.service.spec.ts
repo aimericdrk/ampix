@@ -102,4 +102,30 @@ describe('CustomerInfoAssemblerService', () => {
     expect(info.subscriptions).toHaveLength(1);
     expect(info.subscriptions[0]).toMatchObject({ storeProductId: 'com.a.b.monthly', isActive: true });
   });
+
+  it('unions a non-revoked promotional grant into entitlements.active as promotionally-sourced', async () => {
+    const entitlement = await prisma.entitlement.create({
+      data: { projectId, identifier: 'promo-premium', displayName: 'Promo Premium' },
+    });
+    const customer = await prisma.customer.create({ data: { projectId, appUserId: 'promo-user' } });
+    await prisma.promotionalEntitlement.create({
+      data: {
+        projectId,
+        customerId: customer.id,
+        entitlementId: entitlement.id,
+        expiresAt: new Date('2026-08-01T00:00:00.000Z'),
+      },
+    });
+
+    const info = await service.assemble({ projectId, appId, customer }, NOW);
+
+    expect(Object.keys(info.entitlements.active)).toEqual(['promo-premium']);
+    expect(info.entitlements.active['promo-premium']).toMatchObject({
+      isActive: true,
+      willRenew: false,
+      store: 'promotional',
+      productIdentifier: 'promotional',
+      expirationDate: new Date('2026-08-01T00:00:00.000Z'),
+    });
+  });
 });
