@@ -98,4 +98,41 @@ describe('Customer write endpoints e2e — promotional entitlements + delete cus
       .send({ entitlementId: randomUUID(), duration: 'daily' })
       .expect(404);
   });
+
+  it('DELETE .../promotional-entitlements/:grantId — 204 as admin (revokes, idempotent on repeat), 403 as viewer, 404 for a grant scoped to a different customer', async () => {
+    fakeAccess.role = 'admin';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+    const { customer, entitlement } = await seedCustomerAndEntitlement(projectId);
+    const grant = await prisma.promotionalEntitlement.create({
+      data: { projectId, customerId: customer.id, entitlementId: entitlement.id, expiresAt: null },
+    });
+
+    fakeAccess.role = 'viewer';
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/customers/${customer.id}/promotional-entitlements/${grant.id}`)
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(403);
+
+    fakeAccess.role = 'admin';
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/customers/${customer.id}/promotional-entitlements/${grant.id}`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(204);
+
+    const revoked = await prisma.promotionalEntitlement.findUnique({ where: { id: grant.id } });
+    expect(revoked?.revokedAt).not.toBeNull();
+
+    // idempotent: revoking an already-revoked grant is still a no-op 204
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/customers/${customer.id}/promotional-entitlements/${grant.id}`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(204);
+
+    const otherCustomer = await prisma.customer.create({ data: { projectId, appUserId: `other-${randomUUID()}` } });
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/customers/${otherCustomer.id}/promotional-entitlements/${grant.id}`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(404);
+  });
 });

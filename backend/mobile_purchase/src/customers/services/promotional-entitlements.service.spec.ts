@@ -94,4 +94,48 @@ describe('PromotionalEntitlementsService', () => {
       ).rejects.toMatchObject({ problem: { status: 404, title: 'Entitlement not found' } });
     });
   });
+
+  describe('revoke', () => {
+    it('sets revokedAt', async () => {
+      const { customer, entitlement } = await seedCustomerAndEntitlement();
+      const grant = await service.grant(projectId, customer.id, { entitlementId: entitlement.id, duration: 'lifetime' });
+
+      await service.revoke(projectId, customer.id, grant.id);
+
+      const revoked = await prisma.promotionalEntitlement.findUnique({ where: { id: grant.id } });
+      expect(revoked?.revokedAt).not.toBeNull();
+    });
+
+    it('is idempotent — revoking an already-revoked grant does not throw or change revokedAt', async () => {
+      const { customer, entitlement } = await seedCustomerAndEntitlement();
+      const grant = await service.grant(projectId, customer.id, { entitlementId: entitlement.id, duration: 'lifetime' });
+      await service.revoke(projectId, customer.id, grant.id);
+      const firstRevokedAt = (await prisma.promotionalEntitlement.findUnique({ where: { id: grant.id } }))?.revokedAt;
+
+      await service.revoke(projectId, customer.id, grant.id);
+
+      const secondRevokedAt = (await prisma.promotionalEntitlement.findUnique({ where: { id: grant.id } }))?.revokedAt;
+      expect(secondRevokedAt).toEqual(firstRevokedAt);
+    });
+
+    it('404s when the grant does not belong to the given customer', async () => {
+      const { customer, entitlement } = await seedCustomerAndEntitlement();
+      const grant = await service.grant(projectId, customer.id, { entitlementId: entitlement.id, duration: 'lifetime' });
+      const otherCustomer = await prisma.customer.create({ data: { projectId, appUserId: `other-${randomUUID()}` } });
+
+      await expect(service.revoke(projectId, otherCustomer.id, grant.id)).rejects.toMatchObject({
+        problem: { status: 404, title: 'Promotional entitlement grant not found' },
+      });
+    });
+
+    it('404s when the customer does not belong to the project', async () => {
+      const { customer, entitlement } = await seedCustomerAndEntitlement();
+      const grant = await service.grant(projectId, customer.id, { entitlementId: entitlement.id, duration: 'lifetime' });
+      const otherProjectId = randomUUID();
+
+      await expect(service.revoke(otherProjectId, customer.id, grant.id)).rejects.toMatchObject({
+        problem: { status: 404, title: 'Customer not found' },
+      });
+    });
+  });
 });

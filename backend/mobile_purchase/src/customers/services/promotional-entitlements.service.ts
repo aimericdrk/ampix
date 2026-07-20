@@ -66,4 +66,23 @@ export class PromotionalEntitlementsService {
       note: grant.note,
     };
   }
+
+  /**
+   * Revokes a promotional grant (design §1.4). Double-scoped: the customer must belong to
+   * `projectId`, and the grant must belong to that customer — either mismatch 404s. Idempotent:
+   * revoking an already-revoked grant is a silent no-op (no second `revokedAt` write).
+   */
+  async revoke(projectId: string, customerId: string, grantId: string): Promise<void> {
+    const customer = await this.prisma.customer.findFirst({ where: { id: customerId, projectId }, select: { id: true } });
+    if (!customer) throw new ProblemException({ status: 404, title: 'Customer not found' });
+
+    const grant = await this.prisma.promotionalEntitlement.findFirst({
+      where: { id: grantId, customerId },
+      select: { id: true, revokedAt: true },
+    });
+    if (!grant) throw new ProblemException({ status: 404, title: 'Promotional entitlement grant not found' });
+    if (grant.revokedAt) return;
+
+    await this.prisma.promotionalEntitlement.update({ where: { id: grantId }, data: { revokedAt: new Date() } });
+  }
 }

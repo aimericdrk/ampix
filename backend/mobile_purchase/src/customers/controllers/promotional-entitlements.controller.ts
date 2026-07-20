@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 import { parseOrThrow } from '../../common/zod';
 import { ProjectAccessGuard } from '../../authz/project-access.guard';
 import { RequireProjectRole } from '../../authz/require-project-role.decorator';
@@ -18,5 +18,16 @@ export class PromotionalEntitlementsController {
     @Body() body: unknown,
   ) {
     return this.service.grant(projectId, customerId, parseOrThrow(grantPromotionalEntitlementSchema, body));
+  }
+
+  @Delete(':grantId')
+  @HttpCode(204)
+  @RequireProjectRole('admin')
+  revoke(
+    @Param('projectId') projectId: string,
+    @Param('customerId') customerId: string,
+    @Param('grantId') grantId: string,
+  ) {
+    return this.service.revoke(projectId, customerId, grantId);
   }
 }
