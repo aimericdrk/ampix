@@ -135,4 +135,55 @@ describe('Customer write endpoints e2e — promotional entitlements + delete cus
       .set('Authorization', 'Bearer admin-token')
       .expect(404);
   });
+
+  it('DELETE /customers/:customerId — 204 as admin (removes the customer, keeps transactions with customerId NULL), 403 as viewer, 404 for unknown id', async () => {
+    fakeAccess.role = 'admin';
+    const projectId = randomUUID();
+    const http = app.getHttpServer();
+    const { customer } = await seedCustomerAndEntitlement(projectId);
+    const sdkApp = await prisma.app.create({
+      data: {
+        projectId,
+        name: 'iOS',
+        platform: 'IOS',
+        bundleId: `com.del.e2e.${randomUUID()}`,
+        publicSdkKey: `mp_pub_${randomUUID()}`,
+      },
+    });
+    const transaction = await prisma.transaction.create({
+      data: {
+        projectId,
+        customerId: customer.id,
+        appId: sdkApp.id,
+        store: 'APP_STORE',
+        environment: 'PRODUCTION',
+        storeTransactionId: `txn-e2e-${randomUUID()}`,
+        storeProductId: 'sub.monthly',
+        type: 'AUTO_RENEWABLE_SUBSCRIPTION',
+        purchasedAt: new Date(),
+        rawPayload: {},
+      },
+    });
+
+    fakeAccess.role = 'viewer';
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/customers/${customer.id}`)
+      .set('Authorization', 'Bearer viewer-token')
+      .expect(403);
+
+    fakeAccess.role = 'admin';
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/customers/${customer.id}`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(204);
+
+    expect(await prisma.customer.findUnique({ where: { id: customer.id } })).toBeNull();
+    const survivingTransaction = await prisma.transaction.findUnique({ where: { id: transaction.id } });
+    expect(survivingTransaction?.customerId).toBeNull();
+
+    await request(http)
+      .delete(`/api/v1/projects/${projectId}/customers/${randomUUID()}`)
+      .set('Authorization', 'Bearer admin-token')
+      .expect(404);
+  });
 });
