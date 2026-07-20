@@ -44,6 +44,7 @@ import { RcChartsPage } from './features/revenuecat/components/RcChartsPage';
 import { RcEntitlementsPage } from './features/revenuecat/components/RcEntitlementsPage';
 import { RcProductsPage } from './features/revenuecat/components/RcProductsPage';
 import { RcOfferingsPage } from './features/revenuecat/components/RcOfferingsPage';
+import { RcCustomersPage } from './features/revenuecat/components/RcCustomersPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -306,12 +307,7 @@ const rcChartsRoute = createRoute({
 const rcCustomersRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/customers',
-  component: () => (
-    <RcPlaceholderPage
-      title="Customers"
-      description="Browse subscribers, their entitlements, and their purchase history."
-    />
-  ),
+  component: RcCustomersPage,
 });
 
 const rcProductsRoute = createRoute({
