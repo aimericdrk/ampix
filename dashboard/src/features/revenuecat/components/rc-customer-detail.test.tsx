@@ -494,4 +494,29 @@ describe('RcCustomerDetailPage', () => {
       expect(within(row).queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
     });
   });
+
+  it('toasts the connect-Google-Play hint on a 503 refund, leaving the row refundable', async () => {
+    signInOwner();
+    mockCustomerDetail([], [GOOGLE_SUBSCRIPTION]);
+    // Registered after mockCustomerDetail, so this 503 wins over its stateful refund handler —
+    // the exact problem the server emits when GoogleCredentialsUnavailableError maps to 503.
+    server.use(
+      http.post(`${customersBase}/:customerId/subscriptions/:subscriptionId/refund`, () =>
+        problem(503, 'Store credentials unavailable'),
+      ),
+    );
+    renderApp(DETAIL_URL);
+    await screen.findByText('user-42');
+
+    const subsTable = within(screen.getByRole('table', { name: 'Customer subscriptions' }));
+    await userEvent.click(subsTable.getByRole('button', { name: 'Refund' }));
+    const alert = within(await screen.findByRole('alertdialog'));
+    await userEvent.click(alert.getByRole('button', { name: 'Refund' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(await screen.findByText('Connect a Google Play service account first.')).toBeInTheDocument();
+
+    const refreshedTable = within(screen.getByRole('table', { name: 'Customer subscriptions' }));
+    expect(refreshedTable.getByRole('button', { name: 'Refund' })).toBeInTheDocument();
+  });
 });

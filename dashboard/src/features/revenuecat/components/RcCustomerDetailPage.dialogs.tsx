@@ -298,8 +298,12 @@ export function RefundSubscriptionDialog({
                   },
                   onError: (mutationError) => {
                     onClose();
+                    const status = mutationError instanceof ApiError ? mutationError.problem.status : null;
                     toast({
-                      title: apiErrorMessage(mutationError, 'Could not refund this subscription.'),
+                      title:
+                        status === 503
+                          ? 'Connect a Google Play service account first.'
+                          : apiErrorMessage(mutationError, 'Could not refund this subscription.'),
                       variant: 'error',
                     });
                   },
