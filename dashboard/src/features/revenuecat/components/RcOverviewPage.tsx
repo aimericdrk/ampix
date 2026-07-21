@@ -8,13 +8,11 @@ import type {
   SubscriptionsByProduct,
   SubscriptionsByStore,
 } from '../../../lib/api/types';
-import { useSubscriptionsSummary } from '../api';
-import { RcConnectPage } from './RcConnectPage';
+import { useRcSummary } from '../purchase-metrics-api';
 import { useProjects } from '../../projects/api';
 import { colorForIndex } from '../../analytics/palette';
 import { DateRangeControl, useDateRange } from '../../analytics/date-range';
 import { formatCurrency, formatPercent } from '../../analytics/format';
-import { mergeGlobalFilters, useGlobalFilters } from '../../analytics/global-filters';
 import { ChartCard } from '../../analytics/components/charts/ChartCard';
 import { ComparisonTrend } from '../../analytics/components/charts/ComparisonTrend';
 import { DonutChart } from '../../analytics/components/charts/DonutChart';
@@ -70,23 +68,21 @@ const RECENT_EVENTS_COLUMNS: Array<DataTableColumn<SubscriptionRecentEvent>> = [
 ];
 
 /**
- * MyRevenueCat → Overview. The RevenueCat-mirrored subscription summary (MRR, active/trial counts,
- * churn) for the selected range, from `useSubscriptionsSummary`. Attribution lives on the separate
- * Conversion page — the two are split along the query boundary, so neither straddles a data source.
- * Projects without RevenueCat connected land on `RcConnectPage` instead.
+ * MyRevenueCat → Overview. The `mobile_purchase` billing-authority summary (MRR, active/trial
+ * counts, churn) for the selected range, from `useRcSummary`. Attribution lives on the separate
+ * Conversion page — the two are split along the query boundary, so neither straddles a data
+ * source. No connect gate: MyRevenueCat is the self-hosted clone, so this renders directly off
+ * `mobile_purchase` for every project once `useProjects()` resolves.
  */
 export function RcOverviewPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/overview' });
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
-  const rcEnabled = project?.integrations?.revenuecat ?? false;
   const { from, to } = useDateRange();
-  const { filters: globalFilters } = useGlobalFilters();
-  const subscriptions = useSubscriptionsSummary(projectId, from, to, mergeGlobalFilters([], globalFilters));
+  const subscriptions = useRcSummary(projectId, from, to);
 
-  // Mirrors RcSettingsPage/RcConnectPage: nothing renders until `useProjects()` has actually
-  // resolved, so a still-loading connection flag is never mistaken for "not connected" — that bug
-  // used to flash the connect screen at every RC-connected project on every load.
+  // Mirrors RcSettingsPage/RcChartsPage: nothing renders until `useProjects()` has actually
+  // resolved, so a still-loading project briefly flashes an empty shell instead of stale content.
   if (!project) {
     return (
       <PageShell
@@ -99,8 +95,6 @@ export function RcOverviewPage() {
       </PageShell>
     );
   }
-
-  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
 
   const data = subscriptions.data;
 

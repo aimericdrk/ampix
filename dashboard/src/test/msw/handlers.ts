@@ -1570,6 +1570,15 @@ export const handlers = [
     return HttpResponse.json(SUBSCRIPTIONS_SUMMARY_FIXTURE);
   }),
 
+  // `mobile_purchase`'s Overview summary endpoint (spec §1.1) — field-for-field identical shape
+  // to the mirror's `/metrics/subscriptions` above, so the same fixture doubles for both.
+  http.get('/api/v1/projects/:projectId/metrics/summary', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SUBSCRIPTIONS_SUMMARY_FIXTURE);
+  }),
+
   http.get('/api/v1/projects/:projectId/metrics/subscriptions/attribution', ({ request }) => {
     const token = bearerToken(request);
     if (!token || !ACCEPTED_TOKENS.has(token))

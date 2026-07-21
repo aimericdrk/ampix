@@ -26,12 +26,13 @@ describe('RcOverviewPage', () => {
     expect(main.getByText(/by product/i)).toBeInTheDocument();
   });
 
-  it('shows an upsell empty state when RC is not connected', async () => {
+  it('renders directly without a connect gate, even when integrations.revenuecat is false', async () => {
     server.use(projectsHandlerWithoutRc());
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp(OVERVIEW_URL);
     const main = within(await screen.findByRole('main'));
-    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
+    expect(await main.findByText('MRR')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /connect revenuecat/i })).not.toBeInTheDocument();
   });
 
   it('does not render attribution sections', async () => {
