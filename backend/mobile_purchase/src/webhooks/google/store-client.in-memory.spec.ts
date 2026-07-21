@@ -51,4 +51,21 @@ describe('InMemoryStoreClient', () => {
       productId: 'coins_500',
     });
   });
+
+  it('revokeAndRefundSubscription resolves by default and records the (packageName, purchaseToken) call', async () => {
+    const client = new InMemoryStoreClient();
+
+    await expect(client.revokeAndRefundSubscription('com.myampix.app', 'token-1')).resolves.toBeUndefined();
+
+    expect(client.revokeAndRefundCalls).toEqual([{ packageName: 'com.myampix.app', purchaseToken: 'token-1' }]);
+  });
+
+  it('revokeAndRefundSubscription rejects with the configured error and still records the call', async () => {
+    const storeError = new Error('store rejected');
+    const client = new InMemoryStoreClient().failRevokeAndRefundWith(storeError);
+
+    await expect(client.revokeAndRefundSubscription('com.myampix.app', 'token-1')).rejects.toBe(storeError);
+
+    expect(client.revokeAndRefundCalls).toEqual([{ packageName: 'com.myampix.app', purchaseToken: 'token-1' }]);
+  });
 });

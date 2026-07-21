@@ -59,6 +59,14 @@ export class GoogleApiStoreClient implements StoreClient {
     throw new GoogleCredentialsUnavailableError(packageName);
   }
 
+  async revokeAndRefundSubscription(packageName: string, _purchaseToken: string): Promise<void> {
+    await this.requireCredentials(packageName);
+    // Unreachable today, same as getSubscriptionV2 — the real `purchases.subscriptions.revoke`
+    // call (refund last payment + immediate revoke, D1 refund design §1.3) lands here once
+    // decryption exists.
+    throw new GoogleCredentialsUnavailableError(packageName);
+  }
+
   private async requireCredentials(packageName: string): Promise<string> {
     const app = await this.prisma.app.findFirst({
       where: { platform: AppPlatform.ANDROID, packageName },

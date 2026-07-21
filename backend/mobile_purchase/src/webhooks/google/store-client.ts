@@ -114,4 +114,11 @@ export interface StoreClient {
   /** `purchases.products.get(packageName, productId, purchaseToken)` — one-time products. Same
    * `null`-vs-throw contract as `getSubscriptionV2`. */
   getProduct(packageName: string, productId: string, purchaseToken: string): Promise<GoogleOneTimeProductPurchase | null>;
+
+  /** `purchases.subscriptions.revoke(packageName, purchaseToken)` — refund the LAST payment and
+   * immediately revoke access (D1 refund design §1.3, RC's Google dashboard refund). Resolves on
+   * store success; throws on any failure (`GoogleCredentialsUnavailableError` when credentials
+   * are absent, anything else for a store rejection). No `null` case — a revoke either succeeded
+   * or it threw. */
+  revokeAndRefundSubscription(packageName: string, purchaseToken: string): Promise<void>;
 }

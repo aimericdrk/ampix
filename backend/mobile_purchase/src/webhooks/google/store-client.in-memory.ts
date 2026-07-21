@@ -9,6 +9,10 @@ import type { GoogleOneTimeProductPurchase, GoogleSubscriptionV2, StoreClient } 
 export class InMemoryStoreClient implements StoreClient {
   private readonly subscriptions = new Map<string, GoogleSubscriptionV2>();
   private readonly products = new Map<string, GoogleOneTimeProductPurchase>();
+  /** Every `revokeAndRefundSubscription` call, in order — recorded even when the call rejects,
+   * so specs can assert both "the store WAS asked" and "the store was NOT asked" branches. */
+  readonly revokeAndRefundCalls: Array<{ packageName: string; purchaseToken: string }> = [];
+  private revokeAndRefundError: Error | null = null;
 
   seedSubscription(packageName: string, purchaseToken: string, data: GoogleSubscriptionV2): this {
     this.subscriptions.set(subscriptionKey(packageName, purchaseToken), data);
@@ -20,12 +24,28 @@ export class InMemoryStoreClient implements StoreClient {
     return this;
   }
 
+  /** Make every subsequent `revokeAndRefundSubscription` call reject with exactly `error` (e.g. a
+   * `GoogleCredentialsUnavailableError` to drive the 503 branch, or a plain `Error` for the 502
+   * "store rejected" branch). Pass `null` to reset to the resolving default. Fluent, like the
+   * `seed*` methods. Default (never called) = the revoke resolves, i.e. store success. */
+  failRevokeAndRefundWith(error: Error | null): this {
+    this.revokeAndRefundError = error;
+    return this;
+  }
+
   async getSubscriptionV2(packageName: string, purchaseToken: string): Promise<GoogleSubscriptionV2 | null> {
     return this.subscriptions.get(subscriptionKey(packageName, purchaseToken)) ?? null;
   }
 
   async getProduct(packageName: string, productId: string, purchaseToken: string): Promise<GoogleOneTimeProductPurchase | null> {
     return this.products.get(productKey(packageName, productId, purchaseToken)) ?? null;
+  }
+
+  async revokeAndRefundSubscription(packageName: string, purchaseToken: string): Promise<void> {
+    this.revokeAndRefundCalls.push({ packageName, purchaseToken });
+    if (this.revokeAndRefundError) {
+      throw this.revokeAndRefundError;
+    }
   }
 }
 

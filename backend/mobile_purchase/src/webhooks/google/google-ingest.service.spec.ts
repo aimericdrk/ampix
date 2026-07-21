@@ -397,6 +397,7 @@ describe('GoogleIngestService', () => {
       const throwingClient: StoreClient = {
         getSubscriptionV2: () => Promise.reject(new Error('Google Play service-account credentials are not available')),
         getProduct: () => Promise.reject(new Error('Google Play service-account credentials are not available')),
+        revokeAndRefundSubscription: () => Promise.reject(new Error('Google Play service-account credentials are not available')),
       };
       const failingService = new GoogleIngestService(prisma as never, journal, customersService, throwingClient);
       const notification = subscriptionNotification(randomUUID(), 4);

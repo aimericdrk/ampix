@@ -212,6 +212,7 @@ describe('ReceiptsService', () => {
       const throwingClient: StoreClient = {
         getSubscriptionV2: () => Promise.reject(new GoogleCredentialsUnavailableError(PACKAGE_NAME)),
         getProduct: () => Promise.reject(new GoogleCredentialsUnavailableError(PACKAGE_NAME)),
+        revokeAndRefundSubscription: () => Promise.reject(new GoogleCredentialsUnavailableError(PACKAGE_NAME)),
       };
       const service = await makeService(appleVerifierWith(txnJwsPayload()), throwingClient);
 

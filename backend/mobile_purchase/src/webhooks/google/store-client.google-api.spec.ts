@@ -34,4 +34,16 @@ describe('GoogleApiStoreClient', () => {
 
     await expect(client.getSubscriptionV2('com.myampix.app', 'token-1')).rejects.toBeInstanceOf(GoogleCredentialsUnavailableError);
   });
+
+  it('revokeAndRefundSubscription throws GoogleCredentialsUnavailableError when the App has no storeCredentials', async () => {
+    const client = new GoogleApiStoreClient(fakePrisma(null));
+
+    await expect(client.revokeAndRefundSubscription('com.myampix.app', 'token-1')).rejects.toBeInstanceOf(GoogleCredentialsUnavailableError);
+  });
+
+  it('revokeAndRefundSubscription still throws (creds-gated, no googleapis wiring yet) even when storeCredentials IS set — flagged, not silently assumed working', async () => {
+    const client = new GoogleApiStoreClient(fakePrisma('encrypted-blob'));
+
+    await expect(client.revokeAndRefundSubscription('com.myampix.app', 'token-1')).rejects.toBeInstanceOf(GoogleCredentialsUnavailableError);
+  });
 });
