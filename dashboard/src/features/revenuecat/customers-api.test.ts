@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { ApiError } from '../../lib/api/problem';
 import { server } from '../../test/msw/server';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../test/msw/handlers';
 import { authStore } from '../auth/store';
@@ -13,11 +14,13 @@ import {
   useGrantPromotionalEntitlement,
   useRcCustomer,
   useRcCustomers,
+  useRefundSubscription,
   useRevokePromotionalEntitlement,
   type RcCustomerDetail,
   type RcCustomerList,
   type RcCustomerRow,
   type RcPromotionalEntitlement,
+  type RcRefundSubscriptionResult,
 } from './customers-api';
 
 const PID = TEST_PROJECT.id;
@@ -341,5 +344,82 @@ describe('useDeleteCustomer', () => {
     expect(seenUrl).toBe(`http://localhost:3000${BASE}/cust-1`);
     await waitFor(() => expect(detailCalls).toBe(2));
     await waitFor(() => expect(listCalls).toBe(2));
+  });
+});
+
+describe('useRefundSubscription', () => {
+  it('POSTs the nested subscriptions/:subscriptionId/refund path with no body and invalidates the detail query', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    let seenUrl = '';
+    let seenBody = 'unset';
+    let detailCalls = 0;
+    const refunded: RcRefundSubscriptionResult = {
+      id: 'sub-1',
+      status: 'REVOKED',
+      refundedAt: '2026-07-21T00:00:00.000Z',
+    };
+    server.use(
+      http.get(`${BASE}/:customerId`, () => {
+        detailCalls += 1;
+        return HttpResponse.json(CUSTOMER_DETAIL);
+      }),
+      http.post(
+        `${BASE}/:customerId/subscriptions/:subscriptionId/refund`,
+        async ({ request }) => {
+          seenUrl = request.url;
+          seenBody = await request.text();
+          return HttpResponse.json(refunded);
+        },
+      ),
+    );
+
+    const Wrapper = wrapper();
+    const detail = renderHook(() => useRcCustomer(PID, 'cust-1'), { wrapper: Wrapper });
+    await waitFor(() => expect(detail.result.current.isSuccess).toBe(true));
+    expect(detailCalls).toBe(1);
+
+    const refund = renderHook(() => useRefundSubscription(PID, 'cust-1'), { wrapper: Wrapper });
+    act(() => {
+      refund.result.current.mutate('sub-1');
+    });
+
+    await waitFor(() => expect(refund.result.current.isSuccess).toBe(true));
+    expect(seenUrl).toBe(`http://localhost:3000${BASE}/cust-1/subscriptions/sub-1/refund`);
+    expect(seenBody).toBe('');
+    expect(refund.result.current.data).toEqual(refunded);
+    await waitFor(() => expect(detailCalls).toBe(2));
+  });
+
+  it('surfaces a 503 problem body as ApiError and does not invalidate the detail query', async () => {
+    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
+    let detailCalls = 0;
+    server.use(
+      http.get(`${BASE}/:customerId`, () => {
+        detailCalls += 1;
+        return HttpResponse.json(CUSTOMER_DETAIL);
+      }),
+      http.post(`${BASE}/:customerId/subscriptions/:subscriptionId/refund`, () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Store credentials unavailable', status: 503 },
+          { status: 503 },
+        ),
+      ),
+    );
+
+    const Wrapper = wrapper();
+    const detail = renderHook(() => useRcCustomer(PID, 'cust-1'), { wrapper: Wrapper });
+    await waitFor(() => expect(detail.result.current.isSuccess).toBe(true));
+    expect(detailCalls).toBe(1);
+
+    const refund = renderHook(() => useRefundSubscription(PID, 'cust-1'), { wrapper: Wrapper });
+    act(() => {
+      refund.result.current.mutate('sub-1');
+    });
+
+    await waitFor(() => expect(refund.result.current.isError).toBe(true));
+    const error = refund.result.current.error;
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error?.problem).toMatchObject({ status: 503, title: 'Store credentials unavailable' });
+    expect(detailCalls).toBe(1);
   });
 });

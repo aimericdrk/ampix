@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ApiError } from '../../lib/api/problem';
 import { purchaseApiFetch } from '../../lib/api/purchase-client';
 import type { RcProductType } from './catalog-api';
 
@@ -6,7 +7,7 @@ import type { RcProductType } from './catalog-api';
  * TanStack Query hooks over the `mobile_purchase` customers API (design
  * `2026-07-20-myrevenuecat-customers-design.md` §2/§7) — the subscriber list + per-customer detail
  * (entitlements, subscriptions, transactions, promotional entitlements) and the admin
- * grant/revoke/delete actions. Every call goes through {@link purchaseApiFetch} (bearer JWT +
+ * grant/revoke/refund/delete actions. Every call goes through {@link purchaseApiFetch} (bearer JWT +
  * RFC-7807 → `ApiError`), mirroring `catalog-api.ts`. Query keys are `['rc-customers', projectId, …]`.
  */
 
@@ -287,5 +288,28 @@ export function useDeleteCustomer(projectId: string) {
       invalidateDetail(queryClient, projectId, customerId);
       invalidateList(queryClient, projectId);
     },
+  });
+}
+
+/** Refund response (refund design `2026-07-21-myrevenuecat-refund-action-design.md` §1.1 —
+ *  the updated subscription's new state; `refundedAt` is an ISO string on the wire). */
+export interface RcRefundSubscriptionResult {
+  id: string;
+  status: 'REVOKED';
+  refundedAt: string;
+}
+
+/** `POST …/customers/:customerId/subscriptions/:subscriptionId/refund` (refund design §2) —
+ *  Google Play refund-last-payment + revoke. Invalidates the detail so the subscription
+ *  re-renders as REVOKED/refunded and the entitlement drops. */
+export function useRefundSubscription(projectId: string, customerId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<RcRefundSubscriptionResult, ApiError, string>({
+    mutationFn: (subscriptionId: string) =>
+      purchaseApiFetch<RcRefundSubscriptionResult>(
+        `${customersBase(projectId)}/${customerId}/subscriptions/${subscriptionId}/refund`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => invalidateDetail(queryClient, projectId, customerId),
   });
 }
