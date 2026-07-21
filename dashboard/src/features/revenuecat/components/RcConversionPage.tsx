@@ -10,7 +10,6 @@ import type {
 } from '../../../lib/api/types';
 import { useSubscriptionAttribution } from '../api';
 import { useProjects } from '../../projects/api';
-import { RcConnectPage } from './RcConnectPage';
 import { DateRangeControl, useDateRange } from '../../analytics/date-range';
 import { formatPercent } from '../../analytics/format';
 import { BreakdownChart } from '../../analytics/components/charts/BreakdownChart';
@@ -45,19 +44,18 @@ function sortTimeToConvertBuckets(
  * grouped under "Analyze" rather than mirroring RevenueCat's own IA.
  *
  * Unlike Overview, `useSubscriptionAttribution` ignores global filters, so this page carries no
- * filter-dependent state and owns its own loading/error handling.
+ * filter-dependent state and owns its own loading/error handling. No connect gate: this renders
+ * directly off `mobile_analytics` for every project once `useProjects()` resolves.
  */
 export function RcConversionPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/rc/conversion' });
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
-  const rcEnabled = project?.integrations?.revenuecat ?? false;
   const { from, to } = useDateRange();
   const attribution = useSubscriptionAttribution(projectId, from, to);
 
-  // Same discipline as RcOverviewPage/RcSettingsPage: don't decide "not connected" until
-  // `useProjects()` has actually resolved, or a still-loading project briefly flashes this upsell
-  // at every RC-connected project.
+  // Same discipline as RcOverviewPage/RcSettingsPage: don't render below until `useProjects()`
+  // has actually resolved, or a still-loading project briefly flashes an empty shell.
   if (!project) {
     return (
       <PageShell
@@ -70,11 +68,6 @@ export function RcConversionPage() {
       </PageShell>
     );
   }
-
-  // Same connect surface as RcOverviewPage's disconnected state — `/rc/settings` exists precisely
-  // so configuring RevenueCat doesn't eject you from the MyRevenueCat tool, so this page must not
-  // point back at project settings.
-  if (!rcEnabled) return <RcConnectPage projectId={projectId} />;
 
   const data = attribution.data;
   const driverRows = data?.drivers ?? [];

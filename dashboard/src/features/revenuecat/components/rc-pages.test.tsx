@@ -72,37 +72,13 @@ describe('RcConversionPage', () => {
     expect(main.queryByText('Active subscribers')).not.toBeInTheDocument();
   });
 
-  // Same class of bug as RcOverviewPage/RcSettingsPage (see rc-connect.test.tsx): reading the RC
-  // connection flag off a still-loading `useProjects()` must not be mistaken for "not connected".
-  // Holds `/api/v1/projects` open with an infinite delay to inspect the loading window itself.
-  it('never shows the "connect revenuecat" upsell for an RC-connected project, including while still loading', async () => {
-    server.use(
-      http.get('/api/v1/projects', async () => {
-        await delay('infinite');
-        return HttpResponse.json({ projects: [] });
-      }),
-    );
-    authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
-    renderApp(CONVERSION_URL);
-
-    await screen.findByRole('heading', { name: 'Conversion' });
-    // `queryAllByText` — the empty state's title AND description both contain "connect revenuecat",
-    // so the singular `queryByText` throws on multiple matches instead of failing cleanly.
-    expect(screen.queryAllByText(/connect revenuecat/i)).toHaveLength(0);
-  });
-
-  // Regression test: the disconnected branch used to render a stale EmptyState pointing at
-  // project settings, which is wrong now that `/rc/settings` exists specifically so configuring
-  // RevenueCat doesn't eject you from the tool. It must give the same connect surface as
-  // RcOverviewPage instead.
-  it('shows the same connect surface as RcOverviewPage when RC is not connected, not the old project-settings copy', async () => {
+  it('renders directly without a connect gate, even when integrations.revenuecat is false', async () => {
     server.use(projectsHandlerWithoutRc());
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp(CONVERSION_URL);
     const main = within(await screen.findByRole('main'));
-    expect(await main.findByRole('heading', { name: /connect revenuecat/i })).toBeInTheDocument();
-    expect(await main.findByRole('button', { name: /connect/i })).toBeInTheDocument();
-    expect(main.queryByText(/project settings/i)).not.toBeInTheDocument();
+    expect(await main.findByText(/conversion drivers/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /connect revenuecat/i })).not.toBeInTheDocument();
   });
 
   // Regression test: `ChartCard`'s error branch has no live region, so a failed attribution fetch
