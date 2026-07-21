@@ -70,6 +70,34 @@ const SUBSCRIPTION: RcSubscriptionRow = {
   updatedAt: '2026-05-01T00:00:00.000Z',
 };
 
+/** A refundable Google Play subscription — the one row the Refund action may appear on (refund
+ *  design §2: `PLAY_STORE` + still-entitled status + not yet refunded). */
+const GOOGLE_SUBSCRIPTION: RcSubscriptionRow = {
+  ...SUBSCRIPTION,
+  id: 'sub-google-1',
+  store: 'PLAY_STORE',
+  storeProductId: 'com.example.play.monthly',
+  purchaseToken: 'play-token-1',
+};
+
+/** Already refunded — status stays in the refundable set (`CANCELLED`) so the hidden button is
+ *  attributable to `refundedAt` alone. */
+const REFUNDED_GOOGLE_SUBSCRIPTION: RcSubscriptionRow = {
+  ...GOOGLE_SUBSCRIPTION,
+  id: 'sub-google-refunded',
+  storeProductId: 'com.example.play.refunded',
+  status: 'CANCELLED',
+  refundedAt: '2026-06-15T00:00:00.000Z',
+};
+
+/** Google but no longer entitled — `EXPIRED` is outside the refundable status set. */
+const EXPIRED_GOOGLE_SUBSCRIPTION: RcSubscriptionRow = {
+  ...GOOGLE_SUBSCRIPTION,
+  id: 'sub-google-expired',
+  storeProductId: 'com.example.play.expired',
+  status: 'EXPIRED',
+};
+
 const TRANSACTION: RcTransactionRow = {
   id: 'txn-1',
   projectId: PID,
@@ -137,11 +165,14 @@ function promotionalEntitlementInfo(grant: RcPromotionalEntitlement) {
  * `RcOfferingsPage`'s `mockCatalog` helper — mutates the seeded state in place so a
  * grant/revoke/delete is visible on the next GET (read-your-writes, like the real service).
  */
-function mockCustomerDetail(seedGrants: RcPromotionalEntitlement[] = []) {
+function mockCustomerDetail(
+  seedGrants: RcPromotionalEntitlement[] = [],
+  subscriptions: RcSubscriptionRow[] = [SUBSCRIPTION],
+) {
   const state: RcCustomerDetail = {
     customer: { ...CUSTOMER },
     customerInfo: customerInfoFixture(),
-    subscriptions: [SUBSCRIPTION],
+    subscriptions: subscriptions.map((sub) => ({ ...sub })),
     transactions: [TRANSACTION],
     promotionalEntitlements: seedGrants,
   };
@@ -187,6 +218,13 @@ function mockCustomerDetail(seedGrants: RcPromotionalEntitlement[] = []) {
         grant.id === params.grantId ? { ...grant, revokedAt: '2026-07-20T01:00:00.000Z' } : grant,
       );
       return new HttpResponse(null, { status: 204 });
+    }),
+    http.post(`${customersBase}/:customerId/subscriptions/:subscriptionId/refund`, ({ params }) => {
+      const sub = state.subscriptions.find((candidate) => candidate.id === params.subscriptionId);
+      if (!sub) return problem(404, 'Subscription not found');
+      sub.status = 'REVOKED';
+      sub.refundedAt = '2026-07-21T00:00:00.000Z';
+      return HttpResponse.json({ id: sub.id, status: sub.status, refundedAt: sub.refundedAt });
     }),
     http.delete(`${customersBase}/:customerId`, () => {
       deleted = true;
@@ -393,5 +431,67 @@ describe('RcCustomerDetailPage', () => {
     expect(main.queryByRole('button', { name: 'Grant promotional entitlement' })).not.toBeInTheDocument();
     expect(main.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
     expect(main.queryByRole('button', { name: 'Delete customer' })).not.toBeInTheDocument();
+  });
+
+  it('shows Refund only on a refundable Google Play subscription (APP_STORE / refunded / EXPIRED get none)', async () => {
+    signInOwner();
+    mockCustomerDetail(
+      [],
+      [GOOGLE_SUBSCRIPTION, SUBSCRIPTION, REFUNDED_GOOGLE_SUBSCRIPTION, EXPIRED_GOOGLE_SUBSCRIPTION],
+    );
+    renderApp(DETAIL_URL);
+    await screen.findByText('user-42');
+
+    const subsTable = within(screen.getByRole('table', { name: 'Customer subscriptions' }));
+    expect(subsTable.getAllByRole('button', { name: 'Refund' })).toHaveLength(1);
+
+    const googleRow = subsTable.getByText('com.example.play.monthly').closest('tr') as HTMLElement;
+    expect(within(googleRow).getByRole('button', { name: 'Refund' })).toBeInTheDocument();
+
+    for (const productId of ['com.example.monthly', 'com.example.play.refunded', 'com.example.play.expired']) {
+      const row = subsTable.getByText(productId).closest('tr') as HTMLElement;
+      expect(within(row).queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    }
+  });
+
+  it('hides Refund from a viewer even on a refundable Google Play subscription', async () => {
+    signInOwner();
+    server.use(
+      http.get('/api/v1/projects', () => HttpResponse.json({ projects: [{ ...TEST_PROJECT, role: 'viewer' }] })),
+    );
+    mockCustomerDetail([], [GOOGLE_SUBSCRIPTION]);
+    renderApp(DETAIL_URL);
+    await screen.findByText('user-42');
+
+    const subsTable = within(screen.getByRole('table', { name: 'Customer subscriptions' }));
+    expect(subsTable.getByText('com.example.play.monthly')).toBeInTheDocument();
+    expect(subsTable.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+  });
+
+  it('refunds a Google Play subscription after confirming: POST, success toast, row re-renders REVOKED', async () => {
+    signInOwner();
+    mockCustomerDetail([], [GOOGLE_SUBSCRIPTION]);
+    renderApp(DETAIL_URL);
+    await screen.findByText('user-42');
+
+    const subsTable = within(screen.getByRole('table', { name: 'Customer subscriptions' }));
+    await userEvent.click(subsTable.getByRole('button', { name: 'Refund' }));
+
+    const alert = within(await screen.findByRole('alertdialog'));
+    expect(alert.getByText('Refund subscription')).toBeInTheDocument();
+    expect(
+      alert.getByText(/Refund the last payment and revoke this subscription immediately\?/),
+    ).toBeInTheDocument();
+    await userEvent.click(alert.getByRole('button', { name: 'Refund' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(await screen.findByText('Refund issued')).toBeInTheDocument();
+
+    await waitFor(() => {
+      const refreshedTable = within(screen.getByRole('table', { name: 'Customer subscriptions' }));
+      const row = refreshedTable.getByText('com.example.play.monthly').closest('tr') as HTMLElement;
+      expect(within(row).getByText('REVOKED')).toBeInTheDocument();
+      expect(within(row).queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    });
   });
 });

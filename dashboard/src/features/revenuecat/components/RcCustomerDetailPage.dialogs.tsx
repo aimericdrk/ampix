@@ -13,12 +13,14 @@ import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../../components/ui/dialog';
 import { fieldLook, Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import { cn } from '../../../lib/cn';
 import type { RcEntitlement } from '../catalog-api';
 import {
   useDeleteCustomer,
   useGrantPromotionalEntitlement,
+  useRefundSubscription,
   useRevokePromotionalEntitlement,
   type RcPromotionalDuration,
   type RcPromotionalEntitlement,
@@ -245,6 +247,66 @@ export function RevokeGrantAlertDialog({
               }}
             >
               {revokeEntitlement.isPending ? 'Revoking…' : 'Revoke'}
+            </Button>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/** Refund a Google Play subscription (refund design §2): calls the store-gated refund endpoint
+ *  (refund the last payment + revoke access immediately). Same mounted-per-target
+ *  `AlertDialogAction` + `preventDefault` pattern as `RevokeGrantAlertDialog`, but outcomes
+ *  surface as toasts instead of inline errors — the dialog closes either way, and on success the
+ *  hook's detail invalidation re-renders the row as REVOKED. */
+export function RefundSubscriptionDialog({
+  projectId,
+  customerId,
+  subscriptionId,
+  onClose,
+}: {
+  projectId: string;
+  customerId: string;
+  subscriptionId: string;
+  onClose: () => void;
+}) {
+  const refundSubscription = useRefundSubscription(projectId, customerId);
+  const { toast } = useToast();
+
+  return (
+    <AlertDialog open onOpenChange={(next) => !next && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogTitle>Refund subscription</AlertDialogTitle>
+        <AlertDialogDescription>
+          Refund the last payment and revoke this subscription immediately? This can't be undone.
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel asChild>
+            <Button variant="secondary">Cancel</Button>
+          </AlertDialogCancel>
+          <AlertDialogAction asChild>
+            <Button
+              variant="danger"
+              disabled={refundSubscription.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                refundSubscription.mutate(subscriptionId, {
+                  onSuccess: () => {
+                    onClose();
+                    toast({ title: 'Refund issued' });
+                  },
+                  onError: (mutationError) => {
+                    onClose();
+                    toast({
+                      title: apiErrorMessage(mutationError, 'Could not refund this subscription.'),
+                      variant: 'error',
+                    });
+                  },
+                });
+              }}
+            >
+              {refundSubscription.isPending ? 'Refunding…' : 'Refund'}
             </Button>
           </AlertDialogAction>
         </AlertDialogFooter>

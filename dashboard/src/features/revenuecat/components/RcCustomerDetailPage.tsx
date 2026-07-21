@@ -14,12 +14,14 @@ import {
   type RcEntitlementInfo,
   type RcPromotionalEntitlement,
   type RcSubscriptionRow,
+  type RcSubscriptionStatus,
   type RcTransactionRow,
 } from '../customers-api';
 import {
   apiErrorMessage,
   DeleteCustomerAlertDialog,
   GrantEntitlementDialog,
+  RefundSubscriptionDialog,
   RevokeGrantAlertDialog,
 } from './RcCustomerDetailPage.dialogs';
 
@@ -39,6 +41,23 @@ function formatExpiry(iso: string | null): string {
  *  marked it `store: 'promotional'`. */
 function isPromotional(entitlement: RcEntitlementInfo): boolean {
   return entitlement.store === 'promotional';
+}
+
+/** Refund design §2: the still-entitled (refundable) statuses — `CANCELLED` = auto-renew off but
+ *  entitled until `expiresAt`. `BILLING_RETRY`/`PAUSED`/`EXPIRED`/`REVOKED` are not refundable. */
+const REFUNDABLE_STATUSES: ReadonlySet<RcSubscriptionStatus> = new Set([
+  'ACTIVE',
+  'TRIAL',
+  'INTRO',
+  'GRACE_PERIOD',
+  'CANCELLED',
+]);
+
+/** RC-faithful (refund design §2): only a not-yet-refunded, still-entitled Google Play
+ *  subscription is refundable — Apple refunds are impossible via API, so `APP_STORE` rows never
+ *  get the action (hidden, not disabled). */
+function isRefundable(sub: RcSubscriptionRow): boolean {
+  return sub.store === 'PLAY_STORE' && sub.refundedAt === null && REFUNDABLE_STATUSES.has(sub.status);
 }
 
 /**
@@ -88,6 +107,7 @@ function CustomerDetailManager({ projectId, customerId }: { projectId: string; c
   const [showGrant, setShowGrant] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<RcPromotionalEntitlement | null>(null);
   const [showDelete, setShowDelete] = useState(false);
+  const [refundTarget, setRefundTarget] = useState<RcSubscriptionRow | null>(null);
 
   const catalogEntitlements = entitlementsQuery.data ?? [];
   const customer = detailQuery.data?.customer;
@@ -154,6 +174,23 @@ function CustomerDetailManager({ projectId, customerId }: { projectId: string; c
     { key: 'autoRenewStatus', header: 'Auto-renew', render: (sub) => (sub.autoRenewStatus ? 'Yes' : 'No') },
     { key: 'purchasedAt', header: 'Purchased', render: (sub) => formatDate(sub.purchasedAt) },
     { key: 'expiresAt', header: 'Expires', render: (sub) => formatExpiry(sub.expiresAt) },
+    ...(canManage
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            align: 'right' as const,
+            render: (sub: RcSubscriptionRow) =>
+              isRefundable(sub) ? (
+                <div className="flex justify-end">
+                  <Button variant="danger" size="sm" onClick={() => setRefundTarget(sub)}>
+                    Refund
+                  </Button>
+                </div>
+              ) : null,
+          },
+        ]
+      : []),
   ];
 
   const transactionColumns: Array<DataTableColumn<RcTransactionRow>> = [
@@ -344,6 +381,15 @@ function CustomerDetailManager({ projectId, customerId }: { projectId: string; c
           customerId={customerId}
           grant={revokeTarget}
           onClose={() => setRevokeTarget(null)}
+        />
+      )}
+
+      {canManage && refundTarget && (
+        <RefundSubscriptionDialog
+          projectId={projectId}
+          customerId={customerId}
+          subscriptionId={refundTarget.id}
+          onClose={() => setRefundTarget(null)}
         />
       )}
 
