@@ -152,6 +152,36 @@ describe('RefundService', () => {
     expect(reloaded.refundedAt).toEqual(previouslyRefundedAt);
   });
 
+  it('409s on a concurrent double-refund — a racer refunds the row mid-store-call, the loser does not clobber it and stamps no transaction', async () => {
+    const racerRefundedAt = new Date('2026-07-01T00:05:00.000Z');
+    const { app, customer, subscription } = await seedGoogleSubscription();
+    const latest = await seedTransaction(subscription.id, customer.id, app.id, new Date('2026-06-01T00:00:00.000Z'));
+
+    /** Simulates a concurrent refund that lands between the loser's precondition check and its
+     * write: while the store call is in flight, directly stamp `refundedAt`/`REVOKED` on the row
+     * via the spec's own prisma client, as a second in-flight refund would. */
+    class RacingStoreClient extends InMemoryStoreClient {
+      async revokeAndRefundSubscription(packageName: string, purchaseToken: string): Promise<void> {
+        await super.revokeAndRefundSubscription(packageName, purchaseToken);
+        await prisma.subscription.update({
+          where: { id: subscription.id },
+          data: { status: 'REVOKED', refundedAt: racerRefundedAt },
+        });
+      }
+    }
+    const racingService = new RefundService(prisma as never, new RacingStoreClient());
+
+    await expect(racingService.refund(projectId, customer.id, subscription.id, NOW_MS)).rejects.toMatchObject({
+      problem: { status: 409, title: 'This subscription has already been refunded.' },
+    });
+
+    const reloaded = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(reloaded.refundedAt).toEqual(racerRefundedAt);
+    expect(reloaded.status).toBe('REVOKED');
+    const latestReloaded = await prisma.transaction.findUniqueOrThrow({ where: { id: latest.id } });
+    expect(latestReloaded.revokedAt).toBeNull();
+  });
+
   it('409s for an APP_STORE subscription — store not called', async () => {
     const { customer, subscription } = await seedGoogleSubscription({
       store: 'APP_STORE',

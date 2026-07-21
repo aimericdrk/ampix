@@ -96,10 +96,16 @@ export class RefundService {
     // transactions → skip that write, the subscription-level refund still stands.
     const refundedAt = new Date(nowMs);
     await this.prisma.$transaction(async (tx) => {
-      await tx.subscription.update({
-        where: { id: subscription.id },
+      // Guard against a concurrent refund landing between the precondition check above and this
+      // write: only the transaction that still finds `refundedAt: null` wins; the loser 409s here
+      // instead of clobbering the winner's `refundedAt`.
+      const { count } = await tx.subscription.updateMany({
+        where: { id: subscription.id, refundedAt: null },
         data: { status: SubscriptionStatus.REVOKED, refundedAt },
       });
+      if (count === 0) {
+        throw new ProblemException({ status: 409, title: 'This subscription has already been refunded.' });
+      }
       const latestTransaction = await tx.transaction.findFirst({
         where: { subscriptionId: subscription.id, projectId },
         orderBy: { purchasedAt: 'desc' },
