@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma, PrismaClient, SubscriptionStatus } from '../../generated/client';
+import { Prisma, PrismaClient } from '../../generated/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { startPostgresContainer } from '../../test/integration/helpers/containers';
 import { computeCustomerInfo } from '../entitlements/compute-customer-info';
@@ -36,12 +36,10 @@ describe('SubscriptionExpirySweepService', () => {
 
   beforeEach(async () => {
     // The sweep is a deliberately global, non-project-scoped query (a cron job sweeps every
-    // project in one pass — see `candidateWhere` in the service). That means every test in this
-    // file shares one Postgres container with no natural isolation between them: in particular,
-    // the ordering-guard test below seeds a row that permanently stays a candidate (ACTIVE, past
-    // expiry, but forever blocked by the reducer's ordering guard) and would otherwise leak into
-    // every later test's candidate/batch counts. Reset the swept tables before each test so every
-    // test's `sweep()` call only ever sees that test's own freshly-seeded rows.
+    // project in one pass — see the raw-SQL candidate selection in `runBatch`). That means every
+    // test in this file shares one Postgres container with no natural isolation between them.
+    // Reset the swept tables before each test so every test's `sweep()` call only ever sees that
+    // test's own freshly-seeded rows.
     await prisma.subscription.deleteMany();
     await prisma.customer.deleteMany();
     await prisma.app.deleteMany();
@@ -172,18 +170,33 @@ describe('SubscriptionExpirySweepService', () => {
     },
   );
 
-  it('does not clobber a row whose lastEventAt is already later than its expiry instant (ordering guard)', async () => {
+  it('excludes a superseded row (lastEventAt already later than its expiry instant) from candidate selection', async () => {
     const laterEvent = new Date('2026-06-15T00:00:00.000Z'); // after expiresAt (PAST), before NOW
     const { subscription } = await seedSubscription({ status: 'ACTIVE', expiresAt: PAST, lastEventAt: laterEvent });
 
     const result = await service.sweep(NOW_MS);
 
-    // It IS a candidate (past expiry, still ACTIVE) but the reducer's ordering guard no-ops it.
-    expect(result.candidates).toBe(1);
+    // The reducer's ordering guard would no-op this row anyway, so the productive-only predicate
+    // excludes it up front rather than letting it consume a batch slot forever.
+    expect(result.candidates).toBe(0);
     expect(result.expired).toBe(0);
     const row = await reload(subscription.id);
     expect(row.status).toBe('ACTIVE');
     expect(row.lastEventAt).toEqual(laterEvent);
+  });
+
+  it('excludes a row with neither originalTransactionId nor purchaseToken set (no throw, not selected)', async () => {
+    const { subscription } = await seedSubscription({
+      status: 'ACTIVE',
+      expiresAt: PAST,
+      purchaseToken: null,
+      originalTransactionId: null,
+    });
+
+    const result = await service.sweep(NOW_MS);
+
+    expect(result).toMatchObject({ candidates: 0, expired: 0 });
+    expect((await reload(subscription.id)).status).toBe('ACTIVE');
   });
 
   it('drains more candidates than one batch across batches', async () => {

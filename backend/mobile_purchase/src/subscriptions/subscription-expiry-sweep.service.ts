@@ -22,10 +22,6 @@ export interface ExpirySweepResult {
   capped: boolean;
 }
 
-/** Statuses that are still-entitled-looking and thus sweepable once their effective expiry passes
- * (design §0). BILLING_RETRY/PAUSED/EXPIRED/REVOKED are deliberately excluded. */
-const SWEEPABLE_VIA_EXPIRES_AT = ['TRIAL', 'INTRO', 'ACTIVE', 'CANCELLED'] as const;
-
 /**
  * Flips still-entitled-looking subscriptions to EXPIRED once their effective expiry passes, THROUGH
  * the lifecycle reducer (design §2) — one writer of subscription state. The store call is not
@@ -91,10 +87,28 @@ export class SubscriptionExpirySweepService {
         return { skippedLock: true as const };
       }
 
-      const candidates = await tx.subscription.findMany({
-        where: candidateWhere(now),
-        take: batchSize,
-      });
+      // Productive candidates only: rows the reducer will ACTUALLY expire. Column-to-column
+      // comparisons (`last_event_at <= COALESCE(grace_period_expires_at, expires_at)`) aren't
+      // expressible in a Prisma `where`, hence the raw id-selection. Two failure modes this
+      // guards against: a row with neither identity column throws out of `writeIdentityOf` and
+      // aborts the whole batch transaction; and a "superseded" row (already advanced past its own
+      // expiry by a later real event) matches the old status/expiry-only predicate forever, so at
+      // scale it would keep consuming the `maxBatches` cap while never actually expiring.
+      const ids = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id FROM subscriptions
+        WHERE (
+          (status IN ('TRIAL','INTRO','ACTIVE','CANCELLED') AND expires_at IS NOT NULL AND expires_at <= ${now})
+          OR (status = 'GRACE_PERIOD' AND grace_period_expires_at IS NOT NULL AND grace_period_expires_at <= ${now})
+          OR (status = 'GRACE_PERIOD' AND grace_period_expires_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ${now})
+        )
+        AND (original_transaction_id IS NOT NULL OR purchase_token IS NOT NULL)
+        AND last_event_at <= COALESCE(grace_period_expires_at, expires_at)
+        ORDER BY COALESCE(grace_period_expires_at, expires_at) ASC
+        LIMIT ${batchSize}
+      `);
+      const candidates = ids.length
+        ? await tx.subscription.findMany({ where: { id: { in: ids.map((r) => r.id) } } })
+        : [];
 
       let expired = 0;
       for (const row of candidates) {
@@ -116,22 +130,11 @@ export class SubscriptionExpirySweepService {
   }
 }
 
-/** Candidate predicate (design §2): effective expiry ≤ now, still-entitled-looking status. */
-function candidateWhere(now: Date): Prisma.SubscriptionWhereInput {
-  return {
-    OR: [
-      { status: { in: [...SWEEPABLE_VIA_EXPIRES_AT] }, expiresAt: { not: null, lte: now } },
-      { status: 'GRACE_PERIOD', gracePeriodExpiresAt: { not: null, lte: now } },
-      { status: 'GRACE_PERIOD', gracePeriodExpiresAt: null, expiresAt: { not: null, lte: now } },
-    ],
-  };
-}
-
 /** The row's own expiry instant — grace rows use gracePeriodExpiresAt when set, else expiresAt.
- * `candidateWhere` guarantees the chosen field is non-null. */
+ * The raw-SQL productive predicate in `runBatch` guarantees the chosen field is non-null. */
 function effectiveExpiry(row: Subscription): Date {
   if (row.status === 'GRACE_PERIOD' && row.gracePeriodExpiresAt) return row.gracePeriodExpiresAt;
-  // Non-null by the candidate predicate.
+  // Non-null by the productive predicate.
   return row.expiresAt as Date;
 }
 
