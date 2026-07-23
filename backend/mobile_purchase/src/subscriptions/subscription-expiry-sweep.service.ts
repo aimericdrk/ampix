@@ -93,7 +93,10 @@ export class SubscriptionExpirySweepService {
       // guards against: a row with neither identity column throws out of `writeIdentityOf` and
       // aborts the whole batch transaction; and a "superseded" row (already advanced past its own
       // expiry by a later real event) matches the old status/expiry-only predicate forever, so at
-      // scale it would keep consuming the `maxBatches` cap while never actually expiring.
+      // scale it would keep consuming the `maxBatches` cap while never actually expiring. A NULL
+      // `last_event_at` is coalesced to `-infinity` (never-superseded) so it stays eligible —
+      // matching the reducer's own `new Date(0)` fallback in `to-subscription-state.ts`, rather than
+      // SQL three-valued logic silently excluding it (the same starvation class this guards against).
       const ids = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         SELECT id FROM subscriptions
         WHERE (
@@ -102,7 +105,7 @@ export class SubscriptionExpirySweepService {
           OR (status = 'GRACE_PERIOD' AND grace_period_expires_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ${now})
         )
         AND (original_transaction_id IS NOT NULL OR purchase_token IS NOT NULL)
-        AND last_event_at <= COALESCE(grace_period_expires_at, expires_at)
+        AND COALESCE(last_event_at, '-infinity') <= COALESCE(grace_period_expires_at, expires_at)
         ORDER BY COALESCE(grace_period_expires_at, expires_at) ASC
         LIMIT ${batchSize}
       `);

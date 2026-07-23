@@ -199,6 +199,20 @@ describe('SubscriptionExpirySweepService', () => {
     expect((await reload(subscription.id)).status).toBe('ACTIVE');
   });
 
+  it('treats a null lastEventAt as never-superseded — the row is selected and expired', async () => {
+    // `lastEventAt` is defensively nullable in the schema; the raw SQL COALESCEs a null to
+    // '-infinity' (matching the reducer's new Date(0) fallback), so such a row stays eligible
+    // instead of being silently dropped by SQL three-valued logic.
+    const { subscription } = await seedSubscription({ status: 'ACTIVE', expiresAt: PAST, lastEventAt: null });
+
+    const result = await service.sweep(NOW_MS);
+
+    expect(result).toMatchObject({ candidates: 1, expired: 1 });
+    const row = await reload(subscription.id);
+    expect(row.status).toBe('EXPIRED');
+    expect(row.lastEventAt).toEqual(PAST); // reducer stamped the expiry instant
+  });
+
   it('drains more candidates than one batch across batches', async () => {
     await seedSubscription();
     await seedSubscription();
