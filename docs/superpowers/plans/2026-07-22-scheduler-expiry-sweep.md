@@ -49,13 +49,13 @@ Every task's requirements implicitly include all of these:
   - `export const EXPIRY_SWEEP_JOB_NAME = 'subscription-expiry-sweep';` (in `expiry-sweep.job.ts`).
   - `AppConfig` gains `schedulerEnabled?: boolean` and `expirySweepCron?: string` (both always populated by `loadConfig`; optional for the same hand-built-fixture-compat reason the file documents for the Apple/Google fields).
 
-- [ ] **Step 1: Install `@nestjs/schedule`.**
+- [ ] **Step 1: Install `@nestjs/schedule` + `cron` (scoped to the `mobile_purchase` workspace).**
 
-Run (from `backend/mobile_purchase`):
+This is a **pnpm workspace** (`pnpm-workspace.yaml`, root `pnpm-lock.yaml`) — use `pnpm add` with a `--filter`, NOT `npm install` (a bare `npm`/root install lands the dep on the root workspace and churns the whole lockfile). The `ExpirySweepJob` imports `CronJob` directly from `cron`, so `cron` must be a **direct** dependency of this workspace (pnpm's strict isolation won't resolve it as a transitive-only dep). Run from the **repo root**:
 ```bash
-npm install @nestjs/schedule
+pnpm add @nestjs/schedule cron --filter @myampix/mobile-purchase
 ```
-Expected: it resolves a version whose peer range accepts `@nestjs/core@^11` and adds a `"@nestjs/schedule": "^..."` line to `package.json` dependencies (plus `cron` transitively). If npm reports an `ERESOLVE` peer conflict against `@nestjs/core@11`, install the version its peer range allows (e.g. `@nestjs/schedule@^4.1.0` or `@^6.0.0`) — do NOT use `--force`/`--legacy-peer-deps`. Record the resolved version in your report.
+Expected: adds `"@nestjs/schedule"` and `"cron"` to `backend/mobile_purchase/package.json` `dependencies` (resolving versions whose peer range accepts `@nestjs/core@^11` — e.g. `@nestjs/schedule@^6.1.3` + `cron@^4.4.0`), and a minimal `pnpm-lock.yaml` change under the `backend/mobile_purchase:` importer only. Verify the root `package.json` is UNCHANGED and the lockfile did NOT bump unrelated dev deps (`git diff -- package.json` empty; `git diff pnpm-lock.yaml | grep -E 'eslint|prettier|typescript-eslint'` empty). Record the resolved versions in your report.
 
 - [ ] **Step 2: Write the failing config test.**
 
@@ -363,7 +363,7 @@ Expected: exit 0, no output.
 ```bash
 cd /Users/aimeric/Documents/personnal-project/MyAmpix && git add \
   backend/mobile_purchase/package.json \
-  backend/mobile_purchase/package-lock.json \
+  pnpm-lock.yaml \
   backend/mobile_purchase/src/config/app-config.ts \
   backend/mobile_purchase/src/config/app-config.spec.ts \
   backend/mobile_purchase/src/subscriptions/subscription-expiry-sweep.service.ts \
@@ -373,7 +373,7 @@ cd /Users/aimeric/Documents/personnal-project/MyAmpix && git add \
   backend/mobile_purchase/src/app.module.ts && \
   git commit -m "feat(mobile_purchase): add scheduler skeleton — @nestjs/schedule, config, ExpirySweepJob shell (D2.1)"
 ```
-(Include `package-lock.json` only if the install changed it — check `git status --short` first and stage whichever lockfile the repo actually uses; if none changed, omit it. `git status` afterward must still show the dashboard WIP as the only remaining modifications.) No co-author trailer.
+Stage the root `pnpm-lock.yaml` (the workspace lockfile the `pnpm add` updated) — NOT a `package-lock.json`, and NEVER the root `package.json` (it must be unchanged). `git status` afterward must still show the dashboard WIP as the only remaining modifications. No co-author trailer.
 
 ---
 
