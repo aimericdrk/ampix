@@ -13,6 +13,7 @@ import { SubscribersModule } from './subscribers/subscribers.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { MetricsModule } from './metrics/metrics.module';
     WebhooksModule,
     ReceiptsModule,
     MetricsModule,
+    SchedulerModule,
   ],
 })
 export class AppModule {}

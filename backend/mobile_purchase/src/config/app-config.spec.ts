@@ -26,4 +26,20 @@ describe('loadConfig — DASHBOARD_ORIGINS (CORS allowlist)', () => {
     });
     expect(describeConfig(config).DASHBOARD_ORIGINS).toBe('https://app.myampix.example');
   });
+
+  it('defaults SCHEDULER_ENABLED to true and EXPIRY_SWEEP_CRON to every 5 minutes', () => {
+    const config = loadConfig({ DATABASE_URL: 'postgresql://u:p@localhost:5433/db' });
+    expect(config.schedulerEnabled).toBe(true);
+    expect(config.expirySweepCron).toBe('*/5 * * * *');
+  });
+
+  it('parses SCHEDULER_ENABLED=false and a custom EXPIRY_SWEEP_CRON', () => {
+    const config = loadConfig({
+      DATABASE_URL: 'postgresql://u:p@localhost:5433/db',
+      SCHEDULER_ENABLED: 'false',
+      EXPIRY_SWEEP_CRON: '*/10 * * * *',
+    });
+    expect(config.schedulerEnabled).toBe(false);
+    expect(config.expirySweepCron).toBe('*/10 * * * *');
+  });
 });

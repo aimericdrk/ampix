@@ -48,6 +48,12 @@ const envSchema = z.object({
   // default is the dashboard dev server origin (dashboard/vite.config.ts); X1 sets the prod
   // origin(s). Empty → no origin is allowed (CORS effectively closed).
   DASHBOARD_ORIGINS: z.string().default('http://localhost:5173'),
+  // Scheduler (D2): master on/off for the @nestjs/schedule crons. Default on; set 'false' to
+  // register no jobs (tests + a future split worker opt out this way).
+  SCHEDULER_ENABLED: z.enum(['true', 'false']).default('true'),
+  // Cron expression for the subscription-expiry sweep (design §1). Default every 5 minutes —
+  // RC-faithful promptness without load. The `cron` lib validates the expression at job construction.
+  EXPIRY_SWEEP_CRON: z.string().min(1).default('*/5 * * * *'),
 });
 
 export interface AppConfig {
@@ -74,6 +80,10 @@ export interface AppConfig {
   // CORS allowlist — see envSchema comment above. Optional for the same hand-built-fixture-
   // compatibility reason as the Apple/Google fields; loadConfig() always populates it.
   dashboardOrigins?: string[];
+  // Scheduler config (D2) — see envSchema comments. Optional for the same hand-built-fixture-
+  // compatibility reason as the Apple/Google fields; loadConfig() always populates both.
+  schedulerEnabled?: boolean;
+  expirySweepCron?: string;
 }
 
 /**
@@ -111,6 +121,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dashboardOrigins: v.DASHBOARD_ORIGINS.split(',')
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),
+    schedulerEnabled: v.SCHEDULER_ENABLED === 'true',
+    expirySweepCron: v.EXPIRY_SWEEP_CRON,
   };
 }
 
@@ -152,5 +164,7 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     GOOGLE_PUSH_AUTH_MODE: config.googlePushAuthMode ?? 'shared_secret',
     GOOGLE_PUBSUB_SHARED_SECRET: redacted(config.googlePubsubSharedSecret),
     DASHBOARD_ORIGINS: (config.dashboardOrigins ?? []).join(',') || 'MISSING',
+    SCHEDULER_ENABLED: String(config.schedulerEnabled ?? true),
+    EXPIRY_SWEEP_CRON: config.expirySweepCron ?? '*/5 * * * *',
   };
 }
