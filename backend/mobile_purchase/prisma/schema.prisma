@@ -101,6 +101,11 @@ model App {
   // Store credentials, encrypted at rest. Column modeled now; POPULATED by a later connect-store
   // flow (nullable until then). Encryption uses a dedicated key (STORE_CREDENTIALS_ENC_KEY).
   storeCredentials String?     @map("store_credentials") // encrypted JSON blob, null until connected
+  // Non-secret connection status (connect-stores E3): status reads NEVER decrypt the blob above.
+  // `storeCredentialsLiveVerified` = a live store validation succeeded; `…VerifiedAt` = when (null
+  // while `connected` but live-verify still pending — the creds-gated validator was unavailable).
+  storeCredentialsVerifiedAt   DateTime?   @map("store_credentials_verified_at")
+  storeCredentialsLiveVerified Boolean     @default(false) @map("store_credentials_live_verified")
   createdAt        DateTime    @default(now()) @map("created_at")
   products         Product[]
 
