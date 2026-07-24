@@ -21,9 +21,18 @@ const envSchema = z.object({
       }
     }, 'must be a valid URL')
     .default('http://localhost:8088'),
-  // Encryption key for App.storeCredentials (encrypted-at-rest, populated by a later
-  // connect-store flow). Optional here: P0 ships the column, not the writer.
-  STORE_CREDENTIALS_ENC_KEY: z.string().optional(),
+  // Encryption key for App.storeCredentials (encrypted-at-rest, populated by the connect-store
+  // flow). Optional at boot — absence only fails the connect path, not startup. When present it
+  // must be a base64 value that decodes to exactly 32 bytes (AES-256), validated here so a
+  // misconfigured key fails fast instead of at first encrypt. `.optional()` after `.refine()` so
+  // an unset var short-circuits before the refine ever runs.
+  STORE_CREDENTIALS_ENC_KEY: z
+    .string()
+    .refine(
+      (value) => Buffer.from(value, 'base64').length === 32,
+      'must be a base64-encoded 32-byte key',
+    )
+    .optional(),
   // Apple ASSN v2 verifier config (design §1.1/§8). M2a is single-tenant/config-driven (no
   // App-by-bundleId DB resolution yet — that is M2b); comma-separated so more than one bundleId
   // can be accepted meanwhile. Dev default is an obviously-fake placeholder, never a real app.

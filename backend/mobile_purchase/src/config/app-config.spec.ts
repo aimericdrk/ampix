@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { describeConfig, loadConfig } from './app-config';
 
 const BASE_ENV = { DATABASE_URL: 'postgresql://u:p@localhost:5432/db' } as NodeJS.ProcessEnv;
@@ -41,5 +43,25 @@ describe('loadConfig — DASHBOARD_ORIGINS (CORS allowlist)', () => {
     });
     expect(config.schedulerEnabled).toBe(false);
     expect(config.expirySweepCron).toBe('*/10 * * * *');
+  });
+});
+
+describe('loadConfig — STORE_CREDENTIALS_ENC_KEY (encrypted-at-rest key)', () => {
+  it('leaves storeCredentialsEncKey undefined when the var is unset', () => {
+    const config = loadConfig({ ...BASE_ENV });
+    expect(config.storeCredentialsEncKey).toBeUndefined();
+  });
+
+  it('accepts a base64 value that decodes to exactly 32 bytes', () => {
+    const key = randomBytes(32).toString('base64');
+    const config = loadConfig({ ...BASE_ENV, STORE_CREDENTIALS_ENC_KEY: key });
+    expect(config.storeCredentialsEncKey).toBe(key);
+  });
+
+  it('rejects a base64 value that decodes to fewer than 32 bytes', () => {
+    const shortKey = randomBytes(16).toString('base64');
+    expect(() => loadConfig({ ...BASE_ENV, STORE_CREDENTIALS_ENC_KEY: shortKey })).toThrow(
+      /STORE_CREDENTIALS_ENC_KEY/,
+    );
   });
 });
