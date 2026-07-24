@@ -11,6 +11,8 @@ import { ProductsService } from './services/products.service';
 import { OfferingsService } from './services/offerings.service';
 import { OfferingResolverService } from './services/offering-resolver.service';
 import { PublicApiKeyGuard } from './public-api-key.guard';
+import { StoreCredentialsService } from './store-credentials/store-credentials.service';
+import { STORE_CREDENTIAL_VALIDATOR, buildStoreCredentialValidator } from './store-credentials/store-credential-validator';
 
 /**
  * Mounts the catalog domain's controllers. AuthzModule provides ProjectAccessGuard (used by every
@@ -20,12 +22,26 @@ import { PublicApiKeyGuard } from './public-api-key.guard';
  * (WebhooksModule) can resolve an App by bundleId without re-mounting this module.
  * PublicApiKeyGuard is exported so M5a's SubscribersModule (`GET /v1/subscribers/:appUserId`) can
  * reuse the exact same `publicSdkKey` authentication `/v1/offerings` uses, without re-mounting
- * this module.
+ * this module. StoreCredentialsService (E4 design §1.4) backs the store-credentials routes on
+ * AppsController; STORE_CREDENTIAL_VALIDATOR is wired like WebhooksModule's GOOGLE_STORE_CLIENT —
+ * the real creds-gated validator in the running app, overridden with an InMemory double in specs.
  */
 @Module({
   imports: [AuthzModule],
   controllers: [AppsController, EntitlementsController, ProductsController, OfferingsController, PublicOfferingsController],
-  providers: [AppsService, EntitlementsService, ProductsService, OfferingsService, OfferingResolverService, PublicApiKeyGuard],
+  providers: [
+    AppsService,
+    EntitlementsService,
+    ProductsService,
+    OfferingsService,
+    OfferingResolverService,
+    PublicApiKeyGuard,
+    StoreCredentialsService,
+    {
+      provide: STORE_CREDENTIAL_VALIDATOR,
+      useFactory: () => buildStoreCredentialValidator(),
+    },
+  ],
   exports: [OfferingResolverService, AppsService, PublicApiKeyGuard],
 })
 export class CatalogModule {}
