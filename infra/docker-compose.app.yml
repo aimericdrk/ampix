@@ -64,7 +64,7 @@ services:
       NODE_ENV: production
       PORT: "8090"
       DATABASE_URL: postgresql://mobile_purchase:mobile_purchase_dev@mobile-purchase-postgres:5432/mobile_purchase
-      DASHBOARD_ORIGINS: http://localhost:5173
+      DASHBOARD_ORIGINS: http://localhost:5173 # dev-only (the dashboard dev server origin)
       # Cross-service authz target (analytics backend). Only used on-demand for guarded requests, not
       # by /health — the app boots fine even if the analytics service isn't up.
       ANALYTICS_INTERNAL_URL: http://backend:8088

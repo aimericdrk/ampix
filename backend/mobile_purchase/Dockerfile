@@ -3,9 +3,10 @@
 # Build context is the REPO ROOT so the pnpm workspace is visible.
 #
 # Three targets:
-#   builder  — installs the workspace, generates the Prisma client, builds dist/, and produces two
-#              self-contained pnpm-deploy bundles: /out (prod-only, for serving) and /out-migrate
-#              (with devDeps, so it carries the `prisma` CLI + migration engine).
+#   builder  — installs openssl (so Prisma's `native` engine detection targets openssl-3.0.x to
+#              match the distroless runtime), installs the workspace, generates the Prisma client,
+#              builds dist/, and produces two self-contained pnpm-deploy bundles: /out (prod-only,
+#              for serving) and /out-migrate (with devDeps, so it carries the `prisma` CLI + engine).
 #   migrate  — one-shot job image: runs `prisma migrate deploy` and exits. Keeps a shell (the CLI
 #              wants one); never serves traffic, so size is secondary.
 #   runtime  — distroless serving image: `node dist/main.js` only. No prisma CLI, no shell, no
@@ -59,7 +60,7 @@ COPY --from=builder /app/backend/mobile_purchase/prisma /app/prisma
 CMD ["node_modules/.bin/prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"]
 
 # ---------- runtime (distroless serving) ----------
-FROM gcr.io/distroless/nodejs22-debian12 AS runtime
+FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
@@ -72,7 +73,10 @@ COPY --from=builder /out /app
 # nor a runtime `prisma generate`. (bookworm builder → bookworm-based distroless: engine is ABI-compatible.)
 COPY --from=builder /app/backend/mobile_purchase/generated /app/generated
 
-# distroless/nodejs* runs as the built-in nonroot user (uid 65532) and its ENTRYPOINT is `node`,
-# so CMD is just the script path → `node dist/main.js`. No shell, no entrypoint script.
+# The :nonroot tag runs as uid 65532 (restoring the non-root posture of the pre-D3 `USER app`
+# image — the plain tag would run as root). distroless's ENTRYPOINT is `node`, so CMD is just the
+# script path → `node dist/main.js`. No shell, no entrypoint script. The COPY'd files are
+# world-readable and the app only reads them at runtime (Prisma's engine writes to /tmp), so no
+# --chown is needed.
 EXPOSE 8090
 CMD ["dist/main.js"]
