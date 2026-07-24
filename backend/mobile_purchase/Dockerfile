@@ -14,6 +14,13 @@
 # ---------- builder ----------
 FROM node:22-bookworm-slim AS builder
 RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
+# The distroless runtime ships OpenSSL 3.0.x, but node:22-bookworm-slim exposes no libssl for
+# `prisma generate` to probe, so it mis-guesses the openssl-1.1.x engine target and the copied
+# engine then fails to load on the 3.0.x runtime (PrismaClientInitializationError at $connect).
+# Installing openssl lets `prisma generate` detect 3.0.x and emit a `native` engine that is
+# ABI-compatible with the runtime — and it stays correct for BOTH local (arm64) and Cloud Run
+# (amd64) builds, unlike a hardcoded platform-specific `binaryTargets`.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Workspace root + the packages mobile-purchase needs. Other workspace manifests are copied so the
