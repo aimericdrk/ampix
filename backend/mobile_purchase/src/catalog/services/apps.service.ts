@@ -86,12 +86,22 @@ export class AppsService {
     }
   }
 
-  list(projectId: string) {
-    return this.prisma.app.findMany({
+  async list(projectId: string) {
+    const apps = await this.prisma.app.findMany({
       where: { projectId },
+      // storeCredentials is the encrypted-at-rest blob — never echo it (design §1.4). Keep the omit
+      // so the returned shape is unchanged apart from the derived flag below.
       omit: { storeCredentials: true },
       orderBy: { createdAt: 'asc' },
     });
+    // Derive `storeConnected` WITHOUT loading the ciphertext: a second, blob-free query filters on
+    // null-ness in-DB and selects only the id, so the encrypted value never reaches the server.
+    const connected = await this.prisma.app.findMany({
+      where: { projectId, storeCredentials: { not: null } },
+      select: { id: true },
+    });
+    const connectedIds = new Set(connected.map((a) => a.id));
+    return apps.map((app) => ({ ...app, storeConnected: connectedIds.has(app.id) }));
   }
 
   async remove(projectId: string, appId: string) {
