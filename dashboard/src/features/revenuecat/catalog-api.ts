@@ -26,6 +26,9 @@ export interface RcApp {
   /** Derived on the apps-list response (E4): `storeCredentials !== null`. Never the blob itself.
    *  The per-app connection list reads this so the whole list needs one query. */
   storeConnected?: boolean;
+  /** Reflects the App column added in E3; absent/false means live-verify hasn't run yet, distinct
+   *  from `storeConnected` so the list can render "Connected · live-verify pending". */
+  storeCredentialsLiveVerified?: boolean;
 }
 
 export interface CreateRcAppInput {
