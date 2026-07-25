@@ -51,8 +51,9 @@ import { GoogleIngestService } from './google/google-ingest.service';
     },
     {
       provide: GOOGLE_STORE_CLIENT,
-      inject: [PrismaService],
-      useFactory: (prisma: PrismaService) => buildGoogleStoreClient(prisma),
+      inject: [PrismaService, APP_CONFIG],
+      useFactory: (prisma: PrismaService, config: AppConfig) =>
+        buildGoogleStoreClient(prisma, config.storeCredentialsEncKey),
     },
   ],
   // M5b: `AppleNotificationVerifier`/`AppleIngestService`/`GoogleIngestService`/`GOOGLE_STORE_CLIENT`
