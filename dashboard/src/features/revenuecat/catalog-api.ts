@@ -23,6 +23,9 @@ export interface RcApp {
   bundleId?: string | null;
   packageName?: string | null;
   publicSdkKey: string;
+  /** Derived on the apps-list response (E4): `storeCredentials !== null`. Never the blob itself.
+   *  The per-app connection list reads this so the whole list needs one query. */
+  storeConnected?: boolean;
 }
 
 export interface CreateRcAppInput {
