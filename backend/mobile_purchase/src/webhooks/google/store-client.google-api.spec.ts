@@ -39,6 +39,13 @@ function callRequireCredentials(client: GoogleApiStoreClient, packageName: strin
   return (client as unknown as { requireCredentials(pn: string): Promise<GoogleServiceAccount> }).requireCredentials(packageName);
 }
 
+// What `StoreCredentialsService.set` (E3) actually persists: the plaintext is the WRAPPER
+// `{ kind: 'google_play', serviceAccountJson: <SA JSON as a string> }`, not the bare SA — see
+// `store-credentials.service.ts`. `requireCredentials` must unwrap both levels to reach the SA.
+function encryptedGooglePlayBlob(sa: GoogleServiceAccount): string {
+  return encryptStoreCredentials(JSON.stringify({ kind: 'google_play', serviceAccountJson: JSON.stringify(sa) }), KEY_B64);
+}
+
 describe('GoogleApiStoreClient', () => {
   it('getSubscriptionV2 throws GoogleCredentialsUnavailableError when the App has no storeCredentials', async () => {
     const client = new GoogleApiStoreClient(fakePrisma(null));
@@ -59,7 +66,7 @@ describe('GoogleApiStoreClient', () => {
   });
 
   it('requireCredentials throws GoogleCredentialsUnavailableError when a cred is stored but no enc key is configured', async () => {
-    const blob = encryptStoreCredentials(JSON.stringify(SERVICE_ACCOUNT), KEY_B64);
+    const blob = encryptedGooglePlayBlob(SERVICE_ACCOUNT);
     const client = new GoogleApiStoreClient(fakePrisma(blob)); // no key passed
 
     await expect(callRequireCredentials(client, 'com.myampix.app')).rejects.toBeInstanceOf(GoogleCredentialsUnavailableError);
@@ -72,21 +79,21 @@ describe('GoogleApiStoreClient', () => {
   });
 
   it('requireCredentials decrypts + JSON.parses a stored cred and returns the Google service account when the enc key is configured', async () => {
-    const blob = encryptStoreCredentials(JSON.stringify(SERVICE_ACCOUNT), KEY_B64);
+    const blob = encryptedGooglePlayBlob(SERVICE_ACCOUNT);
     const client = new GoogleApiStoreClient(fakePrisma(blob), KEY_B64);
 
     await expect(callRequireCredentials(client, 'com.myampix.app')).resolves.toEqual(SERVICE_ACCOUNT);
   });
 
   it('getSubscriptionV2 STILL throws (googleapis network stays gated) even with a valid cred + enc key — flagged, not silently assumed working', async () => {
-    const blob = encryptStoreCredentials(JSON.stringify(SERVICE_ACCOUNT), KEY_B64);
+    const blob = encryptedGooglePlayBlob(SERVICE_ACCOUNT);
     const client = new GoogleApiStoreClient(fakePrisma(blob), KEY_B64);
 
     await expect(client.getSubscriptionV2('com.myampix.app', 'token-1')).rejects.toBeInstanceOf(GoogleCredentialsUnavailableError);
   });
 
   it('revokeAndRefundSubscription STILL throws (googleapis network stays gated) even with a valid cred + enc key — flagged, not silently assumed working', async () => {
-    const blob = encryptStoreCredentials(JSON.stringify(SERVICE_ACCOUNT), KEY_B64);
+    const blob = encryptedGooglePlayBlob(SERVICE_ACCOUNT);
     const client = new GoogleApiStoreClient(fakePrisma(blob), KEY_B64);
 
     await expect(client.revokeAndRefundSubscription('com.myampix.app', 'token-1')).rejects.toBeInstanceOf(GoogleCredentialsUnavailableError);

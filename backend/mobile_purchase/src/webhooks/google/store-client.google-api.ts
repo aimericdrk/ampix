@@ -106,10 +106,20 @@ export class GoogleApiStoreClient implements StoreClient {
     }
     try {
       const plaintext = decryptStoreCredentials(app.storeCredentials, this.encKey);
-      return JSON.parse(plaintext) as GoogleServiceAccount;
+      // `StoreCredentialsService.set` (E3) persists the WRAPPER
+      // `{ kind: 'google_play', serviceAccountJson: <SA JSON as a string> }`, not the bare service
+      // account — so the plaintext must be unwrapped twice: once to reach the wrapper, once more
+      // to parse the SA JSON string it carries.
+      const outer = JSON.parse(plaintext) as { kind?: unknown; serviceAccountJson?: unknown };
+      if (!outer || outer.kind !== 'google_play' || typeof outer.serviceAccountJson !== 'string') {
+        throw new Error('unexpected store-credential blob shape');
+      }
+      return JSON.parse(outer.serviceAccountJson) as GoogleServiceAccount;
     } catch {
-      // StoreCipherError (bad key length / tamper / auth-tag failure) or a JSON.parse failure —
-      // an undecryptable/corrupt credential is unusable; surface it as the same gated error.
+      // StoreCipherError (bad key length / tamper / auth-tag failure), an outer/inner JSON.parse
+      // failure, or an unexpected blob shape (missing `kind`/`serviceAccountJson`) — any of these
+      // means the credential is unusable; surface it as the same gated error (never the cipher or
+      // parse internals).
       throw new GoogleCredentialsUnavailableError(packageName);
     }
   }

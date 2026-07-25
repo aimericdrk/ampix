@@ -73,6 +73,10 @@ export class StoreCredentialsService {
       if (e instanceof StoreValidationUnavailableError) {
         liveVerified = false;
       } else {
+        // TODO(real Play/ASC validator): the store's error message becomes `detail` verbatim here.
+        // The future live validator MUST ensure its error strings never echo submitted key
+        // material (private keys, shared secrets) back into this message — sanitize/allowlist
+        // before throwing, don't rely on this call site to redact it.
         throw new ProblemException({
           status: 502,
           title: 'Store rejected the credentials',
