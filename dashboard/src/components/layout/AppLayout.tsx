@@ -16,7 +16,7 @@ import { cn } from '../../lib/cn';
 import { springTransition, useReducedMotion } from '../../lib/motion';
 import { Button } from '../ui/button';
 import { Kbd } from '../ui/kbd';
-import { toolForPathname, toolGroups, type NavAccent, type NavItem } from './nav-model';
+import { PROJECT_SETTINGS, toolForPathname, toolGroups, type NavAccent, type NavItem } from './nav-model';
 import { NavIcon, type IconName } from './NavIcon';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ProjectSwitcher } from './ProjectSwitcher';
@@ -64,6 +64,7 @@ function SidebarLink({
   icon,
   label,
   indicatorId,
+  collapsed = false,
 }: {
   to: string;
   params?: Record<string, string | undefined>;
@@ -72,6 +73,8 @@ function SidebarLink({
   label: string;
   /** Layout-group id for the active indicator; omit to share the section nav's sliding bar. */
   indicatorId?: string;
+  /** Icon-only rendering for the collapsed rail; the label stays in the a11y tree. */
+  collapsed?: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const active = isHrefActive(pathname, resolveHref(to, params), exact);
@@ -87,17 +90,20 @@ function SidebarLink({
       // an ancestor link (e.g. "Projects", "Project settings") would get `aria-current="page"`
       // added on every descendant route, even though it's `exact: true` and not tinted.
       activeOptions={{ exact }}
-      className={cn(NAV_LINK_BASE, active && NAV_LINK_ACTIVE)}
+      className={cn(NAV_LINK_BASE, collapsed && 'justify-center px-0', active && NAV_LINK_ACTIVE)}
       aria-current={active ? 'page' : undefined}
+      title={collapsed ? label : undefined}
     >
       {active && <NavIndicator layoutId={indicatorId} />}
       <NavIcon name={icon} />
-      <span>{label}</span>
+      {/* `sr-only` rather than unmounted: the icon alone is not an accessible name, and hiding the
+          text outright would strip every collapsed link of one. */}
+      <span className={cn(collapsed && 'sr-only')}>{label}</span>
     </Link>
   );
 }
 
-function NavLink({ item, projectId }: { item: NavItem; projectId?: string }) {
+function NavLink({ item, projectId, collapsed }: { item: NavItem; projectId?: string; collapsed?: boolean }) {
   return (
     <SidebarLink
       to={item.to}
@@ -105,6 +111,7 @@ function NavLink({ item, projectId }: { item: NavItem; projectId?: string }) {
       exact={item.exact ?? false}
       icon={item.icon}
       label={item.label}
+      collapsed={collapsed}
     />
   );
 }
@@ -119,6 +126,15 @@ export function AppLayout() {
   const { projectId } = useParams({ strict: false }) as { projectId?: string };
   const [mobileOpen, setMobileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Pointer and keyboard are tracked apart, not folded into one `expanded` flag: they overlap
+  // freely (tab into the rail, then mouse away), and a single flag would let whichever ended
+  // first collapse the rail out from under the other.
+  const [railHovered, setRailHovered] = useState(false);
+  const [railFocused, setRailFocused] = useState(false);
+  // The drawer is the only way to see the sidebar below `md`, where there is no hover at all — so
+  // opening it must expand, or touch users would get a permanently icon-only rail.
+  const railExpanded = railHovered || railFocused || mobileOpen;
+  const collapsed = !railExpanded;
 
   // Global `g <letter>` navigation + `?` help overlay (feat-12). Disabled while the overlay
   // itself is open so a stray keypress behind it can't fire a surprise navigation.
@@ -201,8 +217,22 @@ export function AppLayout() {
         className={cn(
           'z-40 flex flex-col shrink-0 overflow-y-auto',
           'md:sticky md:top-0 md:h-screen md:flex-row md:overflow-visible',
+          // The gutter main content is laid out against is fixed at the two collapsed rails
+          // (2 × 4rem), never the expanded width. The columns are `shrink-0`, so expanding simply
+          // overflows this box and floats over the page — main never reflows on a hover.
+          'md:w-32',
           mobileOpen ? 'fixed inset-y-0 left-0 flex' : 'hidden md:flex',
         )}
+        onMouseEnter={() => setRailHovered(true)}
+        onMouseLeave={() => setRailHovered(false)}
+        // React's onFocus/onBlur are focusin/focusout, so these fire for descendants too. The
+        // `relatedTarget` guard keeps focus moving *within* the rail from collapsing it.
+        onFocus={() => setRailFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setRailFocused(false);
+          }
+        }}
       >
         {/* Global sidebar: brand, tool switcher, and the project-scoped chrome (workspace, project,
             search, Projects) all live on the left, so everything global sits in one column. The
@@ -210,13 +240,23 @@ export function AppLayout() {
             `md`; a fixed 240px column beside the aside from `md` up, scrolling on its own if tall. */}
         <div
           data-testid="global-sidebar"
-          className="flex w-full shrink-0 flex-col gap-3 border-r border-border bg-surface p-4 md:w-60 md:overflow-y-auto"
+          data-collapsed={collapsed || undefined}
+          className={cn(
+            'flex w-full shrink-0 flex-col gap-3 border-r border-border bg-surface p-4',
+            'transition-[width,padding] duration-200 motion-reduce:transition-none',
+            'md:overflow-y-auto',
+            collapsed ? 'md:w-16 md:p-2' : 'md:w-60',
+          )}
         >
-          <span className="font-display text-lg font-bold text-gradient-brand">MyAmpix</span>
-          <OrgSwitcher />
-          <ProjectSwitcher />
+          {/* Collapsed, the wordmark becomes its initial — the one place a shortened label beats
+              an `sr-only` one, since the full name is still on every page's <title>. */}
+          <span className="truncate font-display text-lg font-bold text-gradient-brand">
+            {collapsed ? 'M' : 'MyAmpix'}
+          </span>
+          <OrgSwitcher collapsed={collapsed} />
+          <ProjectSwitcher collapsed={collapsed} />
           {/* Project-scoped: reports/dashboards/cohorts/users only resolve once a project is picked. */}
-          {projectId && <CommandPalette projectId={projectId} />}
+          {projectId && <CommandPalette projectId={projectId} collapsed={collapsed} />}
           {/* Its own indicator layout group so the active bar never animates across to the section
               nav in the other column. */}
           <SidebarLink
@@ -225,19 +265,44 @@ export function AppLayout() {
             icon="projects"
             label="Projects"
             indicatorId="global-nav-indicator"
+            collapsed={collapsed}
           />
           {/* Tool switcher sits below the Projects link, above the identity cluster. */}
-          <ToolRail activeTool={activeTool} projectId={projectId} />
+          <ToolRail activeTool={activeTool} projectId={projectId} collapsed={collapsed} />
           <div className="mt-auto flex flex-col gap-1 pt-2">
-            <ThemeToggle />
+            {/* Configures the project, not a tool — so it sits with the global chrome, above the
+                theme toggle, rather than at the foot of whichever tool's section nav is showing. */}
+            {projectId && (
+              <SidebarLink
+                to={PROJECT_SETTINGS.to}
+                params={{ projectId }}
+                exact
+                icon={PROJECT_SETTINGS.icon}
+                label={PROJECT_SETTINGS.label}
+                indicatorId="global-nav-indicator"
+                collapsed={collapsed}
+              />
+            )}
+            <ThemeToggle compact={collapsed} />
             <RailIdentityMenu email={user?.email} orgId={currentOrgId} onLogout={() => void handleLogout()} />
           </div>
         </div>
 
-        <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
+        <aside
+          data-collapsed={collapsed || undefined}
+          className={cn(
+            'flex w-60 shrink-0 flex-col border-r border-border bg-surface',
+            'transition-[width] duration-200 motion-reduce:transition-none',
+            collapsed && 'md:w-16',
+          )}
+        >
           <nav
             aria-label="Primary"
-            className="min-h-0 flex-1 overflow-y-auto p-4"
+            className={cn(
+              'min-h-0 flex-1 overflow-y-auto p-4',
+              'transition-[padding] duration-200 motion-reduce:transition-none',
+              collapsed && 'md:p-2',
+            )}
             onClickCapture={() => setMobileOpen(false)}
           >
             {groups.map((group, index) => (
@@ -245,28 +310,36 @@ export function AppLayout() {
                 key={group.heading ?? `group-${index}`}
                 heading={group.heading}
                 accent={group.accent}
+                collapsed={collapsed}
               >
                 {group.items.map((item) => (
-                  <NavLink key={item.to} item={item} projectId={projectId} />
+                  <NavLink key={item.to} item={item} projectId={projectId} collapsed={collapsed} />
                 ))}
               </NavSection>
             ))}
 
             {!projectId && (
-              <p className="mt-4 px-3 text-xs text-text-muted">
+              <p className={cn('mt-4 px-3 text-xs text-text-muted', collapsed && 'sr-only')}>
                 Pick a project to see its analytics.
               </p>
             )}
           </nav>
 
-          <div className="mt-auto shrink-0 border-t border-border p-4">
-            {/* Subtle, always-available affordance for the shortcut system (feat-12). */}
+          <div className={cn('mt-auto shrink-0 border-t border-border p-4', collapsed && 'md:p-2')}>
+            {/* Subtle, always-available affordance for the shortcut system (feat-12). Collapsed
+                it shrinks to the bare "?" key — the sentence has nowhere to go at 48px, and the
+                shortcut it advertises works regardless of the rail's state. */}
             <button
               type="button"
               onClick={() => setHelpOpen(true)}
-              className="w-full truncate px-3 text-left text-xs text-text-muted/70 transition-colors hover:text-text-muted"
+              aria-label="Press ? for shortcuts"
+              title={collapsed ? 'Press ? for shortcuts' : undefined}
+              className={cn(
+                'w-full truncate text-xs text-text-muted/70 transition-colors hover:text-text-muted',
+                collapsed ? 'px-0 text-center' : 'px-3 text-left',
+              )}
             >
-              Press <Kbd>?</Kbd> for shortcuts
+              {collapsed ? <Kbd>?</Kbd> : <span aria-hidden="true">Press <Kbd>?</Kbd> for shortcuts</span>}
             </button>
           </div>
         </aside>
@@ -299,16 +372,25 @@ export function AppLayout() {
 function NavSection({
   heading,
   accent,
+  collapsed = false,
   children,
 }: {
   heading?: string;
   accent?: NavAccent;
+  collapsed?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="mt-4" data-accent={accent}>
       {heading && (
-        <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted/70">
+        <p
+          className={cn(
+            'px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted/70',
+            // Collapsed the heading has no room to render, but it still groups its links for a
+            // screen reader — hence `sr-only` rather than dropping it.
+            collapsed && 'sr-only',
+          )}
+        >
           {heading}
         </p>
       )}

@@ -13,7 +13,7 @@ import {
   VIEWER_ORG_ID,
 } from '../../test/msw/handlers';
 import { server } from '../../test/msw/server';
-import { renderApp } from '../../test/render-app';
+import { expandSidebar, renderApp } from '../../test/render-app';
 
 describe('AppLayout', () => {
   it('shows navigation, the workspace + project selectors, and the signed-in user', async () => {
@@ -27,6 +27,8 @@ describe('AppLayout', () => {
     // The project selector is a real, enabled dropdown (no more disabled "All projects" box).
     const projectSelector = screen.getByRole('button', { name: 'Switch project' });
     expect(projectSelector).toBeEnabled();
+    // Its *name* only renders once the rail is hovered out of its icon-only resting state.
+    await expandSidebar();
     expect(within(projectSelector).getByText('All projects')).toBeInTheDocument();
 
     // The signed-in user now lives behind the rail's identity menu.
@@ -35,14 +37,37 @@ describe('AppLayout', () => {
   });
 
   // The global sidebar carries the visible "MyAmpix" wordmark at `md+` (the top bar's copy is
-  // `md:hidden`), so assistive tech always has accessible brand text.
-  it('shows the MyAmpix wordmark in the global sidebar', async () => {
+  // `md:hidden`), so assistive tech always has accessible brand text. Collapsed the rail shows
+  // only the "M" initial, so the wordmark is an expanded-state assertion.
+  it('shows the MyAmpix wordmark in the global sidebar once expanded', async () => {
     authState.refreshValid = true;
     renderApp('/projects');
     await screen.findByRole('heading', { name: 'Projects' });
 
     const sidebar = screen.getByTestId('global-sidebar');
+    expect(within(sidebar).getByText('M')).toBeInTheDocument();
+
+    await expandSidebar();
     expect(within(sidebar).getByText('MyAmpix')).toBeInTheDocument();
+  });
+
+  it('collapses the rails to icons at rest and expands them on hover', async () => {
+    authState.refreshValid = true;
+    renderApp(`/projects/${TEST_PROJECT.id}/insights`);
+    await screen.findByRole('heading', { name: 'Insights' });
+
+    const sidebar = screen.getByTestId('global-sidebar');
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+
+    // Collapsed, section headings and link labels are visually gone but still named for AT —
+    // which is exactly why the accessible-name assertions elsewhere need no hover.
+    expect(within(nav).getByText('Explore')).toHaveClass('sr-only');
+    expect(within(nav).getByRole('link', { name: 'Funnels' })).toBeInTheDocument();
+
+    await expandSidebar();
+    expect(sidebar).not.toHaveAttribute('data-collapsed');
+    expect(within(nav).getByText('Explore')).not.toHaveClass('sr-only');
   });
 
   it('places Organization settings in the rail identity menu as a nav item', async () => {

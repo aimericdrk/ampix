@@ -29,5 +29,5 @@ const String demoServerUrl = String.fromEnvironment(
 /// and shows on screen.
 const String demoApiKey = String.fromEnvironment(
   'MP_API_KEY',
-  defaultValue: 'mp_pub_00000000000000000000000000000000',
+  defaultValue: 'mam_7ac0cf0b5c861de45b250f777206a041',
 );

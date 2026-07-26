@@ -88,7 +88,7 @@ export function RcOverviewPage() {
       <PageShell
         projectId={projectId}
         title="Overview"
-        description="Subscription analytics powered by RevenueCat."
+        description="Subscription analytics for your apps."
         breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Overview' }]}
       >
         {null}

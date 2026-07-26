@@ -11,7 +11,7 @@ import {
   VALID_ACCESS_TOKEN,
   VIEWER_ORG_ID,
 } from '../../test/msw/handlers';
-import { renderApp } from '../../test/render-app';
+import { expandSidebar, renderApp } from '../../test/render-app';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -22,6 +22,7 @@ describe('ProjectSwitcher', () => {
     signIn();
     currentOrgStore.setCurrentOrg(TEST_ORG_ID);
     renderApp('/projects');
+    await expandSidebar();
     await screen.findByRole('heading', { name: 'Projects' });
 
     const trigger = screen.getByRole('button', { name: 'Switch project' });
@@ -46,6 +47,7 @@ describe('ProjectSwitcher', () => {
     });
     currentOrgStore.setCurrentOrg(VIEWER_ORG_ID);
     renderApp('/projects');
+    await expandSidebar();
     await screen.findByRole('heading', { name: 'Projects' });
 
     await userEvent.click(screen.getByRole('button', { name: 'Switch project' }));
@@ -60,6 +62,7 @@ describe('ProjectSwitcher', () => {
     signIn();
     currentOrgStore.setCurrentOrg(TEST_ORG_ID);
     renderApp(`/projects/${TEST_PROJECT.id}`);
+    await expandSidebar();
     await screen.findByRole('heading', { name: TEST_PROJECT.name });
 
     const trigger = screen.getByRole('button', { name: 'Switch project' });
@@ -70,6 +73,7 @@ describe('ProjectSwitcher', () => {
     signIn();
     currentOrgStore.setCurrentOrg(TEST_ORG_ID);
     renderApp(`/projects/${TEST_PROJECT.id}`);
+    await expandSidebar();
     await screen.findByRole('heading', { name: TEST_PROJECT.name });
 
     await userEvent.click(screen.getByRole('button', { name: 'Switch project' }));

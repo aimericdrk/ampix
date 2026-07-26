@@ -88,10 +88,6 @@ export const TOOLS: Tool[] = [
           { label: 'Templates', to: p('/templates'), icon: 'templates' },
         ],
       },
-      {
-        items: [{ label: 'Project settings', to: p(''), icon: 'settings', exact: true }],
-        accent: 'lime',
-      },
     ],
   },
   {
@@ -139,39 +135,42 @@ export const TOOLS: Tool[] = [
   },
 ];
 
-/** Pages that only mean anything once RevenueCat is connected. Integration settings is how you
- * connect, so it is never gated. */
-const RC_GATED = new Set(['Overview', 'Charts', 'Customers', 'Products', 'Entitlements', 'Offerings', 'Paywalls', 'Conversion']);
+/**
+ * Project settings belongs to no tool: it configures the project itself, so it lives in the global
+ * sidebar rather than a tool's section nav. Kept here so `allGroups` still hands it to the command
+ * palette and the shortcut map, which stay tool-agnostic.
+ */
+export const PROJECT_SETTINGS: NavItem = {
+  label: 'Project settings',
+  to: p(''),
+  icon: 'settings',
+  exact: true,
+};
 
 export interface NavOptions {
-  /** When false, RevenueCat's data pages are dropped. Omit to return everything ungated. */
+  /** Legacy real-RevenueCat-connected flag. Retained so existing callers keep type-checking, but it
+   * NO LONGER hides anything: MyRevenueCat is the self-hosted clone (its pages read our own
+   * `mobile_purchase` service), so the nav must never gate on a real RevenueCat connection — there
+   * is nothing external to connect to. Integration settings is just one item among the clone pages. */
   rcEnabled?: boolean;
 }
 
-/**
- * Scoped to the revenuecat tool deliberately: `RC_GATED` matches on labels, so applying it across
- * every tool would silently hide a future MyAmplitude page that happened to be called "Charts".
- */
-function gate(groups: NavGroup[], toolId: ToolId, opts?: NavOptions): NavGroup[] {
-  if (toolId !== 'revenuecat' || opts?.rcEnabled !== false) return groups;
-  return groups
-    .map((group) => ({ ...group, items: group.items.filter((item) => !RC_GATED.has(item.label)) }))
-    .filter((group) => group.items.length > 0);
-}
-
-/** One tool's groups, for the sidebar. */
-export function toolGroups(toolId: ToolId, opts?: NavOptions): NavGroup[] {
+/** One tool's groups, for the sidebar. The clone is never gated (see NavOptions). */
+export function toolGroups(toolId: ToolId, _opts?: NavOptions): NavGroup[] {
   const tool = TOOLS.find((t) => t.id === toolId);
-  return tool ? gate(tool.groups, tool.id, opts) : [];
+  return tool ? tool.groups : [];
 }
 
 /**
  * Every tool's groups, flattened. The command palette stays cross-tool on purpose — its whole
  * value is jumping to *anything* — and the `g <letter>` shortcuts read it at module scope with no
- * options, which is why `opts` is optional.
+ * options, which is why `_opts` is optional (and now ignored — see NavOptions).
  */
-export function allGroups(opts?: NavOptions): NavGroup[] {
-  return TOOLS.flatMap((tool) => gate(tool.groups, tool.id, opts));
+export function allGroups(_opts?: NavOptions): NavGroup[] {
+  return [
+    ...TOOLS.flatMap((tool) => tool.groups),
+    { items: [PROJECT_SETTINGS], accent: 'lime' },
+  ];
 }
 
 /** The active tool, derived from the URL — never stored. */

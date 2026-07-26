@@ -3,13 +3,14 @@ import { useCurrentOrgId } from '../../features/orgs/store';
 import { useProjects } from '../../features/projects/api';
 import { cn } from '../../lib/cn';
 import { Menu, MENU_ITEM_CLASS, MenuCheck } from '../ui/menu';
+import { RailInitial } from './RailInitial';
 
 /**
  * Project selector — lists the current org's projects plus an "All projects"
  * option and navigates to the chosen destination. Scoped to `currentOrgId`
  * because `GET /projects` returns projects across every org the user belongs to.
  */
-export function ProjectSwitcher() {
+export function ProjectSwitcher({ collapsed = false }: { collapsed?: boolean } = {}) {
   const navigate = useNavigate();
   const currentOrgId = useCurrentOrgId();
   const { projectId } = useParams({ strict: false }) as { projectId?: string };
@@ -24,16 +25,23 @@ export function ProjectSwitcher() {
   return (
     <Menu
       label="Switch project"
-      triggerClassName="rounded-lg border border-border bg-surface-raised px-2.5 py-1.5 text-sm hover:border-border-strong transition-colors w-full"
+      triggerClassName={cn(
+        'rounded-lg border border-border bg-surface-raised text-sm hover:border-border-strong transition-colors w-full',
+        collapsed ? 'flex justify-center p-1.5' : 'px-2.5 py-1.5',
+      )}
       trigger={
-        <span className="flex flex-col">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
-            Project
+        collapsed ? (
+          <RailInitial name={activeProject?.name} fallback="P" />
+        ) : (
+          <span className="flex flex-col">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+              Project
+            </span>
+            <span className="truncate text-sm font-medium text-text">
+              {activeProject?.name ?? 'All projects'}
+            </span>
           </span>
-          <span className="truncate text-sm font-medium text-text">
-            {activeProject?.name ?? 'All projects'}
-          </span>
-        </span>
+        )
       }
     >
       {({ close }) => (

@@ -197,7 +197,7 @@ function OfferingsManager({ projectId }: { projectId: string }) {
             </CardHeader>
             <CardContent>
               {offerings.length > 0 ? (
-                <DataTable caption="RevenueCat offerings" columns={offeringColumns} rows={offerings} rowKey={(o) => o.id} />
+                <DataTable caption="Offerings" columns={offeringColumns} rows={offerings} rowKey={(o) => o.id} />
               ) : (
                 <EmptyState
                   title="No offerings yet."

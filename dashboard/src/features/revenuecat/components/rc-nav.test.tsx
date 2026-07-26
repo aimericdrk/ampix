@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { renderApp } from '../../../test/render-app';
 import { server } from '../../../test/msw/server';
 import {
@@ -10,8 +10,8 @@ import {
 } from '../../../test/msw/handlers';
 import { authStore } from '../../auth/store';
 
-describe('MyRevenueCat nav gating', () => {
-  it('lists the RC data pages in the sidebar when RC is connected', async () => {
+describe('MyRevenueCat nav', () => {
+  it('lists the RC clone pages in the sidebar', async () => {
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp(`/projects/${TEST_PROJECT.id}/rc/overview`);
     const nav = within(await screen.findByRole('navigation', { name: 'Primary' }));
@@ -20,12 +20,15 @@ describe('MyRevenueCat nav gating', () => {
     expect(nav.getByText('Customers')).toBeInTheDocument();
   });
 
-  it('drops the RC data pages but keeps Integration settings when RC is not connected', async () => {
+  it('shows the RC clone pages (and Integration settings) even when RC is not connected — the self-hosted clone has no connect gate', async () => {
+    // The clone reads mobile_purchase and never gates on a real RevenueCat connection; the data
+    // pages appear regardless of the legacy `integrations.revenuecat` flag.
     server.use(projectsHandlerWithoutRc());
     authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
     renderApp(`/projects/${TEST_PROJECT.id}/rc/overview`);
     const nav = within(await screen.findByRole('navigation', { name: 'Primary' }));
-    await waitFor(() => expect(nav.queryByText('Overview')).not.toBeInTheDocument());
+    expect(await nav.findByText('Overview')).toBeInTheDocument();
+    expect(nav.getByText('Customers')).toBeInTheDocument();
     expect(nav.getByText('Integration settings')).toBeInTheDocument();
   });
 

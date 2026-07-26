@@ -139,7 +139,7 @@ function CustomersList({ projectId }: { projectId: string }) {
             {customers.length > 0 ? (
               <>
                 <DataTable
-                  caption="RevenueCat customers"
+                  caption="Customers"
                   columns={columns}
                   rows={customers}
                   rowKey={(row) => row.id}

@@ -172,7 +172,7 @@ function EntitlementsManager({ projectId }: { projectId: string }) {
         !entitlementsQuery.isError &&
         (entitlements.length > 0 ? (
           <DataTable
-            caption="RevenueCat entitlements"
+            caption="Entitlements"
             columns={columns}
             rows={entitlements}
             rowKey={(entitlement) => entitlement.id}

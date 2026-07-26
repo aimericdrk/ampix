@@ -23,7 +23,15 @@ const TILE_INNER_IDLE =
  * MyRevenueCat until RevenueCat is set up makes the feature undiscoverable to exactly the people
  * who haven't adopted it. An unconnected tool's home route explains how to connect instead.
  */
-export function ToolRail({ activeTool, projectId }: { activeTool: ToolId; projectId?: string }) {
+export function ToolRail({
+  activeTool,
+  projectId,
+  collapsed = false,
+}: {
+  activeTool: ToolId;
+  projectId?: string;
+  collapsed?: boolean;
+}) {
   // Tools are project-scoped; off a project route there is nothing to switch between.
   if (!projectId) return null;
 
@@ -44,13 +52,29 @@ export function ToolRail({ activeTool, projectId }: { activeTool: ToolId; projec
             activeOptions={{ exact: true }}
             className={cn(TILE_BASE, active && 'text-accent')}
             aria-current={active ? 'page' : undefined}
+            title={collapsed ? tool.label : undefined}
           >
-            <span className={cn(TILE_INNER_BASE, active ? TILE_INNER_ACTIVE : TILE_INNER_IDLE)}>
+            <span
+              className={cn(
+                TILE_INNER_BASE,
+                // Collapsed the rail is only 48px of content box, so the 56px tile has to shrink.
+                collapsed && 'size-10 [&_svg]:size-5',
+                active ? TILE_INNER_ACTIVE : TILE_INNER_IDLE,
+              )}
+            >
               <NavIcon name={tool.icon} />
             </span>
             {/* Label under the tile. `truncate` is a graceful fallback for a future label longer
-                than the tile; every current label fits at this size. */}
-            <span className="max-w-full truncate text-[11px] font-medium">{tool.label}</span>
+                than the tile; every current label fits at this size. Collapsed it goes `sr-only`
+                rather than away, so the tile keeps its accessible name. */}
+            <span
+              className={cn(
+                'max-w-full truncate text-[11px] font-medium',
+                collapsed && 'sr-only',
+              )}
+            >
+              {tool.label}
+            </span>
           </Link>
         );
       })}

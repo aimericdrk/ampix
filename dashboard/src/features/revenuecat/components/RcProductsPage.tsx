@@ -101,7 +101,7 @@ export function RcProductsPage() {
       <PageShell
         projectId={projectId}
         title="Products"
-        description="The store products synced from RevenueCat, with their pricing and performance."
+        description="The store products for this app, with their pricing and performance."
         breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Products' }]}
       >
         {null}
@@ -158,7 +158,7 @@ function ProductsManager({ projectId }: { projectId: string }) {
     <PageShell
       projectId={projectId}
       title="Products"
-      description="The store products synced from RevenueCat, with their pricing and performance."
+      description="The store products for this app, with their pricing and performance."
       breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Products' }]}
       actions={
         canManage && currentApp ? (

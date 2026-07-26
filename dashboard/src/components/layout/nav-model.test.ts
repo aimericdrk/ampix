@@ -19,15 +19,16 @@ describe('nav-model tools', () => {
     expect(explore?.items.map((i) => i.label)).toContain('Flows');
   });
 
-  it('gates RC data pages on rcEnabled but never Integration settings', () => {
-    const off = labels(toolGroups('revenuecat', { rcEnabled: false }));
-    expect(off).not.toContain('Overview');
-    expect(off).not.toContain('Customers');
-    expect(off).toContain('Integration settings');
-
-    const on = labels(toolGroups('revenuecat', { rcEnabled: true }));
-    expect(on).toContain('Overview');
-    expect(on).toContain('Conversion');
+  it('always shows the MyRevenueCat clone pages — the self-hosted clone has no connect gate', () => {
+    // `rcEnabled` is the legacy real-RevenueCat-connected flag; the clone reads mobile_purchase and
+    // must never gate on it. The pages appear regardless of the flag (or its absence).
+    for (const opts of [{ rcEnabled: false }, { rcEnabled: true }, undefined] as const) {
+      const shown = labels(toolGroups('revenuecat', opts));
+      expect(shown).toContain('Overview');
+      expect(shown).toContain('Customers');
+      expect(shown).toContain('Conversion');
+      expect(shown).toContain('Integration settings');
+    }
   });
 
   it('allGroups spans both tools; toolGroups spans exactly one', () => {
