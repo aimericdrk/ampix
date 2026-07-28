@@ -150,14 +150,71 @@ describe('RcSettingsPage — store connections', () => {
     expect(screen.queryByTestId('rc-integration-card')).not.toBeInTheDocument();
   });
 
-  it('shows an empty state linking to Products when the project has no apps', async () => {
+  it('shows an empty state with a New app action when the project has no apps (admin)', async () => {
     signInOwner();
     mockStoreCredentials([]);
     renderApp(SETTINGS_URL);
     const main = within(await screen.findByRole('main'));
     expect(await main.findByText('No apps yet')).toBeInTheDocument();
-    const link = main.getByRole('link', { name: 'Go to Products' });
-    expect(link).toHaveAttribute('href', `/projects/${PID}/rc/products`);
+    expect(main.getByRole('button', { name: 'New app' })).toBeInTheDocument();
+  });
+
+  it('offers New app in the header when apps already exist (admin)', async () => {
+    signInOwner();
+    mockStoreCredentials([{ ...IOS_APP }]);
+    renderApp(SETTINGS_URL);
+    const main = within(await screen.findByRole('main'));
+    await main.findByText('Aurora iOS');
+    expect(main.getByRole('button', { name: 'New app' })).toBeInTheDocument();
+  });
+
+  it('hides the New app action from viewers', async () => {
+    signInViewer();
+    mockStoreCredentials([]);
+    renderApp(SETTINGS_URL);
+    const main = within(await screen.findByRole('main'));
+    expect(await main.findByText('No apps yet')).toBeInTheDocument();
+    expect(main.queryByRole('button', { name: 'New app' })).not.toBeInTheDocument();
+  });
+
+  it('creates an app from the settings page and shows it in the list', async () => {
+    signInOwner();
+    const apps = mockStoreCredentials([]);
+    server.use(
+      http.post(`${catalogBase}/apps`, async ({ request }) => {
+        const body = (await request.json()) as {
+          name: string;
+          platform: string;
+          bundleId?: string;
+          packageName?: string;
+        };
+        const created: FixtureApp = {
+          id: 'app-new',
+          name: body.name,
+          platform: body.platform,
+          bundleId: body.bundleId ?? null,
+          packageName: body.packageName ?? null,
+          publicSdkKey: 'mp_pub_new',
+          storeConnected: false,
+          storeCredentialsLiveVerified: false,
+        };
+        apps.push(created);
+        return HttpResponse.json(created, { status: 201 });
+      }),
+    );
+    renderApp(SETTINGS_URL);
+    const main = within(await screen.findByRole('main'));
+    await main.findByText('No apps yet');
+
+    await userEvent.click(main.getByRole('button', { name: 'New app' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await userEvent.type(dialog.getByLabelText('Name'), 'Nova iOS');
+    // Platform defaults to IOS, so the Bundle ID field is required.
+    await userEvent.type(dialog.getByLabelText('Bundle ID'), 'com.example.nova');
+    await userEvent.click(dialog.getByRole('button', { name: 'Create app' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await main.findByText('Nova iOS')).toBeInTheDocument();
   });
 
   it('connects Google Play: paste JSON, submit, success toast, row becomes Connected', async () => {

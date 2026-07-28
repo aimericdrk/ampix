@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Boxes, Layers } from 'lucide-react';
 import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
 import { Badge } from '../../../components/ui/badge';
@@ -200,6 +201,7 @@ function OfferingsManager({ projectId }: { projectId: string }) {
                 <DataTable caption="Offerings" columns={offeringColumns} rows={offerings} rowKey={(o) => o.id} />
               ) : (
                 <EmptyState
+                  icon={Layers}
                   title="No offerings yet."
                   description={
                     canManage
@@ -231,6 +233,7 @@ function OfferingsManager({ projectId }: { projectId: string }) {
                   />
                 ) : (
                   <EmptyState
+                    icon={Boxes}
                     title="No packages in this offering"
                     description={
                       canManage

@@ -45,7 +45,33 @@ export interface RcActiveSubscriptionsResponse {
   approximate: true;
 }
 
-type RcMetric = 'revenue' | 'mrr' | 'active-subscriptions' | 'summary';
+/** One movement category's sign-carrying cents (gains `>= 0`, losses `<= 0`). */
+export interface RcMrrMovementBucket {
+  bucket: string;
+  new_cents: number;
+  reactivation_cents: number;
+  expansion_cents: number;
+  contraction_cents: number;
+  churn_cents: number;
+  net_cents: number;
+}
+export interface RcMrrMovementTotals {
+  new_cents: number;
+  reactivation_cents: number;
+  expansion_cents: number;
+  contraction_cents: number;
+  churn_cents: number;
+  net_cents: number;
+}
+/** `GET /metrics/mrr-movement` — per-bucket MRR movement decomposition + per-category totals. */
+export interface RcMrrMovementResponse {
+  currency: string | null;
+  buckets: RcMrrMovementBucket[];
+  totals: RcMrrMovementTotals;
+  approximate: true;
+}
+
+type RcMetric = 'revenue' | 'mrr' | 'mrr-movement' | 'active-subscriptions' | 'summary';
 
 interface RcMetricOptions {
   /** Force-disable the query (e.g. RC not connected). Defaults to enabled once the range is set. */
@@ -129,6 +155,28 @@ export function useRcActiveSubscriptions(
     queryFn: () =>
       purchaseApiFetch<RcActiveSubscriptionsResponse>(
         metricsUrl(projectId, 'active-subscriptions', from, to, granularity),
+      ),
+    enabled: isEnabled(from, to, opts),
+  });
+}
+
+/**
+ * `GET /metrics/mrr-movement` — the Overview page's MRR Movement chart. Per-bucket decomposition of
+ * the change in MRR into new / reactivation / expansion / contraction / churn (+ net). Auto-loads
+ * once both range bounds are set, exactly like the other granularity-bearing metrics.
+ */
+export function useRcMrrMovement(
+  projectId: string,
+  from: string,
+  to: string,
+  granularity: RcGranularity,
+  opts: RcMetricOptions = {},
+) {
+  return useQuery({
+    queryKey: rcMetricsKey(projectId, 'mrr-movement', from, to, granularity),
+    queryFn: () =>
+      purchaseApiFetch<RcMrrMovementResponse>(
+        metricsUrl(projectId, 'mrr-movement', from, to, granularity),
       ),
     enabled: isEnabled(from, to, opts),
   });

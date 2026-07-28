@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { AppWindow, Package } from 'lucide-react';
 import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
 import {
@@ -25,7 +26,6 @@ import { formatCurrency } from '../../analytics/format';
 import { useProjectRole, useProjects } from '../../projects/api';
 import {
   useAttachEntitlement,
-  useCreateRcApp,
   useCreateRcProduct,
   useDeleteRcApp,
   useDeleteRcProduct,
@@ -35,14 +35,11 @@ import {
   useRcProducts,
   useUpdateRcProduct,
   type RcApp,
-  type RcAppPlatform,
   type RcEntitlement,
   type RcProduct,
   type RcProductType,
 } from '../catalog-api';
-
-/** Every `App.platform` value `createAppSchema` accepts (`backend/mobile_purchase/src/catalog/support/catalog.schemas.ts`). */
-const APP_PLATFORMS: RcAppPlatform[] = ['IOS', 'ANDROID', 'MACOS', 'AMAZON', 'WEB'];
+import { NewAppDialog } from './NewAppDialog';
 
 /** Every `Product.type` value `createProductSchema` accepts, same source. */
 const PRODUCT_TYPES: RcProductType[] = [
@@ -182,6 +179,7 @@ function ProductsManager({ projectId }: { projectId: string }) {
       {!apps.isPending && !apps.isError && appList.length === 0 && (
         <Reveal index={0}>
           <EmptyState
+            icon={AppWindow}
             title="No apps yet."
             description={
               canManage
@@ -314,7 +312,7 @@ function ProductsTable({
 }) {
   if (products.length === 0) {
     return (
-      <EmptyState title="No products yet." description="Products entered for this app will appear here." />
+      <EmptyState icon={Package} title="No products yet." description="Products entered for this app will appear here." />
     );
   }
 
@@ -391,134 +389,6 @@ function ProductsTable({
       rowKey={(product) => product.id}
       initialSort={{ key: 'storeProductId', dir: 'asc' }}
     />
-  );
-}
-
-/** New app (design §3.2 header action): name, platform, and the platform-conditional store
- *  identifier (`bundleId` for iOS, `packageName` for Android — matches `createAppSchema`'s
- *  `.refine`s; macOS/Amazon/Web have no required identifier in v1). */
-function NewAppDialog({
-  projectId,
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  projectId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (appId: string) => void;
-}) {
-  const createApp = useCreateRcApp(projectId);
-  const [name, setName] = useState('');
-  const [platform, setPlatform] = useState<RcAppPlatform>('IOS');
-  const [bundleId, setBundleId] = useState('');
-  const [packageName, setPackageName] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  const reset = () => {
-    setName('');
-    setPlatform('IOS');
-    setBundleId('');
-    setPackageName('');
-    setError(null);
-  };
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) reset();
-    onOpenChange(next);
-  };
-
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    createApp.mutate(
-      {
-        name,
-        platform,
-        bundleId: platform === 'IOS' ? bundleId : undefined,
-        packageName: platform === 'ANDROID' ? packageName : undefined,
-      },
-      {
-        onSuccess: (app) => {
-          onCreated(app.id);
-          handleOpenChange(false);
-        },
-        onError: (mutationError) => setError(apiErrorMessage(mutationError, 'Could not create app.')),
-      },
-    );
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
-        <DialogTitle>New app</DialogTitle>
-        <DialogDescription>Register a store app to hold products.</DialogDescription>
-        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3">
-          <div>
-            <Label htmlFor="new-app-name">Name</Label>
-            <Input
-              id="new-app-name"
-              className="mt-1"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="new-app-platform">Platform</Label>
-            <select
-              id="new-app-platform"
-              className={cn(fieldLook, 'mt-1 w-full')}
-              value={platform}
-              onChange={(event) => setPlatform(event.target.value as RcAppPlatform)}
-            >
-              {APP_PLATFORMS.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </div>
-          {platform === 'IOS' && (
-            <div>
-              <Label htmlFor="new-app-bundle-id">Bundle ID</Label>
-              <Input
-                id="new-app-bundle-id"
-                className="mt-1"
-                value={bundleId}
-                onChange={(event) => setBundleId(event.target.value)}
-                required
-              />
-            </div>
-          )}
-          {platform === 'ANDROID' && (
-            <div>
-              <Label htmlFor="new-app-package-name">Package name</Label>
-              <Input
-                id="new-app-package-name"
-                className="mt-1"
-                value={packageName}
-                onChange={(event) => setPackageName(event.target.value)}
-                required
-              />
-            </div>
-          )}
-          {error && (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
-          )}
-          <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => handleOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createApp.isPending}>
-              {createApp.isPending ? 'Creating…' : 'Create app'}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 

@@ -522,6 +522,40 @@ export const RC_JOURNAL_FIXTURE: RcJournalEntry[] = [
 ];
 
 /** Deterministic sample for `GET /metrics/subscriptions` — $49.95 MRR, 5 active, 2 in trial. */
+/** `GET /metrics/mrr-movement` sample: two daily buckets with a mix of gains and losses. */
+export const MRR_MOVEMENT_FIXTURE = {
+  currency: 'USD',
+  approximate: true as const,
+  buckets: [
+    {
+      bucket: '2026-06-30T00:00:00.000Z',
+      new_cents: 1998,
+      reactivation_cents: 0,
+      expansion_cents: 0,
+      contraction_cents: 0,
+      churn_cents: -999,
+      net_cents: 999,
+    },
+    {
+      bucket: '2026-07-01T00:00:00.000Z',
+      new_cents: 999,
+      reactivation_cents: 500,
+      expansion_cents: 300,
+      contraction_cents: -200,
+      churn_cents: 0,
+      net_cents: 1599,
+    },
+  ],
+  totals: {
+    new_cents: 2997,
+    reactivation_cents: 500,
+    expansion_cents: 300,
+    contraction_cents: -200,
+    churn_cents: -999,
+    net_cents: 2598,
+  },
+};
+
 export const SUBSCRIPTIONS_SUMMARY_FIXTURE: SubscriptionsSummaryResponse = {
   mrr_cents: 4995,
   active: 5,
@@ -1577,6 +1611,13 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     return HttpResponse.json(SUBSCRIPTIONS_SUMMARY_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/mrr-movement', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(MRR_MOVEMENT_FIXTURE);
   }),
 
   http.get('/api/v1/projects/:projectId/metrics/subscriptions/attribution', ({ request }) => {

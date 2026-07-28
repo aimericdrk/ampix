@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Link, useParams } from '@tanstack/react-router';
+import { AppWindow } from 'lucide-react';
+import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
 import { Badge } from '../../../components/ui/badge';
-import { Button, buttonVariants } from '../../../components/ui/button';
+import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { useProjectRole, useProjects } from '../../projects/api';
 import { useRcApps, type RcApp, type RcAppPlatform } from '../catalog-api';
+import { NewAppDialog } from './NewAppDialog';
 import {
   AppStoreConnectDialog,
   DisconnectStoreAlertDialog,
@@ -79,16 +81,24 @@ function StoreConnectionsManager({ projectId }: { projectId: string }) {
 
   const [connectTarget, setConnectTarget] = useState<RcApp | null>(null);
   const [disconnectTarget, setDisconnectTarget] = useState<RcApp | null>(null);
+  const [newAppOpen, setNewAppOpen] = useState(false);
 
   return (
     <>
       <Card>
-        <CardHeader>
-          <CardTitle>Store connections</CardTitle>
-          <CardDescription>
-            Give each app the store credentials the clone uses to talk to Google Play and the App
-            Store directly. Credentials are encrypted at rest and never shown again.
-          </CardDescription>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>Store connections</CardTitle>
+            <CardDescription>
+              Give each app the store credentials the clone uses to talk to Google Play and the App
+              Store directly. Credentials are encrypted at rest and never shown again.
+            </CardDescription>
+          </div>
+          {canManage && apps.length > 0 && (
+            <Button size="sm" onClick={() => setNewAppOpen(true)}>
+              New app
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {appsQuery.isError ? (
@@ -97,16 +107,15 @@ function StoreConnectionsManager({ projectId }: { projectId: string }) {
             </p>
           ) : apps.length === 0 ? (
             <EmptyState
+              icon={AppWindow}
               title="No apps yet"
               description="Create an app before you can connect its store credentials."
               action={
-                <Link
-                  to="/projects/$projectId/rc/products"
-                  params={{ projectId }}
-                  className={buttonVariants({ size: 'sm' })}
-                >
-                  Go to Products
-                </Link>
+                canManage ? (
+                  <Button size="sm" onClick={() => setNewAppOpen(true)}>
+                    New app
+                  </Button>
+                ) : undefined
               }
             />
           ) : (
@@ -180,6 +189,9 @@ function StoreConnectionsManager({ projectId }: { projectId: string }) {
           app={disconnectTarget}
           onClose={() => setDisconnectTarget(null)}
         />
+      )}
+      {canManage && (
+        <NewAppDialog projectId={projectId} open={newAppOpen} onOpenChange={setNewAppOpen} />
       )}
     </>
   );

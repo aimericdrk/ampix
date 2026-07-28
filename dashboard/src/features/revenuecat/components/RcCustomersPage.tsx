@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Users } from 'lucide-react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
 import { Button } from '../../../components/ui/button';
@@ -159,6 +160,7 @@ function CustomersList({ projectId }: { projectId: string }) {
               </>
             ) : (
               <EmptyState
+                icon={Users}
                 title="No customers yet"
                 description="They appear here after their first purchase/SDK call."
               />

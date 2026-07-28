@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { KeyRound } from 'lucide-react';
 import { useParams } from '@tanstack/react-router';
 import { PageShell } from '../../../components/layout/PageShell';
 import {
@@ -179,6 +180,7 @@ function EntitlementsManager({ projectId }: { projectId: string }) {
           />
         ) : (
           <EmptyState
+            icon={KeyRound}
             title="No entitlements yet."
             description={
               canManage

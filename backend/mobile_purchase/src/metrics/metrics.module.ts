@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { AuthzModule } from '../authz/authz.module';
 import { ActiveSubscriptionsController } from './controllers/active-subscriptions.controller';
 import { MrrController } from './controllers/mrr.controller';
+import { MrrMovementController } from './controllers/mrr-movement.controller';
 import { RevenueController } from './controllers/revenue.controller';
 import { SummaryController } from './controllers/summary.controller';
 import { MetricsService } from './services/metrics.service';
+import { MrrMovementService } from './services/mrr-movement.service';
 import { SummaryService } from './services/summary.service';
 
 /**
@@ -14,7 +16,13 @@ import { SummaryService } from './services/summary.service';
  */
 @Module({
   imports: [AuthzModule],
-  controllers: [RevenueController, MrrController, ActiveSubscriptionsController, SummaryController],
-  providers: [MetricsService, SummaryService],
+  controllers: [
+    RevenueController,
+    MrrController,
+    MrrMovementController,
+    ActiveSubscriptionsController,
+    SummaryController,
+  ],
+  providers: [MetricsService, MrrMovementService, SummaryService],
 })
 export class MetricsModule {}

@@ -8,7 +8,7 @@ import type {
   SubscriptionsByProduct,
   SubscriptionsByStore,
 } from '../../../lib/api/types';
-import { useRcSummary } from '../purchase-metrics-api';
+import { useRcMrrMovement, useRcSummary, type RcGranularity } from '../purchase-metrics-api';
 import { useProjects } from '../../projects/api';
 import { colorForIndex } from '../../analytics/palette';
 import { DateRangeControl, useDateRange } from '../../analytics/date-range';
@@ -17,6 +17,16 @@ import { ChartCard } from '../../analytics/components/charts/ChartCard';
 import { ComparisonTrend } from '../../analytics/components/charts/ComparisonTrend';
 import { DonutChart } from '../../analytics/components/charts/DonutChart';
 import { KpiTile } from '../../analytics/components/charts/KpiTile';
+import { MrrMovementChart } from './MrrMovementChart';
+
+/** Pick a bucket granularity from the window span so MRR-movement bars stay readable: daily up to
+ *  ~6 weeks, weekly up to ~5 months, monthly beyond. */
+function granularityForRange(from: string, to: string): RcGranularity {
+  const days = (new Date(to).getTime() - new Date(from).getTime()) / 86_400_000;
+  if (days <= 45) return 'day';
+  if (days <= 150) return 'week';
+  return 'month';
+}
 
 /** Maps loading/error/empty query state onto `ChartCard`'s `state` prop in one place (mirrors Revenue/Home). */
 function chartState(
@@ -80,6 +90,8 @@ export function RcOverviewPage() {
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
   const { from, to } = useDateRange();
   const subscriptions = useRcSummary(projectId, from, to);
+  const movementGranularity = granularityForRange(from, to);
+  const movement = useRcMrrMovement(projectId, from, to, movementGranularity);
 
   // Mirrors RcSettingsPage/RcChartsPage: nothing renders until `useProjects()` has actually
   // resolved, so a still-loading project briefly flashes an empty shell instead of stale content.
@@ -107,6 +119,24 @@ export function RcOverviewPage() {
   const trialsStarted = data?.trials_started ?? 0;
   const trialConversionRate = trialsStarted > 0 ? trialsConverted / trialsStarted : 0;
 
+  // KPI context: the MRR tile's delta + sparkline come from the movement endpoint (net change over
+  // the window), reconstructing the MRR trajectory from a start-of-window baseline. New/Churned
+  // sparklines come straight from the summary's daily series.
+  const netCents = movement.data?.totals.net_cents ?? 0;
+  const startMrrCents = (data?.mrr_cents ?? 0) - netCents;
+  const mrrSpark: number[] = [];
+  if (movement.data && movement.data.buckets.length > 0) {
+    let running = startMrrCents;
+    mrrSpark.push(running / 100);
+    for (const bucket of movement.data.buckets) {
+      running += bucket.net_cents;
+      mrrSpark.push(running / 100);
+    }
+  }
+  const mrrDelta = movement.data && startMrrCents > 0 ? { pct: (netCents / startMrrCents) * 100 } : undefined;
+  const newSpark = data?.by_day.map((day) => day.new_subscriptions) ?? [];
+  const churnSpark = data?.by_day.map((day) => day.churned) ?? [];
+
   return (
     <PageShell
       projectId={projectId}
@@ -132,13 +162,41 @@ export function RcOverviewPage() {
         <>
           <Reveal index={0}>
             <SectionGrid>
-              <KpiTile label="MRR" value={formatCurrency(data.mrr_cents / 100)} unfiltered />
+              <KpiTile
+                label="MRR"
+                value={formatCurrency(data.mrr_cents / 100)}
+                spark={mrrSpark}
+                delta={mrrDelta}
+                unfiltered
+              />
               <KpiTile label="Active subscribers" value={data.active} unfiltered />
               <KpiTile label="In trial" value={data.in_trial} unfiltered />
-              <KpiTile label="New subscriptions" value={data.new_subscriptions} />
-              <KpiTile label="Churned" value={data.churned} />
+              <KpiTile label="New subscriptions" value={data.new_subscriptions} spark={newSpark} />
+              <KpiTile label="Churned" value={data.churned} spark={churnSpark} />
               <KpiTile label="Trial→paid" value={formatPercent(trialConversionRate)} />
             </SectionGrid>
+          </Reveal>
+
+          <Reveal index={1}>
+            <ChartCard
+              title="MRR Movement"
+              description="How MRR changed each period — new, reactivation and expansion add; contraction and churn subtract."
+              state={chartState(
+                movement.isPending,
+                movement.isError,
+                !movement.data || movement.data.buckets.length === 0,
+              )}
+            >
+              {movement.data && (
+                <MrrMovementChart
+                  buckets={movement.data.buckets}
+                  totals={movement.data.totals}
+                  currency={movement.data.currency}
+                  granularity={movementGranularity}
+                  persistKey={`myampix:mrr-movement:${projectId}`}
+                />
+              )}
+            </ChartCard>
           </Reveal>
 
           <Reveal index={1}>
