@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { colorForIndex, SERIES_OTHER_COLOR_VAR } from '../../analytics/palette';
 import { formatCompactNumber, formatCurrency } from '../../analytics/format';
+import { downloadCsv, toCsv } from '../../../lib/csv';
 import {
   axisProps,
   ChartTooltip,
@@ -67,6 +68,24 @@ function loadVisible(persistKey: string | undefined): Set<string> {
     // ignore — fall through to the default
   }
   return new Set(DEFAULT_VISIBLE);
+}
+
+const CSV_HEADERS = ['Period', 'New', 'Reactivation', 'Expansion', 'Contraction', 'Churn', 'Net'];
+
+/** Per-bucket movement as a CSV string in currency units (2 decimals, signed) — pure, so it's
+ *  unit-testable without touching the DOM. */
+export function buildMovementCsv(buckets: RcMrrMovementBucket[]): string {
+  const money = (cents: number) => (cents / 100).toFixed(2);
+  const rows = buckets.map((b) => [
+    b.bucket.slice(0, 10),
+    money(b.new_cents),
+    money(b.reactivation_cents),
+    money(b.expansion_cents),
+    money(b.contraction_cents),
+    money(b.churn_cents),
+    money(b.net_cents),
+  ]);
+  return toCsv(CSV_HEADERS, rows);
 }
 
 function formatBucketLabel(iso: string, granularity: RcGranularity): string {
@@ -127,6 +146,7 @@ export function MrrMovementChart({
   const showAll = () => commit(new Set(ALL_KEYS));
   const reset = () => commit(new Set(DEFAULT_VISIBLE));
   const allVisible = ALL_KEYS.every((k) => visible.has(k));
+  const exportCsv = () => downloadCsv('mrr-movement', buildMovementCsv(buckets));
 
   // cents → currency, compact on the axis (e.g. "$1.2k"), exact in the tooltip.
   const axisTick = (cents: number) => `${cents < 0 ? '-' : ''}$${formatCompactNumber(Math.abs(cents) / 100)}`;
@@ -175,6 +195,14 @@ export function MrrMovementChart({
           className="ml-1 rounded-full px-2 py-1 text-xs font-medium text-text-muted underline-offset-2 hover:text-text hover:underline"
         >
           {allVisible ? 'Reset' : 'Show all'}
+        </button>
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={buckets.length === 0}
+          className="ml-auto rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-muted transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Export CSV
         </button>
       </div>
 

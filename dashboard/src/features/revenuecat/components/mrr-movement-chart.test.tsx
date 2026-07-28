@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MrrMovementChart } from './MrrMovementChart';
+import { buildMovementCsv, MrrMovementChart } from './MrrMovementChart';
 import type { RcMrrMovementBucket, RcMrrMovementTotals } from '../purchase-metrics-api';
 
 const TOTALS: RcMrrMovementTotals = {
@@ -100,5 +100,27 @@ describe('MrrMovementChart', () => {
       <MrrMovementChart buckets={BUCKETS} totals={TOTALS} currency="USD" granularity="day" persistKey={key} />,
     );
     expect(screen.getByRole('button', { name: /^Expansion/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('offers an Export CSV action that stays disabled when there is no data', () => {
+    const { rerender } = render(
+      <MrrMovementChart buckets={BUCKETS} totals={TOTALS} currency="USD" granularity="day" />,
+    );
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled();
+
+    rerender(<MrrMovementChart buckets={[]} totals={TOTALS} currency="USD" granularity="day" />);
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled();
+  });
+});
+
+describe('buildMovementCsv', () => {
+  it('emits a header row plus one signed, 2-decimal currency row per bucket keyed by date', () => {
+    const csv = buildMovementCsv(BUCKETS);
+    const lines = csv.split('\r\n');
+
+    expect(lines[0]).toBe('Period,New,Reactivation,Expansion,Contraction,Churn,Net');
+    // First bucket: new 1000¢, reactivation 200¢, expansion 300¢, contraction -100¢, churn -400¢, net 1000¢.
+    expect(lines[1]).toBe('2026-01-01,10.00,2.00,3.00,-1.00,-4.00,10.00');
+    expect(lines).toHaveLength(1 + BUCKETS.length);
   });
 });
