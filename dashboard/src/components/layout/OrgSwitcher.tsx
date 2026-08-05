@@ -8,10 +8,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dia
 import { Input } from '../ui/input';
 import { Menu, MENU_ITEM_CLASS, MenuCheck } from '../ui/menu';
 import { useToast } from '../ui/toast';
+import { RailInitial } from './RailInitial';
 
 /** Workspace (org) switcher — a dropdown that lists the caller's orgs and opens
  * the "New organization" dialog from the top of the menu (contracts §13). */
-export function OrgSwitcher() {
+export function OrgSwitcher({ collapsed = false }: { collapsed?: boolean } = {}) {
   const { data, isPending, error } = useOrgs();
   const currentOrgId = useCurrentOrgId();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -27,10 +28,13 @@ export function OrgSwitcher() {
     currentOrgStore.setCurrentOrg(data.orgs[0]?.id ?? null);
   }, [data]);
 
-  if (isPending) return <p className="text-sm text-text-muted">Loading organizations…</p>;
+  // Collapsed there is no room for either message, but both must stay announced — the rail is
+  // 48px of content box, which a wrapped sentence would blow straight through.
+  if (isPending)
+    return <p className={cn('text-sm text-text-muted', collapsed && 'sr-only')}>Loading organizations…</p>;
   if (error) {
     return (
-      <p role="alert" className="text-sm text-danger">
+      <p role="alert" className={cn('text-sm text-danger', collapsed && 'sr-only')}>
         {error instanceof ApiError ? error.problem.title : 'Failed to load organizations'}
       </p>
     );
@@ -43,16 +47,23 @@ export function OrgSwitcher() {
     <>
       <Menu
         label="Switch workspace"
-        triggerClassName="rounded-lg border border-border bg-surface-raised px-2.5 py-1.5 text-sm hover:border-border-strong transition-colors w-full"
+        triggerClassName={cn(
+          'rounded-lg border border-border bg-surface-raised text-sm hover:border-border-strong transition-colors w-full',
+          collapsed ? 'flex justify-center p-1.5' : 'px-2.5 py-1.5',
+        )}
         trigger={
-          <span className="flex flex-col">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
-              Workspace
+          collapsed ? (
+            <RailInitial name={currentOrg?.name} fallback="W" />
+          ) : (
+            <span className="flex flex-col">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+                Workspace
+              </span>
+              <span className="truncate text-sm font-medium text-text">
+                {currentOrg?.name ?? 'Select workspace'}
+              </span>
             </span>
-            <span className="truncate text-sm font-medium text-text">
-              {currentOrg?.name ?? 'Select workspace'}
-            </span>
-          </span>
+          )
         }
       >
         {({ close }) => (

@@ -1,10 +1,12 @@
 // Read-only Postgres explorer for debugging (e.g. "the image is right in Firebase but wrong in the
 // dashboard" → inspect the screen_captures metadata the read path resolves). Uses the backend's
-// already-generated Prisma client + DATABASE_URL from backend/.env — no extra dependencies.
+// already-generated Prisma client + DATABASE_URL from backend/mobile_analytics/.env — no extra
+// dependencies.
 //
-// Run it from anywhere — it resolves @prisma/client and DATABASE_URL from the backend/ workspace:
+// Run it from anywhere — it resolves @prisma/client and DATABASE_URL from the
+// backend/mobile_analytics workspace:
 //     node scripts/db-explore.mjs <command> [args]        (from the repo root)
-//     cd backend && node ../scripts/db-explore.mjs <command> [args]
+//     cd backend/mobile_analytics && node ../../scripts/db-explore.mjs <command> [args]
 //
 // Commands (all READ-ONLY — the script refuses anything that isn't a plain SELECT/WITH/EXPLAIN):
 //     tables                        List every table with its row count.
@@ -20,12 +22,13 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
-// Resolve @prisma/client + .env from the backend/ workspace, regardless of the current directory.
+// Resolve @prisma/client + .env from the backend/mobile_analytics workspace, regardless of the
+// current directory.
 // (ESM resolves bare specifiers relative to THIS file's dir, which has no node_modules of its own.)
-const backendRequire = createRequire(new URL('../backend/package.json', import.meta.url));
+const backendRequire = createRequire(new URL('../backend/mobile_analytics/package.json', import.meta.url));
 const { PrismaClient } = backendRequire('@prisma/client');
 
-const backendEnv = fileURLToPath(new URL('../backend/.env', import.meta.url));
+const backendEnv = fileURLToPath(new URL('../backend/mobile_analytics/.env', import.meta.url));
 try {
   process.loadEnvFile(backendEnv);
 } catch {
@@ -33,7 +36,7 @@ try {
 }
 
 if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL is not set. Run this from the backend/ dir: cd backend && node ../scripts/db-explore.mjs …');
+  console.error('DATABASE_URL is not set. Run this from the backend/mobile_analytics dir: cd backend/mobile_analytics && node ../../scripts/db-explore.mjs …');
   process.exit(1);
 }
 

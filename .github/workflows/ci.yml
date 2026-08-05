@@ -21,6 +21,7 @@ jobs:
       pull-requests: read
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
+      mobile_purchase: ${{ steps.filter.outputs.mobile_purchase }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
       sdk: ${{ steps.filter.outputs.sdk }}
     steps:
@@ -30,8 +31,13 @@ jobs:
         with:
           filters: |
             backend:
-              - 'backend/**'
+              - 'backend/mobile_analytics/**'
               - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci.yml'
+            mobile_purchase:
+              - 'backend/mobile_purchase/**'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - '.github/workflows/ci.yml'
@@ -69,16 +75,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # backend/ does not exist until the backend sub-project lands.
+      # backend/mobile_analytics/ does not exist until the backend sub-project lands.
       # Every subsequent step is guarded so this job passes as a no-op until then.
       - name: Check backend package exists
         id: pkg
         run: |
-          if [ -f backend/package.json ]; then
+          if [ -f backend/mobile_analytics/package.json ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::backend/package.json not found — backend not scaffolded yet, skipping"
+            echo "::notice::backend/mobile_analytics/package.json not found — backend not scaffolded yet, skipping"
           fi
       - uses: pnpm/action-setup@v4
         if: steps.pkg.outputs.present == 'true'
@@ -92,15 +98,53 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint
         if: steps.pkg.outputs.present == 'true'
-        run: pnpm --filter ./backend run --if-present lint
+        run: pnpm --filter ./backend/mobile_analytics run --if-present lint
       - name: Typecheck
         if: steps.pkg.outputs.present == 'true'
-        run: pnpm --filter ./backend run --if-present typecheck
+        run: pnpm --filter ./backend/mobile_analytics run --if-present typecheck
       # Coverage-gated (README floor: backend 85% lines). test:cov runs the unit +
       # integration projects; Testcontainers spin up Postgres/Redis via the runner's Docker.
       - name: Tests (coverage-gated)
         if: steps.pkg.outputs.present == 'true'
-        run: pnpm --filter ./backend run test:cov
+        run: pnpm --filter ./backend/mobile_analytics run test:cov
+
+  mobile_purchase:
+    name: Mobile Purchase — lint, typecheck, test
+    needs: changes
+    if: needs.changes.outputs.mobile_purchase == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # backend/mobile_purchase/ does not exist until the sub-project lands.
+      # Every subsequent step is guarded so this job passes as a no-op until then.
+      - name: Check mobile_purchase package exists
+        id: pkg
+        run: |
+          if [ -f backend/mobile_purchase/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::backend/mobile_purchase/package.json not found — not scaffolded yet, skipping"
+          fi
+      - uses: pnpm/action-setup@v4
+        if: steps.pkg.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.pkg.outputs.present == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./backend/mobile_purchase run --if-present lint
+      - name: Typecheck
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./backend/mobile_purchase run --if-present typecheck
+      - name: Tests
+        if: steps.pkg.outputs.present == 'true'
+        run: pnpm --filter ./backend/mobile_purchase run --if-present test
 
   dashboard:
     name: Dashboard — lint, typecheck, test

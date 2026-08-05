@@ -134,6 +134,51 @@ describe('ChartCard', () => {
     expect(downloadPng).toHaveBeenCalledWith('active-users-trend', fakeBlob);
   });
 
+  it('starts collapsed and expands on toggle when collapsible', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChartCard title="Active users" collapsible>
+        <p>Chart body</p>
+      </ChartCard>,
+    );
+
+    const toggle = screen.getByRole('button', { name: /active users/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // Body stays mounted (charts keep state) but is hidden from view.
+    expect(screen.getByText('Chart body')).not.toBeVisible();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Chart body')).toBeVisible();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Chart body')).not.toBeVisible();
+  });
+
+  it('hides the Export PNG button while collapsed and shows it once expanded', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChartCard title="Active users" exportImageName="active-users-trend" collapsible>
+        <svg role="presentation" />
+      </ChartCard>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Export PNG' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /active users/i }));
+    expect(screen.getByRole('button', { name: 'Export PNG' })).toBeInTheDocument();
+  });
+
+  it('is not collapsible by default (no toggle, body visible)', () => {
+    render(
+      <ChartCard title="Sessions">
+        <p>Chart body</p>
+      </ChartCard>,
+    );
+    expect(screen.queryByRole('button', { name: /sessions/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Chart body')).toBeVisible();
+  });
+
   it('renders both a custom action and the Export PNG button together', () => {
     render(
       <ChartCard title="Sessions" exportImageName="sessions-trend" action={<button>Breakdown</button>}>

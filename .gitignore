@@ -7,6 +7,11 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+graphify-out/
+
+# Generated Prisma client (mobile_purchase uses a package-local output so it never
+# clobbers mobile_analytics' shared @prisma/client — see backend/mobile_purchase/prisma/schema.prisma)
+backend/mobile_purchase/generated/
 
 # Environment — real env files never committed; the example is
 .env
@@ -42,3 +47,4 @@ google-service-account.json
 **/google-service-account.json
 *-service-account*.json
 *.serviceaccount.json
+ruvector.db

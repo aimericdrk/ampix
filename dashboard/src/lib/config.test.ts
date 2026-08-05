@@ -7,17 +7,24 @@ describe('getRuntimeConfig', () => {
   });
 
   it('returns values injected by config.js', () => {
-    window.___MYAMPIX_CONFIG__ = { apiBaseUrl: 'https://api.myampix.example' };
-    expect(getRuntimeConfig()).toEqual({ apiBaseUrl: 'https://api.myampix.example' });
+    window.___MYAMPIX_CONFIG__ = {
+      apiBaseUrl: 'https://api.myampix.example',
+      purchaseApiBaseUrl: 'https://purchase.myampix.example',
+    };
+    expect(getRuntimeConfig()).toEqual({
+      apiBaseUrl: 'https://api.myampix.example',
+      purchaseApiBaseUrl: 'https://purchase.myampix.example',
+    });
   });
 
-  it('falls back to same-origin default when config.js is absent (dev)', () => {
+  it('falls back to same-origin defaults when config.js is absent (dev)', () => {
     delete window.___MYAMPIX_CONFIG__;
-    expect(getRuntimeConfig()).toEqual({ apiBaseUrl: '' });
+    expect(getRuntimeConfig()).toEqual({ apiBaseUrl: '', purchaseApiBaseUrl: '' });
   });
 
   it('fills missing keys from defaults', () => {
-    window.___MYAMPIX_CONFIG__ = {};
-    expect(getRuntimeConfig().apiBaseUrl).toBe('');
+    window.___MYAMPIX_CONFIG__ = { apiBaseUrl: 'https://api.myampix.example' };
+    expect(getRuntimeConfig().apiBaseUrl).toBe('https://api.myampix.example');
+    expect(getRuntimeConfig().purchaseApiBaseUrl).toBe('');
   });
 });

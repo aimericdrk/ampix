@@ -1,0 +1,72 @@
+# Runs the backend as a container against the local Compose DB stack — the proof that the image works.
+# Usage: docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up --build backend
+#
+# This is a local-run overlay only. GCP/Cloud Run deployment is a later X1 increment.
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/mobile_analytics/Dockerfile
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Dev secrets (JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, TOTP_ENC_KEY) come from the gitignored
+    # backend/mobile_analytics/.env — never committed. Path is relative to this compose file (infra/).
+    env_file:
+      - ../backend/mobile_analytics/.env
+    environment:
+      NODE_ENV: development
+      PORT: "8088"
+      # DB hosts point at the Compose service names (the localhost values in backend/mobile_analytics/.env
+      # don't resolve inside the container; `environment` overrides `env_file`). Dev creds match
+      # infra/docker-compose.yml and are dev-only.
+      DATABASE_URL: postgresql://myampix:myampix_dev@postgres:5432/myampix
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: myampix_dev
+      CLICKHOUSE_DB: analytics
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8088:8088"
+
+  # --- mobile-purchase (RevenueCat-style service) local run: migrate one-shot, then the distroless app.
+  # Mirrors the intended Cloud Run flow (a migrate Job gates the serving revision). Brought up with the
+  # base stack: docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up --build mobile-purchase
+  mobile-purchase-migrate:
+    build:
+      context: ..
+      dockerfile: backend/mobile_purchase/Dockerfile
+      target: migrate
+    depends_on:
+      mobile-purchase-postgres:
+        condition: service_healthy
+    environment:
+      # Internal service DNS + internal port 5432 (the :5433 is only the host-published port). Dev-only creds.
+      DATABASE_URL: postgresql://mobile_purchase:mobile_purchase_dev@mobile-purchase-postgres:5432/mobile_purchase
+    restart: "no"
+
+  mobile-purchase:
+    build:
+      context: ..
+      dockerfile: backend/mobile_purchase/Dockerfile
+      target: runtime
+    depends_on:
+      # Serve only AFTER the one-shot migrate exits 0 — the compose expression of "migrate Job → serving revision".
+      mobile-purchase-migrate:
+        condition: service_completed_successfully
+      mobile-purchase-postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "8090"
+      DATABASE_URL: postgresql://mobile_purchase:mobile_purchase_dev@mobile-purchase-postgres:5432/mobile_purchase
+      DASHBOARD_ORIGINS: http://localhost:5173 # dev-only (the dashboard dev server origin)
+      # Cross-service authz target (analytics backend). Only used on-demand for guarded requests, not
+      # by /health — the app boots fine even if the analytics service isn't up.
+      ANALYTICS_INTERNAL_URL: http://backend:8088
+    ports:
+      - "8090:8090"

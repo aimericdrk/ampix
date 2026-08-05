@@ -6,9 +6,31 @@ import { fieldLook } from '../../../components/ui/input';
 import { cn } from '../../../lib/cn';
 import type { InsightsFilter, InsightsFilterOp } from '../../../lib/api/types';
 import { INSIGHTS_FILTER_OPS } from '../../../lib/api/types';
+import { useRcEnabled } from '../../revenuecat/api';
 import { useMetaProperties } from '../api';
 import { useGlobalFilters } from '../global-filters';
 import { FILTER_OP_LABELS, FilterValueInput, VALUELESS_OPS } from './builder-controls';
+
+/** The RevenueCat profile property the subscription quick filters pivot on. */
+const RC_STATUS_PROPERTY = '$rc_status';
+
+/**
+ * Curated RevenueCat profile properties appended to the Add-filter property list when RC is
+ * connected — profile-scoped, so they never appear for the plain §14 analytics engine.
+ */
+const RC_CURATED_PROPERTIES = [
+  RC_STATUS_PROPERTY,
+  '$rc_product_id',
+  '$rc_store',
+  '$rc_total_spent',
+];
+
+/** One-click `$rc_status` presets over the profile store (Subscribers / Trial / Churned). */
+const RC_QUICK_FILTERS: Array<{ label: string; value: string }> = [
+  { label: 'Subscribers', value: 'active' },
+  { label: 'Trial', value: 'trial' },
+  { label: 'Churned', value: 'churned' },
+];
 
 /** A short, plain-language rendering of a filter, e.g. "OS is iOS" / "app_version is set". */
 function describeFilter(filter: InsightsFilter): string {
@@ -26,9 +48,13 @@ function describeFilter(filter: InsightsFilter): string {
  * subtle affordance so it never crowds the page above it.
  */
 export function GlobalFilterBar({ projectId }: { projectId: string }) {
-  const { filters, addFilter, removeFilter, clearAll } = useGlobalFilters();
+  const { filters, addFilter, removeFilter, clearAll, toggleGlobalFilter } = useGlobalFilters();
+  const rcEnabled = useRcEnabled(projectId);
   const metaProperties = useMetaProperties(projectId);
-  const propertyNames = metaProperties.data?.properties.map((p) => p.name) ?? [];
+  const baseProperties = metaProperties.data?.properties.map((p) => p.name) ?? [];
+  const propertyNames = rcEnabled
+    ? [...baseProperties, ...RC_CURATED_PROPERTIES.filter((p) => !baseProperties.includes(p))]
+    : baseProperties;
 
   const [open, setOpen] = useState(false);
   const [draftProperty, setDraftProperty] = useState('');
@@ -66,6 +92,40 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
       aria-label="Global filters"
       className="relative mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2"
     >
+      {rcEnabled && (
+        <div className="flex items-center gap-1.5" role="group" aria-label="Subscription quick filters">
+          <span className="text-xs font-medium text-text-muted">Subscription:</span>
+          {RC_QUICK_FILTERS.map(({ label, value }) => {
+            const active = filters.some(
+              (f) => f.property === RC_STATUS_PROPERTY && f.value === value && f.target === 'profile',
+            );
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={active}
+                onClick={() =>
+                  toggleGlobalFilter({
+                    property: RC_STATUS_PROPERTY,
+                    op: 'eq',
+                    value,
+                    target: 'profile',
+                  })
+                }
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.98]',
+                  active
+                    ? 'border-accent bg-accent-soft text-accent'
+                    : 'border-border-strong text-text-muted hover:border-accent hover:text-accent',
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {filters.length === 0 && !open && (
         <button
           type="button"
@@ -84,6 +144,11 @@ export function GlobalFilterBar({ projectId }: { projectId: string }) {
             className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent"
           >
             {label}
+            {filter.target === 'profile' && (
+              <span className="rounded bg-accent/15 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent/80">
+                profile
+              </span>
+            )}
             <button
               type="button"
               aria-label={`Remove filter ${label}`}

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { authStore } from '../../features/auth/store';
 import {
   authState,
@@ -89,6 +89,23 @@ describe('apiFetch', () => {
     await expect(apiFetch('/api/v1/projects')).rejects.toBeInstanceOf(ApiError);
     expect(authStore.getState().status).toBe('anonymous');
     expect(authStore.getState().accessToken).toBeNull();
+  });
+
+  describe('in dev mode', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('keeps the session when the refresh fails', async () => {
+      // DEV is already true under Vitest; MODE is what distinguishes dev from test.
+      vi.stubEnv('MODE', 'development');
+      authStore.setSession('expired-access-token', TEST_USER);
+      authState.refreshValid = false;
+
+      await expect(apiFetch('/api/v1/projects')).rejects.toBeInstanceOf(ApiError);
+      expect(authStore.getState().status).toBe('authenticated');
+      expect(authStore.getState().accessToken).toBe('expired-access-token');
+    });
   });
 
   it('returns undefined for 204 responses', async () => {

@@ -16,6 +16,7 @@ import 'config.dart';
 import 'context/context_collector.dart';
 import 'context/platform_context_data_source.dart';
 import 'identity/identity_manager.dart';
+import 'identity/rc_link_store.dart';
 import 'network/uploader.dart';
 import 'optout/opt_out_state.dart';
 import 'people.dart';
@@ -112,6 +113,7 @@ class MyAmpix {
   late final AttributionStore _attribution;
   late final IdentityManager _identity;
   late final SuperPropertiesStore _superProperties;
+  RcLinkStore? _rcLink;
   late final TimedEventTracker _timedEvents;
   late final OptOutState _optOut;
   late final EventPipeline _pipeline;
@@ -177,6 +179,8 @@ class MyAmpix {
 
     _identity = IdentityManager(store: keyValueStore, idFactory: idFactory);
     await _identity.load();
+    _rcLink = RcLinkStore(store: keyValueStore);
+    await _rcLink!.load();
     _attribution = AttributionStore(keyValueStore);
     try {
       await _attribution.load();
@@ -499,6 +503,24 @@ class MyAmpix {
   bool get autocaptureScreenshotsEnabled =>
       _initialized && _autocaptureScreenshots;
 
+  /// The current distinct id, or null before [init] completes its identity load.
+  /// Pass this to other SDKs (e.g. RevenueCat's `Purchases.logIn`) to share identity.
+  String? getDistinctId() {
+    if (!_initialized) return null;
+    return _identity.distinctId;
+  }
+
+  /// Declares the RevenueCat app_user_id for the current user so MyAmpix can
+  /// attach RevenueCat webhook events to this user. Safe to call on every launch.
+  void setRevenueCatAppUserId(String id) {
+    final trimmed = id.trim();
+    if (trimmed.isEmpty) return;
+    _guard('setRevenueCatAppUserId', () async {
+      await _rcLink?.set(trimmed);
+      await _pipeline.track(r'$rc_link', {r'$rc_app_user_id': trimmed});
+    });
+  }
+
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);
     // Debug-only: shows the identity transition. `changed=false` means the user was already
@@ -510,6 +532,10 @@ class MyAmpix {
     if (changed) {
       await _pipeline.track(r'$identify', {r'$anon_id': _identity.anonId});
     }
+    final rcId = _rcLink?.value;
+    if (rcId != null) {
+      await _pipeline.track(r'$rc_link', {r'$rc_app_user_id': rcId});
+    }
   });
 
   void alias(String aliasId) => _guard(
@@ -520,6 +546,7 @@ class MyAmpix {
   void reset() => _guard('reset', () async {
     await _identity.reset();
     await _superProperties.clear();
+    await _rcLink?.clear();
     _timedEvents.clear();
     // Debug-only: reset wipes identity + super properties (so any registered `country` is GONE
     // after this) and issues a fresh anonymous id.

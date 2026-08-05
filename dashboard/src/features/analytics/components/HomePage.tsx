@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { PageShell } from '../../../components/layout/PageShell';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
+import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Reveal } from '../../../components/ui/reveal';
@@ -270,6 +271,10 @@ export function HomePage() {
   const activeTrendCurrent = dauActive.map((p) => ({ t: p.t, value: p.value }));
   const activeTrendPrevious = dauPreviousActive.map((p) => ({ t: p.t, value: p.value }));
   const activeTrendAnomalies = detectAnomalies(activeTrendCurrent);
+  const activeUsersDailyColumns: Array<DataTableColumn<{ t: string; value: number }>> = [
+    { key: 't', header: 'Date', sortable: true },
+    { key: 'value', header: 'Active users', align: 'right', sortable: true },
+  ];
 
   const eventSlices = byEvent
     .slice(0, 8)
@@ -494,8 +499,27 @@ export function HomePage() {
                 ariaLabel="Active users trend"
                 anomalies={activeTrendAnomalies}
                 annotations={annotations}
+                // The day-by-day list lives in the collapsible "Daily breakdown" below, so hide
+                // this chart's own fixed table to avoid showing it twice.
+                showDataTable={false}
               />
               <AnomalyCallout anomalies={activeTrendAnomalies} />
+              {/* The graph itself always shows; only this per-day breakdown collapses (closed by
+                  default) so the card stays a chart first, table-on-demand second. */}
+              <CollapsibleSection
+                title="Daily breakdown"
+                defaultOpen={false}
+                className="mt-4"
+              >
+                <DataTable
+                  columns={activeUsersDailyColumns}
+                  rows={activeTrendCurrent}
+                  caption="Active users by day"
+                  initialSort={{ key: 't', dir: 'desc' }}
+                  rowKey={(row) => row.t}
+                  exportFilename="active-users-by-day"
+                />
+              </CollapsibleSection>
             </ChartCard>
           </Reveal>
 

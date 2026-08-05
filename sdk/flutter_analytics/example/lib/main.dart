@@ -20,7 +20,7 @@ Future<void> main() async {
       // in debug, so enabling it populates the admin's reference images as you
       // navigate. A release build never captures/uploads (production users
       // never send screenshots). See §14 of HOW-TO-USE.md.
-      autocaptureScreenshots: true,
+      autocaptureScreenshots: false,
     ),
   );
 
@@ -31,7 +31,8 @@ Future<void> main() async {
     'platform': 'flutter',
   });
 
-  MyAmpix.instance.retakeScreenshots();
+  MyAmpix.instance.registerSuperProperties({'country': 'FR'});
+  // MyAmpix.instance.retakeScreenshots();
 
   runApp(const ShopApp());
 }

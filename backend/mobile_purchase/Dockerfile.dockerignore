@@ -1,0 +1,13 @@
+# Ignore patterns for backend/mobile_purchase/Dockerfile (build context = repo root, so patterns
+# are root-relative).
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+**/*.spec.ts
+**/*.test.ts
+backend/mobile_purchase/test
+.git
+**/.DS_Store

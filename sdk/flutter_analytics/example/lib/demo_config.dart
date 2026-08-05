@@ -11,7 +11,7 @@ library;
 /// machine. Android emulators cannot reach the host's `localhost` directly
 /// — use `http://10.0.2.2:8080` instead (the emulator's special alias for
 /// the host loopback interface) when running on the Android emulator.
-const String demoServerUrl = 'http://localhost:8080';
+const String demoServerUrl = 'http://localhost:8088';
 
 /// Demo ingest token: `mam_` followed by 32 hex zeros.
 ///

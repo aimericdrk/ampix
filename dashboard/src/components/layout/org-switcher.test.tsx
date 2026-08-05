@@ -8,7 +8,7 @@ import {
   VALID_ACCESS_TOKEN,
   VIEWER_ORG_NAME,
 } from '../../test/msw/handlers';
-import { renderApp } from '../../test/render-app';
+import { expandSidebar, renderApp } from '../../test/render-app';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -18,6 +18,7 @@ describe('OrgSwitcher', () => {
   it('shows the current workspace and lists the caller’s organizations in the menu', async () => {
     signIn();
     renderApp('/projects');
+    await expandSidebar();
     await screen.findByRole('heading', { name: 'Projects' });
 
     const trigger = await screen.findByRole('button', { name: 'Switch workspace' });
@@ -40,6 +41,7 @@ describe('OrgSwitcher', () => {
   it('switches to another organization from the menu', async () => {
     signIn();
     renderApp('/projects');
+    await expandSidebar();
     const trigger = await screen.findByRole('button', { name: 'Switch workspace' });
     await waitFor(() => expect(within(trigger).getByText(TEST_ORG_NAME)).toBeInTheDocument());
 
@@ -58,6 +60,7 @@ describe('OrgSwitcher', () => {
   it('creates a new organization from the top of the menu and switches to it', async () => {
     signIn();
     renderApp('/projects');
+    await expandSidebar();
     const trigger = await screen.findByRole('button', { name: 'Switch workspace' });
     await waitFor(() => expect(within(trigger).getByText(TEST_ORG_NAME)).toBeInTheDocument());
 
@@ -81,6 +84,7 @@ describe('OrgSwitcher', () => {
     signIn();
     localStorage.setItem('myampix-current-org', 'some-other-users-org');
     renderApp('/projects');
+    await expandSidebar();
 
     const trigger = await screen.findByRole('button', { name: 'Switch workspace' });
     await waitFor(() => expect(within(trigger).getByText(TEST_ORG_NAME)).toBeInTheDocument());

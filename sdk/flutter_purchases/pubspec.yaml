@@ -1,0 +1,37 @@
+name: myampix_purchases
+description: MyAmpix Flutter purchases SDK — a RevenueCat-style client for the mobile_purchase backend.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.32.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.3.0
+  shared_preferences: ^2.5.0
+  uuid: ^4.5.0
+
+dev_dependencies:
+  fake_async: ^1.3.1
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+# This package is a Flutter plugin: it ships native platform code (iOS
+# StoreKit 2 / Android Play Billing) that fetches store products, runs the
+# purchase, and streams transaction updates to the Dart side over the
+# `myampix_purchases/methods` (MethodChannel) and
+# `myampix_purchases/transactions` (EventChannel) channels (spec §5). The
+# Swift/Kotlin sources are authored in P3.5/P3.6; the Dart layer is fully
+# analyzable + unit-testable without them.
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.myampix.purchases
+        pluginClass: MyampixPurchasesPlugin
+      ios:
+        pluginClass: MyampixPurchasesPlugin

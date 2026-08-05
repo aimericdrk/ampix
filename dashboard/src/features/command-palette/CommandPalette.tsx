@@ -1,16 +1,17 @@
 import { useNavigate } from '@tanstack/react-router';
 import { IconSparkle } from '../../components/ui/icons';
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '../../components/ui/dialog';
 import { IconSearch } from '../../components/ui/icons';
 import { Kbd } from '../../components/ui/kbd';
 import { useToast } from '../../components/ui/toast';
-import { projectGroups } from '../../components/layout/nav-model';
+import { allGroups } from '../../components/layout/nav-model';
 import { NavIcon, type IconName } from '../../components/layout/NavIcon';
 import { cn } from '../../lib/cn';
 import type { UserListItem } from '../../lib/api/types';
 import { useCohorts, useDashboards, useReports, useUsersList } from '../analytics/api';
 import { useProjects } from '../projects/api';
+import { useRcEnabled } from '../revenuecat/api';
 import { useFavorites } from '../favorites/favorites';
 import type { FavItemType } from '../favorites/favorites';
 import { useRecents } from '../favorites/recents';
@@ -114,7 +115,13 @@ function UsersResultsLoader({
  * reports/dashboards/cohorts, users, and projects. Mounted once per project scope in `AppLayout`,
  * and reused for the small "⌘K" trigger button so there is a single source of truth for open state.
  */
-export function CommandPalette({ projectId }: { projectId: string }) {
+export function CommandPalette({
+  projectId,
+  collapsed = false,
+}: {
+  projectId: string;
+  collapsed?: boolean;
+}) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -133,6 +140,10 @@ export function CommandPalette({ projectId }: { projectId: string }) {
   const { data: projectsData } = useProjects();
   const favorites = useFavorites(projectId);
   const recents = useRecents(projectId);
+  const rcEnabled = useRcEnabled(projectId);
+  // Cross-tool on purpose: the palette's value is jumping to anything, so it is never scoped to
+  // the active tool.
+  const navGroups = useMemo(() => allGroups({ rcEnabled }), [rcEnabled]);
 
   // Dropping stale rows the instant the query empties keeps a since-cleared search from lingering.
   useEffect(() => {
@@ -215,7 +226,7 @@ export function CommandPalette({ projectId }: { projectId: string }) {
       })
     : [];
 
-  const pageItems: PaletteItem[] = projectGroups()
+  const pageItems: PaletteItem[] = navGroups
     .flatMap((group) => group.items)
     .filter((item) => matchesQuery(item.label, query))
     .map((item) => ({
@@ -339,11 +350,21 @@ export function CommandPalette({ projectId }: { projectId: string }) {
         type="button"
         aria-label="Open command palette"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-md border border-border bg-bg px-3 py-1.5 text-sm text-text-muted transition-colors hover:bg-border/40 hover:text-text"
+        title={collapsed ? 'Search (⌘K)' : undefined}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md border border-border bg-bg py-1.5 text-sm text-text-muted transition-colors hover:bg-border/40 hover:text-text',
+          collapsed ? 'justify-center px-0' : 'px-3',
+        )}
       >
         <IconSearch size={14} />
-        <span className="flex-1 text-left">Search</span>
-        <Kbd>⌘K</Kbd>
+        {/* Collapsed the rail can't fit "Search" or the ⌘K hint, so the glyph carries it alone —
+            the button's own `aria-label` is what screen readers announce either way. */}
+        {!collapsed && (
+          <>
+            <span className="flex-1 text-left">Search</span>
+            <Kbd>⌘K</Kbd>
+          </>
+        )}
       </button>
 
       {hasQuery && (

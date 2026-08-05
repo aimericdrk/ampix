@@ -3,17 +3,20 @@ import { cn } from '../../lib/cn';
 import { useTheme } from '../../lib/theme';
 import { Button } from '../ui/button';
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean } = {}) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
+  const label = isDark ? 'Switch to light mode' : 'Switch to dark mode';
 
   return (
     <Button
       variant="ghost"
       size="sm"
-      className="w-full justify-start"
+      className={cn(compact ? 'w-auto px-2' : 'w-full justify-start')}
       onClick={toggleTheme}
       aria-pressed={isDark}
+      // In compact mode the label is dropped for space, so it has to carry the accessible name.
+      aria-label={compact ? label : undefined}
     >
       <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
         <Sun
@@ -31,7 +34,7 @@ export function ThemeToggle() {
           )}
         />
       </span>
-      {isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      {!compact && label}
     </Button>
   );
 }

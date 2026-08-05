@@ -18,6 +18,14 @@ import { StatTile } from './charts/StatTile';
 /** How often the relative-time labels ("3s ago") re-render while the stream is live. */
 const RELATIVE_TIME_TICK_MS = 1000;
 
+/**
+ * A RevenueCat subscription lifecycle event (purchase/renewal/cancellation/etc.). `$rc_link` shares
+ * the `$rc_` prefix but is an SDK identity event, not a subscription event, so it's excluded here.
+ */
+function isSubscriptionEvent(name: string): boolean {
+  return name.startsWith('$rc_') && name !== '$rc_link';
+}
+
 /** `2026-07-02T12:03:00.000Z` at various ages -> "3s ago" / "5m ago" / "2h ago" / "1d ago". */
 function formatRelativeTime(timestamp: string, now: number): string {
   const diffMs = Math.max(0, now - new Date(timestamp).getTime());
@@ -197,6 +205,9 @@ export function LiveEventsPage() {
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <Badge variant="accent">{event.event}</Badge>
+                        {isSubscriptionEvent(event.event) && (
+                          <Badge variant="accent">subscription</Badge>
+                        )}
                         <span
                           className="truncate font-mono text-xs text-text-muted"
                           title={event.distinct_id}

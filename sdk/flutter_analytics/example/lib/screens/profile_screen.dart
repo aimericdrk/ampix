@@ -3,8 +3,10 @@ import 'package:myampix_analytics/myampix_analytics.dart';
 
 import '../state/event_log.dart';
 import '../state/session_state.dart';
+import 'order_history_screen.dart';
 
-/// Profile screen: fake login/logout.
+/// Profile screen: fake login/logout, plus the nested Order history flow
+/// (`profile/orders` > `profile/orders/detail`) once logged in.
 ///
 /// SDK calls: `identify(userId)` + `people.set({'email', 'name'})` on
 /// "Log in"; `reset()` on "Log out".
@@ -50,6 +52,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     EventLog.instance.log('reset()');
   }
 
+  void _openOrders() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'profile/orders'),
+        builder: (_) => const OrderHistoryScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -70,6 +81,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(session.email ?? ''),
+                      const SizedBox(height: 24),
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.receipt_long_outlined),
+                          title: const Text('Order history'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _openOrders,
+                        ),
+                      ),
                       const SizedBox(height: 24),
                       FilledButton(
                         onPressed: _logout,

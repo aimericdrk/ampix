@@ -1,0 +1,343 @@
+// Mobile Purchase service — standalone Postgres database (see infra/docker-compose.yml,
+// service "mobile-purchase-postgres", port 5433). Owns the catalog domain: apps, products,
+// entitlements, offerings, and packages for a project. This service has NO Project/Org/User
+// tables of its own — projectId is a plain, unenforced-by-FK column, scoped by the caller.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppPlatform {
+  IOS
+  ANDROID
+  // Reserved for later platform phases — modeled now so the enum is stable, unused today.
+  MACOS
+  AMAZON
+  WEB
+}
+
+enum ProductType {
+  AUTO_RENEWABLE_SUBSCRIPTION
+  NON_RENEWING_SUBSCRIPTION
+  CONSUMABLE
+  NON_CONSUMABLE
+}
+
+// RevenueCat's PackageType, verbatim so the SDK contract matches.
+enum PackageType {
+  UNKNOWN
+  CUSTOM
+  LIFETIME
+  ANNUAL
+  SIX_MONTH
+  THREE_MONTH
+  TWO_MONTH
+  MONTHLY
+  WEEKLY
+}
+
+// --- Store webhooks / Customer / Subscription / Transaction (M1) ---------------------------
+// RC-style store attribution (distinct from AppPlatform, which describes the App's OS target).
+enum Store {
+  APP_STORE
+  PLAY_STORE
+}
+
+enum Environment {
+  SANDBOX
+  PRODUCTION
+}
+
+enum PeriodType {
+  NORMAL
+  TRIAL
+  INTRO
+  PROMO
+}
+
+enum SubscriptionStatus {
+  TRIAL // entitled + (usually) renewing
+  INTRO
+  ACTIVE
+  CANCELLED // auto-renew off, still entitled until expiresAt
+  GRACE_PERIOD // billing failed, still entitled during grace
+  BILLING_RETRY // billing failed, NOT entitled, store still retrying
+  PAUSED // Google pause, not entitled, resumes later
+  EXPIRED // terminal
+  REVOKED // access removed (refund / family-share / chargeback)
+}
+
+// Mirrors the RC journal's status vocabulary.
+enum JournalStatus {
+  PROCESSED
+  FAILED
+  UNLINKED
+  SKIPPED
+}
+
+// Apple `inAppOwnershipType` (M2b): whether the transaction was purchased by the customer or is
+// available to them through Family Sharing — persisted so the entitlement engine (M4b) can report
+// it on EntitlementInfo.ownershipType.
+enum OwnershipType {
+  PURCHASED
+  FAMILY_SHARED
+}
+
+model App {
+  id               String      @id @default(uuid(7)) @db.Uuid
+  projectId        String      @map("project_id") @db.Uuid
+  name             String
+  platform         AppPlatform
+  // Store identity: one is set depending on platform (validated at the boundary, not the DB).
+  bundleId         String?     @map("bundle_id") // iOS
+  packageName      String?     @map("package_name") // Android
+  // Public SDK key — safe to ship in a client; generated on create. Format: `mp_pub_<random>`.
+  publicSdkKey     String      @unique @map("public_sdk_key")
+  // Store credentials, encrypted at rest. Column modeled now; POPULATED by a later connect-store
+  // flow (nullable until then). Encryption uses a dedicated key (STORE_CREDENTIALS_ENC_KEY).
+  storeCredentials String?     @map("store_credentials") // encrypted JSON blob, null until connected
+  // Non-secret connection status (connect-stores E3): status reads NEVER decrypt the blob above.
+  // `storeCredentialsLiveVerified` = a live store validation succeeded; `…VerifiedAt` = when (null
+  // while `connected` but live-verify still pending — the creds-gated validator was unavailable).
+  storeCredentialsVerifiedAt   DateTime?   @map("store_credentials_verified_at")
+  storeCredentialsLiveVerified Boolean     @default(false) @map("store_credentials_live_verified")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  products         Product[]
+
+  @@unique([projectId, platform, bundleId])
+  @@unique([projectId, platform, packageName])
+  @@index([projectId])
+  @@map("apps")
+}
+
+model Product {
+  id                  String               @id @default(uuid(7)) @db.Uuid
+  projectId           String               @map("project_id") @db.Uuid
+  appId               String               @map("app_id") @db.Uuid
+  storeProductId      String               @map("store_product_id") // App Store / Play product identifier
+  type                ProductType
+  displayName         String               @map("display_name")
+  // Imported price/duration SNAPSHOT (real pricing is store-authoritative; this is a cached
+  // config value, refreshed by a later import). Nullable until imported.
+  priceCents          Int?                 @map("price_cents")
+  currency            String?
+  durationIso8601     String?              @map("duration_iso8601") // e.g. P1M, P1Y; null for non-subs
+  subscriptionGroupId String?              @map("subscription_group_id") // iOS upgrade/downgrade scope
+  createdAt           DateTime             @default(now()) @map("created_at")
+  app                 App                  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  entitlements        ProductEntitlement[]
+  packages            Package[]
+
+  @@unique([appId, storeProductId])
+  @@index([projectId])
+  @@map("products")
+}
+
+model Entitlement {
+  id          String               @id @default(uuid(7)) @db.Uuid
+  projectId   String               @map("project_id") @db.Uuid
+  identifier  String // e.g. "pro" — unique per project, stable, used by the SDK
+  displayName String               @map("display_name")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  products    ProductEntitlement[]
+  promotionalEntitlements PromotionalEntitlement[]
+
+  @@unique([projectId, identifier])
+  @@index([projectId])
+  @@map("entitlements")
+}
+
+model ProductEntitlement {
+  productId     String      @map("product_id") @db.Uuid
+  entitlementId String      @map("entitlement_id") @db.Uuid
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  entitlement   Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  @@id([productId, entitlementId])
+  @@index([entitlementId])
+  @@map("product_entitlements")
+}
+
+model Offering {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  identifier  String // e.g. "default"
+  displayName String    @map("display_name")
+  isCurrent   Boolean   @default(false) @map("is_current")
+  metadata    Json? // arbitrary client-readable JSON (RC Offering.metadata)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  packages    Package[]
+
+  @@unique([projectId, identifier])
+  // At most one current offering per project — enforced in the service AND a partial unique
+  // index on (projectId) WHERE is_current is added via raw SQL in the migration (Prisma can't
+  // express partial indexes natively).
+  @@index([projectId])
+  @@map("offerings")
+}
+
+model Package {
+  id          String      @id @default(uuid(7)) @db.Uuid
+  offeringId  String      @map("offering_id") @db.Uuid
+  identifier  String // e.g. "$rc_monthly"
+  packageType PackageType @map("package_type")
+  productId   String      @map("product_id") @db.Uuid
+  sortOrder   Int         @default(0) @map("sort_order")
+  offering    Offering    @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([offeringId, identifier])
+  @@index([productId])
+  @@map("packages")
+}
+
+// One row per SDK-provided app_user_id, per project. Aliasing/identity-graph = P5 (out of scope).
+model Customer {
+  id                   String         @id @default(uuid(7)) @db.Uuid
+  projectId            String         @map("project_id") @db.Uuid
+  appUserId            String         @map("app_user_id") // validated, non-reserved (app-user-id.validator)
+  // Store-account linkage tokens used to self-attribute notifications back to this customer:
+  appleAppAccountToken String?        @map("apple_app_account_token") @db.Uuid // Apple appAccountToken
+  googleObfuscatedId   String?        @map("google_obfuscated_account_id") // Google obfuscatedExternalAccountId (<=64 chars)
+  attributes           Json? // subscriber attributes (reserved + custom); write API = P5
+  createdAt            DateTime       @default(now()) @map("created_at")
+  lastSeenAt           DateTime?      @map("last_seen_at")
+  subscriptions        Subscription[]
+  transactions         Transaction[]
+  promotionalEntitlements PromotionalEntitlement[]
+
+  // M5b: a given store token must map to at most ONE Customer per project (previously unenforced —
+  // `findByStoreToken` was a plain `findFirst`). Plain (non-partial) unique indexes are sufficient:
+  // Postgres never treats two NULLs as colliding on a unique index, so unbound customers (both
+  // columns NULL) never conflict with each other. Supersedes the old single-column indexes below
+  // (this composite already covers the `(projectId, token)` lookup `findByStoreToken` performs).
+  @@unique([projectId, appUserId])
+  @@unique([projectId, appleAppAccountToken])
+  @@unique([projectId, googleObfuscatedId])
+  @@index([projectId])
+  // Covers the customers LIST keyset query (`CustomersQueryService.list`, design §1.3):
+  // `WHERE projectId = ... ORDER BY createdAt DESC, id DESC` — without this, Postgres scans by
+  // projectId then sorts in memory; with it, the sort is satisfied directly from the index.
+  @@index([projectId, createdAt, id])
+  @@map("customers")
+}
+
+// The per-customer, per-product subscription STATE (one live row per store subscription identity).
+model Subscription {
+  id                     String             @id @default(uuid(7)) @db.Uuid
+  projectId              String             @map("project_id") @db.Uuid
+  customerId             String             @map("customer_id") @db.Uuid
+  appId                  String             @map("app_id") @db.Uuid
+  productId              String?            @map("product_id") @db.Uuid // FK -> catalog Product; NULL if store product not yet imported
+  storeProductId         String             @map("store_product_id")
+  store                  Store
+  environment            Environment
+  status                 SubscriptionStatus
+  periodType             PeriodType         @default(NORMAL) @map("period_type")
+  ownershipType          OwnershipType      @default(PURCHASED) @map("ownership_type")
+  // Store identity (one is set per store; see design §7 on Google token rotation):
+  originalTransactionId  String?            @map("original_transaction_id") // Apple: stable across renewals
+  purchaseToken          String?            @map("purchase_token") // Google: latest; linkedPurchaseToken chains upgrades
+  purchasedAt            DateTime           @map("purchased_at")
+  originalPurchasedAt    DateTime?          @map("original_purchased_at")
+  expiresAt              DateTime?          @map("expires_at")
+  autoRenewStatus        Boolean            @default(true) @map("auto_renew_status") // -> willRenew
+  autoRenewProductId     String?            @map("auto_renew_product_id") // pending downgrade/change
+  unsubscribeDetectedAt  DateTime?          @map("unsubscribe_detected_at")
+  billingIssueDetectedAt DateTime?          @map("billing_issue_detected_at")
+  gracePeriodExpiresAt   DateTime?          @map("grace_period_expires_at")
+  refundedAt             DateTime?          @map("refunded_at")
+  priceCents             Int?               @map("price_cents")
+  currency               String?
+  lastEventAt            DateTime?          @map("last_event_at") // ordering guard (Apple signedDate / Google eventTime)
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+  customer               Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, store, originalTransactionId]) // Apple identity
+  @@unique([projectId, store, purchaseToken]) // Google identity (latest token)
+  @@index([projectId, status])
+  @@index([customerId])
+  @@map("subscriptions")
+}
+
+// Immutable record of every validated store transaction (purchase/renewal/one-time). Idempotent.
+model Transaction {
+  id                    String      @id @default(uuid(7)) @db.Uuid
+  projectId             String      @map("project_id") @db.Uuid
+  customerId            String?     @map("customer_id") @db.Uuid // NULL until linked (unlinked-replay)
+  appId                 String      @map("app_id") @db.Uuid
+  subscriptionId        String?     @map("subscription_id") @db.Uuid
+  store                 Store
+  environment           Environment
+  storeTransactionId    String      @map("store_transaction_id") // Apple transactionId / Google orderId
+  originalTransactionId String?     @map("original_transaction_id")
+  storeProductId        String      @map("store_product_id")
+  type                  ProductType // reuse catalog enum
+  purchasedAt           DateTime    @map("purchased_at")
+  expiresAt             DateTime?   @map("expires_at")
+  priceCents            Int?        @map("price_cents")
+  currency              String?
+  isTrialPeriod         Boolean     @default(false) @map("is_trial_period")
+  revokedAt             DateTime?   @map("revoked_at")
+  rawPayload            Json        @map("raw_payload") // the validated decoded store payload (audit)
+  createdAt             DateTime    @default(now()) @map("created_at")
+  customer              Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, store, storeTransactionId]) // transaction-level idempotency
+  @@index([projectId])
+  // Revenue time-series scans (MetricsService.revenue): filter by projectId + environment,
+  // bucket/sort by purchasedAt.
+  @@index([projectId, environment, purchasedAt])
+  @@index([originalTransactionId])
+  @@index([subscriptionId])
+  @@map("transactions")
+}
+
+// Admin-granted entitlement not backed by a store purchase (design §1.1 of the MyRevenueCat
+// Customers spec). Coexists with store-derived entitlements on the same customer/entitlement
+// pair — `computeCustomerInfo` (M4b, extended) unions both, later-expiration-wins.
+model PromotionalEntitlement {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  projectId     String      @map("project_id") @db.Uuid
+  customerId    String      @map("customer_id") @db.Uuid
+  entitlementId String      @map("entitlement_id") @db.Uuid
+  grantedAt     DateTime    @default(now()) @map("granted_at")
+  startsAt      DateTime    @default(now()) @map("starts_at") // when the grant becomes active
+  expiresAt     DateTime?   @map("expires_at") // null = lifetime
+  revokedAt     DateTime?   @map("revoked_at") // null = active; set on revoke
+  note          String? // optional admin note
+  customer      Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  entitlement   Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, customerId])
+  @@index([customerId])
+  @@map("promotional_entitlements")
+}
+
+// Webhook journal - journal-first, idempotent by store event id, replayable. Mirrors the RC pattern.
+model StoreNotification {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  projectId        String?       @map("project_id") @db.Uuid // NULL only for unresolved-App (SKIPPED) rows
+  appId            String?       @map("app_id") @db.Uuid
+  store            Store
+  storeEventId     String        @map("store_event_id") // Apple notificationUUID / Google messageId
+  notificationType String        @map("notification_type")
+  subtype          String?
+  appUserId        String?       @map("app_user_id") // resolved link, if any
+  payload          Json // full VERIFIED + decoded notification
+  status           JournalStatus
+  error            String?
+  receivedAt       DateTime      @default(now()) @map("received_at")
+  processedAt      DateTime?     @map("processed_at")
+
+  @@unique([store, storeEventId]) // global idempotency; Apple UUID / Google messageId are globally unique
+  @@index([status])
+  @@index([projectId, status])
+  @@index([projectId, appUserId, status])
+  @@map("store_notifications")
+}

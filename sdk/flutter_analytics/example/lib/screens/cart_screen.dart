@@ -3,13 +3,15 @@ import 'package:myampix_analytics/myampix_analytics.dart';
 
 import '../state/cart_state.dart';
 import '../state/event_log.dart';
+import 'checkout_flow.dart';
 
-/// Cart / checkout screen.
+/// Cart screen — the entry of the multi-step checkout funnel
+/// (cart > shipping > payment > confirmation).
 ///
-/// SDK calls: `timeEvent('checkout_completed')` on entering the screen;
-/// `track('checkout_completed', properties: {...})` (the timed duration
-/// auto-attaches) + `people.set({'last_purchase_value': ...})` on
-/// "Complete purchase".
+/// SDK calls: `timeEvent('checkout_completed')` on entering the screen (the
+/// timed duration auto-attaches when the confirmation screen finally tracks
+/// `checkout_completed`, so it measures the WHOLE funnel);
+/// `track('checkout_started')` on "Checkout".
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
 
@@ -25,21 +27,17 @@ class _CartScreenState extends State<CartScreen> {
     EventLog.instance.log('timeEvent("checkout_completed")');
   }
 
-  void _completePurchase() {
+  void _startCheckout() {
     final cart = CartState.instance;
-    final total = cart.total;
-    final items = cart.itemCount;
-    final properties = {'value': total, 'items': items};
-    MyAmpix.instance.track('checkout_completed', properties: properties);
-    MyAmpix.instance.people.set({'last_purchase_value': total});
-    EventLog.instance.log(
-      'track("checkout_completed") + people.set({"last_purchase_value": ...})',
-      properties,
+    final properties = {'value': cart.total, 'items': cart.itemCount};
+    MyAmpix.instance.track('checkout_started', properties: properties);
+    EventLog.instance.log('track("checkout_started")', properties);
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'cart/checkout/shipping'),
+        builder: (_) => const ShippingScreen(),
+      ),
     );
-    cart.clear();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Purchase complete!')));
   }
 
   @override
@@ -81,8 +79,8 @@ class _CartScreenState extends State<CartScreen> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: FilledButton(
-                onPressed: cart.items.isEmpty ? null : _completePurchase,
-                child: const Text('Complete purchase'),
+                onPressed: cart.items.isEmpty ? null : _startCheckout,
+                child: const Text('Checkout'),
               ),
             ),
           ),

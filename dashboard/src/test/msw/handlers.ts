@@ -3,6 +3,7 @@ import { phase5Handlers, TEMPLATES_FIXTURE } from './phase5-handlers';
 import type {
   Activate2faResponse,
   AcceptInvitationResponse,
+  AddProjectMemberRequest,
   AskDataResponse,
   AuthResponse,
   AuthUser,
@@ -30,6 +31,8 @@ import type {
   InsightsQueryDefinition,
   InsightsSeries,
   ListInvitationsResponse,
+  ListProjectAccessResponse,
+  ListProjectMembersResponse,
   RetentionQueryDefinition,
   RetentionResponse,
   RevenueSummaryResponse,
@@ -47,12 +50,23 @@ import type {
   Org,
   OrgRole,
   Project,
+  ProjectRole,
+  RcIntegrationStatus,
+  RcJournalEntry,
+  RcJournalResponse,
+  RcReplayResponse,
+  RcResyncResponse,
   RenameOrgResponse,
   SessionsSummaryResponse,
   Setup2faResponse,
+  SubscriptionAttributionResponse,
+  SubscriptionsSummaryResponse,
+  UpdatedProjectMember,
   UpdateProjectResponse,
   UserListItem,
   UserProfileResponse,
+  UserSubscription,
+  UserSubscriptionResponse,
 } from '../../lib/api/types';
 
 export const TEST_USER: AuthUser = {
@@ -82,7 +96,20 @@ export const MOCK_QR_DATA_URL =
 /** A single pre-seeded recovery code accepted once by /2fa/verify or /2fa/disable. */
 export const MFA_RECOVERY_CODE = 'RECOVERY-CODE-0';
 
-/** Fixture project (contracts §12) — org_name + ingest_token included, requester owns it. */
+/**
+ * A third TEST_ORG member who is NOT (yet) on TEST_PROJECT — no login credentials needed, it only
+ * ever appears as an org-member fixture, used to exercise the project add-member picker
+ * (per-project-roles).
+ */
+export const THIRD_ORG_USER: AuthUser = {
+  id: '0197f6a0-0000-7000-8000-000000000003',
+  email: 'grace@example.com',
+  name: 'Grace Hopper',
+};
+
+/** Fixture project (contracts §12) — org_name + ingest_token included, requester owns it.
+ *  RC-on is the fixture default; gating-off tests override the projects handler with
+ *  {@link projectsHandlerWithoutRc}. */
 export const TEST_PROJECT: Project = {
   id: '0197f6a0-0000-7000-8000-0000000000aa',
   org_id: '0197f6a0-0000-7000-8000-0000000000bb',
@@ -90,6 +117,8 @@ export const TEST_PROJECT: Project = {
   name: 'Demo App',
   timezone: 'UTC',
   ingest_token: 'mam_0123456789abcdef0123456789abcdef',
+  role: 'owner',
+  integrations: { revenuecat: true },
 };
 
 /** Deterministic sample for GET /projects/:projectId/events/summary (contracts §12). */
@@ -160,6 +189,7 @@ export const LIVE_EVENTS_FIXTURE: LiveEvent[] = Array.from({ length: 30 }, (_, i
 export const USERS_FIXTURE: UserListItem[] = [
   {
     distinct_id: 'user-001',
+    first_seen: '2026-01-05T10:00:00.000Z',
     last_seen: '2026-07-01T10:00:00.000Z',
     event_count: 42,
     name: 'Alex Chen',
@@ -167,6 +197,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-002',
+    first_seen: '2026-02-10T09:30:00.000Z',
     last_seen: '2026-06-30T09:30:00.000Z',
     event_count: 17,
     name: 'Alex Wong',
@@ -174,6 +205,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-003',
+    first_seen: '2026-03-03T08:15:00.000Z',
     last_seen: '2026-06-29T08:15:00.000Z',
     event_count: 5,
     name: 'Priya Singh',
@@ -181,6 +213,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-004',
+    first_seen: '2026-04-01T07:00:00.000Z',
     last_seen: '2026-06-28T07:00:00.000Z',
     event_count: 63,
     name: 'Jordan Lee',
@@ -188,6 +221,7 @@ export const USERS_FIXTURE: UserListItem[] = [
   },
   {
     distinct_id: 'user-005',
+    first_seen: '2026-05-05T06:45:00.000Z',
     last_seen: '2026-06-27T06:45:00.000Z',
     event_count: 9,
     name: null,
@@ -197,6 +231,7 @@ export const USERS_FIXTURE: UserListItem[] = [
     const n = i + 6;
     return {
       distinct_id: `user-${String(n).padStart(3, '0')}`,
+      first_seen: `2026-05-${String(26 - i).padStart(2, '0')}T06:00:00.000Z`,
       last_seen: `2026-06-${String(26 - i).padStart(2, '0')}T06:00:00.000Z`,
       event_count: n,
       name: `User ${n}`,
@@ -227,14 +262,30 @@ export const USER_PROFILE_FIXTURE: Omit<
   first_seen: '2026-05-01T08:00:00.000Z',
   // Newest-first. The $screen_view rows drive the screen-path chain: chronologically
   // home → catalog → catalog → cart, collapsing to home → catalog → cart. Non-screen events carry
-  // a null screen_name.
+  // a null screen_name. evt-108/evt-107 are the RevenueCat timeline rows (Task 20's tests).
   recent_events: [
+    {
+      insert_id: 'evt-108',
+      event: '$rc_renewal',
+      timestamp: '2026-07-01T10:05:00.000Z',
+      screen_name: null,
+      properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
     {
       insert_id: 'evt-106',
       event: 'checkout_completed',
       timestamp: '2026-07-01T10:00:00.000Z',
       screen_name: null,
       properties: { country: 'FR', $price: 42.5, currency: 'EUR', order_id: 'ord-9' },
+      context: DEVICE_CONTEXT_FIXTURE,
+    },
+    {
+      insert_id: 'evt-107',
+      event: '$rc_initial_purchase',
+      timestamp: '2026-07-01T09:59:00.000Z',
+      screen_name: null,
+      properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
       context: DEVICE_CONTEXT_FIXTURE,
     },
     {
@@ -415,6 +466,177 @@ export const ENGAGEMENT_FIXTURE: EngagementResponse = {
   ],
 };
 
+// --- RevenueCat integration fixtures (spec §4.7) ---
+
+/** Deterministic status for `GET .../integrations/revenuecat` — connected, sandbox off, a full
+ *  journal counts breakdown across all four statuses. */
+export const RC_STATUS_FIXTURE: RcIntegrationStatus = {
+  connected: true,
+  webhook_path: `/webhooks/revenuecat/${TEST_PROJECT.id}`,
+  webhook_secret: 'rcwh_test_secret_abc123',
+  api_key_masked: '…1234',
+  rc_project_id: 'rcproj_demo',
+  sandbox_mode: false,
+  last_webhook_at: '2026-07-01T09:58:00.000Z',
+  backfill_status: 'completed',
+  counts: { processed: 214, failed: 3, unlinked: 5, skipped: 8 },
+};
+
+export const RC_JOURNAL_FIXTURE: RcJournalEntry[] = [
+  {
+    id: 'rcje-4',
+    rc_event_id: 'evt_rc_004',
+    event_type: 'INITIAL_PURCHASE',
+    rc_app_user_id: 'rcuser-001',
+    status: 'processed',
+    error: null,
+    received_at: '2026-07-01T09:58:00.000Z',
+  },
+  {
+    id: 'rcje-3',
+    rc_event_id: 'evt_rc_003',
+    event_type: 'RENEWAL',
+    rc_app_user_id: 'rcuser-002',
+    status: 'processed',
+    error: null,
+    received_at: '2026-06-30T14:10:00.000Z',
+  },
+  {
+    id: 'rcje-2',
+    rc_event_id: 'evt_rc_002',
+    event_type: 'CANCELLATION',
+    rc_app_user_id: null,
+    status: 'unlinked',
+    error: 'No user matched rc_app_user_id',
+    received_at: '2026-06-30T08:00:00.000Z',
+  },
+  {
+    id: 'rcje-1',
+    rc_event_id: 'evt_rc_001',
+    event_type: 'BILLING_ISSUE',
+    rc_app_user_id: 'rcuser-003',
+    status: 'failed',
+    error: 'Downstream write failed',
+    received_at: '2026-06-29T12:00:00.000Z',
+  },
+];
+
+/** Deterministic sample for `GET /metrics/subscriptions` — $49.95 MRR, 5 active, 2 in trial. */
+/** `GET /metrics/mrr-movement` sample: two daily buckets with a mix of gains and losses. */
+export const MRR_MOVEMENT_FIXTURE = {
+  currency: 'USD',
+  approximate: true as const,
+  buckets: [
+    {
+      bucket: '2026-06-30T00:00:00.000Z',
+      new_cents: 1998,
+      reactivation_cents: 0,
+      expansion_cents: 0,
+      contraction_cents: 0,
+      churn_cents: -999,
+      net_cents: 999,
+    },
+    {
+      bucket: '2026-07-01T00:00:00.000Z',
+      new_cents: 999,
+      reactivation_cents: 500,
+      expansion_cents: 300,
+      contraction_cents: -200,
+      churn_cents: 0,
+      net_cents: 1599,
+    },
+  ],
+  totals: {
+    new_cents: 2997,
+    reactivation_cents: 500,
+    expansion_cents: 300,
+    contraction_cents: -200,
+    churn_cents: -999,
+    net_cents: 2598,
+  },
+};
+
+export const SUBSCRIPTIONS_SUMMARY_FIXTURE: SubscriptionsSummaryResponse = {
+  mrr_cents: 4995,
+  active: 5,
+  in_trial: 2,
+  grace: 1,
+  new_subscriptions: 3,
+  churned: 1,
+  trials_started: 4,
+  trials_converted: 2,
+  by_day: [
+    { t: '2026-06-29', new_subscriptions: 1, churned: 0, revenue: 999 },
+    { t: '2026-06-30', new_subscriptions: 1, churned: 1, revenue: 1998 },
+    { t: '2026-07-01', new_subscriptions: 1, churned: 0, revenue: 999 },
+  ],
+  by_product: [
+    { product_id: 'pro_monthly', active: 3, mrr_cents: 2997 },
+    { product_id: 'pro_annual', active: 2, mrr_cents: 1998 },
+  ],
+  by_store: [
+    { store: 'app_store', active: 3 },
+    { store: 'play_store', active: 2 },
+  ],
+  churn_reasons: [
+    { reason: 'voluntary', count: 1 },
+    { reason: 'billing_error', count: 1 },
+  ],
+  recent_events: [
+    {
+      insert_id: 'rcevt-3',
+      event: '$rc_initial_purchase',
+      distinct_id: 'user-001',
+      timestamp: '2026-07-01T09:58:00.000Z',
+      product_id: 'pro_monthly',
+      price: 9.99,
+    },
+    {
+      insert_id: 'rcevt-2',
+      event: '$rc_renewal',
+      distinct_id: 'user-002',
+      timestamp: '2026-06-30T14:10:00.000Z',
+      product_id: 'pro_annual',
+      price: 99.99,
+    },
+  ],
+};
+
+/** Deterministic sample for `GET /metrics/subscriptions/attribution`: 10 trials, 4 converted. */
+export const SUBSCRIPTION_ATTRIBUTION_FIXTURE: SubscriptionAttributionResponse = {
+  drivers: [
+    { event: '$screen_view', users: 40 },
+    { event: 'checkout_completed', users: 12 },
+  ],
+  screens: [
+    { screen_name: 'Paywall', users: 30 },
+    { screen_name: 'Onboarding', users: 18 },
+  ],
+  time_to_convert: [
+    { bucket: '<1d', users: 4 },
+    { bucket: '1-3d', users: 3 },
+    { bucket: '3-7d', users: 2 },
+    { bucket: '7-14d', users: 1 },
+  ],
+  trial_funnel: { trials: 10, converted: 4 },
+};
+
+/** Deterministic active subscription for `GET/POST .../users/:distinctId(/refresh)`. */
+export const USER_SUBSCRIPTION_FIXTURE: UserSubscription = {
+  status: 'active',
+  product_id: 'pro_monthly',
+  store: 'app_store',
+  period_type: 'normal',
+  total_spent_cents: 2997,
+  mrr_cents: 999,
+  currency: 'USD',
+  first_purchase_at: '2026-05-01T08:00:00.000Z',
+  expires_at: '2026-08-01T08:00:00.000Z',
+  cancelled_at: null,
+  rc_app_user_id: 'rcuser-001',
+  rc_customer_url: 'https://app.revenuecat.com/customers/rcproj_demo/rcuser-001',
+};
+
 // --- Screens, user-path map & click heatmap fixtures (contracts §18/§19) ---
 
 export const SCREENS_FIXTURE: ScreensResponse = {
@@ -545,7 +767,7 @@ function checkCode(email: string, code: string | undefined): boolean {
 
 // --- Tenancy management fixtures (contracts §13) ---
 
-/** Ada's Workspace — TEST_USER is admin, MFA_USER is analyst. Matches TEST_PROJECT.org_id/org_name. */
+/** Ada's Workspace — TEST_USER is owner, MFA_USER is analyst. Matches TEST_PROJECT.org_id/org_name. */
 export const TEST_ORG_ID = TEST_PROJECT.org_id;
 export const TEST_ORG_NAME = TEST_PROJECT.org_name;
 
@@ -591,6 +813,13 @@ interface ProjectRecord {
   timezone: string;
 }
 
+/** Per-project membership (per-project-roles) — independent of the owning org's memberships. */
+interface ProjectMembershipRecord {
+  projectId: string;
+  user: AuthUser;
+  role: ProjectRole;
+}
+
 interface TokenRecord {
   id: string;
   projectId: string;
@@ -612,8 +841,9 @@ function initialOrgsState() {
       { id: INVITE_ONLY_ORG_ID, name: INVITE_ONLY_ORG_NAME },
     ] as OrgRecord[],
     memberships: [
-      { orgId: TEST_ORG_ID, user: TEST_USER, role: 'admin' as OrgRole },
+      { orgId: TEST_ORG_ID, user: TEST_USER, role: 'owner' as OrgRole },
       { orgId: TEST_ORG_ID, user: MFA_USER, role: 'analyst' as OrgRole },
+      { orgId: TEST_ORG_ID, user: THIRD_ORG_USER, role: 'viewer' as OrgRole },
       { orgId: VIEWER_ORG_ID, user: TEST_USER, role: 'viewer' as OrgRole },
       { orgId: VIEWER_ORG_ID, user: MFA_USER, role: 'admin' as OrgRole },
     ] as MembershipRecord[],
@@ -645,6 +875,14 @@ function initialOrgsState() {
         revoked: false,
       },
     ] as TokenRecord[],
+    /**
+     * TEST_USER owns TEST_PROJECT; MFA_USER is a project admin. THIRD_ORG_USER is deliberately left
+     * off — an org member not yet on the project, for the add-member picker.
+     */
+    projectMemberships: [
+      { projectId: TEST_PROJECT.id, user: TEST_USER, role: 'owner' as ProjectRole },
+      { projectId: TEST_PROJECT.id, user: MFA_USER, role: 'admin' as ProjectRole },
+    ] as ProjectMembershipRecord[],
     /** Display-name overrides from PATCH /auth/me, keyed by user id. */
     userNames: new Map<string, string>(),
     nextId: 1,
@@ -660,6 +898,7 @@ export function resetOrgsState(): void {
   orgsState.invitations = fresh.invitations;
   orgsState.projects = fresh.projects;
   orgsState.tokens = fresh.tokens;
+  orgsState.projectMemberships = fresh.projectMemberships;
   orgsState.userNames = fresh.userNames;
   orgsState.nextId = fresh.nextId;
 }
@@ -683,8 +922,9 @@ function roleFor(orgId: string, userId: string): OrgRole | undefined {
   return orgsState.memberships.find((m) => m.orgId === orgId && m.user.id === userId)?.role;
 }
 
-function adminCount(orgId: string): number {
-  return orgsState.memberships.filter((m) => m.orgId === orgId && m.role === 'admin').length;
+/** Rank-based admin-or-above check (owner > admin > analyst > viewer) — mirrors RolesGuard('admin'). */
+function isAdminOrOwner(role: OrgRole | undefined): boolean {
+  return role === 'admin' || role === 'owner';
 }
 
 function orgById(orgId: string): OrgRecord | undefined {
@@ -701,7 +941,36 @@ function ingestTokenFor(projectId: string): string {
   return active?.token ?? '';
 }
 
-function toProject(record: ProjectRecord): Project {
+/**
+ * A caller's role on a project: an explicit project membership wins; otherwise fall back to their
+ * org role (every project-role literal except 'owner' overlaps with an org-role literal) — this
+ * keeps ad-hoc projects seeded by other tests (with no project membership of their own) working.
+ */
+function projectRoleFor(projectId: string, orgId: string, userId: string): ProjectRole | undefined {
+  const explicit = orgsState.projectMemberships.find(
+    (m) => m.projectId === projectId && m.user.id === userId,
+  );
+  if (explicit) return explicit.role;
+  return roleFor(orgId, userId);
+}
+
+function ownerCountFor(projectId: string): number {
+  return orgsState.projectMemberships.filter((m) => m.projectId === projectId && m.role === 'owner')
+    .length;
+}
+
+/**
+ * A target user's EXPLICIT project role only (no org-role/owner-derived fallback) — mirrors
+ * OrgProjectAccessService.list()/set(), which reason purely over ProjectMembership rows.
+ */
+function explicitProjectRole(projectId: string, userId: string): ProjectRole | null {
+  return (
+    orgsState.projectMemberships.find((m) => m.projectId === projectId && m.user.id === userId)
+      ?.role ?? null
+  );
+}
+
+function toProject(record: ProjectRecord, callerId: string): Project {
   const org = orgById(record.orgId);
   return {
     id: record.id,
@@ -710,7 +979,33 @@ function toProject(record: ProjectRecord): Project {
     name: record.name,
     timezone: record.timezone,
     ingest_token: ingestTokenFor(record.id),
+    role: projectRoleFor(record.id, record.orgId, callerId) ?? 'viewer',
+    // RC-on is the fixture default; gating-off tests override the handler via projectsHandlerWithoutRc().
+    integrations: { revenuecat: true },
   };
+}
+
+/**
+ * Gating-off override for `GET /api/v1/projects` — used by tests exercising the "RevenueCat not
+ * connected" state (the nav item hidden, upsell shown, etc). Returns TEST_PROJECT unchanged except
+ * for `integrations.revenuecat: false`; pass to `server.use(...)` for the duration of the test.
+ */
+export function projectsHandlerWithoutRc() {
+  return http.get('/api/v1/projects', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token)) {
+      return problem(401, 'Access token invalid or expired');
+    }
+    const caller = userForToken(token);
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const response: ListProjectsResponse = {
+      projects: orgsState.projects.map((record) => ({
+        ...toProject(record, caller.id),
+        integrations: { revenuecat: false },
+      })),
+    };
+    return HttpResponse.json(response);
+  });
 }
 
 export const handlers = [
@@ -869,8 +1164,8 @@ export const handlers = [
     }
     const org: OrgRecord = { id: nextId('org'), name: body.name.trim() };
     orgsState.orgs.push(org);
-    orgsState.memberships.push({ orgId: org.id, user, role: 'admin' });
-    const response: CreateOrgResponse = { id: org.id, name: org.name, role: 'admin' };
+    orgsState.memberships.push({ orgId: org.id, user, role: 'owner' });
+    const response: CreateOrgResponse = { id: org.id, name: org.name, role: 'owner' };
     return HttpResponse.json(response, { status: 201 });
   }),
 
@@ -893,7 +1188,7 @@ export const handlers = [
     if (!org) return problem(404, 'Organization not found');
     const role = roleFor(orgId, user.id);
     if (!role) return problem(403, 'Not a member of this organization');
-    if (role !== 'admin') return problem(403, 'Only admins can rename the organization');
+    if (!isAdminOrOwner(role)) return problem(403, 'Only admins can rename the organization');
     const body = (await request.json()) as { name?: string };
     if (!body.name?.trim()) {
       return problem(400, 'Validation failed', { errors: { name: ['required'] } });
@@ -927,16 +1222,35 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can change member roles');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can change member roles');
     const membership = orgsState.memberships.find(
       (m) => m.orgId === orgId && m.user.id === targetUserId,
     );
     if (!membership) return problem(404, 'Member not found');
     const body = (await request.json()) as { role?: OrgRole };
     if (!body.role) return problem(400, 'Validation failed', { errors: { role: ['required'] } });
-    if (membership.role === 'admin' && body.role !== 'admin' && adminCount(orgId) <= 1) {
-      return problem(409, 'Cannot demote the last admin');
+
+    if (body.role === 'owner') {
+      // Ownership transfer: only the current owner may initiate it. Atomic: target -> owner,
+      // caller -> admin. No-op (still owner) if the target already is the owner.
+      if (callerRole !== 'owner') {
+        return problem(403, 'Only the current owner can transfer ownership');
+      }
+      if (membership.role !== 'owner') {
+        const currentOwner = orgsState.memberships.find(
+          (m) => m.orgId === orgId && m.user.id === caller.id,
+        );
+        if (currentOwner) currentOwner.role = 'admin';
+        membership.role = 'owner';
+      }
+      return HttpResponse.json({ id: membership.user.id, role: membership.role });
     }
+
+    // The current owner's role can never be changed directly — transfer only.
+    if (membership.role === 'owner') {
+      return problem(409, "Cannot change the owner's role directly; transfer ownership instead");
+    }
+
     membership.role = body.role;
     // apiFetch always parses non-204 responses as JSON — an empty body would throw client-side.
     return HttpResponse.json({ id: membership.user.id, role: membership.role });
@@ -950,19 +1264,108 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can remove members');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can remove members');
     const membership = orgsState.memberships.find(
       (m) => m.orgId === orgId && m.user.id === targetUserId,
     );
     if (!membership) return problem(404, 'Member not found');
-    if (membership.role === 'admin' && adminCount(orgId) <= 1) {
-      return problem(409, 'Cannot remove the last admin');
+    if (membership.role === 'owner') {
+      return problem(409, 'Cannot remove the organization owner; transfer ownership first');
     }
     orgsState.memberships = orgsState.memberships.filter(
       (m) => !(m.orgId === orgId && m.user.id === targetUserId),
     );
     return new HttpResponse(null, { status: 204 });
   }),
+
+  // --- Org-scoped per-project access (org owner role) ---
+
+  http.get('/api/v1/orgs/:orgId/members/:userId/project-access', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    const targetUserId = params.userId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const callerRole = roleFor(orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can view project access');
+    const response: ListProjectAccessResponse = {
+      projects: orgsState.projects
+        .filter((p) => p.orgId === orgId)
+        .map((p) => ({
+          projectId: p.id,
+          name: p.name,
+          role: explicitProjectRole(p.id, targetUserId),
+        })),
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.put(
+    '/api/v1/orgs/:orgId/members/:userId/project-access/:projectId',
+    async ({ request, params }) => {
+      const caller = userForToken(bearerToken(request));
+      if (!caller) return problem(401, 'Access token invalid or expired');
+      const orgId = params.orgId as string;
+      const targetUserId = params.userId as string;
+      const projectId = params.projectId as string;
+      if (!orgById(orgId)) return problem(404, 'Organization not found');
+      const callerRole = roleFor(orgId, caller.id);
+      if (!callerRole) return problem(403, 'Not a member of this organization');
+      if (!isAdminOrOwner(callerRole)) {
+        return problem(403, 'Only admins can manage project access');
+      }
+      // Self-escalation guard: an admin can't manage their own project access; owner is exempt.
+      if (callerRole !== 'owner' && targetUserId === caller.id) {
+        return problem(403, 'Admins cannot change their own project access');
+      }
+      const record = projectRecordById(projectId);
+      if (!record || record.orgId !== orgId) return problem(404, 'Project not found');
+
+      const body = (await request.json()) as { role?: 'viewer' | 'analyst' | 'admin' | null };
+      const newRole = body.role ?? null;
+
+      const existing = orgsState.projectMemberships.find(
+        (m) => m.projectId === projectId && m.user.id === targetUserId,
+      );
+      // Project-owner rows are immutable to admin callers (owner-safety, mirrors ProjectMembersService).
+      if (existing?.role === 'owner' && callerRole !== 'owner') {
+        return problem(403, 'Only owners can change the owner role');
+      }
+      // changeRole delegate's unconditional self-guard: nobody — not even an owner — may re-role
+      // their OWN existing project membership row (project-members.service.ts `cannotChangeSelf`).
+      // The ADD path (no existing row) still defers to the org self-escalation guard above.
+      if (newRole !== null && existing && targetUserId === caller.id) {
+        return problem(403, 'Cannot change your own project role');
+      }
+      // Last-owner invariant (mirrors ProjectMembersService.remove/changeRole `lastOwner`): only an
+      // owner caller reaches here (admins were blocked above), but demoting/removing the sole
+      // project owner is still a conflict.
+      if (existing?.role === 'owner' && ownerCountFor(projectId) <= 1) {
+        return problem(409, newRole === null ? 'Cannot remove the last owner' : 'Cannot demote the last owner');
+      }
+
+      if (newRole === null) {
+        if (existing) {
+          orgsState.projectMemberships = orgsState.projectMemberships.filter(
+            (m) => !(m.projectId === projectId && m.user.id === targetUserId),
+          );
+        }
+        return HttpResponse.json({ projectId, role: null });
+      }
+
+      if (existing) {
+        existing.role = newRole;
+      } else {
+        const orgMembership = orgsState.memberships.find(
+          (m) => m.orgId === orgId && m.user.id === targetUserId,
+        );
+        if (!orgMembership) return problem(404, 'User is not a member of this organization');
+        orgsState.projectMemberships.push({ projectId, user: orgMembership.user, role: newRole });
+      }
+      return HttpResponse.json({ projectId, role: newRole });
+    },
+  ),
 
   // --- Invitations (contracts §13) ---
 
@@ -973,7 +1376,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can create invitations');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create invitations');
     const body = (await request.json()) as { role?: OrgRole };
     if (!body.role) return problem(400, 'Validation failed', { errors: { role: ['required'] } });
     const invitation: InvitationRecord = {
@@ -1002,7 +1405,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can list invitations');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can list invitations');
     const now = Date.now();
     const invitations: Invitation[] = orgsState.invitations
       .filter(
@@ -1020,7 +1423,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can revoke invitations');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can revoke invitations');
     const invitationId = params.invitationId as string;
     const exists = orgsState.invitations.some(
       (inv) => inv.id === invitationId && inv.orgId === orgId,
@@ -1081,8 +1484,25 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token)) {
       return problem(401, 'Access token invalid or expired');
     }
-    const response: ListProjectsResponse = { projects: orgsState.projects.map(toProject) };
+    const caller = userForToken(token);
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const response: ListProjectsResponse = {
+      projects: orgsState.projects.map((record) => toProject(record, caller.id)),
+    };
     return HttpResponse.json(response);
+  }),
+
+  http.get('/api/v1/projects/stats', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token)) {
+      return problem(401, 'Access token invalid or expired');
+    }
+    const stats = orgsState.projects.map((record) => ({
+      project_id: record.id,
+      user_count: record.id === TEST_PROJECT.id ? 1234 : 0,
+      top_country: record.id === TEST_PROJECT.id ? 'US' : null,
+    }));
+    return HttpResponse.json({ stats });
   }),
 
   http.get('/api/v1/projects/:projectId/events/summary', ({ request, params }) => {
@@ -1097,6 +1517,116 @@ export const handlers = [
     return HttpResponse.json(response);
   }),
 
+  // --- RevenueCat integration (spec §4.7) ---
+
+  http.get('/api/v1/projects/:projectId/integrations/revenuecat', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(RC_STATUS_FIXTURE);
+  }),
+
+  http.put('/api/v1/projects/:projectId/integrations/revenuecat', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as {
+      api_key?: string;
+      rc_project_id?: string;
+      sandbox_mode?: boolean;
+    };
+    const response: RcIntegrationStatus = {
+      ...RC_STATUS_FIXTURE,
+      connected: true,
+      api_key_masked: body.api_key ? `…${body.api_key.slice(-4)}` : RC_STATUS_FIXTURE.api_key_masked,
+      rc_project_id: body.rc_project_id ?? RC_STATUS_FIXTURE.rc_project_id,
+      sandbox_mode: body.sandbox_mode ?? RC_STATUS_FIXTURE.sandbox_mode,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.delete('/api/v1/projects/:projectId/integrations/revenuecat', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get('/api/v1/projects/:projectId/integrations/revenuecat/events', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const status = new URL(request.url).searchParams.get('status');
+    const events = status ? RC_JOURNAL_FIXTURE.filter((e) => e.status === status) : RC_JOURNAL_FIXTURE;
+    const response: RcJournalResponse = { events };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/integrations/revenuecat/replay', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: RcReplayResponse = { replayed: 5, remaining: 0 };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/integrations/revenuecat/resync', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: RcResyncResponse = { status: 'started' };
+    return HttpResponse.json(response, { status: 202 });
+  }),
+
+  http.get('/api/v1/projects/:projectId/integrations/revenuecat/users/:distinctId', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: UserSubscriptionResponse = { subscription: USER_SUBSCRIPTION_FIXTURE };
+    return HttpResponse.json(response);
+  }),
+
+  http.post(
+    '/api/v1/projects/:projectId/integrations/revenuecat/users/:distinctId/refresh',
+    ({ request }) => {
+      const token = bearerToken(request);
+      if (!token || !ACCEPTED_TOKENS.has(token))
+        return problem(401, 'Access token invalid or expired');
+      const response: UserSubscriptionResponse = { subscription: USER_SUBSCRIPTION_FIXTURE };
+      return HttpResponse.json(response);
+    },
+  ),
+
+  http.get('/api/v1/projects/:projectId/metrics/subscriptions', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SUBSCRIPTIONS_SUMMARY_FIXTURE);
+  }),
+
+  // `mobile_purchase`'s Overview summary endpoint (spec §1.1) — field-for-field identical shape
+  // to the mirror's `/metrics/subscriptions` above, so the same fixture doubles for both.
+  http.get('/api/v1/projects/:projectId/metrics/summary', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SUBSCRIPTIONS_SUMMARY_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/mrr-movement', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(MRR_MOVEMENT_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/subscriptions/attribution', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SUBSCRIPTION_ATTRIBUTION_FIXTURE);
+  }),
+
   http.post('/api/v1/orgs/:orgId/projects', async ({ request, params }) => {
     const caller = userForToken(bearerToken(request));
     if (!caller) return problem(401, 'Access token invalid or expired');
@@ -1104,7 +1634,7 @@ export const handlers = [
     if (!orgById(orgId)) return problem(404, 'Organization not found');
     const callerRole = roleFor(orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can create projects');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create projects');
     const body = (await request.json()) as { name?: string; timezone?: string };
     if (!body.name?.trim()) {
       return problem(400, 'Validation failed', { errors: { name: ['required'] } });
@@ -1143,7 +1673,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can update the project');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can update the project');
     const body = (await request.json()) as { name?: string; timezone?: string };
     if (body.name?.trim()) record.name = body.name.trim();
     if (body.timezone?.trim()) record.timezone = body.timezone.trim();
@@ -1163,9 +1693,118 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can delete the project');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can delete the project');
     orgsState.projects = orgsState.projects.filter((p) => p.id !== projectId);
     orgsState.tokens = orgsState.tokens.filter((t) => t.projectId !== projectId);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // --- Per-project members (per-project-roles) ---
+
+  http.get('/api/v1/projects/:projectId/members', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    if (!projectRoleFor(projectId, record.orgId, caller.id)) {
+      return problem(403, 'Not a member of this project');
+    }
+    const response: ListProjectMembersResponse = {
+      members: orgsState.projectMemberships
+        .filter((m) => m.projectId === projectId)
+        .map((m) => ({ user: m.user, role: m.role })),
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/members', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = projectRoleFor(projectId, record.orgId, caller.id);
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return problem(403, 'Only project owners and admins can add members');
+    }
+    const body = (await request.json()) as Partial<AddProjectMemberRequest>;
+    if (!body.userId || !body.role) {
+      return problem(400, 'Validation failed', {
+        errors: { userId: body.userId ? [] : ['required'], role: body.role ? [] : ['required'] },
+      });
+    }
+    if (body.role === 'owner' && callerRole !== 'owner') {
+      return problem(403, 'Only owners can grant the owner role');
+    }
+    const orgMembership = orgsState.memberships.find(
+      (m) => m.orgId === record.orgId && m.user.id === body.userId,
+    );
+    if (!orgMembership) return problem(404, 'User is not a member of this organization');
+    const existing = orgsState.projectMemberships.find(
+      (m) => m.projectId === projectId && m.user.id === body.userId,
+    );
+    if (existing) {
+      existing.role = body.role;
+    } else {
+      orgsState.projectMemberships.push({ projectId, user: orgMembership.user, role: body.role });
+    }
+    const response: UpdatedProjectMember = { user_id: body.userId, role: body.role };
+    return HttpResponse.json(response, { status: 201 });
+  }),
+
+  http.patch('/api/v1/projects/:projectId/members/:userId', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const targetUserId = params.userId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = projectRoleFor(projectId, record.orgId, caller.id);
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return problem(403, 'Only project owners and admins can change member roles');
+    }
+    const membership = orgsState.projectMemberships.find(
+      (m) => m.projectId === projectId && m.user.id === targetUserId,
+    );
+    if (!membership) return problem(404, 'Member not found');
+    const body = (await request.json()) as { role?: ProjectRole };
+    if (!body.role) return problem(400, 'Validation failed', { errors: { role: ['required'] } });
+    if ((membership.role === 'owner' || body.role === 'owner') && callerRole !== 'owner') {
+      return problem(403, 'Only owners can change the owner role');
+    }
+    if (membership.role === 'owner' && body.role !== 'owner' && ownerCountFor(projectId) <= 1) {
+      return problem(409, 'Cannot demote the last owner');
+    }
+    membership.role = body.role;
+    const response: UpdatedProjectMember = { user_id: membership.user.id, role: membership.role };
+    return HttpResponse.json(response);
+  }),
+
+  http.delete('/api/v1/projects/:projectId/members/:userId', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const targetUserId = params.userId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = projectRoleFor(projectId, record.orgId, caller.id);
+    if (callerRole !== 'owner' && callerRole !== 'admin') {
+      return problem(403, 'Only project owners and admins can remove members');
+    }
+    const membership = orgsState.projectMemberships.find(
+      (m) => m.projectId === projectId && m.user.id === targetUserId,
+    );
+    if (!membership) return problem(404, 'Member not found');
+    if (membership.role === 'owner' && callerRole !== 'owner') {
+      return problem(403, 'Only owners can remove an owner');
+    }
+    if (membership.role === 'owner' && ownerCountFor(projectId) <= 1) {
+      return problem(409, 'Cannot remove the last owner');
+    }
+    orgsState.projectMemberships = orgsState.projectMemberships.filter(
+      (m) => !(m.projectId === projectId && m.user.id === targetUserId),
+    );
     return new HttpResponse(null, { status: 204 });
   }),
 
@@ -1179,7 +1818,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can view tokens');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can view tokens');
     const response: ListTokensResponse = {
       tokens: orgsState.tokens
         .filter((t) => t.projectId === projectId && !t.revoked)
@@ -1196,7 +1835,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can create tokens');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create tokens');
     const body = (await request.json()) as { label?: string };
     const token: TokenRecord = {
       id: nextId('token'),
@@ -1219,7 +1858,7 @@ export const handlers = [
     if (!record) return problem(404, 'Project not found');
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
-    if (callerRole !== 'admin') return problem(403, 'Only admins can revoke tokens');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can revoke tokens');
     const tokenId = params.tokenId as string;
     const token = orgsState.tokens.find((t) => t.id === tokenId && t.projectId === projectId);
     if (!token) return problem(404, 'Token not found');

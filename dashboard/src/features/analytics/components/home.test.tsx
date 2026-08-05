@@ -50,8 +50,16 @@ describe('HomePage', () => {
     const highlightsList = await main.findByRole('list', { name: 'Highlights' });
     expect(within(highlightsList).getAllByText(/vs previous period$/).length).toBeGreaterThan(0);
 
-    // Active-users trend, with the previous-period overlay.
+    // Active-users trend: the graph is always shown (not hideable).
     expect(await main.findByRole('img', { name: 'Active users trend' })).toBeInTheDocument();
+    // The per-day breakdown list is collapsed by default (hidden from the a11y tree) and
+    // expands on toggle.
+    const dailyToggle = main.getByRole('button', { name: /Daily breakdown/ });
+    expect(dailyToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(main.queryByRole('table', { name: 'Active users by day' })).toBeNull();
+    await userEvent.click(dailyToggle);
+    expect(dailyToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(main.getByRole('table', { name: 'Active users by day' })).toBeInTheDocument();
 
     // Events-by-type donut with a center total.
     expect(main.getByRole('img', { name: 'Events by type composition' })).toBeInTheDocument();
@@ -214,6 +222,7 @@ describe('HomePage', () => {
 
     await screen.findByRole('heading', { name: 'Home' });
     const main = within(screen.getByRole('main'));
+    // The Active users graph is always visible — no expand needed.
     const trendFigure = await main.findByRole('img', { name: 'Active users trend' });
 
     await userEvent.click(main.getByRole('button', { name: 'Notes' }));

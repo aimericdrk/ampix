@@ -1,10 +1,11 @@
 // Diagnoses the Firebase Storage screenshot pipeline independently of the SDK/backend.
-// It loads backend/.env, resolves your credentials + bucket exactly like the backend does,
-// uploads a tiny test object, and lists what's under screens/. Any auth/permission/bucket
-// problem surfaces here with a clear error.
+// It loads backend/mobile_analytics/.env, resolves your credentials + bucket exactly like the
+// backend does, uploads a tiny test object, and lists what's under screens/. Any
+// auth/permission/bucket problem surfaces here with a clear error.
 //
-// Run it from the backend/ dir so it uses backend/node_modules (firebase-admin) and loads backend/.env:
-//     cd backend && node ../scripts/firebase-storage-check.mjs
+// Run it from the backend/mobile_analytics dir so it uses backend/mobile_analytics/node_modules
+// (firebase-admin) and loads backend/mobile_analytics/.env:
+//     cd backend/mobile_analytics && node ../../scripts/firebase-storage-check.mjs
 //
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -12,7 +13,7 @@ import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 
 try {
-  process.loadEnvFile(); // loads ./.env from the CURRENT working directory (run from backend/)
+  process.loadEnvFile(); // loads ./.env from the CURRENT working directory (run from backend/mobile_analytics/)
 } catch {
   console.warn('No .env in the current directory — relying on the real environment.');
 }

@@ -50,6 +50,10 @@ export interface Project {
   timezone: string;
   /** Added by contracts §12 — included because the requester owns this project. */
   ingest_token: string;
+  /** The caller's role in this project (per-project-roles). */
+  role: ProjectRole;
+  /** Feature-gating flags for this project; absent on projects predating an integration. */
+  integrations?: { revenuecat: boolean };
 }
 
 export interface ListProjectsResponse {
@@ -106,9 +110,10 @@ export interface Disable2faRequest {
 
 // --- Tenancy management (contracts §13) ---
 
-/** Role matrix (contracts §13): admin > analyst > viewer. */
-export type OrgRole = 'admin' | 'analyst' | 'viewer';
+/** Role matrix: owner > admin > analyst > viewer. `owner` is reached only via creation/transfer. */
+export type OrgRole = 'owner' | 'admin' | 'analyst' | 'viewer';
 
+/** Roles assignable via the org role dropdown / invitations — owner is NOT here (transfer only). */
 export const ORG_ROLES: OrgRole[] = ['admin', 'analyst', 'viewer'];
 
 /** An org as seen by the caller, with their own role in it. */
@@ -151,6 +156,63 @@ export interface OrgMember {
 
 export interface ListMembersResponse {
   members: OrgMember[];
+}
+
+// --- Per-project roles & membership ---
+
+/** Role matrix (per-project-roles): owner > admin > analyst > viewer. */
+export type ProjectRole = 'owner' | 'admin' | 'analyst' | 'viewer';
+
+export const PROJECT_ROLES: ProjectRole[] = ['owner', 'admin', 'analyst', 'viewer'];
+
+export interface ProjectMemberUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export interface ProjectMember {
+  user: ProjectMemberUser;
+  role: ProjectRole;
+}
+
+export interface ListProjectMembersResponse {
+  members: ProjectMember[];
+}
+
+export interface AddProjectMemberRequest {
+  userId: string;
+  role: ProjectRole;
+}
+
+export interface UpdateProjectMemberRoleRequest {
+  role: ProjectRole;
+}
+
+/**
+ * `POST /projects/:projectId/members` and `PATCH /projects/:projectId/members/:userId` response —
+ * flat `{ user_id, role }` (NOT the nested `ProjectMember`), mirroring the backend
+ * `UpdatedProjectMember` in `project-members.types.ts`.
+ */
+export interface UpdatedProjectMember {
+  user_id: string;
+  role: ProjectRole;
+}
+
+// --- Org-scoped per-project access (org owner role) ---
+
+export interface ProjectAccessItem {
+  projectId: string;
+  name: string;
+  role: ProjectRole | null;
+}
+
+export interface ListProjectAccessResponse {
+  projects: ProjectAccessItem[];
+}
+
+export interface SetProjectAccessRequest {
+  role: 'viewer' | 'analyst' | 'admin' | null;
 }
 
 export interface UpdateMemberRoleRequest {
@@ -216,6 +278,36 @@ export interface UpdateProjectResponse {
   id: string;
   name: string;
   timezone: string;
+}
+
+/** Per-project list stats from GET /projects/stats — distinct users + most common country. */
+export interface ProjectStat {
+  project_id: string;
+  user_count: number;
+  top_country: string | null;
+}
+
+export interface ProjectStatsResponse {
+  stats: ProjectStat[];
+}
+
+/** The selectable data scopes for POST /projects/:id/data/purge (owner-only, irreversible). */
+export interface PurgeProjectDataScopes {
+  analytics?: boolean;
+  revenuecat?: boolean;
+  saved?: boolean;
+}
+
+export interface PurgeProjectDataRequest {
+  scopes: PurgeProjectDataScopes;
+}
+
+export interface PurgeProjectDataResponse {
+  cleared: {
+    analytics: boolean;
+    revenuecat: boolean;
+    saved: boolean;
+  };
 }
 
 export interface SdkToken {
@@ -288,6 +380,9 @@ export interface InsightsFilter {
   property: string;
   op: InsightsFilterOp;
   value?: string;
+  /** RevenueCat metrics filtering (Task 12/13): whether the filter targets an event or a profile
+   *  property; omitted for the plain §14 analytics engine. */
+  target?: 'event' | 'profile';
 }
 
 export interface InsightsBreakdown {
@@ -371,6 +466,7 @@ export interface LiveEventsResponse {
 
 export interface UserListItem {
   distinct_id: string;
+  first_seen: string;
   last_seen: string;
   event_count: number;
   /** From the user's profile (whitelisted keys); null when not set — search also matches these. */
@@ -1038,4 +1134,158 @@ export interface ListTemplatesResponse {
 /** `POST /projects/:projectId/templates/:templateId/apply` — returns the created dashboard's id. */
 export interface ApplyTemplateResponse {
   dashboard_id: string;
+}
+
+// --- RevenueCat integration (spec §4.7) ---
+// Mirrors `backend/src/revenuecat/rc-admin.service.ts` and `rc-metrics.service.ts` field-for-field.
+
+/** `GET /projects/:projectId/integrations/revenuecat` — connection state + webhook journal counts. */
+export interface RcIntegrationStatus {
+  connected: boolean;
+  /** `/webhooks/revenuecat/${projectId}` — UI prefixes apiBaseUrl. */
+  webhook_path: string;
+  /** Full value: the admin must paste it into RC. */
+  webhook_secret: string;
+  /** `'…' + last 4`, or null. */
+  api_key_masked: string | null;
+  rc_project_id: string | null;
+  sandbox_mode: boolean;
+  /** ISO, or null. */
+  last_webhook_at: string | null;
+  backfill_status: string | null;
+  counts: { processed: number; failed: number; unlinked: number; skipped: number };
+}
+
+/** `PUT /projects/:projectId/integrations/revenuecat` body — all fields optional (partial update). */
+export interface UpsertRcIntegrationRequest {
+  api_key?: string;
+  rc_project_id?: string;
+  sandbox_mode?: boolean;
+}
+
+/** One row of `GET /projects/:projectId/integrations/revenuecat/events`. */
+export interface RcJournalEntry {
+  id: string;
+  rc_event_id: string;
+  event_type: string;
+  rc_app_user_id: string | null;
+  status: string;
+  error: string | null;
+  received_at: string;
+}
+
+export interface RcJournalResponse {
+  events: RcJournalEntry[];
+}
+
+/** `POST .../replay` — replays every `unlinked` journal row for the project. */
+export interface RcReplayResponse {
+  replayed: number;
+  remaining: number;
+}
+
+/** `POST .../resync` (202, fire-and-forget backfill). */
+export interface RcResyncResponse {
+  status: 'started';
+}
+
+/** `GET .../users/:distinctId` — the RC subscription state resolved for one user. */
+export interface UserSubscription {
+  status: string;
+  product_id: string | null;
+  store: string | null;
+  period_type: string | null;
+  total_spent_cents: number;
+  mrr_cents: number;
+  currency: string | null;
+  first_purchase_at: string | null;
+  expires_at: string | null;
+  cancelled_at: string | null;
+  rc_app_user_id: string;
+  /** `https://app.revenuecat.com/customers/{rc_project_id}/{urlencoded app_user_id}` when
+   *  `rc_project_id` is set, else null. */
+  rc_customer_url: string | null;
+}
+
+/** `GET .../users/:distinctId` and `POST .../users/:distinctId/refresh` — `null` when the project
+ *  has never seen a subscription event for this user. */
+export interface UserSubscriptionResponse {
+  subscription: UserSubscription | null;
+}
+
+export interface SubscriptionsByDay {
+  t: string;
+  new_subscriptions: number;
+  churned: number;
+  revenue: number;
+}
+
+export interface SubscriptionsByProduct {
+  product_id: string;
+  active: number;
+  mrr_cents: number;
+}
+
+export interface SubscriptionsByStore {
+  store: string;
+  active: number;
+}
+
+export interface ChurnReasonCount {
+  reason: string;
+  count: number;
+}
+
+export interface SubscriptionRecentEvent {
+  insert_id: string;
+  event: string;
+  distinct_id: string;
+  timestamp: string;
+  product_id: string;
+  price: number;
+}
+
+/** `GET /projects/:projectId/metrics/subscriptions` (Subscriptions page). */
+export interface SubscriptionsSummaryResponse {
+  mrr_cents: number;
+  active: number;
+  in_trial: number;
+  grace: number;
+  new_subscriptions: number;
+  churned: number;
+  trials_started: number;
+  trials_converted: number;
+  by_day: SubscriptionsByDay[];
+  by_product: SubscriptionsByProduct[];
+  by_store: SubscriptionsByStore[];
+  churn_reasons: ChurnReasonCount[];
+  recent_events: SubscriptionRecentEvent[];
+}
+
+export interface SubscriptionAttributionDriver {
+  event: string;
+  users: number;
+}
+
+export interface SubscriptionAttributionScreen {
+  screen_name: string;
+  users: number;
+}
+
+export interface SubscriptionTimeToConvertBucket {
+  bucket: string;
+  users: number;
+}
+
+export interface SubscriptionTrialFunnel {
+  trials: number;
+  converted: number;
+}
+
+/** `GET /projects/:projectId/metrics/subscriptions/attribution`. */
+export interface SubscriptionAttributionResponse {
+  drivers: SubscriptionAttributionDriver[];
+  screens: SubscriptionAttributionScreen[];
+  time_to_convert: SubscriptionTimeToConvertBucket[];
+  trial_funnel: SubscriptionTrialFunnel;
 }

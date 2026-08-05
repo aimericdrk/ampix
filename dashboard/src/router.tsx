@@ -36,6 +36,16 @@ import { UsersPage } from './features/analytics/components/UsersPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
+import { RcConversionPage } from './features/revenuecat/components/RcConversionPage';
+import { RcOverviewPage } from './features/revenuecat/components/RcOverviewPage';
+import { RcPlaceholderPage } from './features/revenuecat/components/RcPlaceholderPage';
+import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage';
+import { RcChartsPage } from './features/revenuecat/components/RcChartsPage';
+import { RcEntitlementsPage } from './features/revenuecat/components/RcEntitlementsPage';
+import { RcProductsPage } from './features/revenuecat/components/RcProductsPage';
+import { RcOfferingsPage } from './features/revenuecat/components/RcOfferingsPage';
+import { RcCustomersPage } from './features/revenuecat/components/RcCustomersPage';
+import { RcCustomerDetailPage } from './features/revenuecat/components/RcCustomerDetailPage';
 import { restoreSession } from './lib/api/client';
 import { sanitizeRedirect } from './lib/safe-redirect';
 
@@ -265,6 +275,83 @@ const revenueRoute = createRoute({
   component: RevenuePage,
 });
 
+// --- MyRevenueCat (tool rail, 2026-07-16) ---
+// The legacy flat /subscriptions URL is kept as a redirect so existing links and bookmarks survive
+// the move under the /rc/ namespace.
+
+const subscriptionsRedirectRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/subscriptions',
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/projects/$projectId/rc/overview', params });
+  },
+});
+
+const rcOverviewRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/overview',
+  component: RcOverviewPage,
+});
+
+const rcConversionRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/conversion',
+  component: RcConversionPage,
+});
+
+const rcChartsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/charts',
+  component: RcChartsPage,
+});
+
+const rcCustomersRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/customers',
+  component: RcCustomersPage,
+});
+
+const rcCustomerDetailRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/customers/$customerId',
+  component: RcCustomerDetailPage,
+});
+
+const rcProductsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/products',
+  component: RcProductsPage,
+});
+
+const rcEntitlementsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/entitlements',
+  component: RcEntitlementsPage,
+});
+
+const rcOfferingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/offerings',
+  component: RcOfferingsPage,
+});
+
+const rcPaywallsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/paywalls',
+  component: () => (
+    <RcPlaceholderPage
+      title="Paywalls"
+      description="The paywalls shown to users, and how each one performs."
+    />
+  ),
+});
+
+const rcSettingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/settings',
+  component: RcSettingsPage,
+});
+
 // --- Distribution histograms (feat-09) ---
 
 const distributionsRoute = createRoute({
@@ -337,6 +424,17 @@ export const routeTree = rootRoute.addChildren([
     userProfileRoute,
     sessionsRoute,
     revenueRoute,
+    subscriptionsRedirectRoute,
+    rcOverviewRoute,
+    rcConversionRoute,
+    rcChartsRoute,
+    rcCustomersRoute,
+    rcCustomerDetailRoute,
+    rcProductsRoute,
+    rcEntitlementsRoute,
+    rcOfferingsRoute,
+    rcPaywallsRoute,
+    rcSettingsRoute,
     distributionsRoute,
     propertiesRoute,
     eventsRoute,

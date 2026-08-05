@@ -1,11 +1,13 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useEffect } from 'react';
 import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
 import { Badge } from '../../../components/ui/badge';
+import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '../../../components/ui/dialog';
 import { fieldLook } from '../../../components/ui/input';
+import { useToast } from '../../../components/ui/toast';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
 import type {
@@ -14,19 +16,64 @@ import type {
   ScreenPathsResponse,
   UserEventContext,
   UserRecentEvent,
+  UserSubscription,
 } from '../../../lib/api/types';
-import { formatExactNumber } from '../format';
+import { formatCurrency, formatExactNumber } from '../format';
 import { useRunClickHeatmap, useRunScreenPaths, useScreens, useUserProfile } from '../api';
 import { FavoriteButton } from '../../favorites/FavoriteButton';
 import { useFavorites } from '../../favorites/favorites';
 import { useRecents } from '../../favorites/recents';
+import { useRcEnabled, useRefreshUserSubscription, useUserSubscription } from '../../revenuecat/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, Fingerprint, Maximize2, RotateCw, Route, Waypoints, X } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { defaultDate } from './builder-controls';
 import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
 import { PathMap } from './PathMap';
 
+/** The three data-heavy exploration views launched into a larger modal over the profile. */
+type ExplorerTab = 'screen-path' | 'path-map' | 'heatmap';
+const EXPLORER_LAUNCHERS: Array<{ tab: ExplorerTab; label: string; icon: typeof Route; hint: string }> = [
+  { tab: 'screen-path', label: 'Screen path', icon: Route, hint: 'The order of screens this user visited' },
+  { tab: 'path-map', label: 'Path map', icon: Waypoints, hint: 'How this user moved between screens' },
+  { tab: 'heatmap', label: 'Tap heatmap', icon: Fingerprint, hint: 'Where this user tapped, per screen' },
+];
+
 /** The screen-view autocapture event (contracts §4) — drives the per-user screen-path diagram. */
 const SCREEN_VIEW_EVENT = '$screen_view';
+/** RevenueCat timeline event prefix (spec §4.7) — `$rc_initial_purchase`, `$rc_renewal`, etc. */
+const RC_EVENT_PREFIX = '$rc_';
+
+/**
+ * A RevenueCat subscription lifecycle event. `$rc_link` shares the `$rc_` prefix but is an SDK
+ * identity event (not a subscription event), so it's excluded from the "subscription" badge/ring.
+ */
+function isSubscriptionEvent(name: string): boolean {
+  return name.startsWith(RC_EVENT_PREFIX) && name !== '$rc_link';
+}
 const HEATMAP_GRID: HeatmapGrid = { cols: 20, rows: 40 };
+
+/** Subscription status -> Badge variant (spec §4.7). Unlisted statuses fall back to `default`. */
+const SUBSCRIPTION_STATUS_VARIANT: Record<
+  string,
+  'success' | 'info' | 'warning' | 'outline' | 'danger'
+> = {
+  active: 'success',
+  trial: 'info',
+  grace: 'warning',
+  paused: 'outline',
+  churned: 'danger',
+};
+
+/**
+ * The forward (newest-first) index of the OLDEST `$rc_initial_purchase` in `events`, or -1 if none.
+ * `events` is newest-first, so the oldest occurrence is the last match when scanning forward —
+ * equivalently the first match when scanning the reversed (oldest-first) array, mapped back.
+ */
+function firstSubscribedIndex(events: UserRecentEvent[]): number {
+  const reversedIdx = [...events].reverse().findIndex((e) => e.event === '$rc_initial_purchase');
+  return reversedIdx === -1 ? -1 : events.length - 1 - reversedIdx;
+}
 
 /** Device/app context fields, in display order, with friendly labels. */
 const DEVICE_FIELDS: ReadonlyArray<readonly [keyof UserEventContext, string]> = [
@@ -121,12 +168,44 @@ export function UserProfileModal({
   const favorites = useFavorites(projectId);
   const recents = useRecents(projectId);
   const recordRecent = recents.record;
+  // The data-heavy views (screen path, path map, tap heatmap) open in a larger modal on demand —
+  // null when that modal is closed. Opening picks the active tab.
+  const [explorerTab, setExplorerTab] = useState<ExplorerTab | null>(null);
+  // The explorer views are one-shot snapshots fetched when opened; bumping this refetches them in
+  // place (path map / heatmap remount, and the profile — which the screen path derives from — is
+  // invalidated) so new activity shows without closing and reopening.
+  const [explorerRefresh, setExplorerRefresh] = useState(0);
+  const queryClient = useQueryClient();
+  const refreshExplorer = () => {
+    void queryClient.invalidateQueries({ queryKey: ['analytics', projectId, 'user', distinctId] });
+    setExplorerRefresh((n) => n + 1);
+  };
+
+  // RC subscription card (spec §4.7) — hidden entirely when the project isn't connected to
+  // RevenueCat or this user has never had a subscription event.
+  const rcEnabled = useRcEnabled(projectId);
+  const { data: subscriptionData } = useUserSubscription(projectId, distinctId, rcEnabled);
+  const subscription = subscriptionData?.subscription ?? null;
+  const refreshSubscription = useRefreshUserSubscription(projectId);
+  const { toast } = useToast();
+  const handleRefreshSubscription = () => {
+    refreshSubscription.mutate(distinctId, {
+      onSuccess: () => toast({ title: 'Subscription refreshed' }),
+      onError: (err) =>
+        toast({
+          title: 'Could not refresh subscription',
+          description: err instanceof ApiError ? err.problem.title : 'Something went wrong.',
+          variant: 'error',
+        }),
+    });
+  };
 
   // The event whose detail is shown on the right. `null` means "follow the latest" (recent_events
   // is newest-first, so index 0). Clicking a timeline event pins it here.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const events = data?.recent_events ?? [];
   const selectedEvent = events.find((e) => e.insert_id === selectedId) ?? events[0];
+  const firstSubIndex = useMemo(() => firstSubscribedIndex(events), [events]);
 
   // Country: prefer the profile row (set via people.set); otherwise fall back to the most recent
   // event carrying a `country` super property (registerSuperProperties rides on events, not the
@@ -159,7 +238,7 @@ export function UserProfileModal({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         aria-describedby={undefined}
-        className="flex max-h-[92vh] w-[96vw] max-w-6xl flex-col gap-0 overflow-hidden p-0"
+        className="flex max-h-[98vh] w-[96vw] max-w-7xl flex-col gap-0 overflow-hidden p-0"
       >
         {/* Header: monogram + id + at-a-glance stats, with favorite + close on the right. */}
         <header className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
@@ -211,8 +290,8 @@ export function UserProfileModal({
             >
               <svg
                 aria-hidden
-                viewBox="0 0 24 24"
-                className="h-4 w-4"
+                viewBox="0 0 20 20"
+                className="h-6 w-6"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth={2}
@@ -260,46 +339,130 @@ export function UserProfileModal({
                   </CardContent>
                 </Card>
 
+                {rcEnabled && subscription && (
+                  <Card>
+                    <CardContent>
+                      <CollapsibleSection title="Subscription" defaultOpen>
+                        <SubscriptionCard
+                          subscription={subscription}
+                          isRefreshing={refreshSubscription.isPending}
+                          onRefresh={handleRefreshSubscription}
+                        />
+                      </CollapsibleSection>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* These three views carry a lot of data, so they open in a larger modal on top
+                    of the profile rather than cramping the left column. */}
                 <Card>
-                  <CardContent>
-                    <CollapsibleSection title="Screen path" defaultOpen={false}>
-                      {screenPath.length === 0 ? (
-                        <p className="text-text-muted">No screen views recorded.</p>
-                      ) : (
-                        <ol className="flex flex-wrap items-center gap-2 text-sm">
-                          {screenPath.map((name, i) => (
-                            <li key={`${name}-${i}`} className="flex items-center gap-2">
-                              {i > 0 && (
-                                <span aria-hidden className="text-text-muted">
-                                  →
-                                </span>
-                              )}
-                              <Badge variant="outline" className="px-2.5 py-1 text-sm font-medium">
-                                {name}
-                              </Badge>
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                    </CollapsibleSection>
+                  <CardHeader>
+                    <CardTitle>Journey &amp; interactions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-2">
+                    {EXPLORER_LAUNCHERS.map(({ tab, label, icon: Icon, hint }) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setExplorerTab(tab)}
+                        className="group flex w-full items-center gap-3 rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                          <Icon className="size-4" aria-hidden />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium">{label}</span>
+                          <span className="block truncate text-xs text-text-muted">{hint}</span>
+                        </span>
+                        <Maximize2
+                          className="size-4 shrink-0 text-text-muted transition-colors group-hover:text-accent"
+                          aria-hidden
+                        />
+                      </button>
+                    ))}
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardContent>
-                    <CollapsibleSection title="Path map" defaultOpen={false}>
-                      <UserPathMap projectId={projectId} distinctIds={data.distinct_ids} />
-                    </CollapsibleSection>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent>
-                    <CollapsibleSection title="Tap heatmap" defaultOpen={false}>
-                      <UserTapHeatmap projectId={projectId} distinctIds={data.distinct_ids} />
-                    </CollapsibleSection>
-                  </CardContent>
-                </Card>
+                <Dialog
+                  open={explorerTab !== null}
+                  onOpenChange={(open) => !open && setExplorerTab(null)}
+                >
+                  <DialogContent className="flex h-[92vh] w-[96vw] max-w-[110rem] flex-col gap-0 overflow-hidden p-0">
+                    <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+                      <DialogTitle className="text-base font-semibold">
+                        Journey &amp; interactions
+                      </DialogTitle>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={refreshExplorer}
+                          className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+                        >
+                          <RotateCw className="size-4" aria-hidden />
+                          Refresh
+                        </button>
+                        <DialogClose
+                          aria-label="Close"
+                          className="flex size-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text focus-visible:outline-2 focus-visible:outline-accent"
+                        >
+                          <X className="size-4" aria-hidden />
+                        </DialogClose>
+                      </div>
+                    </header>
+                    {explorerTab !== null && (
+                      <Tabs
+                        value={explorerTab}
+                        onValueChange={(value) => setExplorerTab(value as ExplorerTab)}
+                        className="flex min-h-0 flex-1 flex-col"
+                      >
+                        <TabsList className="shrink-0 px-6 pt-4">
+                          <TabsTrigger value="screen-path">Screen path</TabsTrigger>
+                          <TabsTrigger value="path-map">Path map</TabsTrigger>
+                          <TabsTrigger value="heatmap">Tap heatmap</TabsTrigger>
+                        </TabsList>
+                        <div className="min-h-0 flex-1 overflow-auto p-6">
+                          <TabsContent value="screen-path">
+                            {screenPath.length === 0 ? (
+                              <p className="text-text-muted">No screen views recorded.</p>
+                            ) : (
+                              <ol className="flex flex-wrap items-center gap-2 text-sm">
+                                {screenPath.map((name, i) => (
+                                  <li key={`${name}-${i}`} className="flex items-center gap-2">
+                                    {i > 0 && (
+                                      <span aria-hidden className="text-text-muted">
+                                        →
+                                      </span>
+                                    )}
+                                    <Badge
+                                      variant="outline"
+                                      className="px-2.5 py-1 text-sm font-medium"
+                                    >
+                                      {name}
+                                    </Badge>
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                          </TabsContent>
+                          <TabsContent value="path-map">
+                            <UserPathMap
+                              projectId={projectId}
+                              distinctIds={data.distinct_ids}
+                              refreshKey={explorerRefresh}
+                            />
+                          </TabsContent>
+                          <TabsContent value="heatmap">
+                            <UserTapHeatmap
+                              key={explorerRefresh}
+                              projectId={projectId}
+                              distinctIds={data.distinct_ids}
+                            />
+                          </TabsContent>
+                        </div>
+                      </Tabs>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </div>
 
               {/* CENTRE — the activity timeline; each event selects itself on click. */}
@@ -310,43 +473,59 @@ export function UserProfileModal({
                       <p className="text-text-muted">No recent events.</p>
                     ) : (
                       <div
-                        className="max-h-[62vh] overflow-y-auto pr-1"
+                        className="max-h-[80vh] overflow-y-auto pr-1"
                         data-testid="activity-timeline-scroll"
                       >
                         <ol className="flex flex-col gap-1 border-l border-border pl-4 text-sm">
-                          {events.map((event) => {
+                          {events.map((event, index) => {
                             const isSelected = event.insert_id === selectedEvent?.insert_id;
+                            const isRcEvent = isSubscriptionEvent(event.event);
                             return (
-                              <li key={event.insert_id} className="relative">
-                                <span
-                                  aria-hidden
-                                  className={cn(
-                                    'absolute -left-[1.3125rem] top-2.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
-                                    isSelected ? 'bg-accent ring-2 ring-accent/30' : 'bg-accent',
-                                  )}
-                                />
-                                <button
-                                  type="button"
-                                  aria-pressed={isSelected}
-                                  onClick={() => setSelectedId(event.insert_id)}
-                                  className={cn(
-                                    'w-full rounded-md px-2 py-1.5 text-left transition-colors',
-                                    isSelected
-                                      ? 'bg-accent/10 ring-1 ring-accent/40'
-                                      : 'hover:bg-chart-surface',
-                                  )}
-                                >
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-medium">{event.event}</span>
-                                    {event.screen_name && (
-                                      <Badge variant="outline">{event.screen_name}</Badge>
+                              <Fragment key={event.insert_id}>
+                                {index === firstSubIndex && (
+                                  <li
+                                    role="presentation"
+                                    className="-ml-4 pl-4 py-1 text-xs font-semibold text-accent"
+                                  >
+                                    ★ First subscribed
+                                  </li>
+                                )}
+                                <li className="relative">
+                                  <span
+                                    aria-hidden
+                                    className={cn(
+                                      'absolute -left-[1.3125rem] top-2.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
+                                      isSelected
+                                        ? 'bg-accent ring-2 ring-accent/30'
+                                        : isRcEvent
+                                          ? 'bg-accent ring-2 ring-accent/20'
+                                          : 'bg-accent',
                                     )}
-                                  </div>
-                                  <div className="text-xs text-text-muted">
-                                    {new Date(event.timestamp).toLocaleString()}
-                                  </div>
-                                </button>
-                              </li>
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    onClick={() => setSelectedId(event.insert_id)}
+                                    className={cn(
+                                      'w-full rounded-md px-2 py-1.5 text-left transition-colors',
+                                      isSelected
+                                        ? 'bg-accent/10 ring-1 ring-accent/40'
+                                        : 'hover:bg-chart-surface',
+                                    )}
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-medium">{event.event}</span>
+                                      {event.screen_name && (
+                                        <Badge variant="outline">{event.screen_name}</Badge>
+                                      )}
+                                      {isRcEvent && <Badge variant="accent">subscription</Badge>}
+                                    </div>
+                                    <div className="text-xs text-text-muted">
+                                      {new Date(event.timestamp).toLocaleString()}
+                                    </div>
+                                  </button>
+                                </li>
+                              </Fragment>
                             );
                           })}
                         </ol>
@@ -373,6 +552,61 @@ export function UserProfileModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The LEFT column's RC subscription summary (spec §4.7): status, plan/store/period, spend, dates,
+ *  a manual refresh, and a deep-link into RevenueCat's dashboard when the project id is known. */
+function SubscriptionCard({
+  subscription,
+  isRefreshing,
+  onRefresh,
+}: {
+  subscription: UserSubscription;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const currency = subscription.currency ?? 'USD';
+  return (
+    <div className="flex flex-col gap-3">
+      <Badge variant={SUBSCRIPTION_STATUS_VARIANT[subscription.status] ?? 'default'}>
+        {subscription.status}
+      </Badge>
+      <PropertyGrid
+        entries={[
+          ['Plan', subscription.product_id],
+          ['Store', subscription.store],
+          ['Period', subscription.period_type],
+          ['Total spent', formatCurrency(subscription.total_spent_cents / 100, currency)],
+          ['MRR', formatCurrency(subscription.mrr_cents / 100, currency)],
+          [
+            'First purchased',
+            subscription.first_purchase_at
+              ? new Date(subscription.first_purchase_at).toLocaleDateString()
+              : null,
+          ],
+          [
+            'Renews / expires',
+            subscription.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : null,
+          ],
+        ]}
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="secondary" size="sm" disabled={isRefreshing} onClick={onRefresh}>
+          {isRefreshing ? 'Refreshing…' : 'Refresh from RevenueCat'}
+        </Button>
+        {subscription.rc_customer_url && (
+          <a
+            href={subscription.rc_customer_url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm font-medium text-accent hover:underline"
+          >
+            Open in RevenueCat
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -525,63 +759,209 @@ function UserTapHeatmap({
   );
 }
 
+/** How the path map is anchored: from each visit's entry, or pinned to a chosen start/end screen. */
+type PathAnchorMode = 'entry' | 'start' | 'end';
+const PATH_STEP_OPTIONS = [1, 2, 3, 4, 5];
+const PATH_MAX_NODE_OPTIONS = [3, 6, 10, 20];
+const PATH_RANGE_OPTIONS: Array<{ days: number; label: string }> = [
+  { days: 7, label: 'Last 7 days' },
+  { days: 30, label: 'Last 30 days' },
+  { days: 90, label: 'Last 90 days' },
+  { days: 365, label: 'Last year' },
+];
+
+/** One segment of the path-map control bar: a micro-label + a borderless (ghost) native select with
+ *  a custom chevron, so the four controls read as one cohesive toolbar rather than separate boxes. */
+function PathControl({
+  label,
+  id,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  id: string;
+  value: string | number;
+  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3.5 py-2.5">
+      <label
+        htmlFor={id}
+        className="text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+      >
+        {label}
+      </label>
+      <div className="relative">
+        <select
+          id={id}
+          value={value}
+          onChange={onChange}
+          className="cursor-pointer appearance-none bg-transparent pr-5 text-sm font-medium text-text focus:outline-none focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {children}
+        </select>
+        <ChevronDown
+          aria-hidden
+          className="pointer-events-none absolute right-0 top-1/2 size-3.5 -translate-y-1/2 text-text-muted"
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * The full interactive per-user path map. `distinct_ids` (the profile's §17 identity set: canonical
- * id + aliased anon_ids) is passed to `useRunScreenPaths`, so the backend restricts the screen-paths
- * query to `distinct_id IN (…)` for this one person — identity-correct across pre- and post-login
- * events, mirroring the tap-heatmap pattern above. Runs once, as soon as the identity set is known.
+ * id + aliased anon_ids) restricts the screen-paths query to this one person — identity-correct
+ * across pre- and post-login events, mirroring the tap-heatmap pattern above. The controls map to
+ * the §19 screen-paths params: anchor mode → `anchor_screen` + `direction` ("starts with" = forward
+ * from the screen, "ends with" = backward into it), plus `steps`, `max_nodes_per_step`, and range.
+ * `refreshKey` re-runs the current query in place without resetting the controls.
  */
-function UserPathMap({ projectId, distinctIds }: { projectId: string; distinctIds: string[] }) {
+function UserPathMap({
+  projectId,
+  distinctIds,
+  refreshKey,
+}: {
+  projectId: string;
+  distinctIds: string[];
+  refreshKey: number;
+}) {
   const screens = useScreens(projectId);
   const runScreenPaths = useRunScreenPaths(projectId);
   const [result, setResult] = useState<ScreenPathsResponse | null>(null);
 
+  const [anchorMode, setAnchorMode] = useState<PathAnchorMode>('entry');
+  const [anchorScreen, setAnchorScreen] = useState('');
+  const [steps, setSteps] = useState(3);
+  const [maxNodes, setMaxNodes] = useState(6);
+  const [days, setDays] = useState(90);
+
+  const screenList = screens.data?.screens ?? [];
   // screen_name → latest image_hash, so each map node's screenshot is content-addressed (retake-safe).
   const screenHashes = useMemo(
-    () => new Map(screens.data?.screens.map((s) => [s.screen_name, s.latest_image_hash]) ?? []),
-    [screens.data],
+    () => new Map(screenList.map((s) => [s.screen_name, s.latest_image_hash])),
+    [screenList],
   );
 
+  // "Starts with"/"Ends with" need a screen picked before the query is meaningful.
+  const needsScreen = anchorMode !== 'entry' && anchorScreen === '';
+
   useEffect(() => {
-    if (distinctIds.length === 0) return;
-    // Clear the prior user's map first so navigating profile→profile doesn't flash a stale path.
+    if (distinctIds.length === 0 || needsScreen) {
+      setResult(null);
+      return;
+    }
+    // Clear first so changing a control (or switching user) doesn't flash the previous result.
     setResult(null);
     runScreenPaths.mutate(
       {
-        direction: 'forward',
-        date_range: { from: defaultDate(90), to: defaultDate(0) },
-        steps: 3,
-        max_nodes_per_step: 6,
+        direction: anchorMode === 'end' ? 'backward' : 'forward',
+        date_range: { from: defaultDate(days), to: defaultDate(0) },
+        steps,
+        max_nodes_per_step: maxNodes,
         unit: 'user',
         // §17: identity-correct — restrict the path map to this user's whole identity set.
         distinct_ids: distinctIds,
+        ...(anchorMode !== 'entry' ? { anchor_screen: anchorScreen } : {}),
       },
       { onSuccess: setResult },
     );
-    // Only re-run when the identity set itself changes (e.g. navigating to another user's profile).
     // `runScreenPaths` (a `useMutation` result) is a fresh object each render, so it is intentionally
     // omitted from the dependency list — including it would refire the request every render.
-  }, [projectId, distinctIds.join(',')]);
-
-  if (runScreenPaths.isPending && !result) {
-    return <p role="status">Loading path map…</p>;
-  }
-
-  if (runScreenPaths.isError) {
-    return (
-      <p role="alert" className="text-danger">
-        {runScreenPaths.error instanceof ApiError
-          ? runScreenPaths.error.problem.title
-          : 'Failed to load the path map'}
-      </p>
-    );
-  }
-
-  if (!result || result.nodes.length === 0) {
-    return <p className="text-text-muted">No screen-path data for this user yet.</p>;
-  }
+  }, [projectId, distinctIds.join(','), anchorMode, anchorScreen, steps, maxNodes, days, refreshKey]);
 
   return (
-    <PathMap projectId={projectId} nodes={result.nodes} links={result.links} screenHashes={screenHashes} />
+    <div className="flex flex-col gap-4">
+      <div className="inline-flex flex-wrap items-stretch divide-x divide-border overflow-hidden rounded-xl border border-border bg-surface">
+        <PathControl
+          label="Path"
+          id="path-anchor-mode"
+          value={anchorMode}
+          onChange={(e) => setAnchorMode(e.target.value as PathAnchorMode)}
+        >
+          <option value="entry">From entry screen</option>
+          <option value="start">Starts with…</option>
+          <option value="end">Ends with…</option>
+        </PathControl>
+
+        {anchorMode !== 'entry' && (
+          <PathControl
+            label="Screen"
+            id="path-anchor-screen"
+            value={anchorScreen}
+            onChange={(e) => setAnchorScreen(e.target.value)}
+          >
+            <option value="">Select a screen…</option>
+            {screenList.map((screen) => (
+              <option key={screen.screen_name} value={screen.screen_name}>
+                {screen.screen_name}
+              </option>
+            ))}
+          </PathControl>
+        )}
+
+        <PathControl
+          label="Steps"
+          id="path-steps"
+          value={steps}
+          onChange={(e) => setSteps(Number(e.target.value))}
+        >
+          {PATH_STEP_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </PathControl>
+
+        <PathControl
+          label="Max per step"
+          id="path-max-nodes"
+          value={maxNodes}
+          onChange={(e) => setMaxNodes(Number(e.target.value))}
+        >
+          {PATH_MAX_NODE_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </PathControl>
+
+        <PathControl
+          label="Range"
+          id="path-range"
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+        >
+          {PATH_RANGE_OPTIONS.map((r) => (
+            <option key={r.days} value={r.days}>
+              {r.label}
+            </option>
+          ))}
+        </PathControl>
+      </div>
+
+      {runScreenPaths.isError ? (
+        <p role="alert" className="text-danger">
+          {runScreenPaths.error instanceof ApiError
+            ? runScreenPaths.error.problem.title
+            : 'Failed to load the path map'}
+        </p>
+      ) : needsScreen ? (
+        <p className="text-text-muted">Pick a screen to anchor the path.</p>
+      ) : runScreenPaths.isPending && !result ? (
+        <p role="status">Loading path map…</p>
+      ) : !result || result.nodes.length === 0 ? (
+        <p className="text-text-muted">No screen-path data for this user in this range.</p>
+      ) : (
+        <PathMap
+          projectId={projectId}
+          nodes={result.nodes}
+          links={result.links}
+          screenHashes={screenHashes}
+        />
+      )}
+    </div>
   );
 }

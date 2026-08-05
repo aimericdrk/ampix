@@ -1,24 +1,47 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api/client';
 import type {
+  AddProjectMemberRequest,
   CreateProjectRequest,
   CreatedProject,
   CreatedToken,
   CreateTokenRequest,
   EventSummaryResponse,
+  ListProjectMembersResponse,
   ListProjectsResponse,
   ListTokensResponse,
+  ProjectStatsResponse,
+  PurgeProjectDataRequest,
+  PurgeProjectDataResponse,
+  UpdatedProjectMember,
+  UpdateProjectMemberRoleRequest,
   UpdateProjectRequest,
   UpdateProjectResponse,
 } from '../../lib/api/types';
 
 export const PROJECTS_QUERY_KEY = ['projects'] as const;
 
+/** Per-project list stats (user count + top country). Loads separately from the project list so
+ *  the list renders immediately and the stats fill in. */
+export function useProjectStats() {
+  return useQuery({
+    queryKey: ['projects', 'stats'],
+    queryFn: () => apiFetch<ProjectStatsResponse>('/api/v1/projects/stats'),
+  });
+}
+
 export function useProjects() {
   return useQuery({
     queryKey: PROJECTS_QUERY_KEY,
     queryFn: () => apiFetch<ListProjectsResponse>('/api/v1/projects'),
   });
+}
+
+/** The caller's role in a given project, once the projects list has loaded — undefined until then. */
+export function useProjectRole(projectId: string | undefined) {
+  const { data } = useProjects();
+  if (!projectId || !data) return undefined;
+  return data.projects.find((project) => project.id === projectId)?.role;
 }
 
 /** All-time event summary for a project (contracts §12) — no client recomputation, use the totals as-is. */
@@ -66,6 +89,27 @@ export function useDeleteProject(projectId: string) {
   });
 }
 
+/**
+ * Owner-only, irreversible wipe of the selected data scopes for a project. On success we
+ * invalidate every cache the wiped scopes could have populated so the UI reflects the empty
+ * state without a reload.
+ */
+export function usePurgeProjectData(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PurgeProjectDataRequest) =>
+      apiFetch<PurgeProjectDataResponse>(`/api/v1/projects/${projectId}/data/purge`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['analytics', projectId] });
+      void queryClient.invalidateQueries({ queryKey: ['revenuecat', projectId] });
+    },
+  });
+}
+
 export function useTokens(projectId: string) {
   return useQuery({
     queryKey: ['projects', projectId, 'tokens'],
@@ -94,6 +138,54 @@ export function useRevokeToken(projectId: string) {
       apiFetch<void>(`/api/v1/projects/${projectId}/tokens/${tokenId}`, { method: 'DELETE' }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tokens'] });
+    },
+  });
+}
+
+// --- Per-project members (per-project-roles) ---
+
+export function useProjectMembers(projectId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'members'],
+    queryFn: () => apiFetch<ListProjectMembersResponse>(`/api/v1/projects/${projectId}/members`),
+  });
+}
+
+export function useAddProjectMember(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AddProjectMemberRequest) =>
+      apiFetch<UpdatedProjectMember>(`/api/v1/projects/${projectId}/members`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'members'] });
+    },
+  });
+}
+
+export function useUpdateProjectMemberRole(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string } & UpdateProjectMemberRoleRequest) =>
+      apiFetch<UpdatedProjectMember>(`/api/v1/projects/${projectId}/members/${userId}`, {
+        method: 'PATCH',
+        body: { role },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'members'] });
+    },
+  });
+}
+
+export function useRemoveProjectMember(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<void>(`/api/v1/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'members'] });
     },
   });
 }
