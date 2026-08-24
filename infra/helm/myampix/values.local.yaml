@@ -8,6 +8,7 @@ hosts:
   api: api.local
   purchase: purchase.local
   app: app.local
+  admin: admin.local
 ingress:
   className: nginx
 tls:
@@ -32,3 +33,9 @@ purchase:
 dashboard:
   replicas: 1
   purchaseApiBaseUrl: http://purchase.local:8080
+admin:
+  dockerSock:
+    enabled: false # kind nodes run containerd — there is no dockerd socket to mount
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 512Mi }

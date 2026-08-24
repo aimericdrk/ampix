@@ -2,6 +2,7 @@
 # Creates/updates the MyAmpix Kubernetes Secrets from the gitignored env files (idempotent):
 #   infra/k8s/secrets/analytics.env → Secret myampix-analytics
 #   infra/k8s/secrets/purchase.env  → Secret myampix-purchase
+#   infra/k8s/secrets/admin.env     → Secret myampix-admin
 #   $GHCR_USER + $GHCR_TOKEN         → docker-registry Secret ghcr-pull (skipped when unset)
 # Usage: [NAMESPACE=myampix] [GHCR_USER=… GHCR_TOKEN=…] scripts/k8s/secrets.sh
 # After rotating a value: re-run, then `kubectl -n myampix rollout restart deploy -l app.kubernetes.io/part-of=myampix`.
@@ -13,7 +14,7 @@ DIR="$ROOT/infra/k8s/secrets"
 command -v kubectl >/dev/null || { echo "secrets.sh: kubectl not found" >&2; exit 1; }
 kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
 
-for svc in analytics purchase; do
+for svc in analytics purchase admin; do
   f="$DIR/$svc.env"
   [ -f "$f" ] || { echo "secrets.sh: missing $f — copy $svc.env.example and fill it" >&2; exit 1; }
   if grep -q 'CHANGE_ME' "$f"; then echo "secrets.sh: $f still contains CHANGE_ME" >&2; exit 1; fi

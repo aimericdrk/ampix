@@ -7,10 +7,11 @@ once per VPS, in order. Commands assume Ubuntu 24.04, a sudo user, and the repo 
 
 - Docker Compose on the host runs Postgres ×2, ClickHouse, Redis (bound to the VPS private IP).
 - k3s runs `mobile-analytics` (HPA 2–6), `mobile-purchase-api` (HPA 2–4), `mobile-purchase-scheduler` (1),
-  `dashboard` (2), behind Traefik with Let's Encrypt certificates for `api.`, `purchase.`, `app.<domain>`.
+  `dashboard` (2), and the `admin` ops console (1) behind Traefik with Let's Encrypt certificates for
+  `api.`, `purchase.`, `app.`, `admin.<domain>`.
 - Deploys: `scripts/k8s/deploy.sh <tag>` (migrations run first; automatic rollback on failure).
 
-Minimum VPS: 4 vCPU, 8 GB RAM, 80 GB SSD. DNS: A records for the three hosts → the VPS public IP.
+Minimum VPS: 4 vCPU, 8 GB RAM, 80 GB SSD. DNS: A records for the four hosts (`api.`, `purchase.`, `app.`, `admin.`) → the VPS public IP.
 
 ## 1. VPS preparation
 
@@ -86,6 +87,7 @@ kubectl -n kube-system rollout status deploy/traefik --timeout=120s
 ```bash
 cp infra/k8s/secrets/analytics.env.example infra/k8s/secrets/analytics.env
 cp infra/k8s/secrets/purchase.env.example  infra/k8s/secrets/purchase.env
+cp infra/k8s/secrets/admin.env.example     infra/k8s/secrets/admin.env
 # Fill every CHANGE_ME (generators are in the comments; DB passwords = the ones in infra/.env.prod).
 # GHCR pull credentials: a GitHub PAT (classic) with read:packages — skip if your packages are public.
 GHCR_USER=<github-user> GHCR_TOKEN=<pat> scripts/k8s/secrets.sh
@@ -96,7 +98,8 @@ kubectl -n myampix get secrets
 
 ```bash
 cp infra/helm/myampix/values.prod.example.yaml infra/values.prod.yaml   # gitignored
-# set image.owner (lowercase GitHub user/org), hosts.*, tls.email, hostDbs.ip (= BIND_IP)
+# set image.owner (lowercase GitHub user/org), hosts.*, tls.email, hostDbs.ip (= BIND_IP),
+# and admin.dockerSock.gid:   getent group docker | cut -d: -f3
 ```
 
 ## 7. First deploy
@@ -112,6 +115,13 @@ curl -fsS https://purchase.<domain>/health/ready
 open https://app.<domain>
 ```
 The two `*-migrate` Jobs must show `1/1` Completions; certificates turn `READY True` within ~1 min.
+
+### 7b. Admin console first login
+
+Open `https://admin.<domain>` and sign in with `ADMIN_DEFAULT_EMAIL` / `ADMIN_DEFAULT_PASSWORD` from
+`infra/k8s/secrets/admin.env`. The console forces a password change immediately. Then create your real
+account(s) under **Users**, sign in as one, and disable nothing until a second account works. The
+default seed only ever runs while the user table is empty — it never resurrects.
 
 ## 8. Upgrade / rollback
 

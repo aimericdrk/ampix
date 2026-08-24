@@ -1,0 +1,24 @@
+{{- if .Values.admin.enabled }}
+{{- $a := .Values.admin }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-admin-config
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "admin" "component" "web") | nindent 4 }}
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  COOKIE_SECURE: {{ .Values.tls.enabled | quote }}
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: default
+  ANALYTICS_INTERNAL_URL: http://mobile-analytics:8088
+  PURCHASE_INTERNAL_URL: http://mobile-purchase-api:8090
+  {{- if $a.dockerSock.enabled }}
+  DOCKER_SOCK: {{ $a.dockerSock.path | quote }}
+  {{- end }}
+  {{- range $k, $v := $a.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+{{- end }}

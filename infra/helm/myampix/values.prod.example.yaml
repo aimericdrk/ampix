@@ -8,6 +8,7 @@ hosts:
   api: api.CHANGE_ME.com
   purchase: purchase.CHANGE_ME.com
   app: app.CHANGE_ME.com
+  admin: admin.CHANGE_ME.com
 
 tls:
   enabled: true
@@ -23,3 +24,7 @@ hostDbs:
 #   env:
 #     APPLE_BUNDLE_IDS: com.your.app
 #     APPLE_APP_APPLE_ID: "123456789"
+
+admin:
+  dockerSock:
+    gid: 988 # getent group docker | cut -d: -f3   (on the VPS)

@@ -35,10 +35,10 @@ echo "== assertions"
 ALL="$(render -f "$PROD" --set tls.email=lint@example.com --set image.owner=lint)"
 
 [ "$(grep -c '^kind: Secret$' <<<"$ALL")" -eq 0 ] || fail "chart must not render Secrets"
-[ "$(grep -c 'runAsNonRoot: true' <<<"$ALL")" -eq 6 ] || fail "expected 6 pod templates with runAsNonRoot (2 jobs + 4 deployments)"
+[ "$(grep -c 'runAsNonRoot: true' <<<"$ALL")" -eq 8 ] || fail "expected 8 pod templates with runAsNonRoot (3 jobs + 5 deployments)"
 [ "$(grep -c '^kind: EndpointSlice$' <<<"$ALL")" -eq 4 ] || fail "expected 4 EndpointSlices for the host DBs"
-[ "$(grep -c '^kind: Ingress$' <<<"$ALL")" -eq 3 ] || fail "expected 3 Ingresses (api, purchase, app)"
-[ "$(grep -c 'cert-manager.io/cluster-issuer: letsencrypt' <<<"$ALL")" -eq 3 ] || fail "every Ingress must reference the ClusterIssuer"
+[ "$(grep -c '^kind: Ingress$' <<<"$ALL")" -eq 4 ] || fail "expected 4 Ingresses (api, purchase, app, admin)"
+[ "$(grep -c 'cert-manager.io/cluster-issuer: letsencrypt' <<<"$ALL")" -eq 4 ] || fail "every Ingress must reference the ClusterIssuer"
 
 show analytics-deployment.yaml | grep -q 'command: \["node", "dist/main.js"\]' || fail "analytics must bypass the migrate-at-boot entrypoint"
 show analytics-deployment.yaml | grep -q 'runAsUser: 999' || fail "analytics runAsUser must be the image's app uid (999)"
@@ -55,5 +55,16 @@ grep -A1 'name: SCHEDULER_ENABLED' <<<"$SCHED" | grep -q 'value: "true"' || fail
 show dashboard-ingress.yaml | grep -q 'path: /api' || fail "app host must proxy /api to analytics"
 show dashboard-ingress.yaml | grep -q 'path: /ingest' || fail "app host must proxy /ingest to analytics"
 show purchase-configmap.yaml | grep -q 'DASHBOARD_ORIGINS: "https://app.CHANGE_ME.com"' || fail "DASHBOARD_ORIGINS must derive from hosts.app"
+
+# Admin console invariants (2026-08-24 design §6/§7)
+RBAC="$(show admin-rbac.yaml)"
+! grep -qE 'verbs:.*(create|update|patch|delete)' <<<"$RBAC" || fail "admin RBAC must stay read-only"
+grep -q 'nodes/proxy' <<<"$RBAC" || fail "admin RBAC needs nodes/proxy for stats/summary"
+show admin-deployment.yaml | grep -q 'automountServiceAccountToken: true' || fail "admin deployment must mount its SA token"
+show admin-deployment.yaml | grep -q 'supplementalGroups' || fail "admin deployment must add the docker gid when dockerSock is enabled"
+show admin-migrate-job.yaml | grep -q 'helm.sh/hook: pre-install,pre-upgrade' || fail "admin migrate must be a hook"
+LOCAL_ADMIN="$(helm template myampix "$CHART" -f "$LOCAL" --show-only templates/admin-deployment.yaml)"
+! grep -q 'hostPath' <<<"$LOCAL_ADMIN" || fail "local values must not mount docker.sock (kind has none)"
+! grep -q 'DOCKER_SOCK' <<<"$(helm template myampix "$CHART" -f "$LOCAL" --show-only templates/admin-configmap.yaml)" || fail "local configmap must not set DOCKER_SOCK"
 
 echo "lint.sh: OK"

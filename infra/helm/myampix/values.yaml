@@ -17,6 +17,7 @@ hosts:
   api: api.example.com
   purchase: purchase.example.com
   app: app.example.com
+  admin: admin.example.com
 
 ingress:
   # traefik on k3s; nginx in the kind smoke test. No controller-specific annotations are used by the chart.
@@ -130,3 +131,26 @@ dashboard:
   resources:
     requests: { cpu: 50m, memory: 32Mi }
     limits: { cpu: 200m, memory: 64Mi }
+
+# Ops/admin console (docs/superpowers/specs/2026-08-24-admin-console-design.md).
+admin:
+  enabled: true
+  # Secret with DATABASE_URL (admin_console), probe URLs/passwords, ADMIN_DEFAULT_EMAIL/PASSWORD.
+  secretName: myampix-admin
+  # `node` user in the image.
+  runAsUser: 1000
+  runAsGroup: 1000
+  replicas: 1
+  dockerSock:
+    # Mount the host Docker socket read-only so the console lists host containers. Root-equivalent
+    # on the host — the operator accepted this for their single-node cluster; disable to turn the
+    # Docker page into a graceful "not mounted" state.
+    enabled: true
+    path: /var/run/docker.sock
+    # gid of the `docker` group on the VPS:  getent group docker | cut -d: -f3
+    gid: 988
+  # Extra non-secret env (merged into the ConfigMap).
+  env: {}
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }

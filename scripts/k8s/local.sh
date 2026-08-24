@@ -59,6 +59,8 @@ if [ "${SKIP_BUILD:-}" != "1" ]; then
   docker build -f "$ROOT/backend/mobile_purchase/Dockerfile" --target runtime -t "$IMG_PREFIX-mobile-purchase:$TAG" "$ROOT"
   docker build -f "$ROOT/backend/mobile_purchase/Dockerfile" --target migrate -t "$IMG_PREFIX-mobile-purchase-migrate:$TAG" "$ROOT"
   docker build -f "$ROOT/dashboard/Dockerfile" -t "$IMG_PREFIX-dashboard:$TAG" "$ROOT"
+  docker build -f "$ROOT/admin/Dockerfile" --target runtime -t "$IMG_PREFIX-admin:$TAG" "$ROOT"
+  docker build -f "$ROOT/admin/Dockerfile" --target migrate -t "$IMG_PREFIX-admin-migrate:$TAG" "$ROOT"
 fi
 
 step "verify the analytics image's app uid matches values.yaml (runAsUser: 999)"
@@ -68,7 +70,8 @@ uid="$(docker run --rm --entrypoint id "$IMG_PREFIX-mobile-analytics:$TAG" -u)"
 step "load images into kind"
 kind load docker-image --name "$CLUSTER" \
   "$IMG_PREFIX-mobile-analytics:$TAG" "$IMG_PREFIX-mobile-purchase:$TAG" \
-  "$IMG_PREFIX-mobile-purchase-migrate:$TAG" "$IMG_PREFIX-dashboard:$TAG"
+  "$IMG_PREFIX-mobile-purchase-migrate:$TAG" "$IMG_PREFIX-dashboard:$TAG" \
+  "$IMG_PREFIX-admin:$TAG" "$IMG_PREFIX-admin-migrate:$TAG"
 
 step "host IP (Compose DBs) as seen from the kind node"
 # ahostsv4: the EndpointSlice is IPv4 and `getent hosts` may return an IPv6 address first.
@@ -91,6 +94,15 @@ kubectl -n "$NS" create secret generic myampix-purchase \
   --from-literal=STORE_CREDENTIALS_ENC_KEY="$(openssl rand -base64 32)" \
   --from-literal=GOOGLE_PUBSUB_SHARED_SECRET="$(openssl rand -hex 32)" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+ADMIN_PW="smoke-$(openssl rand -hex 12)"
+kubectl -n "$NS" create secret generic myampix-admin \
+  --from-literal=DATABASE_URL="postgresql://myampix:myampix_dev@postgres:5432/admin_console_kind" \
+  --from-literal=ANALYTICS_DATABASE_URL="postgresql://myampix:myampix_dev@postgres:5432/myampix" \
+  --from-literal=REDIS_URL="redis://redis:6379" \
+  --from-literal=CLICKHOUSE_PASSWORD="myampix_dev" \
+  --from-literal=ADMIN_DEFAULT_EMAIL="smoke@myampix.local" \
+  --from-literal=ADMIN_DEFAULT_PASSWORD="$ADMIN_PW" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 step "helm upgrade --install (hooks migrate first, then rollout)"
 major="$(helm version --template '{{.Version}}' | sed -E 's/^v([0-9]+).*/\1/')"
@@ -103,7 +115,7 @@ step "assertions"
 fail() { echo "local.sh: FAIL — $1" >&2; kubectl -n "$NS" get pods,jobs; exit 1; }
 [ "$(kubectl -n "$NS" get job myampix-analytics-migrate -o jsonpath='{.status.succeeded}')" = "1" ] || fail "analytics migrate job not succeeded"
 [ "$(kubectl -n "$NS" get job myampix-purchase-migrate -o jsonpath='{.status.succeeded}')" = "1" ] || fail "purchase migrate job not succeeded"
-for d in mobile-analytics mobile-purchase-api mobile-purchase-scheduler dashboard; do
+for d in mobile-analytics mobile-purchase-api mobile-purchase-scheduler dashboard admin; do
   kubectl -n "$NS" rollout status "deploy/$d" --timeout=120s >/dev/null || fail "deploy/$d not available"
 done
 BASE="http://localhost:$HTTP_PORT"
@@ -118,6 +130,21 @@ curl -fsS -H 'Host: app.local' "$BASE/config.js" | grep -q "purchaseApiBaseUrl: 
 code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Host: app.local' "$BASE/api/v1/auth/refresh")"
 [ "$code" = "401" ] || fail "app.local/api should proxy to analytics (got HTTP $code, expected 401)"
 kubectl -n "$NS" get hpa >/dev/null || fail "HPAs missing"
+
+# Admin console: seeded login → forced password change → authenticated cluster status (design §8).
+[ "$(kubectl -n "$NS" get job myampix-admin-migrate -o jsonpath='{.status.succeeded}')" = "1" ] || fail "admin migrate job not succeeded"
+curl -fsS -H 'Host: admin.local' "$BASE/login" | grep -q 'MyAmpix Ops' || fail "admin login page"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.local' "$BASE/api/admin/status")" = "401" ] || fail "admin API must be 401 unauthenticated"
+JAR="$(mktemp)"
+curl -fsS -c "$JAR" -X POST -H 'Host: admin.local' -H 'Origin: http://admin.local' -H 'content-type: application/json' \
+  -d "{\"email\":\"smoke@myampix.local\",\"password\":\"$ADMIN_PW\"}" "$BASE/api/auth/login" | grep -q '"ok":true' || fail "admin seeded login"
+[ "$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' -H 'Host: admin.local' "$BASE/api/admin/status")" = "403" ] || fail "admin data must be blocked while password change is pending"
+curl -fsS -b "$JAR" -X POST -H 'Host: admin.local' -H 'Origin: http://admin.local' -H 'content-type: application/json' \
+  -d "{\"currentPassword\":\"$ADMIN_PW\",\"newPassword\":\"$ADMIN_PW-rotated\"}" "$BASE/api/account/password" | grep -q '"ok":true' || fail "admin forced password change"
+STATUS_JSON="$(curl -fsS -b "$JAR" -H 'Host: admin.local' "$BASE/api/admin/status")"
+grep -q '"available":true' <<<"$STATUS_JSON" || fail "admin status must see the cluster"
+grep -q '"name":' <<<"$STATUS_JSON" || fail "admin status must list at least one node"
+rm -f "$JAR"
 
 printf '\n\033[1;32mSMOKE OK\033[0m  (cluster %s kept; `pnpm k8s:local down` to delete)\n' "$CLUSTER"
 kubectl -n "$NS" get pods,hpa,ingress

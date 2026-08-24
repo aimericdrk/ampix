@@ -25,6 +25,7 @@ jobs:
       dashboard: ${{ steps.filter.outputs.dashboard }}
       sdk: ${{ steps.filter.outputs.sdk }}
       k8s: ${{ steps.filter.outputs.k8s }}
+      admin: ${{ steps.filter.outputs.admin }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -50,6 +51,11 @@ jobs:
               - '.github/workflows/ci.yml'
             sdk:
               - 'sdk/flutter_analytics/**'
+              - '.github/workflows/ci.yml'
+            admin:
+              - 'admin/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
               - '.github/workflows/ci.yml'
             k8s:
               - 'infra/helm/**'
@@ -252,3 +258,24 @@ jobs:
             sudo tar -xz -C /usr/local/bin kubeconform
       - name: Lint chart
         run: bash scripts/k8s/lint.sh
+
+  admin:
+    name: Admin console — typecheck, test, build
+    needs: changes
+    if: needs.changes.outputs.admin == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @myampix/admin typecheck
+      - name: Tests
+        run: pnpm --filter @myampix/admin test
+      - name: Build
+        run: pnpm --filter @myampix/admin build

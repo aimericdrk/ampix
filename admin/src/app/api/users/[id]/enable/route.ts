@@ -1,0 +1,13 @@
+import { NextResponse } from 'next/server';
+import { guardedMutation } from '@/app/api/_helpers';
+import { clientIpFrom } from '@/lib/auth';
+import { prisma } from '@/lib/db';
+import { enableUser } from '@/lib/users';
+
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const { id } = await ctx.params;
+  return guardedMutation(req, async (auth) => {
+    await enableUser(prisma, { id: auth.user.id, ip: clientIpFrom(req.headers) }, id);
+    return NextResponse.json({ ok: true });
+  });
+}
