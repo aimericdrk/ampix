@@ -1,0 +1,32 @@
+# MyAmpix production edge — TLS via Let's Encrypt (automatic), one site per domain.
+# Domains and email come from the container environment (set in /opt/myampix/.env).
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Dashboard: static SPA build served from the mounted dashboard/dist.
+{$DASHBOARD_DOMAIN} {
+	root * /srv/dashboard
+	encode gzip zstd
+	# SPA fallback: unknown paths route to index.html, real files served as-is.
+	try_files {path} /index.html
+	file_server
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
+
+# Analytics API + SDK event ingestion.
+{$API_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy backend:8088
+}
+
+# Purchase (RevenueCat-style) service: SDK calls + store webhooks.
+{$PURCHASE_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy mobile-purchase:8090
+}

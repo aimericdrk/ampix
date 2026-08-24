@@ -1,0 +1,6 @@
+// MyAmpix runtime configuration — rendered from the container environment at start.
+// '' = same origin (the app host proxies /api and /ingest to the analytics backend).
+window.___MYAMPIX_CONFIG__ = {
+  apiBaseUrl: '${API_BASE_URL}',
+  purchaseApiBaseUrl: '${PURCHASE_API_BASE_URL}',
+};

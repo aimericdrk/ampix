@@ -1,0 +1,55 @@
+{{- if .Values.admin.enabled }}
+# Read-only cluster visibility for the admin console (design §7 of the admin-console spec).
+# The console displays state; it never mutates — keep these verbs get/list/watch only.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: myampix-admin
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "admin" "component" "web") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-admin-readonly
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ['']
+    resources: [nodes, pods, events, namespaces, services]
+    verbs: [get, list, watch]
+  - apiGroups: ['']
+    resources: [nodes/proxy] # kubelet stats/summary via the API-server proxy
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [cert-manager.io]
+    resources: [certificates]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-admin-readonly
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-admin-readonly
+subjects:
+  - kind: ServiceAccount
+    name: myampix-admin
+    namespace: {{ .Release.Namespace }}
+{{- end }}

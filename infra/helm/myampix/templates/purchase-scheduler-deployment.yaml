@@ -1,0 +1,81 @@
+{{- if and .Values.purchase.enabled .Values.purchase.scheduler.enabled }}
+{{- $p := .Values.purchase }}
+{{- $sel := dict "root" . "name" "mobile-purchase" "component" "scheduler" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-purchase-scheduler
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" $sel | nindent 4 }}
+spec:
+  # Exactly one cron runner, ever: replicas pinned to 1 and Recreate (old pod fully gone before the
+  # new one starts). Not HPA-managed. See SCHEDULER_ENABLED in backend/mobile_purchase/src/config/app-config.ts.
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "myampix.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "myampix.labels" . | nindent 8 }}
+        {{- include "myampix.selectorLabels" $sel | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/purchase-configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      {{- include "myampix.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "myampix.podSecurityContext" . | nindent 8 }}
+        runAsUser: {{ $p.runAsUser }}
+        runAsGroup: {{ $p.runAsGroup }}
+      containers:
+        - name: scheduler
+          image: {{ include "myampix.image" (dict "root" . "name" "mobile-purchase") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http # health probes only — no Service/Ingress points here
+              containerPort: 8090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-purchase-config
+            - secretRef:
+                name: {{ $p.secretName }}
+          env:
+            # `env` wins over `envFrom`: this replica is THE scheduler.
+            - name: SCHEDULER_ENABLED
+              value: "true"
+            {{- range $k, $v := $p.scheduler.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            {{- toYaml $p.scheduler.resources | nindent 12 }}
+          securityContext:
+            {{- include "myampix.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

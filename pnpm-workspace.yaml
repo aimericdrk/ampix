@@ -1,4 +1,5 @@
 packages:
+  - admin
   - backend/mobile_analytics
   - backend/mobile_purchase
   - dashboard

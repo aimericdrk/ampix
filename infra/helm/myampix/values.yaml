@@ -1,0 +1,156 @@
+# MyAmpix Helm chart — default values.
+# Design: docs/superpowers/specs/2026-08-23-kubernetes-vps-deploy-design.md
+# Copy values.prod.example.yaml → infra/values.prod.yaml (gitignored) for a real cluster.
+
+image:
+  registry: ghcr.io
+  # GitHub user/org that owns the packages (lowercase). CI pushes ghcr.io/<owner>/myampix-<component>.
+  owner: CHANGE_ME
+  # Overridden per deploy: scripts/k8s/deploy.sh <tag>  (e.g. sha-1a2b3c4 or v1.2.0)
+  tag: latest
+  pullPolicy: IfNotPresent
+  # Name of a docker-registry Secret (created by scripts/k8s/secrets.sh). "" if the packages are public.
+  pullSecret: ghcr-pull
+
+# Public hostnames (DNS A records → the VPS). app = dashboard + same-origin /api,/ingest proxy to analytics.
+hosts:
+  api: api.example.com
+  purchase: purchase.example.com
+  app: app.example.com
+  admin: admin.example.com
+
+ingress:
+  # traefik on k3s; nginx in the kind smoke test. No controller-specific annotations are used by the chart.
+  className: traefik
+  annotations: {}
+
+tls:
+  enabled: true
+  # ClusterIssuer name. createIssuer renders it (cert-manager must already be installed).
+  issuer: letsencrypt
+  createIssuer: true
+  # ACME account email — REQUIRED when tls.enabled (the chart refuses to render without it).
+  email: ""
+  acmeServer: https://acme-v02.api.letsencrypt.org/directory
+
+# Datastores run in Docker Compose on the host (infra/docker-compose.prod.yml). The chart renders a
+# selector-less Service + EndpointSlice per entry so pods use the SAME hostnames as Compose, and the
+# migrate hook Jobs (which run before any Service exists) get the same names via hostAliases.
+# Ports are therefore identical in-cluster and on the host (no remapping is possible for hostAliases).
+hostDbs:
+  # VPS private IP the Compose ports are bound to (BIND_IP in infra/.env.prod).
+  ip: 10.0.0.2
+  services:
+    - name: postgres
+      ports: [{ name: postgres, port: 5432 }]
+    - name: mobile-purchase-postgres
+      # Host-published on :5433 (infra/docker-compose*.yml) → reachable as mobile-purchase-postgres:5433.
+      ports: [{ name: postgres, port: 5433 }]
+    - name: clickhouse
+      ports:
+        - { name: http, port: 8123 }
+        - { name: native, port: 9000 }
+    - name: redis
+      ports: [{ name: redis, port: 6379 }]
+
+migrations:
+  activeDeadlineSeconds: 600
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+analytics:
+  enabled: true
+  # Secret with DATABASE_URL, REDIS_URL, CLICKHOUSE_PASSWORD, JWT_*_SECRET, TOTP_ENC_KEY (+ optional keys).
+  secretName: myampix-analytics
+  # UID/GID of the image's `app` user (useradd -r → 999 on node:22-bookworm-slim).
+  runAsUser: 999
+  runAsGroup: 999
+  # Non-secret env (rendered into a ConfigMap; NODE_ENV and PORT are fixed by the template).
+  env:
+    CLICKHOUSE_URL: http://clickhouse:8123
+    CLICKHOUSE_USER: default
+    CLICKHOUSE_DB: analytics
+    COOKIE_SECURE: "true"
+    LOG_LEVEL: info
+  replicas: 2 # used only when autoscaling.enabled=false
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    minAvailable: 1
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+purchase:
+  enabled: true
+  # Secret with DATABASE_URL, STORE_CREDENTIALS_ENC_KEY, GOOGLE_PUBSUB_SHARED_SECRET.
+  secretName: myampix-purchase
+  runAsUser: 65532
+  runAsGroup: 65532
+  # "" → derived from hosts.app (https://app.example.com). Comma-separated to allow several.
+  dashboardOrigins: ""
+  env:
+    ANALYTICS_INTERNAL_URL: http://mobile-analytics:8088
+    GOOGLE_PUSH_AUTH_MODE: shared_secret
+    APPLE_BUNDLE_IDS: com.myampix.app
+    LOG_LEVEL: info
+  api:
+    replicas: 2
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+    pdb:
+      minAvailable: 1
+    resources:
+      requests: { cpu: 200m, memory: 192Mi }
+      limits: { cpu: "1", memory: 384Mi }
+  scheduler:
+    enabled: true
+    # Exactly one replica, Recreate strategy — the in-process @nestjs/schedule cron must never run twice.
+    env:
+      EXPIRY_SWEEP_CRON: "*/5 * * * *"
+    resources:
+      requests: { cpu: 100m, memory: 192Mi }
+      limits: { cpu: 500m, memory: 384Mi }
+
+dashboard:
+  enabled: true
+  runAsUser: 101
+  runAsGroup: 101
+  replicas: 2
+  # "" = same origin (the app host proxies /api and /ingest to analytics → auth cookies stay first-party).
+  apiBaseUrl: ""
+  # "" → derived from hosts.purchase.
+  purchaseApiBaseUrl: ""
+  resources:
+    requests: { cpu: 50m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 64Mi }
+
+# Ops/admin console (docs/superpowers/specs/2026-08-24-admin-console-design.md).
+admin:
+  enabled: true
+  # Secret with DATABASE_URL (admin_console), probe URLs/passwords, ADMIN_DEFAULT_EMAIL/PASSWORD.
+  secretName: myampix-admin
+  # `node` user in the image.
+  runAsUser: 1000
+  runAsGroup: 1000
+  replicas: 1
+  dockerSock:
+    # Mount the host Docker socket read-only so the console lists host containers. Root-equivalent
+    # on the host — the operator accepted this for their single-node cluster; disable to turn the
+    # Docker page into a graceful "not mounted" state.
+    enabled: true
+    path: /var/run/docker.sock
+    # gid of the `docker` group on the VPS:  getent group docker | cut -d: -f3
+    gid: 988
+  # Extra non-secret env (merged into the ConfigMap).
+  env: {}
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }

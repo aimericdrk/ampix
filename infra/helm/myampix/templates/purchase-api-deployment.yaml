@@ -1,0 +1,82 @@
+{{- if .Values.purchase.enabled }}
+{{- $p := .Values.purchase }}
+{{- $sel := dict "root" . "name" "mobile-purchase" "component" "api" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-purchase-api
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" $sel | nindent 4 }}
+spec:
+  {{- if not $p.api.autoscaling.enabled }}
+  replicas: {{ $p.api.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "myampix.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "myampix.labels" . | nindent 8 }}
+        {{- include "myampix.selectorLabels" $sel | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/purchase-configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      {{- include "myampix.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "myampix.podSecurityContext" . | nindent 8 }}
+        runAsUser: {{ $p.runAsUser }}
+        runAsGroup: {{ $p.runAsGroup }}
+      containers:
+        - name: api
+          # Distroless runtime stage: ENTRYPOINT is `node`, CMD is dist/main.js. No shell.
+          image: {{ include "myampix.image" (dict "root" . "name" "mobile-purchase") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-purchase-config
+            - secretRef:
+                name: {{ $p.secretName }}
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              # distroless has no `sleep`; node is at /nodejs/bin/node in gcr.io/distroless/nodejs22.
+              exec:
+                command: ["/nodejs/bin/node", "-e", "setTimeout(() => {}, 5000)"]
+          resources:
+            {{- toYaml $p.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "myampix.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp # Prisma's query engine writes here
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

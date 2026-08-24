@@ -1,0 +1,68 @@
+// Admin console data model — design §2 (docs/superpowers/specs/2026-08-24-admin-console-design.md).
+// Own database `admin_console` (two Prisma migration histories cannot share one DB).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id                 String            @id @default(cuid())
+  email              String            @unique
+  displayName        String
+  passwordHash       String
+  disabled           Boolean           @default(false)
+  mustChangePassword Boolean           @default(false)
+  failedLoginCount   Int               @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  createdById        String?
+  sessions           AdminSession[]
+  auditEvents        AdminAuditEvent[]
+}
+
+model AdminSession {
+  id                String    @id @default(cuid())
+  // sha256(token), hex. The raw token exists only in the cookie.
+  tokenHash         String    @unique
+  user              AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+  createdAt         DateTime  @default(now())
+  lastSeenAt        DateTime  @default(now())
+  idleExpiresAt     DateTime
+  absoluteExpiresAt DateTime
+  revokedAt         DateTime?
+  ip                String
+  userAgent         String
+
+  @@index([userId])
+}
+
+model AdminLoginAttempt {
+  id      String   @id @default(cuid())
+  at      DateTime @default(now())
+  email   String
+  ip      String
+  success Boolean
+
+  @@index([email, at])
+  @@index([ip, at])
+}
+
+model AdminAuditEvent {
+  id      String     @id @default(cuid())
+  at      DateTime   @default(now())
+  actor   AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorId String?
+  action  String
+  detail  Json
+  ip      String
+
+  @@index([at])
+}

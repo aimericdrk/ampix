@@ -1,0 +1,13 @@
+# Ignore patterns for admin/Dockerfile (build context = repo root, so patterns are root-relative).
+**/node_modules
+**/dist
+**/.next
+**/coverage
+admin/generated
+**/.env
+**/.env.*
+!**/.env.example
+**/*.test.ts
+**/*.spec.ts
+.git
+**/.DS_Store

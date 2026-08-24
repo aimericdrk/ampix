@@ -1,0 +1,18 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "dashboard" "component" "web") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "dashboard" "component" "web") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+{{- end }}

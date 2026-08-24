@@ -1,0 +1,20 @@
+{{- if .Values.purchase.enabled }}
+{{- $p := .Values.purchase }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-purchase-config
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "mobile-purchase" "component" "api") | nindent 4 }}
+data:
+  NODE_ENV: production
+  PORT: "8090"
+  # The API replicas never run the in-process cron; the scheduler Deployment overrides this to "true".
+  SCHEDULER_ENABLED: "false"
+  # CORS allowlist for the dashboard (credentialed cross-origin requests). Derived from hosts.app.
+  DASHBOARD_ORIGINS: {{ default (printf "%s://%s" (include "myampix.scheme" .) .Values.hosts.app) $p.dashboardOrigins | quote }}
+  {{- range $k, $v := $p.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+{{- end }}

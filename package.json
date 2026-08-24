@@ -26,7 +26,9 @@
     "seed": "pnpm --filter @myampix/mobile-analytics exec prisma db seed",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
-    "infra:reset": "docker compose -f infra/docker-compose.yml down -v"
+    "infra:reset": "docker compose -f infra/docker-compose.yml down -v",
+    "k8s:lint": "bash scripts/k8s/lint.sh",
+    "k8s:local": "bash scripts/k8s/local.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

@@ -1,0 +1,56 @@
+{{- if .Values.purchase.enabled }}
+{{- $p := .Values.purchase }}
+{{- $sel := dict "root" . "name" "mobile-purchase" "component" "migrate" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-purchase-migrate
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" $sel | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "myampix.labels" . | nindent 8 }}
+        {{- include "myampix.selectorLabels" $sel | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- include "myampix.hostDbAliases" . | nindent 6 }}
+      {{- include "myampix.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "myampix.podSecurityContext" . | nindent 8 }}
+        # The migrate stage is node:22-bookworm-slim (no USER) — run it as the same non-root uid as the runtime.
+        runAsUser: {{ $p.runAsUser }}
+        runAsGroup: {{ $p.runAsGroup }}
+      containers:
+        - name: migrate
+          # Dedicated `migrate` image target: `prisma migrate deploy` and exit (Dockerfile §migrate).
+          image: {{ include "myampix.image" (dict "root" . "name" "mobile-purchase-migrate") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: CHECKPOINT_DISABLE
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: {{ $p.secretName }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

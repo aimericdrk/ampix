@@ -51,6 +51,10 @@ RUN pnpm --filter=@myampix/mobile-purchase deploy --legacy /out-migrate
 # ---------- migrate (one-shot) ----------
 FROM node:22-bookworm-slim AS migrate
 ENV NODE_ENV=production
+# Same reason as the builder: without a visible libssl the Prisma CLI guesses `openssl-1.1.x`, does not
+# find that schema-engine variant (the bundle carries the builder's `openssl-3.0.x` one), and tries to
+# download it into node_modules at runtime — which fails as a non-root, network-less Kubernetes Job.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /out-migrate /app
 # prisma/ (schema + migrations) copied explicitly in case `pnpm deploy` prunes it from the bundle.

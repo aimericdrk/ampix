@@ -1,0 +1,10 @@
+apiVersion: v2
+name: myampix
+description: MyAmpix backend services (mobile-analytics, mobile-purchase) and dashboard on Kubernetes.
+type: application
+version: 0.1.0
+# The image tag is a value (image.tag); appVersion is informational only.
+appVersion: "latest"
+kubeVersion: ">=1.28.0-0"
+home: https://github.com/aimericdrk/MyAmpix
+keywords: [analytics, subscriptions, nestjs]

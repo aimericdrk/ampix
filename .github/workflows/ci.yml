@@ -24,6 +24,8 @@ jobs:
       mobile_purchase: ${{ steps.filter.outputs.mobile_purchase }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
       sdk: ${{ steps.filter.outputs.sdk }}
+      k8s: ${{ steps.filter.outputs.k8s }}
+      admin: ${{ steps.filter.outputs.admin }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -49,6 +51,16 @@ jobs:
               - '.github/workflows/ci.yml'
             sdk:
               - 'sdk/flutter_analytics/**'
+              - '.github/workflows/ci.yml'
+            admin:
+              - 'admin/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci.yml'
+            k8s:
+              - 'infra/helm/**'
+              - 'infra/k8s/**'
+              - 'scripts/k8s/**'
               - '.github/workflows/ci.yml'
 
   root:
@@ -231,3 +243,39 @@ jobs:
           awk -F: '/^LF/{lf+=$2} /^LH/{lh+=$2} END{printf "line coverage: %.1f%%\n", 100*lh/lf}' coverage/lcov.filtered.info
           awk -F: '/^LF/{lf+=$2} /^LH/{lh+=$2} END{exit !(100*lh/lf >= 85.0)}' coverage/lcov.filtered.info ||
             { echo "::error::SDK line coverage is below the 85% floor"; exit 1; }
+
+  k8s:
+    name: Kubernetes — helm lint, kubeconform, invariants
+    needs: changes
+    if: needs.changes.outputs.k8s == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz |
+            sudo tar -xz -C /usr/local/bin kubeconform
+      - name: Lint chart
+        run: bash scripts/k8s/lint.sh
+
+  admin:
+    name: Admin console — typecheck, test, build
+    needs: changes
+    if: needs.changes.outputs.admin == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @myampix/admin typecheck
+      - name: Tests
+        run: pnpm --filter @myampix/admin test
+      - name: Build
+        run: pnpm --filter @myampix/admin build

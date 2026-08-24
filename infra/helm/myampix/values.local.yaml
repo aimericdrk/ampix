@@ -1,0 +1,45 @@
+# kind smoke test (scripts/k8s/local.sh). Images are built locally and `kind load`ed under these names.
+image:
+  owner: local
+  tag: dev
+  pullPolicy: IfNotPresent
+  pullSecret: ""
+# *.localhost resolves to 127.0.0.1 in browsers — the kind stack is browsable with no /etc/hosts edits.
+hosts:
+  api: api.localhost
+  purchase: purchase.localhost
+  app: app.localhost
+  admin: admin.localhost
+ingress:
+  className: nginx
+tls:
+  enabled: false
+hostDbs:
+  ip: 127.0.0.1 # overridden with --set hostDbs.ip=<host ip as seen from the kind node>
+analytics:
+  autoscaling: { enabled: true, minReplicas: 1, maxReplicas: 2, targetCPUUtilizationPercentage: 70 }
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+purchase:
+  # Browser origin includes the mapped port — the derived default (no port) would fail CORS.
+  dashboardOrigins: http://app.localhost:8089
+  api:
+    autoscaling: { enabled: true, minReplicas: 1, maxReplicas: 2, targetCPUUtilizationPercentage: 70 }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: "1", memory: 384Mi }
+  scheduler:
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 384Mi }
+dashboard:
+  replicas: 1
+  # The browser reaches the kind ingress on the mapped host port (local.sh HTTP_PORT, default 8089).
+  purchaseApiBaseUrl: http://purchase.localhost:8089
+admin:
+  dockerSock:
+    enabled: false # kind nodes run containerd — there is no dockerd socket to mount
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 512Mi }
