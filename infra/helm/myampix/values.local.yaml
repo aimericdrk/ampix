@@ -4,11 +4,12 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
   pullSecret: ""
+# *.localhost resolves to 127.0.0.1 in browsers — the kind stack is browsable with no /etc/hosts edits.
 hosts:
-  api: api.local
-  purchase: purchase.local
-  app: app.local
-  admin: admin.local
+  api: api.localhost
+  purchase: purchase.localhost
+  app: app.localhost
+  admin: admin.localhost
 ingress:
   className: nginx
 tls:
@@ -21,6 +22,8 @@ analytics:
     requests: { cpu: 100m, memory: 192Mi }
     limits: { cpu: "1", memory: 512Mi }
 purchase:
+  # Browser origin includes the mapped port — the derived default (no port) would fail CORS.
+  dashboardOrigins: http://app.localhost:8089
   api:
     autoscaling: { enabled: true, minReplicas: 1, maxReplicas: 2, targetCPUUtilizationPercentage: 70 }
     resources:
@@ -32,7 +35,8 @@ purchase:
       limits: { cpu: 500m, memory: 384Mi }
 dashboard:
   replicas: 1
-  purchaseApiBaseUrl: http://purchase.local:8080
+  # The browser reaches the kind ingress on the mapped host port (local.sh HTTP_PORT, default 8089).
+  purchaseApiBaseUrl: http://purchase.localhost:8089
 admin:
   dockerSock:
     enabled: false # kind nodes run containerd — there is no dockerd socket to mount

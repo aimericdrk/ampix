@@ -94,10 +94,13 @@ kubectl -n "$NS" create secret generic myampix-purchase \
   --from-literal=STORE_CREDENTIALS_ENC_KEY="$(openssl rand -base64 32)" \
   --from-literal=GOOGLE_PUBSUB_SHARED_SECRET="$(openssl rand -hex 32)" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# Reset the throwaway admin smoke DB so the seed (and its printed credentials) are fresh each run.
+docker exec myampix-postgres-1 psql -U myampix -d postgres -c 'DROP DATABASE IF EXISTS admin_console_kind' >/dev/null 2>&1 || true
 ADMIN_PW="smoke-$(openssl rand -hex 12)"
 kubectl -n "$NS" create secret generic myampix-admin \
   --from-literal=DATABASE_URL="postgresql://myampix:myampix_dev@postgres:5432/admin_console_kind" \
   --from-literal=ANALYTICS_DATABASE_URL="postgresql://myampix:myampix_dev@postgres:5432/myampix" \
+  --from-literal=PURCHASE_DATABASE_URL="postgresql://mobile_purchase:mobile_purchase_dev@mobile-purchase-postgres:5433/mobile_purchase" \
   --from-literal=REDIS_URL="redis://redis:6379" \
   --from-literal=CLICKHOUSE_PASSWORD="myampix_dev" \
   --from-literal=ADMIN_DEFAULT_EMAIL="smoke@myampix.local" \
@@ -121,30 +124,39 @@ done
 BASE="http://localhost:$HTTP_PORT"
 # ingress-nginx picks up freshly-Ready endpoints with a short lag; give it a few seconds before asserting.
 for _ in $(seq 1 30); do
-  curl -fsS -H 'Host: api.local' "$BASE/health/ready" >/dev/null 2>&1 && break; sleep 1
+  curl -fsS -H 'Host: api.localhost' "$BASE/health/ready" >/dev/null 2>&1 && break; sleep 1
 done
-curl -fsS -H 'Host: api.local' "$BASE/health/ready" | grep -q '"status":"ready"' || fail "api.local /health/ready"
-curl -fsS -H 'Host: purchase.local' "$BASE/health/ready" | grep -q '"status":"ready"' || fail "purchase.local /health/ready"
-curl -fsS -H 'Host: app.local' "$BASE/" | grep -q '<div id="root">' || fail "app.local SPA shell"
-curl -fsS -H 'Host: app.local' "$BASE/config.js" | grep -q "purchaseApiBaseUrl: 'http://purchase.local:8080'" || fail "app.local runtime config.js"
-code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Host: app.local' "$BASE/api/v1/auth/refresh")"
+curl -fsS -H 'Host: api.localhost' "$BASE/health/ready" | grep -q '"status":"ready"' || fail "api.localhost /health/ready"
+curl -fsS -H 'Host: purchase.localhost' "$BASE/health/ready" | grep -q '"status":"ready"' || fail "purchase.local /health/ready"
+curl -fsS -H 'Host: app.localhost' "$BASE/" | grep -q '<div id="root">' || fail "app.local SPA shell"
+curl -fsS -H 'Host: app.localhost' "$BASE/config.js" | grep -q "purchaseApiBaseUrl: 'http://purchase.localhost:8089'" || fail "app.local runtime config.js"
+code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Host: app.localhost' "$BASE/api/v1/auth/refresh")"
 [ "$code" = "401" ] || fail "app.local/api should proxy to analytics (got HTTP $code, expected 401)"
 kubectl -n "$NS" get hpa >/dev/null || fail "HPAs missing"
 
 # Admin console: seeded login → forced password change → authenticated cluster status (design §8).
 [ "$(kubectl -n "$NS" get job myampix-admin-migrate -o jsonpath='{.status.succeeded}')" = "1" ] || fail "admin migrate job not succeeded"
-curl -fsS -H 'Host: admin.local' "$BASE/login" | grep -q 'MyAmpix Ops' || fail "admin login page"
-[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.local' "$BASE/api/admin/status")" = "401" ] || fail "admin API must be 401 unauthenticated"
+curl -fsS -H 'Host: admin.localhost' "$BASE/login" | grep -q 'MyAmpix Ops' || fail "admin login page"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.localhost' "$BASE/api/admin/status")" = "401" ] || fail "admin API must be 401 unauthenticated"
 JAR="$(mktemp)"
-curl -fsS -c "$JAR" -X POST -H 'Host: admin.local' -H 'Origin: http://admin.local' -H 'content-type: application/json' \
+curl -fsS -c "$JAR" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' \
   -d "{\"email\":\"smoke@myampix.local\",\"password\":\"$ADMIN_PW\"}" "$BASE/api/auth/login" | grep -q '"ok":true' || fail "admin seeded login"
-[ "$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' -H 'Host: admin.local' "$BASE/api/admin/status")" = "403" ] || fail "admin data must be blocked while password change is pending"
-curl -fsS -b "$JAR" -X POST -H 'Host: admin.local' -H 'Origin: http://admin.local' -H 'content-type: application/json' \
+[ "$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' -H 'Host: admin.localhost' "$BASE/api/admin/status")" = "403" ] || fail "admin data must be blocked while password change is pending"
+curl -fsS -b "$JAR" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' \
   -d "{\"currentPassword\":\"$ADMIN_PW\",\"newPassword\":\"$ADMIN_PW-rotated\"}" "$BASE/api/account/password" | grep -q '"ok":true' || fail "admin forced password change"
-STATUS_JSON="$(curl -fsS -b "$JAR" -H 'Host: admin.local' "$BASE/api/admin/status")"
+STATUS_JSON="$(curl -fsS -b "$JAR" -H 'Host: admin.localhost' "$BASE/api/admin/status")"
 grep -q '"available":true' <<<"$STATUS_JSON" || fail "admin status must see the cluster"
 grep -q '"name":' <<<"$STATUS_JSON" || fail "admin status must list at least one node"
 rm -f "$JAR"
 
 printf '\n\033[1;32mSMOKE OK\033[0m  (cluster %s kept; `pnpm k8s:local down` to delete)\n' "$CLUSTER"
 kubectl -n "$NS" get pods,hpa,ingress
+cat <<INFO
+
+Browse the stack (no /etc/hosts changes needed):
+  Dashboard      http://app.localhost:$HTTP_PORT      (sign in with your usual dev account)
+  Analytics API  http://api.localhost:$HTTP_PORT/health/ready
+  Purchase API   http://purchase.localhost:$HTTP_PORT/health/ready
+  Admin console  http://admin.localhost:$HTTP_PORT    →  smoke@myampix.local / $ADMIN_PW-rotated
+                 (throwaway smoke account; the assertions already rotated its seeded password)
+INFO
