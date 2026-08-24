@@ -2,7 +2,7 @@
   "name": "@myampix/mobile-analytics",
   "version": "0.1.0",
   "private": true,
-  "description": "MyAmpix NestJS backend — ingestion, analytics queries, auth",
+  "description": "MyAmpix NestJS backend \u2014 ingestion, analytics queries, auth",
   "scripts": {
     "prepare": "prisma generate",
     "build": "nest build",
@@ -14,7 +14,8 @@
     "test:int": "jest --config test/jest-integration.config.js --runInBand",
     "test:e2e": "jest --config test/jest-e2e.config.js --runInBand",
     "prisma": "prisma",
-    "seed": "prisma db seed"
+    "seed": "prisma db seed",
+    "account:create": "node dist/scripts/create-account.js"
   },
   "prisma": {
     "seed": "node prisma/seed.mjs"

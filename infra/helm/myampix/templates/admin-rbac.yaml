@@ -22,6 +22,9 @@ rules:
   - apiGroups: ['']
     resources: [nodes/proxy] # kubelet stats/summary via the API-server proxy
     verbs: [get]
+  - apiGroups: ['']
+    resources: [pods/log] # the console's Logs page (read-only)
+    verbs: [get]
   - apiGroups: [apps]
     resources: [deployments, replicasets]
     verbs: [get, list, watch]

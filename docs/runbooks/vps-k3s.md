@@ -147,6 +147,7 @@ helm -n myampix rollback myampix <REVISION>   # manual rollback (does NOT undo D
 |---|---|
 | Logs | `kubectl -n myampix logs -l app.kubernetes.io/name=mobile-analytics --tail=200 -f` |
 | Scale knobs | edit `infra/values.prod.yaml` (`analytics.autoscaling.*`, `purchase.api.autoscaling.*`, `dashboard.replicas`) then redeploy the same tag |
+| Close signups | `analytics.env.SIGNUP_ENABLED: "false"` in `infra/values.prod.yaml`, redeploy; create accounts with `kubectl -n myampix exec deploy/mobile-analytics -- node dist/scripts/create-account.js --email … --name …` (SETUP.md §8) |
 | Rotate a secret | edit the env file → `scripts/k8s/secrets.sh` → `kubectl -n myampix rollout restart deploy -l app.kubernetes.io/part-of=myampix` |
 | Headroom | `kubectl top pods -n myampix`, `kubectl top node` |
 | Certificates | `kubectl -n myampix get certificate` (renewed automatically by cert-manager) |

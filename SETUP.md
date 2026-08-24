@@ -17,7 +17,8 @@ Every value below is traceable to a real file — file paths are cited for the n
 5. [Dashboard setup](#5-dashboard-setup)
 6. [Mobile SDK setup](#6-mobile-sdk-setup)
 7. [Admin console setup](#7-admin-console-setup)
-8. [Full-stack test mode & production deploy](#8-full-stack-test-mode--production-deploy)
+8. [Closing signups & creating accounts manually](#8-closing-signups--creating-accounts-manually)
+9. [Full-stack test mode & production deploy](#9-full-stack-test-mode--production-deploy)
 
 > **Secrets rule (applies everywhere):** never commit `.env`, encryption keys, shared secrets,
 > `.p8`/`.p12`, or service-account JSON. Where a real secret is needed, this guide shows how to
@@ -862,7 +863,40 @@ alert events. Outside a cluster the Kubernetes pages simply report "not running 
 
 Tests / checks: `pnpm --filter @myampix/admin test | typecheck | build`.
 
-## 8. Full-stack test mode & production deploy
+## 8. Closing signups & creating accounts manually
+
+Self-hosted instances usually don't want a public register page. Set, in `backend/mobile_analytics`'s
+environment (`backend/mobile_analytics/.env` locally; `analytics.env.SIGNUP_ENABLED` in the chart
+values for k3s):
+
+```bash
+SIGNUP_ENABLED=false
+```
+
+Effect: `POST /api/v1/auth/signup` answers `403 Signups disabled`, `GET /api/v1/auth/config` reports
+`{"signup_enabled": false}`, and the dashboard hides the register page and the login page's
+"Sign up" link (`/signup` redirects to `/login`). Existing accounts, logins, and sessions are
+untouched. **Note:** organization invites still require the invitee to have an account — on a closed
+instance, create it with the script below first.
+
+**Creating an account manually** (works whether signups are open or closed — this is the operator's
+escape hatch; it runs the exact same provisioning as the signup endpoint: user + personal org +
+default project + SDK token):
+
+```bash
+# Local (after `pnpm --filter @myampix/mobile-analytics build`; reads backend/mobile_analytics/.env):
+pnpm --filter @myampix/mobile-analytics account:create -- --email you@example.com --name "You"
+# → prints a generated one-time password (or pass --password '…' to choose one)
+
+# Production (inside the running pod — the image ships the script):
+kubectl -n myampix exec deploy/mobile-analytics -- \
+  node dist/scripts/create-account.js --email you@example.com --name "You"
+```
+
+Exit codes: `0` created · `1` bad usage · `2` failed (e.g. email already registered). The generated
+password is printed once; the user should change it after first login.
+
+## 9. Full-stack test mode & production deploy
 
 **Test mode** — the entire platform (both backends + migrations, dashboard, admin console, ingress,
 HPAs) in a local kind cluster wired to your Compose databases:

@@ -70,6 +70,20 @@ export async function kubePatch<T>(path: string, body: unknown, contentType?: st
   return kubeRequest<T>('PATCH', path, body, contentType);
 }
 
+/** Raw-text GET for endpoints that do not speak JSON (pod logs). */
+export async function kubeGetText(path: string, timeoutMs = 10_000): Promise<string> {
+  const host = process.env.KUBERNETES_SERVICE_HOST;
+  const port = process.env.KUBERNETES_SERVICE_PORT ?? '443';
+  if (!host) throw new KubeError(0, 'not running in a cluster');
+  const res = await undiciFetch(`https://${host}:${port}${path}`, {
+    headers: { authorization: `Bearer ${saToken()}` },
+    dispatcher: kubeAgent(),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) throw new KubeError(res.status, `${path} → HTTP ${res.status}`);
+  return res.text();
+}
+
 export async function kubeGet<T>(path: string): Promise<T> {
   const host = process.env.KUBERNETES_SERVICE_HOST;
   const port = process.env.KUBERNETES_SERVICE_PORT ?? '443';

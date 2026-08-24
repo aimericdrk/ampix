@@ -20,6 +20,8 @@ hostDbs:
 # Optional overrides (defaults in values.yaml are sized for a 4 vCPU / 8 GB VPS):
 # analytics:
 #   autoscaling: { minReplicas: 2, maxReplicas: 6 }
+#   env:
+#     SIGNUP_ENABLED: "false" # close self-service registration (accounts via create-account script)
 # purchase:
 #   env:
 #     APPLE_BUNDLE_IDS: com.your.app

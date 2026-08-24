@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 const NAV = [
   { href: '/', label: 'Overview' },
   { href: '/metrics', label: 'Metrics' },
+  { href: '/logs', label: 'Logs' },
   { href: '/kubernetes', label: 'Kubernetes' },
   { href: '/docker', label: 'Docker' },
   { href: '/datastores', label: 'Datastores' },

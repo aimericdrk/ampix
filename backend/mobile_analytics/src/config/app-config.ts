@@ -95,6 +95,10 @@ const envSchema = z.object({
   // suppressed (app.module maps them to `debug` via customLogLevel) while app logs (info) and
   // 4xx/5xx request logs still surface. Raise to `debug`/`trace` to see successful-request logs.
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  // Self-hosted instances often want a closed door: 'false' disables POST /api/v1/auth/signup
+  // (403) and the dashboard hides its register page. Existing accounts and invites-between-existing
+  // -users are unaffected; new people are then created via scripts/create-account (see SETUP.md §7).
+  SIGNUP_ENABLED: z.enum(['true', 'false']).default('true'),
   // feat-17 §3.1 — "Ask your data". Both optional: no key means the feature is simply
   // "unconfigured" (MistralService maps this to a 503, not a boot-time config error).
   MISTRAL_API_KEY: z.string().optional(),
@@ -125,6 +129,9 @@ export interface AppConfig {
   // fixtures outside this task's scope (e.g. test/integration/clickhouse.int-spec.ts) keep compiling
   // without every fixture needing an update. loadConfig() always populates it (default 'info').
   logLevel?: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
+  // Optional (fixture-compat convention, see logLevel above); loadConfig() always populates it.
+  // false ⇒ the signup endpoint answers 403 and the dashboard hides registration.
+  signupEnabled?: boolean;
   // Optional (rather than required) so pre-existing AppConfig fixtures outside this task's scope
   // (e.g. test/integration/clickhouse.int-spec.ts, owned by concurrent work) keep compiling
   // without every hand-built fixture needing an update. loadConfig() always populates it.
@@ -236,6 +243,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     screenshotMaxKb: v.SCREENSHOT_MAX_KB,
     firebaseStorageBucket: v.FIREBASE_STORAGE_BUCKET,
     logLevel: v.LOG_LEVEL,
+    signupEnabled: v.SIGNUP_ENABLED === 'true',
     mistralApiKey: v.MISTRAL_API_KEY,
     mistralModel: v.MISTRAL_MODEL,
     auth: {
@@ -313,7 +321,8 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     INGEST_MAX_BODY_KB: String(config.ingestMaxBodyKb),
     INGEST_RATE_LIMIT_PER_MIN: String(config.ingestRateLimitPerMin),
     SCREENSHOT_MAX_KB: String(config.screenshotMaxKb),
-    FIREBASE_STORAGE_BUCKET: config.firebaseStorageBucket ?? '(not set — in-memory screenshot store)',
+    FIREBASE_STORAGE_BUCKET:
+      config.firebaseStorageBucket ?? '(not set — in-memory screenshot store)',
     MISTRAL_API_KEY: redacted(config.mistralApiKey),
     MISTRAL_MODEL: config.mistralModel ?? 'mistral-small-latest',
     TOTP_ISSUER: auth.totpIssuer,

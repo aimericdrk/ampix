@@ -1,8 +1,12 @@
-import { Link } from '@tanstack/react-router';
+import { Link, Navigate } from '@tanstack/react-router';
+import { useSignupEnabled } from '../useSignupEnabled';
 import { GlowCard } from '../../../components/ui/glow-card';
 import { SignupForm } from './SignupForm';
 
 export function SignupPage() {
+  const signupEnabled = useSignupEnabled();
+  // Closed instance (backend SIGNUP_ENABLED=false): the register page does not exist.
+  if (signupEnabled === false) return <Navigate to="/login" />;
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg p-6">
       <div

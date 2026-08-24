@@ -399,7 +399,12 @@ export const FUNNEL_FIXTURE: FunnelResponse = {
   steps: [
     { event: 'app_open', count: 1000, conversion_from_prev: 1, conversion_from_top: 1 },
     { event: 'signup_started', count: 620, conversion_from_prev: 0.62, conversion_from_top: 0.62 },
-    { event: 'checkout_completed', count: 145, conversion_from_prev: 0.234, conversion_from_top: 0.145 },
+    {
+      event: 'checkout_completed',
+      count: 145,
+      conversion_from_prev: 0.234,
+      conversion_from_top: 0.145,
+    },
   ],
   overall_conversion: 0.145,
 };
@@ -641,9 +646,33 @@ export const USER_SUBSCRIPTION_FIXTURE: UserSubscription = {
 
 export const SCREENS_FIXTURE: ScreensResponse = {
   screens: [
-    { screen_name: 'home', capture_count: 3, latest_captured_at: '2026-07-01T10:00:00Z', width: 390, height: 844, latest_image_hash: 'hash-home', latest_app_version: '1.0.0' },
-    { screen_name: 'catalog', capture_count: 2, latest_captured_at: '2026-07-01T10:05:00Z', width: 390, height: 844, latest_image_hash: 'hash-catalog', latest_app_version: '1.0.0' },
-    { screen_name: 'checkout', capture_count: 1, latest_captured_at: '2026-07-01T10:10:00Z', width: 390, height: 844, latest_image_hash: 'hash-checkout', latest_app_version: '1.0.0' },
+    {
+      screen_name: 'home',
+      capture_count: 3,
+      latest_captured_at: '2026-07-01T10:00:00Z',
+      width: 390,
+      height: 844,
+      latest_image_hash: 'hash-home',
+      latest_app_version: '1.0.0',
+    },
+    {
+      screen_name: 'catalog',
+      capture_count: 2,
+      latest_captured_at: '2026-07-01T10:05:00Z',
+      width: 390,
+      height: 844,
+      latest_image_hash: 'hash-catalog',
+      latest_app_version: '1.0.0',
+    },
+    {
+      screen_name: 'checkout',
+      capture_count: 1,
+      latest_captured_at: '2026-07-01T10:10:00Z',
+      width: 390,
+      height: 844,
+      latest_image_hash: 'hash-checkout',
+      latest_app_version: '1.0.0',
+    },
   ],
 };
 
@@ -1009,6 +1038,9 @@ export function projectsHandlerWithoutRc() {
 }
 
 export const handlers = [
+  // Public capability discovery — signups are open in the default test instance.
+  http.get('/api/v1/auth/config', () => HttpResponse.json({ signup_enabled: true })),
+
   http.post('/api/v1/auth/login', async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string };
     const fixture = findFixture(body.email, body.password);
@@ -1342,7 +1374,10 @@ export const handlers = [
       // owner caller reaches here (admins were blocked above), but demoting/removing the sole
       // project owner is still a conflict.
       if (existing?.role === 'owner' && ownerCountFor(projectId) <= 1) {
-        return problem(409, newRole === null ? 'Cannot remove the last owner' : 'Cannot demote the last owner');
+        return problem(
+          409,
+          newRole === null ? 'Cannot remove the last owner' : 'Cannot demote the last owner',
+        );
       }
 
       if (newRole === null) {
@@ -1538,7 +1573,9 @@ export const handlers = [
     const response: RcIntegrationStatus = {
       ...RC_STATUS_FIXTURE,
       connected: true,
-      api_key_masked: body.api_key ? `…${body.api_key.slice(-4)}` : RC_STATUS_FIXTURE.api_key_masked,
+      api_key_masked: body.api_key
+        ? `…${body.api_key.slice(-4)}`
+        : RC_STATUS_FIXTURE.api_key_masked,
       rc_project_id: body.rc_project_id ?? RC_STATUS_FIXTURE.rc_project_id,
       sandbox_mode: body.sandbox_mode ?? RC_STATUS_FIXTURE.sandbox_mode,
     };
@@ -1557,7 +1594,9 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     const status = new URL(request.url).searchParams.get('status');
-    const events = status ? RC_JOURNAL_FIXTURE.filter((e) => e.status === status) : RC_JOURNAL_FIXTURE;
+    const events = status
+      ? RC_JOURNAL_FIXTURE.filter((e) => e.status === status)
+      : RC_JOURNAL_FIXTURE;
     const response: RcJournalResponse = { events };
     return HttpResponse.json(response);
   }),
@@ -1578,13 +1617,16 @@ export const handlers = [
     return HttpResponse.json(response, { status: 202 });
   }),
 
-  http.get('/api/v1/projects/:projectId/integrations/revenuecat/users/:distinctId', ({ request }) => {
-    const token = bearerToken(request);
-    if (!token || !ACCEPTED_TOKENS.has(token))
-      return problem(401, 'Access token invalid or expired');
-    const response: UserSubscriptionResponse = { subscription: USER_SUBSCRIPTION_FIXTURE };
-    return HttpResponse.json(response);
-  }),
+  http.get(
+    '/api/v1/projects/:projectId/integrations/revenuecat/users/:distinctId',
+    ({ request }) => {
+      const token = bearerToken(request);
+      if (!token || !ACCEPTED_TOKENS.has(token))
+        return problem(401, 'Access token invalid or expired');
+      const response: UserSubscriptionResponse = { subscription: USER_SUBSCRIPTION_FIXTURE };
+      return HttpResponse.json(response);
+    },
+  ),
 
   http.post(
     '/api/v1/projects/:projectId/integrations/revenuecat/users/:distinctId/refresh',
@@ -2040,7 +2082,8 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     const body = (await request.json()) as ScreenPathsQuery;
-    if (body.steps < 1 || body.steps > 5) return problem(400, 'Invalid screen-paths: steps out of range');
+    if (body.steps < 1 || body.steps > 5)
+      return problem(400, 'Invalid screen-paths: steps out of range');
     if (body.max_nodes_per_step < 1 || body.max_nodes_per_step > 20)
       return problem(400, 'Invalid screen-paths: max_nodes_per_step out of range');
     return HttpResponse.json(SCREEN_PATHS_FIXTURE);

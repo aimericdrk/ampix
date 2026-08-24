@@ -49,9 +49,24 @@ export class AuthController {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
+  /** Public capability discovery — the dashboard uses it to show/hide the register page. */
+  @Get('config')
+  authConfig(): { signup_enabled: boolean } {
+    return { signup_enabled: this.config.signupEnabled !== false };
+  }
+
   @Post('signup')
   @HttpCode(200)
   async signup(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    if (this.config.signupEnabled === false) {
+      // SIGNUP_ENABLED=false (self-hosted closed instance): the endpoint stays routable but inert.
+      throw new ProblemException({
+        status: 403,
+        title: 'Signups disabled',
+        detail:
+          'Account creation is disabled on this instance. Ask an administrator to create your account.',
+      });
+    }
     const dto = parseOrThrow(signupSchema, body);
     const session = await this.authService.signup(dto);
     setRefreshCookie(res, session.refreshToken, requireAuthConfig(this.config));

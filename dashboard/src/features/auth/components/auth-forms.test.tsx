@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -154,5 +154,33 @@ describe('SignupForm', () => {
     expect(await screen.findByText('Email domain is not allowed')).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.queryByText('Validation failed')).not.toBeInTheDocument();
+  });
+});
+
+describe('signup disabled (backend SIGNUP_ENABLED=false)', () => {
+  function disableSignups() {
+    server.use(http.get('/api/v1/auth/config', () => HttpResponse.json({ signup_enabled: false })));
+  }
+
+  it('hides the sign-up link on the login page', async () => {
+    disableSignups();
+    renderApp('/login');
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
+    // The link renders optimistically, then withdraws once the config answer lands.
+    await waitFor(() =>
+      expect(screen.queryByRole('link', { name: 'Sign up' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('redirects /signup to the login page', async () => {
+    disableSignups();
+    renderApp('/signup');
+    expect(await screen.findByRole('heading', { name: 'Log in to MyAmpix' })).toBeInTheDocument();
+  });
+
+  it('keeps the sign-up link when the instance is open', async () => {
+    renderApp('/login');
+    await screen.findByRole('heading', { name: 'Log in to MyAmpix' });
+    expect(await screen.findByRole('link', { name: 'Sign up' })).toBeInTheDocument();
   });
 });

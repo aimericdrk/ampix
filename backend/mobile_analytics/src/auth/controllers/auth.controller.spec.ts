@@ -21,7 +21,7 @@ function fakeRequest(overrides: Partial<AuthRequest> = {}): AuthRequest {
 }
 
 describe('AuthController', () => {
-  function makeController() {
+  function makeController(configOverrides: Parameters<typeof makeAuthTestConfig>[0] = {}) {
     const authService = {
       signup: jest.fn(),
       login: jest.fn(),
@@ -57,12 +57,35 @@ describe('AuthController', () => {
       totp as unknown as TotpService,
       recoveryCodes as unknown as RecoveryCodeService,
       attemptLimiter as unknown as TwoFactorAttemptLimiter,
-      makeAuthTestConfig(),
+      makeAuthTestConfig(configOverrides),
     );
     return { controller, authService, tokens, refreshTokens, totp, recoveryCodes, attemptLimiter };
   }
 
+  describe('auth config discovery', () => {
+    it('reports signups enabled by default (and when explicitly on)', () => {
+      expect(makeController().controller.authConfig()).toEqual({ signup_enabled: true });
+      expect(makeController({ signupEnabled: true }).controller.authConfig()).toEqual({
+        signup_enabled: true,
+      });
+    });
+
+    it('reports signups disabled when the flag is off', () => {
+      expect(makeController({ signupEnabled: false }).controller.authConfig()).toEqual({
+        signup_enabled: false,
+      });
+    });
+  });
+
   describe('signup', () => {
+    it('answers 403 without touching the service when signups are disabled', async () => {
+      const { controller, authService } = makeController({ signupEnabled: false });
+      await expect(
+        controller.signup({ email: 'a@b.com', password: 'password123', name: 'A' }, fakeResponse()),
+      ).rejects.toMatchObject({ problem: expect.objectContaining({ status: 403 }) });
+      expect(authService.signup).not.toHaveBeenCalled();
+    });
+
     it('sets the refresh cookie and returns access_token + user', async () => {
       const { controller, authService } = makeController();
       authService.signup.mockResolvedValue({ accessToken: 'at', refreshToken: 'rt', user: USER });

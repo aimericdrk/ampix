@@ -17,7 +17,14 @@
     "useDefineForClassFields": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
+    // Pin the React type package this app compiles against. The pnpm workspace also contains
+    // React 19 types (admin/); without this, transitive .d.ts imports of 'react' can resolve the
+    // hoisted 19 copy and break this React-18 app's typecheck.
+    "paths": {
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"]
+    }
   },
   "include": [
     "src",

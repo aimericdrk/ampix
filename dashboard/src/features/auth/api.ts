@@ -20,6 +20,15 @@ import { authStore } from './store';
 /** Shared TanStack Query key for `GET /auth/me`, used by both Security and Account pages. */
 export const ME_QUERY_KEY = ['auth', 'me'] as const;
 
+/** Public capability discovery (no auth): whether this instance accepts self-service signups. */
+export interface AuthConfigResponse {
+  signup_enabled: boolean;
+}
+
+export async function getAuthConfig(): Promise<AuthConfigResponse> {
+  return apiFetch<AuthConfigResponse>('/api/v1/auth/config', { method: 'GET' });
+}
+
 export async function login(input: LoginRequest): Promise<AuthResponse> {
   const response = await apiFetch<AuthResponse>('/api/v1/auth/login', {
     method: 'POST',

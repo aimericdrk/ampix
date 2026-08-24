@@ -521,6 +521,9 @@ operations counterpart to the product dashboard:
   node CPU/RAM/disk (percent and absolute), pod counts, restarts, per-deployment/HPA replicas,
   service health latency, Postgres sizes/connections, Redis memory/keys, ClickHouse disk, and the
   host Docker container count.
+- **Logs page**: browse the live logs of every service — Kubernetes pods in the release namespace
+  (per container, with a "previous container" option for crash loops) and, when the socket is
+  mounted, the host Docker containers. Tail size, time window, text filter, 5 s follow mode.
 - **Alerting & history**: an in-process sampler snapshots metrics every 5 min (7-day retention);
   fixed rules (CPU>90 %, mem>90 %, disk>85 %, store/service down, degraded deployment,
   cert <14 days) open/close alerts with a 2-tick flap guard, optional Slack/Discord-style

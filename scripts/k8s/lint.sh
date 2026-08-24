@@ -60,6 +60,7 @@ show purchase-configmap.yaml | grep -q 'DASHBOARD_ORIGINS: "https://app.CHANGE_M
 RBAC="$(show admin-rbac.yaml)"
 ! grep -qE 'verbs:.*(create|update|patch|delete)' <<<"$RBAC" || fail "admin RBAC must stay read-only"
 grep -q 'nodes/proxy' <<<"$RBAC" || fail "admin RBAC needs nodes/proxy for stats/summary"
+grep -q 'pods/log' <<<"$RBAC" || fail "admin RBAC needs pods/log for the Logs page"
 show admin-deployment.yaml | grep -q 'automountServiceAccountToken: true' || fail "admin deployment must mount its SA token"
 show admin-deployment.yaml | grep -q 'supplementalGroups' || fail "admin deployment must add the docker gid when dockerSock is enabled"
 show admin-migrate-job.yaml | grep -q 'helm.sh/hook: pre-install,pre-upgrade' || fail "admin migrate must be a hook"
