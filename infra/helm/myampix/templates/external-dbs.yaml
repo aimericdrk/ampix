@@ -1,0 +1,46 @@
+{{- /*
+Datastores live in Docker Compose on the VPS. For each entry in hostDbs.services render a
+selector-less Service plus a hand-managed EndpointSlice pointing at hostDbs.ip, so pods resolve the
+same hostnames Compose uses (postgres, clickhouse, redis, mobile-purchase-postgres).
+The migrate hook Jobs cannot use these (hooks run before regular resources exist) — they carry the
+same name→IP mapping as hostAliases (see "myampix.hostDbAliases").
+*/ -}}
+{{- range .Values.hostDbs.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "myampix.labels" $ | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" $ "name" .name "component" "external-db") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    {{- range .ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      protocol: TCP
+    {{- end }}
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: {{ .name }}-host
+  labels:
+    kubernetes.io/service-name: {{ .name }}
+    endpointslice.kubernetes.io/managed-by: helm
+    {{- include "myampix.labels" $ | nindent 4 }}
+addressType: IPv4
+ports:
+  {{- range .ports }}
+  - name: {{ .name }}
+    port: {{ .port }}
+    protocol: TCP
+  {{- end }}
+endpoints:
+  - addresses:
+      - {{ $.Values.hostDbs.ip | quote }}
+    conditions:
+      ready: true
+{{- end }}

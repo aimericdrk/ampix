@@ -1,0 +1,51 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dashboard
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "dashboard" "component" "web") | nindent 4 }}
+  annotations:
+    {{- if .Values.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.tls.issuer }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.hosts.app | quote }}]
+      secretName: {{ include "myampix.tlsSecret" .Values.hosts.app }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.hosts.app | quote }}
+      http:
+        paths:
+          {{- if .Values.analytics.enabled }}
+          # Same-origin API for the SPA (dashboard.apiBaseUrl = ""): the httpOnly refresh cookie stays first-party.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: mobile-analytics
+                port:
+                  name: http
+          - path: /ingest
+            pathType: Prefix
+            backend:
+              service:
+                name: mobile-analytics
+                port:
+                  name: http
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dashboard
+                port:
+                  name: http
+{{- end }}

@@ -1,0 +1,25 @@
+# Copy to infra/values.prod.yaml (gitignored) and fill every CHANGE_ME. Deploy with:
+#   scripts/k8s/deploy.sh <image-tag>            (defaults to infra/values.prod.yaml)
+image:
+  owner: CHANGE_ME # your GitHub user/org, lowercase
+  pullSecret: ghcr-pull # "" if the GHCR packages are public
+
+hosts:
+  api: api.CHANGE_ME.com
+  purchase: purchase.CHANGE_ME.com
+  app: app.CHANGE_ME.com
+
+tls:
+  enabled: true
+  email: CHANGE_ME@example.com
+
+hostDbs:
+  ip: 10.0.0.2 # BIND_IP from infra/.env.prod (VPS private IP the Compose DBs listen on)
+
+# Optional overrides (defaults in values.yaml are sized for a 4 vCPU / 8 GB VPS):
+# analytics:
+#   autoscaling: { minReplicas: 2, maxReplicas: 6 }
+# purchase:
+#   env:
+#     APPLE_BUNDLE_IDS: com.your.app
+#     APPLE_APP_APPLE_ID: "123456789"

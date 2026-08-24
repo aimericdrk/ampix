@@ -1,0 +1,34 @@
+# kind smoke test (scripts/k8s/local.sh). Images are built locally and `kind load`ed under these names.
+image:
+  owner: local
+  tag: dev
+  pullPolicy: IfNotPresent
+  pullSecret: ""
+hosts:
+  api: api.local
+  purchase: purchase.local
+  app: app.local
+ingress:
+  className: nginx
+tls:
+  enabled: false
+hostDbs:
+  ip: 127.0.0.1 # overridden with --set hostDbs.ip=<host ip as seen from the kind node>
+analytics:
+  autoscaling: { enabled: true, minReplicas: 1, maxReplicas: 2, targetCPUUtilizationPercentage: 70 }
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+purchase:
+  api:
+    autoscaling: { enabled: true, minReplicas: 1, maxReplicas: 2, targetCPUUtilizationPercentage: 70 }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: "1", memory: 384Mi }
+  scheduler:
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 384Mi }
+dashboard:
+  replicas: 1
+  purchaseApiBaseUrl: http://purchase.local:8080

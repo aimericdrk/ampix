@@ -48,3 +48,9 @@ google-service-account.json
 *-service-account*.json
 *.serviceaccount.json
 ruvector.db
+# Kubernetes / VPS deploy — real secrets and per-environment values (NEVER commit)
+infra/k8s/secrets/*
+!infra/k8s/secrets/*.example
+infra/values.prod.yaml
+infra/.env.prod
+!infra/.env.prod.example

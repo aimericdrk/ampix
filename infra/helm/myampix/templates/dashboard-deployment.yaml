@@ -1,0 +1,69 @@
+{{- if .Values.dashboard.enabled }}
+{{- $d := .Values.dashboard }}
+{{- $sel := dict "root" . "name" "dashboard" "component" "web" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" $sel | nindent 4 }}
+spec:
+  replicas: {{ $d.replicas }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "myampix.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "myampix.labels" . | nindent 8 }}
+        {{- include "myampix.selectorLabels" $sel | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/dashboard-configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 15
+      {{- include "myampix.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "myampix.podSecurityContext" . | nindent 8 }}
+        runAsUser: {{ $d.runAsUser }}
+        runAsGroup: {{ $d.runAsGroup }}
+      containers:
+        - name: web
+          image: {{ include "myampix.image" (dict "root" . "name" "dashboard") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-dashboard-config
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          resources:
+            {{- toYaml $d.resources | nindent 12 }}
+          securityContext:
+            {{- include "myampix.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            # nginx-unprivileged writes its pid/cache under /tmp and the envsubst'd templates into conf.d.
+            - name: tmp
+              mountPath: /tmp
+            - name: confd
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: confd
+          emptyDir: {}
+{{- end }}

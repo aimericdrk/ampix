@@ -1,0 +1,15 @@
+# Ignore patterns for dashboard/Dockerfile (build context = repo root, so patterns are root-relative).
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+dashboard/e2e
+dashboard/e2e-functional
+dashboard/test-results
+dashboard/playwright-report
+**/*.test.ts
+**/*.test.tsx
+.git
+**/.DS_Store

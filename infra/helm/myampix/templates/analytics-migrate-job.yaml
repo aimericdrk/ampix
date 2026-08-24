@@ -1,0 +1,59 @@
+{{- if .Values.analytics.enabled }}
+{{- $a := .Values.analytics }}
+{{- $sel := dict "root" . "name" "mobile-analytics" "component" "migrate" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-analytics-migrate
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" $sel | nindent 4 }}
+  annotations:
+    # Runs to completion BEFORE any Deployment is touched; a failure aborts the release.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    # Previous run (success or failure) is deleted right before the next one, so failed-job logs stay
+    # inspectable until you redeploy.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "myampix.labels" . | nindent 8 }}
+        {{- include "myampix.selectorLabels" $sel | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- include "myampix.hostDbAliases" . | nindent 6 }}
+      {{- include "myampix.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "myampix.podSecurityContext" . | nindent 8 }}
+        runAsUser: {{ $a.runAsUser }}
+        runAsGroup: {{ $a.runAsGroup }}
+      containers:
+        - name: migrate
+          # Same runtime image as the API: it carries the global `prisma` CLI (see the Dockerfile).
+          image: {{ include "myampix.image" (dict "root" . "name" "mobile-analytics") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"]
+          env:
+            - name: CHECKPOINT_DISABLE # no Prisma CLI telemetry/update checks from the cluster
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: {{ $a.secretName }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

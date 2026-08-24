@@ -1,0 +1,38 @@
+# Rendered to /etc/nginx/conf.d/default.conf by the nginx entrypoint (only $API_BASE_URL and
+# $PURCHASE_API_BASE_URL are substituted, see NGINX_ENVSUBST_FILTER in the Dockerfile).
+server {
+  listen 8080;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  gzip on;
+  gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+  gzip_min_length 1024;
+
+  # Kubernetes probes.
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 'ok';
+  }
+
+  # Runtime config rendered from env at container start (overrides the dev public/config.js in dist/).
+  location = /config.js {
+    alias /etc/nginx/conf.d/config.js;
+    default_type application/javascript;
+    add_header Cache-Control "no-store";
+  }
+
+  # Hashed Vite assets: cache forever.
+  location /assets/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    try_files $uri =404;
+  }
+
+  # SPA fallback; index.html must always be revalidated so a new deploy is picked up.
+  location / {
+    add_header Cache-Control "no-cache";
+    try_files $uri /index.html;
+  }
+}

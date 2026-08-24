@@ -1,0 +1,14 @@
+{{- if .Values.dashboard.enabled }}
+{{- $d := .Values.dashboard }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-dashboard-config
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "dashboard" "component" "web") | nindent 4 }}
+data:
+  # Rendered into /config.js by the nginx image at start (window.___MYAMPIX_CONFIG__).
+  API_BASE_URL: {{ $d.apiBaseUrl | quote }}
+  PURCHASE_API_BASE_URL: {{ default (printf "%s://%s" (include "myampix.scheme" .) .Values.hosts.purchase) $d.purchaseApiBaseUrl | quote }}
+{{- end }}

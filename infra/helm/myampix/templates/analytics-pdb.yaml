@@ -1,0 +1,14 @@
+{{- if .Values.analytics.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mobile-analytics
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "mobile-analytics" "component" "api") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.analytics.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "myampix.selectorLabels" (dict "root" . "name" "mobile-analytics" "component" "api") | nindent 6 }}
+{{- end }}

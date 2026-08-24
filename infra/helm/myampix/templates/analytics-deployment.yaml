@@ -1,0 +1,84 @@
+{{- if .Values.analytics.enabled }}
+{{- $a := .Values.analytics }}
+{{- $sel := dict "root" . "name" "mobile-analytics" "component" "api" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-analytics
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" $sel | nindent 4 }}
+spec:
+  {{- if not $a.autoscaling.enabled }}
+  replicas: {{ $a.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "myampix.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "myampix.labels" . | nindent 8 }}
+        {{- include "myampix.selectorLabels" $sel | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/analytics-configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      {{- include "myampix.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "myampix.podSecurityContext" . | nindent 8 }}
+        runAsUser: {{ $a.runAsUser }}
+        runAsGroup: {{ $a.runAsGroup }}
+      containers:
+        - name: api
+          image: {{ include "myampix.image" (dict "root" . "name" "mobile-analytics") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Bypass docker-entrypoint.sh: it runs `prisma migrate deploy` at boot, which must not race
+          # across replicas. Migrations run once in the pre-upgrade hook Job (analytics-migrate-job.yaml).
+          command: ["node", "dist/main.js"]
+          ports:
+            - name: http
+              containerPort: 8088
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-analytics-config
+            - secretRef:
+                name: {{ $a.secretName }}
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              # Let the ingress/endpoints drop this pod before SIGTERM (Nest handles SIGTERM via enableShutdownHooks).
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            {{- toYaml $a.resources | nindent 12 }}
+          securityContext:
+            {{- include "myampix.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

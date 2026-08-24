@@ -1,0 +1,18 @@
+{{- if and .Values.tls.enabled .Values.tls.createIssuer }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.tls.issuer }}
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: {{ .Values.tls.acmeServer }}
+    email: {{ required "tls.email is required when tls.enabled" .Values.tls.email }}
+    privateKeySecretRef:
+      name: {{ .Values.tls.issuer }}-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: {{ .Values.ingress.className }}
+{{- end }}
