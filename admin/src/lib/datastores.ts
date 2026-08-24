@@ -146,18 +146,21 @@ export interface ServiceHealth {
   status?: number;
   checks?: Record<string, boolean>;
   error?: string;
+  /** Wall-clock duration of the readiness probe — charted as svc.latency.ms/<name>. */
+  durationMs?: number;
 }
 
 export async function probeService(name: string, baseUrl: string | undefined): Promise<ServiceHealth | null> {
   if (!baseUrl) return null;
+  const startedAt = Date.now();
   try {
     const res = await fetch(`${baseUrl}/health/ready`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS + 1500),
     });
     const body = (await res.json().catch(() => ({}))) as { checks?: Record<string, boolean> };
-    return { name, ok: res.ok, status: res.status, checks: body.checks };
+    return { name, ok: res.ok, status: res.status, checks: body.checks, durationMs: Date.now() - startedAt };
   } catch (e) {
-    return { name, ok: false, error: e instanceof Error ? e.message : 'unreachable' };
+    return { name, ok: false, error: e instanceof Error ? e.message : 'unreachable', durationMs: Date.now() - startedAt };
   }
 }

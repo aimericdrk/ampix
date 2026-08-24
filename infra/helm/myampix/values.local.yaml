@@ -38,6 +38,8 @@ dashboard:
   # The browser reaches the kind ingress on the mapped host port (local.sh HTTP_PORT, default 8089).
   purchaseApiBaseUrl: http://purchase.localhost:8089
 admin:
+  env:
+    SAMPLE_INTERVAL_MINUTES: "1" # dense samples so the metrics charts fill quickly in test mode
   dockerSock:
     enabled: false # kind nodes run containerd — there is no dockerd socket to mount
   resources:

@@ -84,10 +84,19 @@ export async function resetPassword(
   const tempPassword = generateTempPassword();
   await db.adminUser.update({
     where: { id: targetId },
-    data: { passwordHash: await hashPassword(tempPassword), mustChangePassword: true, lockedUntil: null, failedLoginCount: 0 },
+    // Also clears TOTP — an admin reset is the lost-authenticator recovery path (v2 design Phase 1).
+    data: {
+      passwordHash: await hashPassword(tempPassword),
+      mustChangePassword: true,
+      lockedUntil: null,
+      failedLoginCount: 0,
+      totpSecretEnc: null,
+      totpEnabledAt: null,
+    },
   });
+  await db.adminRecoveryCode.deleteMany({ where: { userId: targetId } });
   await revokeAllSessions(db, targetId);
-  await writeAudit(db, 'user.reset_password', actor.id, { targetId, email: target.email }, actor.ip);
+  await writeAudit(db, 'user.reset_password', actor.id, { targetId, email: target.email, totpCleared: true }, actor.ip);
   return { tempPassword };
 }
 

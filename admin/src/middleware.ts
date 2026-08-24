@@ -18,7 +18,9 @@ export function middleware(req: NextRequest): NextResponse {
     url.search = '';
     return NextResponse.redirect(url);
   }
-  if (hasCookie && pathname === '/login') {
+  // `stale=1` breaks the redirect loop a dead-but-present cookie would otherwise cause
+  // (requireSession → /login?stale=1 → middleware → / → requireSession → …).
+  if (hasCookie && pathname === '/login' && !req.nextUrl.searchParams.has('stale') && !req.nextUrl.searchParams.has('e')) {
     const url = req.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);

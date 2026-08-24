@@ -30,6 +30,7 @@ function mockDb(over: { user?: unknown; failsEmail?: number; failsIp?: number })
     },
     adminSession: {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 's1', ...data })),
+      update: vi.fn(async () => ({})),
     },
     adminAuditEvent: { create: vi.fn(async () => ({})) },
   };
@@ -45,6 +46,7 @@ function user(over: Record<string, unknown> = {}) {
     mustChangePassword: false,
     failedLoginCount: 0,
     lockedUntil: null,
+    totpEnabledAt: null,
     ...over,
   };
 }
@@ -64,6 +66,19 @@ describe('attemptLogin', () => {
       expect.objectContaining({ data: { failedLoginCount: 0, lockedUntil: null } }),
     );
     expect(db.adminSession.create).toHaveBeenCalled();
+    if (res.ok) expect(res.totpRequired).toBe(false);
+    expect(db.adminSession.update).not.toHaveBeenCalled();
+  });
+
+  it('marks the session TOTP-pending when the user has 2FA enabled', async () => {
+    const db = mockDb({ user: user({ totpEnabledAt: new Date('2026-08-01') }) });
+    const res = await attemptLogin(db, 'ops@example.com', GOOD_PASSWORD, '1.2.3.4', 'ua', now);
+    expect(res.ok && res.totpRequired).toBe(true);
+    expect(db.adminSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { totpPendingUntil: new Date(now.getTime() + 5 * 60_000) },
+      }),
+    );
   });
 
   it('fails generically for unknown user, wrong password, disabled, and locked accounts', async () => {

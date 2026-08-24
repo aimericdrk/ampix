@@ -1,0 +1,31 @@
+{{- if and .Values.admin.enabled .Values.admin.opsActions.enabled }}
+# Write RBAC for the console's operational actions (restart / scale) — deliberately a NAMESPACED
+# Role, never a ClusterRole: the console may only act on this release's own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-admin-ops
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, deployments/scale]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-admin-ops
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-admin-ops
+subjects:
+  - kind: ServiceAccount
+    name: myampix-admin
+    namespace: {{ .Release.Namespace }}
+{{- end }}

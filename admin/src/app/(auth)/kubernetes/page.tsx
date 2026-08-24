@@ -1,10 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import type { KubernetesPayload } from '@/app/api/admin/kubernetes/route';
+import { DeploymentActions } from '@/components/ops-actions';
 import { Card, Dot, ErrorBanner, fmtAgo, fmtBytes, fmtCores, Table, usePoll } from '@/components/ui';
 
 export default function KubernetesPage() {
   const { data, error } = usePoll<KubernetesPayload>('/api/admin/kubernetes');
+  const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
+  const hpaTargets = new Set((data?.hpas ?? []).map((h) => h.target.replace('Deployment/', '')));
   return (
     <div className="space-y-4">
       <header className="flex items-baseline justify-between">
@@ -14,15 +18,25 @@ export default function KubernetesPage() {
       {error ? <ErrorBanner text={`Failed to load: ${error}`} /> : null}
       {data && !data.available ? <ErrorBanner text="Not running inside a Kubernetes cluster." /> : null}
       {data?.error ? <ErrorBanner text={data.error} /> : null}
+      {toast ? (
+        <p className={`rounded-md border px-3 py-2 text-sm ${toast.ok ? 'border-emerald-900 bg-emerald-950/60 text-emerald-300' : 'border-red-900 bg-red-950/60 text-red-300'}`}>
+          {toast.text}
+        </p>
+      ) : null}
       <Card title="Deployments">
         <Table
-          head={['', 'Namespace', 'Name', 'Ready', 'Image']}
+          head={['', 'Namespace', 'Name', 'Ready', 'Image', 'Actions']}
           rows={(data?.deployments ?? []).map((d) => [
             <Dot key="s" ok={d.ready >= d.desired && d.desired > 0} />,
             d.namespace,
             <span key="n" className="font-medium">{d.name}</span>,
             `${d.ready}/${d.desired}`,
             <span key="i" className="text-zinc-400">{d.image ?? '—'}</span>,
+            d.namespace.startsWith('kube-') || d.namespace === 'ingress-nginx' || d.namespace === 'cert-manager' ? (
+              <span key="a" className="text-xs text-zinc-600">—</span>
+            ) : (
+              <DeploymentActions key="a" name={d.name} hpaManaged={hpaTargets.has(d.name)} onDone={(text, ok) => setToast({ text, ok })} />
+            ),
           ])}
         />
       </Card>

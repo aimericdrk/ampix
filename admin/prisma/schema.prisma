@@ -23,8 +23,23 @@ model AdminUser {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   createdById        String?
+  // TOTP 2FA (v2 design Phase 1): secret encrypted at rest (AES-256-GCM, TOTP_ENC_KEY).
+  // totpSecretEnc set + totpEnabledAt null = enrolment pending verification.
+  totpSecretEnc      String?
+  totpEnabledAt      DateTime?
   sessions           AdminSession[]
   auditEvents        AdminAuditEvent[]
+  recoveryCodes      AdminRecoveryCode[]
+}
+
+model AdminRecoveryCode {
+  id       String    @id @default(cuid())
+  user     AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  codeHash String    // sha256 of the code; raw code shown exactly once at enrolment
+  usedAt   DateTime?
+
+  @@index([userId])
 }
 
 model AdminSession {
@@ -38,6 +53,10 @@ model AdminSession {
   idleExpiresAt     DateTime
   absoluteExpiresAt DateTime
   revokedAt         DateTime?
+  // Set when the password succeeded but TOTP is still owed; such sessions are invalid everywhere
+  // except POST /api/auth/totp until cleared (or revoked at expiry / after 5 wrong codes).
+  totpPendingUntil  DateTime?
+  totpFailedCount   Int       @default(0)
   ip                String
   userAgent         String
 
@@ -65,4 +84,28 @@ model AdminAuditEvent {
   ip      String
 
   @@index([at])
+}
+
+// v2 Phase 3 — sampler history + alerting.
+model MetricSnapshot {
+  id    String   @id @default(cuid())
+  at    DateTime @default(now())
+  key   String // e.g. node.cpu.pct/<node>, ds.up/redis, cert.days/<name>
+  value Float
+
+  @@index([key, at])
+  @@index([at])
+}
+
+model AlertEvent {
+  id         String    @id @default(cuid())
+  kind       String // node.cpu | node.mem | node.fs | ds.down | svc.down | deploy.degraded | cert.expiry
+  key        String
+  message    String
+  lastValue  Float
+  openedAt   DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([resolvedAt, openedAt])
+  @@index([key])
 }

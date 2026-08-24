@@ -15,6 +15,7 @@ function mockDb(over: { user?: unknown; enabledCount?: number } = {}) {
       update: vi.fn(async () => ({})),
     },
     adminSession: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    adminRecoveryCode: { deleteMany: vi.fn(async () => ({})) },
     adminAuditEvent: { create: vi.fn(async () => ({})) },
   };
   return db as unknown as PrismaClient & typeof db;

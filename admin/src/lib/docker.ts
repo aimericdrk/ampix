@@ -112,3 +112,18 @@ export async function dockerReport(): Promise<DockerReport> {
     await client.close().catch(() => {});
   }
 }
+
+/** Cheap running-container count for the sampler (no per-container stats). Null when unavailable. */
+export async function dockerRunningCount(): Promise<number | null> {
+  const sock = loadEnv().DOCKER_SOCK;
+  if (!sock) return null;
+  const client = new Client('http://localhost', { socketPath: sock });
+  try {
+    const raw = await dockerGet<RawContainer[]>(client, '/v1.44/containers/json');
+    return raw.length;
+  } catch {
+    return null;
+  } finally {
+    await client.close().catch(() => {});
+  }
+}

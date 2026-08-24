@@ -95,7 +95,9 @@ kubectl -n "$NS" create secret generic myampix-purchase \
   --from-literal=GOOGLE_PUBSUB_SHARED_SECRET="$(openssl rand -hex 32)" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # Reset the throwaway admin smoke DB so the seed (and its printed credentials) are fresh each run.
-docker exec myampix-postgres-1 psql -U myampix -d postgres -c 'DROP DATABASE IF EXISTS admin_console_kind' >/dev/null 2>&1 || true
+# WITH (FORCE): a running admin pod keeps connections open; a plain DROP would fail and leave a
+# stale seed (whose password no longer matches this run's fresh ADMIN_PW).
+docker exec myampix-postgres-1 psql -U myampix -d postgres -c 'DROP DATABASE IF EXISTS admin_console_kind WITH (FORCE)' >/dev/null 2>&1 || true
 ADMIN_PW="smoke-$(openssl rand -hex 12)"
 kubectl -n "$NS" create secret generic myampix-admin \
   --from-literal=DATABASE_URL="postgresql://myampix:myampix_dev@postgres:5432/admin_console_kind" \
@@ -103,6 +105,7 @@ kubectl -n "$NS" create secret generic myampix-admin \
   --from-literal=PURCHASE_DATABASE_URL="postgresql://mobile_purchase:mobile_purchase_dev@mobile-purchase-postgres:5433/mobile_purchase" \
   --from-literal=REDIS_URL="redis://redis:6379" \
   --from-literal=CLICKHOUSE_PASSWORD="myampix_dev" \
+  --from-literal=TOTP_ENC_KEY="$(openssl rand -base64 32)" \
   --from-literal=ADMIN_DEFAULT_EMAIL="smoke@myampix.local" \
   --from-literal=ADMIN_DEFAULT_PASSWORD="$ADMIN_PW" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -113,6 +116,9 @@ if [ "$major" -ge 4 ]; then ROLLBACK_FLAG=--rollback-on-failure; else ROLLBACK_F
 helm upgrade --install myampix "$ROOT/infra/helm/myampix" -n "$NS" \
   -f "$ROOT/infra/helm/myampix/values.local.yaml" --set hostDbs.ip="$HOST_IP" \
   "$ROLLBACK_FLAG" --wait --timeout 10m
+# The :dev tag is reused across runs — restart so freshly `kind load`ed image content takes effect
+# (an unchanged Deployment spec would otherwise keep serving the previous container).
+kubectl -n "$NS" rollout restart deploy -l app.kubernetes.io/part-of=myampix >/dev/null
 
 step "assertions"
 fail() { echo "local.sh: FAIL — $1" >&2; kubectl -n "$NS" get pods,jobs; exit 1; }
@@ -122,16 +128,19 @@ for d in mobile-analytics mobile-purchase-api mobile-purchase-scheduler dashboar
   kubectl -n "$NS" rollout status "deploy/$d" --timeout=120s >/dev/null || fail "deploy/$d not available"
 done
 BASE="http://localhost:$HTTP_PORT"
-# ingress-nginx picks up freshly-Ready endpoints with a short lag; give it a few seconds before asserting.
-for _ in $(seq 1 30); do
-  curl -fsS -H 'Host: api.localhost' "$BASE/health/ready" >/dev/null 2>&1 && break; sleep 1
+# ingress-nginx picks up freshly-Ready endpoints with a short lag; wait for every host before asserting.
+for probe in "api.localhost /health/ready" "purchase.localhost /health/ready" "app.localhost /" "admin.localhost /login"; do
+  host="${probe%% *}"; path="${probe#* }"
+  for _ in $(seq 1 45); do
+    curl -fsS -H "Host: $host" "$BASE$path" >/dev/null 2>&1 && break; sleep 1
+  done
 done
 curl -fsS -H 'Host: api.localhost' "$BASE/health/ready" | grep -q '"status":"ready"' || fail "api.localhost /health/ready"
-curl -fsS -H 'Host: purchase.localhost' "$BASE/health/ready" | grep -q '"status":"ready"' || fail "purchase.local /health/ready"
-curl -fsS -H 'Host: app.localhost' "$BASE/" | grep -q '<div id="root">' || fail "app.local SPA shell"
-curl -fsS -H 'Host: app.localhost' "$BASE/config.js" | grep -q "purchaseApiBaseUrl: 'http://purchase.localhost:8089'" || fail "app.local runtime config.js"
+curl -fsS -H 'Host: purchase.localhost' "$BASE/health/ready" | grep -q '"status":"ready"' || fail "purchase.localhost /health/ready"
+curl -fsS -H 'Host: app.localhost' "$BASE/" | grep -q '<div id="root">' || fail "app.localhost SPA shell"
+curl -fsS -H 'Host: app.localhost' "$BASE/config.js" | grep -q "purchaseApiBaseUrl: 'http://purchase.localhost:8089'" || fail "app.localhost runtime config.js"
 code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Host: app.localhost' "$BASE/api/v1/auth/refresh")"
-[ "$code" = "401" ] || fail "app.local/api should proxy to analytics (got HTTP $code, expected 401)"
+[ "$code" = "401" ] || fail "app.localhost/api should proxy to analytics (got HTTP $code, expected 401)"
 kubectl -n "$NS" get hpa >/dev/null || fail "HPAs missing"
 
 # Admin console: seeded login → forced password change → authenticated cluster status (design §8).
@@ -147,7 +156,48 @@ curl -fsS -b "$JAR" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.
 STATUS_JSON="$(curl -fsS -b "$JAR" -H 'Host: admin.localhost' "$BASE/api/admin/status")"
 grep -q '"available":true' <<<"$STATUS_JSON" || fail "admin status must see the cluster"
 grep -q '"name":' <<<"$STATUS_JSON" || fail "admin status must list at least one node"
-rm -f "$JAR"
+
+# --- v2: TOTP 2FA end-to-end (enrol → re-login needs code → recovery code path) ---
+ACURL() { curl -fsS -b "$JAR" -c "$JAR" -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' "$@"; }
+SECRET="$(ACURL -X POST "$BASE/api/account/totp/setup" -d '{}' | sed -n 's/.*"secret":"\([^"]*\)".*/\1/p')"
+[ -n "$SECRET" ] || fail "totp setup returned no secret"
+ENABLE_JSON="$(ACURL -X POST "$BASE/api/account/totp/enable" -d "{\"code\":\"$(node "$ROOT/scripts/k8s/totp-code.mjs" "$SECRET")\"}")"
+RECOVERY="$(sed -n 's/.*"recoveryCodes":\["\([^"]*\)".*/\1/p' <<<"$ENABLE_JSON")"
+[ -n "$RECOVERY" ] || fail "totp enable returned no recovery codes"
+curl -fsS -b "$JAR" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' "$BASE/api/auth/logout" -o /dev/null
+JAR2="$(mktemp)"
+LOGIN2="$(curl -fsS -c "$JAR2" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' \
+  -d "{\"email\":\"smoke@myampix.local\",\"password\":\"$ADMIN_PW-rotated\"}" "$BASE/api/auth/login")"
+grep -q '"totpRequired":true' <<<"$LOGIN2" || fail "second login must demand TOTP"
+[ "$(curl -s -b "$JAR2" -o /dev/null -w '%{http_code}' -H 'Host: admin.localhost' "$BASE/api/admin/status")" = "401" ] || fail "TOTP-pending session must be unusable"
+curl -fsS -b "$JAR2" -c "$JAR2" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' \
+  -d "{\"code\":\"$(node "$ROOT/scripts/k8s/totp-code.mjs" "$SECRET")\"}" "$BASE/api/auth/totp" | grep -q '"ok":true' || fail "TOTP verification"
+curl -fsS -b "$JAR2" -H 'Host: admin.localhost' "$BASE/api/admin/status" >/dev/null || fail "post-TOTP session must work"
+JAR3="$(mktemp)"
+curl -fsS -c "$JAR3" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' \
+  -d "{\"email\":\"smoke@myampix.local\",\"password\":\"$ADMIN_PW-rotated\"}" "$BASE/api/auth/login" >/dev/null
+curl -fsS -b "$JAR3" -c "$JAR3" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' \
+  -d "{\"code\":\"$RECOVERY\"}" "$BASE/api/auth/totp" | grep -q '"via":"recovery"' || fail "recovery-code login"
+
+# Leave the smoke account 2FA-free so the credentials printed below work with just the password.
+curl -fsS -b "$JAR2" -X POST -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' \
+  -d "{\"currentPassword\":\"$ADMIN_PW-rotated\",\"code\":\"$(node "$ROOT/scripts/k8s/totp-code.mjs" "$SECRET")\"}" \
+  "$BASE/api/account/totp/disable" | grep -q '"ok":true' || fail "totp disable (cleanup)"
+
+# --- v2: ops actions (restart works; scaling an HPA-managed deployment is refused) ---
+ACURL2() { curl -s -b "$JAR2" -H 'Host: admin.localhost' -H 'Origin: http://admin.localhost' -H 'content-type: application/json' "$@"; }
+ACURL2 -X POST "$BASE/api/admin/ops/restart" -d '{"deployment":"dashboard"}' | grep -q '"ok":true' || fail "ops restart"
+kubectl -n "$NS" rollout status deploy/dashboard --timeout=120s >/dev/null || fail "dashboard rollout after restart"
+[ "$(ACURL2 -o /dev/null -w '%{http_code}' -X POST "$BASE/api/admin/ops/scale" -d '{"deployment":"mobile-analytics","replicas":2}')" = "409" ] || fail "scaling an HPA-managed deployment must be refused"
+
+# --- v2: sampler + alerts ---
+ACURL2 -X POST "$BASE/api/admin/ops/sample" -d '{}' | grep -q '"wrote":true' || fail "manual sampler tick"
+ACURL2 "$BASE/api/admin/alerts" | grep -q '"open"' || fail "alerts endpoint"
+HIST="$(ACURL2 "$BASE/api/admin/history?prefix=node.&hours=1")"
+grep -q 'node\.' <<<"$HIST" || fail "history must contain node samples after a tick"
+ACURL2 "$BASE/api/admin/history?keys=k8s.pods.running,k8s.pods.total&hours=1" | grep -q 'k8s.pods.running' || fail "keyed history (pod counts)"
+curl -fsS -b "$JAR2" -H 'Host: admin.localhost' "$BASE/metrics" | grep -q 'Metrics' || fail "metrics page"
+rm -f "$JAR" "$JAR2" "$JAR3"
 
 printf '\n\033[1;32mSMOKE OK\033[0m  (cluster %s kept; `pnpm k8s:local down` to delete)\n' "$CLUSTER"
 kubectl -n "$NS" get pods,hpa,ingress

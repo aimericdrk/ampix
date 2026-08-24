@@ -22,6 +22,18 @@ const envSchema = z.object({
   // Unix socket path for the host Docker daemon; empty/unset disables the Docker page's data.
   DOCKER_SOCK: z.string().optional(),
   COOKIE_SECURE: boolish.default(false),
+  // v2 Phase 1 — AES-256-GCM key for TOTP secrets (base64 or 64-hex, 32 bytes). Unset ⇒ 2FA
+  // enrolment unavailable (login unaffected). Validation mirrors the analytics backend.
+  TOTP_ENC_KEY: z
+    .string()
+    .refine((v) => /^[0-9a-fA-F]{64}$/.test(v) || Buffer.from(v, 'base64').length === 32, {
+      message: 'must decode to exactly 32 bytes (base64 or 64 hex chars)',
+    })
+    .optional(),
+  // v2 Phase 3 — alerting/history.
+  ALERT_WEBHOOK_URL: z.string().url().optional(),
+  SAMPLE_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
+  POD_NAMESPACE: z.string().default('myampix'),
   SESSION_IDLE_HOURS: z.coerce.number().int().positive().default(12),
   SESSION_ABSOLUTE_DAYS: z.coerce.number().int().positive().default(7),
 });

@@ -11,7 +11,15 @@ export type AuditAction =
   | 'user.enable'
   | 'user.reset_password'
   | 'password.change'
-  | 'session.revoke';
+  | 'session.revoke'
+  | 'login.totp'
+  | 'login.recovery_code'
+  | 'login.totp_locked'
+  | 'totp.enable'
+  | 'totp.disable'
+  | 'ops.restart'
+  | 'ops.scale'
+  | 'ops.sample';
 
 /** Fire-and-forget-safe audit write — an audit failure must never break the audited action. */
 export async function writeAudit(

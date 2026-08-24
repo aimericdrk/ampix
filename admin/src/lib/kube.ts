@@ -42,6 +42,34 @@ export class KubeError extends Error {
   }
 }
 
+export async function kubeRequest<T>(
+  method: 'GET' | 'PATCH',
+  path: string,
+  body?: unknown,
+  contentType = 'application/strategic-merge-patch+json',
+): Promise<T> {
+  const host = process.env.KUBERNETES_SERVICE_HOST;
+  const port = process.env.KUBERNETES_SERVICE_PORT ?? '443';
+  if (!host) throw new KubeError(0, 'not running in a cluster');
+  const res = await undiciFetch(`https://${host}:${port}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${saToken()}`,
+      ...(body !== undefined ? { 'content-type': contentType } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    dispatcher: kubeAgent(),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new KubeError(res.status, `${method} ${path} → HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
+/** Strategic-merge PATCH (ops actions — v2 design Phase 2). */
+export async function kubePatch<T>(path: string, body: unknown, contentType?: string): Promise<T> {
+  return kubeRequest<T>('PATCH', path, body, contentType);
+}
+
 export async function kubeGet<T>(path: string): Promise<T> {
   const host = process.env.KUBERNETES_SERVICE_HOST;
   const port = process.env.KUBERNETES_SERVICE_PORT ?? '443';

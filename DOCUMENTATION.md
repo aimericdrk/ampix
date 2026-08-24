@@ -31,6 +31,8 @@ and [`HOW-TO-USE.md`](HOW-TO-USE.md) (the analytics Flutter SDK, in depth).
 9. [How a purchase flows in (end to end)](#9-how-a-purchase-flows-in-end-to-end)
 10. [Contributor guide](#10-contributor-guide)
 11. [Troubleshooting](#11-troubleshooting)
+12. [Production deployment (k3s on a VPS)](#12-production-deployment-k3s-on-a-vps)
+13. [Admin/ops console](#13-adminops-console)
 
 ---
 
@@ -63,17 +65,17 @@ and [`HOW-TO-USE.md`](HOW-TO-USE.md) (the analytics Flutter SDK, in depth).
 
 **Monorepo layout** (pnpm workspaces — see `pnpm-workspace.yaml`):
 
-| Path                        | What it is                                                              |
-| --------------------------- | ----------------------------------------------------------------------- |
-| `backend/mobile_analytics/` | NestJS analytics + auth backend (port **8088**)                         |
-| `backend/mobile_purchase/`  | NestJS billing-authority backend (port **8090**, its own Postgres)      |
-| `dashboard/`                | React 18 + Vite SPA (port **5173** in dev)                              |
-| `sdk/flutter_analytics/`    | `myampix_analytics` Flutter SDK                                         |
-| `sdk/flutter_purchases/`    | `myampix_purchases` Flutter SDK                                         |
-| `packages/contracts/`       | Shared TypeScript types + Zod schemas used across services              |
-| `infra/`                    | `docker-compose.yml` (local databases) + ClickHouse init SQL           |
-| `docs/superpowers/`         | Design specs and implementation plans                                   |
-| `scripts/`                  | `dev.sh` (one-command stack), seed + functional-test helpers            |
+| Path                        | What it is                                                         |
+| --------------------------- | ------------------------------------------------------------------ |
+| `backend/mobile_analytics/` | NestJS analytics + auth backend (port **8088**)                    |
+| `backend/mobile_purchase/`  | NestJS billing-authority backend (port **8090**, its own Postgres) |
+| `dashboard/`                | React 18 + Vite SPA (port **5173** in dev)                         |
+| `sdk/flutter_analytics/`    | `myampix_analytics` Flutter SDK                                    |
+| `sdk/flutter_purchases/`    | `myampix_purchases` Flutter SDK                                    |
+| `packages/contracts/`       | Shared TypeScript types + Zod schemas used across services         |
+| `infra/`                    | `docker-compose.yml` (local databases) + ClickHouse init SQL       |
+| `docs/superpowers/`         | Design specs and implementation plans                              |
+| `scripts/`                  | `dev.sh` (one-command stack), seed + functional-test helpers       |
 
 **Why two backends and two databases?** MyRevenueCat is a full clone, not a mirror:
 `mobile_purchase` owns its own Postgres (subscriptions, customers, catalog) and is the source of
@@ -86,13 +88,13 @@ the same dashboard.
 
 ## 2. Prerequisites
 
-| Tool             | Version         | Notes                                                        |
-| ---------------- | --------------- | ----------------------------------------------------------- |
-| **Node.js**      | 22.x (`>=22 <23`) | `nvm use` reads `.nvmrc`                                    |
-| **pnpm**         | 10.x            | `corepack enable` activates the pinned `pnpm@10.12.1`        |
-| **Docker**       | with Compose v2 | runs ClickHouse, Postgres ×2, Redis locally                 |
-| **Flutter**      | 3.32+ / Dart 3.8+ | only needed to build/run the mobile SDKs or their examples  |
-| **tmux**         | optional        | `pnpm dev` uses it for a split backend/dashboard log view   |
+| Tool        | Version           | Notes                                                      |
+| ----------- | ----------------- | ---------------------------------------------------------- |
+| **Node.js** | 22.x (`>=22 <23`) | `nvm use` reads `.nvmrc`                                   |
+| **pnpm**    | 10.x              | `corepack enable` activates the pinned `pnpm@10.12.1`      |
+| **Docker**  | with Compose v2   | runs ClickHouse, Postgres ×2, Redis locally                |
+| **Flutter** | 3.32+ / Dart 3.8+ | only needed to build/run the mobile SDKs or their examples |
+| **tmux**    | optional          | `pnpm dev` uses it for a split backend/dashboard log view  |
 
 Everything except Flutter is needed to run the web stack. Flutter is only for the SDKs.
 
@@ -145,14 +147,14 @@ pnpm infra:reset   # stop AND wipe all local data
 Local services and dev credentials (from `infra/docker-compose.yml`; the compose project is named
 `myampix`). **These credentials are for local dev only — never reuse them in production.**
 
-| Service                    | Port(s)      | Credentials / notes                                   |
-| -------------------------- | ------------ | ----------------------------------------------------- |
-| ClickHouse                 | 8123, 9000   | `default` / `myampix_dev`, db `analytics`             |
-| Postgres (analytics)       | 5432         | `myampix` / `myampix_dev`, db `myampix`               |
-| Redis                      | 6379         | no password                                           |
+| Service                    | Port(s)       | Credentials / notes                                             |
+| -------------------------- | ------------- | --------------------------------------------------------------- |
+| ClickHouse                 | 8123, 9000    | `default` / `myampix_dev`, db `analytics`                       |
+| Postgres (analytics)       | 5432          | `myampix` / `myampix_dev`, db `myampix`                         |
+| Redis                      | 6379          | no password                                                     |
 | Postgres (mobile_purchase) | **5433**→5432 | `mobile_purchase` / `mobile_purchase_dev`, db `mobile_purchase` |
-| Adminer (DB web UI)        | 8082         | inspect any Postgres above                            |
-| ch-ui (ClickHouse web UI)  | —            | browse ClickHouse                                     |
+| Adminer (DB web UI)        | 8082          | inspect any Postgres above                                      |
+| ch-ui (ClickHouse web UI)  | —             | browse ClickHouse                                               |
 
 ### 4.2 mobile_analytics backend (:8088)
 
@@ -194,41 +196,41 @@ every problem listed at once** if something is wrong.
 
 Copy from `.env.example`. Key variables:
 
-| Variable                         | Purpose                                                                 |
-| -------------------------------- | ----------------------------------------------------------------------- |
-| `PORT`                           | HTTP port (default `8088`)                                              |
-| `DATABASE_URL`                   | analytics Postgres (`postgresql://myampix:…@localhost:5432/myampix`)    |
-| `CLICKHOUSE_URL/_USER/_PASSWORD/_DB` | event store connection                                              |
-| `REDIS_URL`                      | **mandatory, no fallback** — auth sessions + rate limiting need it      |
-| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | sign/verify auth tokens — change for any real env             |
-| `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL` / `MFA_TOKEN_TTL` | token lifetimes (seconds)              |
-| `TOTP_ISSUER` / `TOTP_ENC_KEY`   | 2FA; `TOTP_ENC_KEY` is a 32-byte hex key (`openssl rand -hex 32`)       |
-| `COOKIE_SECURE` / `COOKIE_DOMAIN`| refresh-cookie flags — **production refuses to boot with `COOKIE_SECURE=false`** |
-| `INGEST_MAX_BATCH` / `INGEST_MAX_BODY_KB` | ingestion limits                                              |
-| `SCREENSHOT_MAX_KB`              | max size of an autocapture screenshot upload                            |
-| `FIREBASE_STORAGE_BUCKET`        | GCS bucket for screenshot bytes; unset → in-memory fake (dev/test)      |
-| `GOOGLE_APPLICATION_CREDENTIALS` | service-account JSON path for Firebase Storage — **never commit it**    |
-| `LOG_LEVEL`                      | pino level; at `info`, 2xx/3xx request logs are suppressed              |
+| Variable                                                   | Purpose                                                                          |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `PORT`                                                     | HTTP port (default `8088`)                                                       |
+| `DATABASE_URL`                                             | analytics Postgres (`postgresql://myampix:…@localhost:5432/myampix`)             |
+| `CLICKHOUSE_URL/_USER/_PASSWORD/_DB`                       | event store connection                                                           |
+| `REDIS_URL`                                                | **mandatory, no fallback** — auth sessions + rate limiting need it               |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`                 | sign/verify auth tokens — change for any real env                                |
+| `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL` / `MFA_TOKEN_TTL` | token lifetimes (seconds)                                                        |
+| `TOTP_ISSUER` / `TOTP_ENC_KEY`                             | 2FA; `TOTP_ENC_KEY` is a 32-byte hex key (`openssl rand -hex 32`)                |
+| `COOKIE_SECURE` / `COOKIE_DOMAIN`                          | refresh-cookie flags — **production refuses to boot with `COOKIE_SECURE=false`** |
+| `INGEST_MAX_BATCH` / `INGEST_MAX_BODY_KB`                  | ingestion limits                                                                 |
+| `SCREENSHOT_MAX_KB`                                        | max size of an autocapture screenshot upload                                     |
+| `FIREBASE_STORAGE_BUCKET`                                  | GCS bucket for screenshot bytes; unset → in-memory fake (dev/test)               |
+| `GOOGLE_APPLICATION_CREDENTIALS`                           | service-account JSON path for Firebase Storage — **never commit it**             |
+| `LOG_LEVEL`                                                | pino level; at `info`, 2xx/3xx request logs are suppressed                       |
 
 ### 5.2 mobile_purchase (`backend/mobile_purchase/.env`)
 
 The `.env.example` is minimal; the full surface is defined in
 `backend/mobile_purchase/src/config/app-config.ts`. Notable variables:
 
-| Variable                     | Default                | Purpose                                                          |
-| ---------------------------- | ---------------------- | ---------------------------------------------------------------- |
-| `PORT`                       | `8090`                 | HTTP port                                                        |
-| `DATABASE_URL`               | —                      | its **own** Postgres on `:5433`                                  |
-| `ANALYTICS_INTERNAL_URL`     | `http://localhost:8088`| where it resolves project roles (it holds no JWT secret)         |
-| `DASHBOARD_ORIGINS`          | `http://localhost:5173`| CORS allowlist for dashboard→purchase requests                  |
-| `STORE_CREDENTIALS_ENC_KEY`  | (unset)                | base64 32-byte key (`openssl rand -base64 32`) — AES-256 for stored store credentials. Absence only blocks the connect-store path, not boot. **Never commit it.** |
-| `APPLE_BUNDLE_IDS`           | `com.myampix.app`      | comma-separated bundle IDs accepted from Apple ASSN v2          |
-| `APPLE_APP_APPLE_ID`         | (unset)                | App Store Connect numeric app id (required for Production)       |
-| `APPLE_ROOT_CERT_DIR`        | in-repo `certs/`       | trust anchors for verifying Apple notifications                 |
-| `GOOGLE_PUSH_AUTH_MODE`      | `shared_secret`        | `shared_secret` works today; `oidc` is deferred (X1)            |
-| `GOOGLE_PUBSUB_SHARED_SECRET`| (unset)                | token for Google Pub/Sub push auth — **unset ⇒ every push is rejected (401)**, never fail-open |
-| `SCHEDULER_ENABLED`          | `true`                 | master switch for cron jobs; set `false` in tests/workers       |
-| `EXPIRY_SWEEP_CRON`          | `*/5 * * * *`          | how often expired subscriptions are swept                       |
+| Variable                      | Default                 | Purpose                                                                                                                                                           |
+| ----------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                        | `8090`                  | HTTP port                                                                                                                                                         |
+| `DATABASE_URL`                | —                       | its **own** Postgres on `:5433`                                                                                                                                   |
+| `ANALYTICS_INTERNAL_URL`      | `http://localhost:8088` | where it resolves project roles (it holds no JWT secret)                                                                                                          |
+| `DASHBOARD_ORIGINS`           | `http://localhost:5173` | CORS allowlist for dashboard→purchase requests                                                                                                                    |
+| `STORE_CREDENTIALS_ENC_KEY`   | (unset)                 | base64 32-byte key (`openssl rand -base64 32`) — AES-256 for stored store credentials. Absence only blocks the connect-store path, not boot. **Never commit it.** |
+| `APPLE_BUNDLE_IDS`            | `com.myampix.app`       | comma-separated bundle IDs accepted from Apple ASSN v2                                                                                                            |
+| `APPLE_APP_APPLE_ID`          | (unset)                 | App Store Connect numeric app id (required for Production)                                                                                                        |
+| `APPLE_ROOT_CERT_DIR`         | in-repo `certs/`        | trust anchors for verifying Apple notifications                                                                                                                   |
+| `GOOGLE_PUSH_AUTH_MODE`       | `shared_secret`         | `shared_secret` works today; `oidc` is deferred (X1)                                                                                                              |
+| `GOOGLE_PUBSUB_SHARED_SECRET` | (unset)                 | token for Google Pub/Sub push auth — **unset ⇒ every push is rejected (401)**, never fail-open                                                                    |
+| `SCHEDULER_ENABLED`           | `true`                  | master switch for cron jobs; set `false` in tests/workers                                                                                                         |
+| `EXPIRY_SWEEP_CRON`           | `*/5 * * * *`           | how often expired subscriptions are swept                                                                                                                         |
 
 > **Secrets rule:** never commit `.env`, `.p8`/`.p12`, service-account JSON, or any encryption key.
 > Generate keys per-environment. The store-credentials key and Google shared secret are passed in
@@ -287,12 +289,12 @@ React 18 + TypeScript, TanStack Router + Query, Radix UI, Tailwind, Vite. Tests 
 **Build:** `pnpm --filter @myampix/dashboard build` (typecheck + Vite build).
 
 **Runtime config** — the app reads `window.___MYAMPIX_CONFIG__` from
-`dashboard/public/config.js`, which is loaded *before* the bundle and **replaced at deploy time**,
+`dashboard/public/config.js`, which is loaded _before_ the bundle and **replaced at deploy time**,
 so one static build runs against any backend:
 
 ```js
 window.___MYAMPIX_CONFIG__ = {
-  apiBaseUrl: '',                            // '' = same origin (Vite proxy in dev)
+  apiBaseUrl: '', // '' = same origin (Vite proxy in dev)
   purchaseApiBaseUrl: 'http://localhost:8090', // mobile_purchase origin (distinct backend)
 };
 ```
@@ -367,7 +369,7 @@ MyAmpixPurchases.addCustomerInfoUpdateListener((info) { /* react to entitlement 
   (use `http://10.0.2.2:8090` on the Android emulator). It runs with placeholder values too — the
   backend just returns `401`, which the demo catches and shows on screen.
 
-> **Screen naming (both SDKs):** a screen name identifies a *layout*, not an *instance*. Give each
+> **Screen naming (both SDKs):** a screen name identifies a _layout_, not an _instance_. Give each
 > route/tab a stable `RouteSettings(name: …)` (or call `trackScreen`/`retakeScreenshots` for
 > non-route tabs) so detail pages share one reference screenshot. Put per-item IDs in event
 > properties, not screen names.
@@ -397,17 +399,17 @@ rather than making a live call). Inbound webhook verification is the part that w
 
 ### 10.1 Root commands
 
-| Command                 | Effect                                                        |
-| ----------------------- | ------------------------------------------------------------ |
-| `pnpm install`          | install all workspaces                                       |
-| `pnpm dev`              | run analytics backend + dashboard (see §3)                   |
-| `pnpm infra:up/down/reset` | manage local databases                                    |
-| `pnpm seed`             | seed the analytics demo project + token                      |
-| `pnpm typecheck`        | `typecheck` in every package that defines it                 |
-| `pnpm test`             | `test` in every package that defines it                      |
-| `pnpm test:functional`  | `scripts/functional-test.sh` (black-box stack test)          |
-| `pnpm lint`             | ESLint 9 (flat config) across the workspace                  |
-| `pnpm format` / `format:check` | Prettier 3 write / check                              |
+| Command                        | Effect                                              |
+| ------------------------------ | --------------------------------------------------- |
+| `pnpm install`                 | install all workspaces                              |
+| `pnpm dev`                     | run analytics backend + dashboard (see §3)          |
+| `pnpm infra:up/down/reset`     | manage local databases                              |
+| `pnpm seed`                    | seed the analytics demo project + token             |
+| `pnpm typecheck`               | `typecheck` in every package that defines it        |
+| `pnpm test`                    | `test` in every package that defines it             |
+| `pnpm test:functional`         | `scripts/functional-test.sh` (black-box stack test) |
+| `pnpm lint`                    | ESLint 9 (flat config) across the workspace         |
+| `pnpm format` / `format:check` | Prettier 3 write / check                            |
 
 ### 10.2 Testing conventions
 
@@ -458,17 +460,17 @@ changes keeps it current (AST-only, no API cost).
 
 ## 11. Troubleshooting
 
-| Symptom                                             | Cause / fix                                                                             |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Login returns **500**                               | Redis is down. `REDIS_URL` is mandatory with no fallback → `pnpm infra:up`.             |
-| MyRevenueCat pages **404** / fail to load           | `mobile_purchase` isn't running, or `purchaseApiBaseUrl` doesn't point at it. Start it (§4.3); confirm `dashboard/public/config.js`. |
-| `mobile_purchase` **won't boot**, lists env errors  | Zod validation failed — the log lists every bad/missing var at once. Fix them (§5.2).  |
-| Every Google webhook is **rejected (401)**          | `GOOGLE_PUBSUB_SHARED_SECRET` is unset — that's fail-closed by design. Set it and match the Pub/Sub push `?token=`. |
-| Connect-stores flow errors on save                  | `STORE_CREDENTIALS_ENC_KEY` missing/invalid — must be base64 that decodes to 32 bytes (`openssl rand -base64 32`). |
-| SDK ingest returns **401**                          | Wrong/missing token, or it isn't `mam_` + 32 hex. Use the seeded demo token or mint one via Prisma Studio. |
-| Events never reach ClickHouse                       | Check the token, that the stack is up, and that `serverUrl` is reachable from the device (`10.0.2.2` on Android emulator). |
-| Integration/e2e tests fail at teardown              | Docker not running (Testcontainers), or `mobile_purchase` cron firing in tests — set `SCHEDULER_ENABLED=false`. |
-| Prisma engine ABI / OpenSSL error in a built image  | The build image needs system `openssl`; run as non-root. (Relevant to the `mobile_purchase` container build.) |
+| Symptom                                            | Cause / fix                                                                                                                          |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Login returns **500**                              | Redis is down. `REDIS_URL` is mandatory with no fallback → `pnpm infra:up`.                                                          |
+| MyRevenueCat pages **404** / fail to load          | `mobile_purchase` isn't running, or `purchaseApiBaseUrl` doesn't point at it. Start it (§4.3); confirm `dashboard/public/config.js`. |
+| `mobile_purchase` **won't boot**, lists env errors | Zod validation failed — the log lists every bad/missing var at once. Fix them (§5.2).                                                |
+| Every Google webhook is **rejected (401)**         | `GOOGLE_PUBSUB_SHARED_SECRET` is unset — that's fail-closed by design. Set it and match the Pub/Sub push `?token=`.                  |
+| Connect-stores flow errors on save                 | `STORE_CREDENTIALS_ENC_KEY` missing/invalid — must be base64 that decodes to 32 bytes (`openssl rand -base64 32`).                   |
+| SDK ingest returns **401**                         | Wrong/missing token, or it isn't `mam_` + 32 hex. Use the seeded demo token or mint one via Prisma Studio.                           |
+| Events never reach ClickHouse                      | Check the token, that the stack is up, and that `serverUrl` is reachable from the device (`10.0.2.2` on Android emulator).           |
+| Integration/e2e tests fail at teardown             | Docker not running (Testcontainers), or `mobile_purchase` cron firing in tests — set `SCHEDULER_ENABLED=false`.                      |
+| Prisma engine ABI / OpenSSL error in a built image | The build image needs system `openssl`; run as non-root. (Relevant to the `mobile_purchase` container build.)                        |
 
 Verify the data stores directly:
 
@@ -479,3 +481,58 @@ docker compose -f infra/docker-compose.yml exec clickhouse \
   --query "SELECT event, count() FROM events GROUP BY event"
 # Postgres: browse via Adminer at http://localhost:8082
 ```
+
+---
+
+## 12. Production deployment (k3s on a VPS)
+
+Everything deploys to a single self-managed VPS — no cloud services, no paid SaaS:
+
+- **k3s** runs the app workloads: `mobile-analytics` (HPA 2–6), `mobile-purchase-api` (HPA 2–4),
+  `mobile-purchase-scheduler` (exactly 1, `Recreate`), `dashboard` (nginx), `admin` (ops console) —
+  behind the bundled Traefik with cert-manager/Let's Encrypt TLS for
+  `api.` / `purchase.` / `app.` / `admin.<domain>`.
+- **Datastores stay in Docker Compose on the host** (`infra/docker-compose.prod.yml` overlay binds
+  them to the VPS private IP only); pods reach them through selector-less Services + EndpointSlices
+  under the same hostnames as local Compose.
+- **Migrations gate every rollout**: Helm `pre-install/pre-upgrade` hook Jobs run
+  `prisma migrate deploy` per service; a failed migration aborts and rolls back the release.
+- **Images**: `.github/workflows/images.yml` builds 6 images to GHCR on push to `main`
+  (`myampix-{mobile-analytics,mobile-purchase,mobile-purchase-migrate,dashboard,admin,admin-migrate}`).
+  Deploys are manual: `scripts/k8s/deploy.sh sha-<7>`.
+- **Chart**: `infra/helm/myampix` (values → `infra/values.prod.yaml`, gitignored). Secrets are
+  created out-of-band by `scripts/k8s/secrets.sh` from gitignored env files under
+  `infra/k8s/secrets/` — the chart never renders a Secret.
+- **Verification**: `pnpm k8s:lint` (helm lint + kubeconform + design invariants) and
+  `pnpm k8s:local` (full-stack smoke test in kind, browsable at `http://*.localhost:8089`).
+
+Step-by-step operator guide: [`docs/runbooks/vps-k3s.md`](docs/runbooks/vps-k3s.md). Design:
+`docs/superpowers/specs/2026-08-23-kubernetes-vps-deploy-design.md`.
+
+## 13. Admin/ops console
+
+`admin/` (`@myampix/admin`) is a separate Next.js App Router app at `admin.<domain>` — the
+operations counterpart to the product dashboard:
+
+- **Monitoring**: node CPU/RAM/disk + uptime (metrics-server / kubelet), Kubernetes workloads
+  (deployments, HPAs, pods, jobs, warning events, certificate expiries), host Docker containers
+  (read-only `docker.sock`, values-gated), and direct Postgres/ClickHouse/Redis probes.
+- **Metrics page**: time-series charts (axes, gridlines, hover tooltips; 1h/6h/24h/7d ranges) for
+  node CPU/RAM/disk (percent and absolute), pod counts, restarts, per-deployment/HPA replicas,
+  service health latency, Postgres sizes/connections, Redis memory/keys, ClickHouse disk, and the
+  host Docker container count.
+- **Alerting & history**: an in-process sampler snapshots metrics every 5 min (7-day retention);
+  fixed rules (CPU>90 %, mem>90 %, disk>85 %, store/service down, degraded deployment,
+  cert <14 days) open/close alerts with a 2-tick flap guard, optional Slack/Discord-style
+  `ALERT_WEBHOOK_URL`, 24 h sparklines on the overview.
+- **Ops actions**: restart / scale deployments (type-the-name confirmation, namespaced write Role
+  only — the cluster-wide role stays read-only; HPA-managed deployments refuse manual scale).
+- **Auth**: own `admin_console` Postgres database; argon2id passwords, server-side sessions
+  (`__Host-` cookie, idle+absolute expiry), per-account+per-IP lockout, TOTP 2FA with recovery
+  codes (secrets AES-256-GCM-encrypted via `TOTP_ENC_KEY`), forced first-login password change,
+  in-app user management (no self-registration), full audit log.
+- **Dev**: `pnpm --filter @myampix/admin dev` (port 3100; needs `DATABASE_URL` for the
+  `admin_console` DB on local Compose Postgres), `test`, `typecheck`, `build`.
+
+Design: `docs/superpowers/specs/2026-08-24-admin-console-design.md` (v1) and
+`…-admin-console-v2-design.md` (2FA, ops actions, alerting).

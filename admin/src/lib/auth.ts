@@ -20,8 +20,10 @@ export const MAX_FAILS_PER_IP = 10;
 /** One generic message for every failure mode — no user/lock oracle. */
 export const GENERIC_LOGIN_ERROR = 'Invalid credentials, or the account is temporarily locked.';
 
+export const TOTP_PENDING_MS = 5 * 60 * 1000;
+
 export type LoginResult =
-  | { ok: true; token: string; mustChangePassword: boolean }
+  | { ok: true; token: string; mustChangePassword: boolean; totpRequired: boolean }
   | { ok: false; error: string };
 
 /**
@@ -81,9 +83,17 @@ export async function attemptLogin(
   await db.adminLoginAttempt.deleteMany({
     where: { at: { lt: new Date(now.getTime() - 24 * 3600_000) } },
   });
-  const { token } = await createSession(db, user.id, ip, userAgent, now);
-  await writeAudit(db, 'login.success', user.id, { email }, ip);
-  return { ok: true, token, mustChangePassword: user.mustChangePassword };
+  const { token, session } = await createSession(db, user.id, ip, userAgent, now);
+  const totpRequired = user.totpEnabledAt !== null;
+  if (totpRequired) {
+    // Password accepted but a TOTP code is still owed: the session is unusable until verified.
+    await db.adminSession.update({
+      where: { id: session.id },
+      data: { totpPendingUntil: new Date(now.getTime() + TOTP_PENDING_MS) },
+    });
+  }
+  await writeAudit(db, 'login.success', user.id, { email, totpRequired }, ip);
+  return { ok: true, token, mustChangePassword: user.mustChangePassword, totpRequired };
 }
 
 /** First X-Forwarded-For hop (set by the ingress) or a placeholder. */
@@ -110,7 +120,8 @@ export async function getCurrentSession(): Promise<ValidatedSession> {
 /** Page guard: redirects to /login when unauthenticated. */
 export async function requireSession(): Promise<NonNullable<ValidatedSession>> {
   const s = await getCurrentSession();
-  if (!s) redirect('/login');
+  // stale=1 stops the middleware bouncing a dead cookie straight back to '/'.
+  if (!s) redirect('/login?stale=1');
   return s;
 }
 

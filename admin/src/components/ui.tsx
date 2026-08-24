@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 
 /** Polls a JSON endpoint every `intervalMs`, pausing while the tab is hidden. */
-export function usePoll<T>(url: string, intervalMs = 10_000): { data: T | null; error: string | null; at: Date | null } {
+export function usePoll<T>(
+  url: string,
+  intervalMs = 10_000,
+): { data: T | null; error: string | null; at: Date | null } {
   const [state, setState] = useState<{ data: T | null; error: string | null; at: Date | null }>({
     data: null,
     error: null,
@@ -12,19 +15,26 @@ export function usePoll<T>(url: string, intervalMs = 10_000): { data: T | null; 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const tick = async (): Promise<void> => {
-      if (document.hidden) return;
+    const tick = async (force = false): Promise<void> => {
+      // Interval ticks pause while the tab is hidden, but the FIRST fetch must always run —
+      // otherwise a page opened in a background tab renders empty forever.
+      if (!force && document.hidden) return;
       try {
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as T;
         if (!cancelled) setState({ data, error: null, at: new Date() });
       } catch (e) {
-        if (!cancelled) setState((s) => ({ ...s, error: e instanceof Error ? e.message : 'failed', at: new Date() }));
+        if (!cancelled)
+          setState((s) => ({
+            ...s,
+            error: e instanceof Error ? e.message : 'failed',
+            at: new Date(),
+          }));
       }
     };
-    void tick();
-    timer.current = setInterval(tick, intervalMs);
+    void tick(true);
+    timer.current = setInterval(() => void tick(), intervalMs);
     const onVisible = (): void => {
       if (!document.hidden) void tick();
     };
@@ -69,7 +79,13 @@ export function Dot({ ok }: { ok: boolean | null }): React.ReactElement {
   return <span className={`inline-block h-2.5 w-2.5 rounded-full ${cls}`} />;
 }
 
-export function Card({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
+export function Card({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">{title}</h2>
@@ -78,9 +94,24 @@ export function Card({ title, children }: { title: string; children: React.React
   );
 }
 
-export function Meter({ used, total, label }: { used: number | null; total: number | null; label: string }) {
+export function Meter({
+  used,
+  total,
+  label,
+}: {
+  used: number | null;
+  total: number | null;
+  label: string;
+}) {
   const pct = used !== null && total ? Math.min(100, (used / total) * 100) : null;
-  const color = pct === null ? 'bg-zinc-700' : pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-emerald-500';
+  const color =
+    pct === null
+      ? 'bg-zinc-700'
+      : pct > 90
+        ? 'bg-red-500'
+        : pct > 75
+          ? 'bg-amber-500'
+          : 'bg-emerald-500';
   return (
     <div>
       <div className="mb-1 flex justify-between text-xs text-zinc-400">
@@ -101,20 +132,26 @@ export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][
         <thead>
           <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
             {head.map((h) => (
-              <th key={h} className="px-2 py-1.5 font-medium">{h}</th>
+              <th key={h} className="px-2 py-1.5 font-medium">
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={head.length} className="px-2 py-3 text-zinc-500">Nothing to show.</td>
+              <td colSpan={head.length} className="px-2 py-3 text-zinc-500">
+                Nothing to show.
+              </td>
             </tr>
           ) : (
             rows.map((cells, i) => (
               <tr key={i} className="border-b border-zinc-900 hover:bg-zinc-900/40">
                 {cells.map((c, j) => (
-                  <td key={j} className="px-2 py-1.5 align-middle">{c}</td>
+                  <td key={j} className="px-2 py-1.5 align-middle">
+                    {c}
+                  </td>
                 ))}
               </tr>
             ))
@@ -127,6 +164,8 @@ export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][
 
 export function ErrorBanner({ text }: { text: string }) {
   return (
-    <p className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-300">{text}</p>
+    <p className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-300">
+      {text}
+    </p>
   );
 }

@@ -2,16 +2,17 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { requireSession } from '@/lib/auth';
+import { AlertBadge } from '@/components/alert-badge';
 
 // Everything behind auth is per-request (session cookie + live data) — never prerendered.
 export const dynamic = 'force-dynamic';
 
 const NAV = [
   { href: '/', label: 'Overview' },
+  { href: '/metrics', label: 'Metrics' },
   { href: '/kubernetes', label: 'Kubernetes' },
   { href: '/docker', label: 'Docker' },
   { href: '/datastores', label: 'Datastores' },
-  { href: '/users', label: 'Users' },
   { href: '/audit', label: 'Audit log' },
   { href: '/account', label: 'My account' },
 ] as const;
@@ -40,6 +41,8 @@ export default async function AuthedLayout({ children }: { children: React.React
               {n.label}
             </Link>
           ))}
+          <AlertBadge />
+          <Link href="/users" className="rounded-md px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900 hover:text-white">Users</Link>
         </nav>
         <form action="/api/auth/logout" method="post">
           <button className="w-full rounded-md border border-zinc-800 px-2 py-1.5 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-white">

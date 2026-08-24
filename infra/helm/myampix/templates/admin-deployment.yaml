@@ -49,6 +49,11 @@ spec:
             - name: http
               containerPort: 3000
               protocol: TCP
+          env:
+            - name: POD_NAMESPACE # ops actions are scoped to this namespace (v2 design Phase 2)
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-admin-config

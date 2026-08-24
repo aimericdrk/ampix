@@ -23,7 +23,11 @@ export async function POST(req: Request): Promise<NextResponse> {
   const ua = req.headers.get('user-agent') ?? '';
   const result = await attemptLogin(prisma, parsed.data.email, parsed.data.password, ip, ua);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 401 });
-  const res = NextResponse.json({ ok: true, mustChangePassword: result.mustChangePassword });
+  const res = NextResponse.json({
+    ok: true,
+    mustChangePassword: result.mustChangePassword,
+    totpRequired: result.totpRequired,
+  });
   const c = sessionCookie(result.token, env.COOKIE_SECURE);
   res.cookies.set(c.name, c.value, c);
   return res;

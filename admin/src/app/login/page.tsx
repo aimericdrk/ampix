@@ -19,6 +19,7 @@ async function login(formData: FormData): Promise<void> {
   const env = loadEnv();
   const c = sessionCookie(result.token, env.COOKIE_SECURE);
   (await cookies()).set(c.name, c.value, c);
+  if (result.totpRequired) redirect('/login/totp');
   redirect(result.mustChangePassword ? '/account?pw=1' : '/');
 }
 

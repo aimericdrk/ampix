@@ -51,6 +51,16 @@ export function isSessionLive(
   return true;
 }
 
+/** True while the session still owes a TOTP code (v2 Phase 1). */
+export function isTotpPending(s: Pick<AdminSession, 'totpPendingUntil'>, now: Date): boolean {
+  return s.totpPendingUntil !== null && s.totpPendingUntil.getTime() > now.getTime();
+}
+
+/** A pending marker that outlived its 5-minute window is a dead session, not a live one. */
+export function isTotpExpired(s: Pick<AdminSession, 'totpPendingUntil'>, now: Date): boolean {
+  return s.totpPendingUntil !== null && s.totpPendingUntil.getTime() <= now.getTime();
+}
+
 /** True when lastSeenAt is stale enough that a touch write is warranted. */
 export function shouldTouch(lastSeenAt: Date, now: Date): boolean {
   return now.getTime() - lastSeenAt.getTime() > TOUCH_THROTTLE_MS;
@@ -98,6 +108,7 @@ export async function validateSessionToken(
   db: PrismaClient,
   token: string,
   now = new Date(),
+  opts: { allowPending?: boolean } = {},
 ): Promise<ValidatedSession> {
   if (!token) return null;
   const env = loadEnv();
@@ -108,6 +119,8 @@ export async function validateSessionToken(
   if (!found) return null;
   if (!isSessionLive(found, now)) return null;
   if (found.user.disabled) return null;
+  if (isTotpExpired(found, now)) return null;
+  if (isTotpPending(found, now) && !opts.allowPending) return null;
   let session: AdminSession = found;
   if (shouldTouch(found.lastSeenAt, now)) {
     session = await db.adminSession.update({

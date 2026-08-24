@@ -123,6 +123,16 @@ Open `https://admin.<domain>` and sign in with `ADMIN_DEFAULT_EMAIL` / `ADMIN_DE
 account(s) under **Users**, sign in as one, and disable nothing until a second account works. The
 default seed only ever runs while the user table is empty — it never resurrects.
 
+Then, per account, under **My account → Two-factor authentication**: scan the QR with an
+authenticator app and store the 10 one-time recovery codes somewhere safe (shown once). Lost
+authenticator = another admin resets your password (which also clears 2FA), or a recovery code.
+
+Day-2 from the console: **Kubernetes** page has restart/scale per deployment (type-the-name
+confirmation; scale refuses HPA-managed deployments — change the chart values instead). **Alerts**
+page + nav badge: CPU/mem/disk, datastore/service down, degraded deployments, certificates <14 days;
+snapshots every `SAMPLE_INTERVAL_MINUTES` (default 5) kept 7 days; optional `ALERT_WEBHOOK_URL`
+pushes open/resolve events to a Slack/Discord-style webhook.
+
 ## 8. Upgrade / rollback
 
 ```bash

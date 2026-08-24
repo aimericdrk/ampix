@@ -1,6 +1,8 @@
 import { requireSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { AccountClient, type SessionRow } from '@/components/account-client';
+import { TotpCard } from '@/components/totp-client';
+import { totpAvailable } from '@/lib/totp-account';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +25,7 @@ export default async function AccountPage() {
       <h1 className="text-xl font-semibold">My account</h1>
       <p className="text-sm text-zinc-400">{user.displayName} · {user.email}</p>
       <AccountClient sessions={rows} mustChange={user.mustChangePassword} />
+      <TotpCard enabled={user.totpEnabledAt !== null} available={totpAvailable()} />
     </div>
   );
 }

@@ -80,3 +80,14 @@ describe('cookie', () => {
     expect(del.maxAge).toBe(0);
   });
 });
+
+describe('totp pending gate (v2)', () => {
+  const now = new Date('2026-08-24T12:00:00Z');
+  it('pending within the window blocks normal validation; expired pending is dead', async () => {
+    const { isTotpExpired, isTotpPending } = await import('./session');
+    expect(isTotpPending({ totpPendingUntil: new Date(now.getTime() + 60_000) }, now)).toBe(true);
+    expect(isTotpPending({ totpPendingUntil: null }, now)).toBe(false);
+    expect(isTotpExpired({ totpPendingUntil: new Date(now.getTime() - 1) }, now)).toBe(true);
+    expect(isTotpExpired({ totpPendingUntil: null }, now)).toBe(false);
+  });
+});

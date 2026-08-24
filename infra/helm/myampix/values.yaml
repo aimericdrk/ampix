@@ -141,6 +141,9 @@ admin:
   runAsUser: 1000
   runAsGroup: 1000
   replicas: 1
+  opsActions:
+    # Restart/scale buttons in the console. Backed by a NAMESPACED write Role (never cluster-wide).
+    enabled: true
   dockerSock:
     # Mount the host Docker socket read-only so the console lists host containers. Root-equivalent
     # on the host — the operator accepted this for their single-node cluster; disable to turn the

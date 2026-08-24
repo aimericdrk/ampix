@@ -1,8 +1,8 @@
 # MyAmpix — Setup Guide
 
 Everything you need to stand up MyAmpix locally and to enable each feature end to end. This is the
-**operational** companion to [`DOCUMENTATION.md`](DOCUMENTATION.md) (which explains *what* each part
-is) — here we cover *how to get it running and how to turn features on*, grounded in the actual
+**operational** companion to [`DOCUMENTATION.md`](DOCUMENTATION.md) (which explains _what_ each part
+is) — here we cover _how to get it running and how to turn features on_, grounded in the actual
 code. For per-project detail see each package's own `README.md`; for the analytics SDK in depth see
 [`HOW-TO-USE.md`](HOW-TO-USE.md).
 
@@ -16,10 +16,12 @@ Every value below is traceable to a real file — file paths are cited for the n
 4. [mobile_purchase setup](#4-mobile_purchase-setup)
 5. [Dashboard setup](#5-dashboard-setup)
 6. [Mobile SDK setup](#6-mobile-sdk-setup)
+7. [Admin console setup](#7-admin-console-setup)
+8. [Full-stack test mode & production deploy](#8-full-stack-test-mode--production-deploy)
 
 > **Secrets rule (applies everywhere):** never commit `.env`, encryption keys, shared secrets,
 > `.p8`/`.p12`, or service-account JSON. Where a real secret is needed, this guide shows how to
-> *generate* one. The checked-in `.env.example` values are dev-only.
+> _generate_ one. The checked-in `.env.example` values are dev-only.
 
 ---
 
@@ -27,13 +29,13 @@ Every value below is traceable to a real file — file paths are cited for the n
 
 ### 0. Toolchain prerequisites
 
-| Tool | Required version | Source |
-|------|------------------|--------|
-| Node.js | `>=22 <23` (repo pins **22** via `.nvmrc`) | root `package.json` `engines`, `.nvmrc` |
-| pnpm | `>=10` (repo pins **10.12.1**) | root `package.json` `engines` + `packageManager` |
-| Docker | daemon must be running | `scripts/dev.sh` checks `docker info` |
-| tmux | optional (gives the split-pane dev view) | `scripts/dev.sh` (falls back to labeled interleaved logs) |
-| Flutter | 3.32+ / Dart 3.8+ | only for building/running the SDKs |
+| Tool    | Required version                           | Source                                                    |
+| ------- | ------------------------------------------ | --------------------------------------------------------- |
+| Node.js | `>=22 <23` (repo pins **22** via `.nvmrc`) | root `package.json` `engines`, `.nvmrc`                   |
+| pnpm    | `>=10` (repo pins **10.12.1**)             | root `package.json` `engines` + `packageManager`          |
+| Docker  | daemon must be running                     | `scripts/dev.sh` checks `docker info`                     |
+| tmux    | optional (gives the split-pane dev view)   | `scripts/dev.sh` (falls back to labeled interleaved logs) |
+| Flutter | 3.32+ / Dart 3.8+                          | only for building/running the SDKs                        |
 
 ```bash
 # Node 22 (nvm respects the repo's .nvmrc)
@@ -93,14 +95,14 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / TOTP_ENC_KEY (
 
 `infra/docker-compose.yml` (compose project name `myampix`) brings up 6 services with healthchecks:
 
-| Service | Host port | Credentials / notes |
-|---------|-----------|---------------------|
-| clickhouse | `8123` (HTTP), `9000` (native) | user `default` / pass `myampix_dev`, db `analytics`. Mounts `infra/clickhouse/init.sql` → `/docker-entrypoint-initdb.d/init.sql` (creates the analytics tables on first boot) |
-| postgres | `5432` | user `myampix` / pass `myampix_dev`, db `myampix` (analytics service) |
-| redis | `6379` | append-only enabled (rate limiting) |
-| mobile-purchase-postgres | `5433`→5432 | **separate** DB for the purchase service: user `mobile_purchase` / pass `mobile_purchase_dev`, db `mobile_purchase` |
-| adminer | `8082`→8080 | Postgres web UI, dracula theme |
-| ch-ui | `5521` | ClickHouse web UI (pre-filled connection to `:8123`) |
+| Service                  | Host port                      | Credentials / notes                                                                                                                                                           |
+| ------------------------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| clickhouse               | `8123` (HTTP), `9000` (native) | user `default` / pass `myampix_dev`, db `analytics`. Mounts `infra/clickhouse/init.sql` → `/docker-entrypoint-initdb.d/init.sql` (creates the analytics tables on first boot) |
+| postgres                 | `5432`                         | user `myampix` / pass `myampix_dev`, db `myampix` (analytics service)                                                                                                         |
+| redis                    | `6379`                         | append-only enabled (rate limiting)                                                                                                                                           |
+| mobile-purchase-postgres | `5433`→5432                    | **separate** DB for the purchase service: user `mobile_purchase` / pass `mobile_purchase_dev`, db `mobile_purchase`                                                           |
+| adminer                  | `8082`→8080                    | Postgres web UI, dracula theme                                                                                                                                                |
+| ch-ui                    | `5521`                         | ClickHouse web UI (pre-filled connection to `:8123`)                                                                                                                          |
 
 Named volumes persist data: `clickhouse_data`, `postgres_data`, `redis_data`, `mobile_purchase_postgres_data`.
 
@@ -132,7 +134,7 @@ mam_a5857ba6d091bf8f6c96d7f84f0b35db
 This is a LOCAL DEV credential only — never ship it. Token format is `mam_` + 32 lowercase hex
 (`src/common/sdk-token.ts` → `generateSdkToken()`).
 
-> **Example-token mismatch (heads up):** the Flutter examples are pinned to *different* tokens than
+> **Example-token mismatch (heads up):** the Flutter examples are pinned to _different_ tokens than
 > the seed — `sdk/flutter_analytics/example` uses `mam_d9593ad7de03856e2fab8c97d1a9d7fd` and
 > `sdk/flutter_purchases/example` uses `mam_7ac0cf0b5c861de45b250f777206a041`, both with
 > `serverUrl` defaulting to `http://localhost:8088`. If an example's uploads/calls return **401**,
@@ -262,42 +264,42 @@ Traceable to the Zod schema + `collectCrossFieldProblems()` in `src/config/app-c
 
 **Core / infra**
 
-| Var | Rule (schema) | Default | Breaks if wrong/missing |
-|---|---|---|---|
-| `NODE_ENV` | `development` \| `test` \| `production` | `development` | Selects prod hard-checks, dev TTL boost, pino transport |
-| `PORT` | int 1–65535 | `8088` | App binds elsewhere; SDK/dashboard can't reach it |
-| `DATABASE_URL` | matches `^postgresql://` | — (required) | Boot fails; Prisma can't connect. Dev: `postgresql://myampix:myampix_dev@localhost:5432/myampix` |
-| `CLICKHOUSE_URL` | valid `http(s)://` | — (required) | Boot fails; analytics queries + ingest writes fail. Dev: `http://localhost:8123` |
-| `CLICKHOUSE_USER` | min 1 | — (required) | Boot fails. Dev: `default` |
-| `CLICKHOUSE_PASSWORD` | string (may be empty) | — (required key) | Auth failures to CH. Dev: `myampix_dev` |
-| `CLICKHOUSE_DB` | min 1 | — (required) | Wrong DB → queries hit missing tables. Dev: `analytics` |
-| `REDIS_URL` | valid `redis://`/`rediss://` | — (required) | **Boot fails.** No in-memory fallback. Powers sessions, ingest rate-limiter, 2FA pending secret + attempt limiter, refresh-token store. Dev: `redis://localhost:6379` |
+| Var                   | Rule (schema)                           | Default          | Breaks if wrong/missing                                                                                                                                               |
+| --------------------- | --------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`            | `development` \| `test` \| `production` | `development`    | Selects prod hard-checks, dev TTL boost, pino transport                                                                                                               |
+| `PORT`                | int 1–65535                             | `8088`           | App binds elsewhere; SDK/dashboard can't reach it                                                                                                                     |
+| `DATABASE_URL`        | matches `^postgresql://`                | — (required)     | Boot fails; Prisma can't connect. Dev: `postgresql://myampix:myampix_dev@localhost:5432/myampix`                                                                      |
+| `CLICKHOUSE_URL`      | valid `http(s)://`                      | — (required)     | Boot fails; analytics queries + ingest writes fail. Dev: `http://localhost:8123`                                                                                      |
+| `CLICKHOUSE_USER`     | min 1                                   | — (required)     | Boot fails. Dev: `default`                                                                                                                                            |
+| `CLICKHOUSE_PASSWORD` | string (may be empty)                   | — (required key) | Auth failures to CH. Dev: `myampix_dev`                                                                                                                               |
+| `CLICKHOUSE_DB`       | min 1                                   | — (required)     | Wrong DB → queries hit missing tables. Dev: `analytics`                                                                                                               |
+| `REDIS_URL`           | valid `redis://`/`rediss://`            | — (required)     | **Boot fails.** No in-memory fallback. Powers sessions, ingest rate-limiter, 2FA pending secret + attempt limiter, refresh-token store. Dev: `redis://localhost:6379` |
 
 **JWT + token TTLs** (`src/auth/services/auth-config.util.ts`)
 
-| Var | Rule | Default | Notes |
-|---|---|---|---|
-| `JWT_ACCESS_SECRET` | min 32 chars | — | **Required unless `NODE_ENV=test`.** Signs/verifies access tokens |
-| `JWT_REFRESH_SECRET` | min 32 chars | — | **Required unless `NODE_ENV=test`.** Also signs the interim `mfa_token` — different secret from access so a purpose-check bug can't make them interchangeable |
-| `ACCESS_TOKEN_TTL` | int seconds | `900` | See dev boost below |
-| `REFRESH_TOKEN_TTL` | int seconds | `2592000` (30d) | Also sets the refresh cookie `maxAge` |
-| `MFA_TOKEN_TTL` | int seconds | `300` | Lifetime of the interim `mfa_token` between `login` and `2fa/verify` |
+| Var                  | Rule         | Default         | Notes                                                                                                                                                         |
+| -------------------- | ------------ | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_ACCESS_SECRET`  | min 32 chars | —               | **Required unless `NODE_ENV=test`.** Signs/verifies access tokens                                                                                             |
+| `JWT_REFRESH_SECRET` | min 32 chars | —               | **Required unless `NODE_ENV=test`.** Also signs the interim `mfa_token` — different secret from access so a purpose-check bug can't make them interchangeable |
+| `ACCESS_TOKEN_TTL`   | int seconds  | `900`           | See dev boost below                                                                                                                                           |
+| `REFRESH_TOKEN_TTL`  | int seconds  | `2592000` (30d) | Also sets the refresh cookie `maxAge`                                                                                                                         |
+| `MFA_TOKEN_TTL`      | int seconds  | `300`           | Lifetime of the interim `mfa_token` between `login` and `2fa/verify`                                                                                          |
 
 ```bash
 openssl rand -base64 48   # JWT_ACCESS_SECRET  (>=32 chars)
 openssl rand -base64 48   # JWT_REFRESH_SECRET (must differ)
 ```
 
-**Dev-only TTL boost:** when `NODE_ENV=development` *and* `ACCESS_TOKEN_TTL`/`REFRESH_TOKEN_TTL` are
+**Dev-only TTL boost:** when `NODE_ENV=development` _and_ `ACCESS_TOKEN_TTL`/`REFRESH_TOKEN_TTL` are
 unset, `loadConfig()` swaps in 30-day access / 1-year refresh TTLs so a coding session doesn't keep
 bouncing to login. Setting either var explicitly, or any non-dev `NODE_ENV`, disables the boost.
 
 **TOTP 2FA** (`src/auth/two-factor/`, `src/auth/crypto/aes-gcm.ts`)
 
-| Var | Rule | Default | Notes |
-|---|---|---|---|
-| `TOTP_ISSUER` | min 1 | `MyAmpix` | Label in the authenticator app (`otpauth://` issuer) |
-| `TOTP_ENC_KEY` | must decode to **exactly 32 bytes** (64 hex or base64) | — | **Required unless `NODE_ENV=test`.** AES-256-GCM key for TOTP secrets at rest + the encrypted pending secret in Redis. Wrong length → boot fails |
+| Var            | Rule                                                   | Default   | Notes                                                                                                                                            |
+| -------------- | ------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TOTP_ISSUER`  | min 1                                                  | `MyAmpix` | Label in the authenticator app (`otpauth://` issuer)                                                                                             |
+| `TOTP_ENC_KEY` | must decode to **exactly 32 bytes** (64 hex or base64) | —         | **Required unless `NODE_ENV=test`.** AES-256-GCM key for TOTP secrets at rest + the encrypted pending secret in Redis. Wrong length → boot fails |
 
 ```bash
 openssl rand -hex 32      # 64 hex chars = 32 bytes → TOTP_ENC_KEY
@@ -305,18 +307,18 @@ openssl rand -hex 32      # 64 hex chars = 32 bytes → TOTP_ENC_KEY
 
 **Cookie flags** (`src/auth/tokens/cookies.ts`)
 
-| Var | Rule | Default | Notes |
-|---|---|---|---|
+| Var             | Rule                | Default | Notes                                                                                                                                                                                                                   |
+| --------------- | ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `COOKIE_SECURE` | truthy = `true`/`1` | `false` | The `mam_refresh` cookie is `httpOnly`, `sameSite=lax`, `path=/api/v1/auth`. **Hard boot check:** `NODE_ENV=production` with `COOKIE_SECURE` not truthy → app refuses to boot. Keep `false` only for localhost HTTP dev |
-| `COOKIE_DOMAIN` | optional | unset | Cookie `Domain`; leave empty for localhost |
+| `COOKIE_DOMAIN` | optional            | unset   | Cookie `Domain`; leave empty for localhost                                                                                                                                                                              |
 
 **Ingestion limits**
 
-| Var | Rule | Default | Notes |
-|---|---|---|---|
-| `INGEST_MAX_BATCH` | positive int | `100` | Max events/profiles per batch |
-| `INGEST_MAX_BODY_KB` | positive int | `1024` | Wired into the JSON body parser in `main.ts` |
-| `INGEST_RATE_LIMIT_PER_MIN` | positive int | `1000` | Not in `.env.example`; override exists mainly for tests. Ingest limiter fails **open** on a Redis error (availability > throttling for analytics) |
+| Var                         | Rule         | Default | Notes                                                                                                                                             |
+| --------------------------- | ------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INGEST_MAX_BATCH`          | positive int | `100`   | Max events/profiles per batch                                                                                                                     |
+| `INGEST_MAX_BODY_KB`        | positive int | `1024`  | Wired into the JSON body parser in `main.ts`                                                                                                      |
+| `INGEST_RATE_LIMIT_PER_MIN` | positive int | `1000`  | Not in `.env.example`; override exists mainly for tests. Ingest limiter fails **open** on a Redis error (availability > throttling for analytics) |
 
 **Screenshots** (see §3): `SCREENSHOT_MAX_KB` (default 512), `FIREBASE_STORAGE_BUCKET` (unset → in-memory fake + warning; bytes not persisted), `GOOGLE_APPLICATION_CREDENTIALS` (service-account JSON path — never commit).
 
@@ -380,7 +382,7 @@ Redis error denies with 503; over-limit returns 429 with `Retry-After`.
 
 Reference screenshots are a **developer debug tool**, not a per-user feature: the SDK only ever
 captures in **debug builds** (`kDebugMode`) and only when you opt in. Each screen is captured **once
-per `(screen_name, app_version)`**, uploaded to become the project's *admin reference image* that
+per `(screen_name, app_version)`**, uploaded to become the project's _admin reference image_ that
 powers the dashboard's user-path map + click heatmaps. A release build never captures or uploads.
 
 Full path: **SDK flag + `MyAmpixTracker` + named routes → `POST /ingest/screenshots` → Postgres
@@ -409,7 +411,7 @@ silently skips capture — the intended safety property (bounded storage, no PII
 
 **Wrap the app in `MyAmpixTracker`.** Capture renders a root `RepaintBoundary`; `MyAmpixTracker`
 installs a keyed full-screen boundary (`myampixScreenshotBoundaryKey`) around your subtree
-(`lib/src/autocapture/myampix_tracker.dart`). Without it, the capturer falls back to the *largest*
+(`lib/src/autocapture/myampix_tracker.dart`). Without it, the capturer falls back to the _largest_
 `RenderRepaintBoundary` on screen (less reliable), so mount the tracker:
 
 ```dart
@@ -443,14 +445,14 @@ Use **stable names per layout**: one name per real screen/tab; group dynamic det
 name (e.g. `product_detail`) and put per-item ids in event properties.
 
 **Mask PII with `MyAmpixPrivacy`.** Wrap sensitive widgets; the region renders normally on screen but
-is painted solid black in the *uploaded* image only (`lib/src/autocapture/myampix_privacy.dart`):
+is painted solid black in the _uploaded_ image only (`lib/src/autocapture/myampix_privacy.dart`):
 
 ```dart
 MyAmpixPrivacy(child: TextField(controller: emailController));
 ```
 
 **What the capturer does** (`screenshot_capturer.dart`): waits for the UI to stop animating (polls
-`hasScheduledFrame`, capped at 2.5s) *on top of* `screenshotSettleDelay`; renders the boundary;
+`hasScheduledFrame`, capped at 2.5s) _on top of_ `screenshotSettleDelay`; renders the boundary;
 downscales to **≤ 640 px longest side**; blacks out privacy regions; encodes **JPEG q≈70**. Never
 throws — any failure yields no screenshot.
 
@@ -474,17 +476,17 @@ Parses the multipart file (multer memory storage, hard cap 8 MiB) + fields, then
 **Validation** (`screenshots.service.ts`): content-type must be `image/jpeg` (else 415); size ≤
 `SCREENSHOT_MAX_KB * 1024` (else 413); `screen_name` + `app_version` required (else 400).
 
-| Env var | Default | Effect |
-|---|---|---|
-| `SCREENSHOT_MAX_KB` | `512` | Per-image size cap (KB) → 413 when exceeded |
-| `FIREBASE_STORAGE_BUCKET` | *(unset)* | **Unset ⇒ in-memory fake store** — bytes NOT persisted across restarts, logs a warning. Set ⇒ persist to Firebase/GCS |
-| `GOOGLE_APPLICATION_CREDENTIALS` | *(unset)* | Path to service-account JSON; read by `firebase-admin` via ADC |
+| Env var                          | Default   | Effect                                                                                                                |
+| -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
+| `SCREENSHOT_MAX_KB`              | `512`     | Per-image size cap (KB) → 413 when exceeded                                                                           |
+| `FIREBASE_STORAGE_BUCKET`        | _(unset)_ | **Unset ⇒ in-memory fake store** — bytes NOT persisted across restarts, logs a warning. Set ⇒ persist to Firebase/GCS |
+| `GOOGLE_APPLICATION_CREDENTIALS` | _(unset)_ | Path to service-account JSON; read by `firebase-admin` via ADC                                                        |
 
 **Metadata vs bytes split** (`screenshots.service.ts`): the image **bytes** go to object storage;
 **Postgres holds only metadata** + the object path. Storage adapter chosen at boot
 (`storage/screenshot-storage.provider.ts`):
 
-- `FIREBASE_STORAGE_BUCKET` unset → `InMemoryScreenshotStorage` + warning: *"…using the in-memory screenshot store (dev/test). Screenshot bytes are NOT persisted across restarts."* (Metadata rows survive, but `GET .../image` 404s after restart because the object is gone.)
+- `FIREBASE_STORAGE_BUCKET` unset → `InMemoryScreenshotStorage` + warning: _"…using the in-memory screenshot store (dev/test). Screenshot bytes are NOT persisted across restarts."_ (Metadata rows survive, but `GET .../image` 404s after restart because the object is gone.)
 - Set → `FirebaseScreenshotStorage`, credentials from `applicationDefault()` (`GOOGLE_APPLICATION_CREDENTIALS` or ADC). A Firebase init failure degrades back to in-memory rather than crashing boot.
 
 Bytes are written to a tenant-isolated path `{orgId}/{projectId}/screen/{screen_name}/{app_version}.jpg`,
@@ -514,8 +516,8 @@ React Query hooks (`src/features/analytics/api.ts`): `useScreens` (catalog), `us
 
 1. **Bring up infra + the analytics backend** (`pnpm dev` starts analytics + dashboard).
 2. **Decide persistence.**
-   - *Quick local check (bytes ephemeral):* leave `FIREBASE_STORAGE_BUCKET` unset. Uploads 202 and metadata rows appear, but images vanish on backend restart (the warning tells you so).
-   - *Persist images:* set in the backend env:
+   - _Quick local check (bytes ephemeral):_ leave `FIREBASE_STORAGE_BUCKET` unset. Uploads 202 and metadata rows appear, but images vanish on backend restart (the warning tells you so).
+   - _Persist images:_ set in the backend env:
      ```bash
      export FIREBASE_STORAGE_BUCKET="my-project.appspot.com"
      export GOOGLE_APPLICATION_CREDENTIALS="/abs/path/service-account.json"  # never commit
@@ -556,22 +558,22 @@ curl http://localhost:8090/health                      # verify
 
 ### 2. Every environment variable (`app-config.ts`)
 
-| Var | Default | Fail behavior / notes |
-|---|---|---|
-| `NODE_ENV` | `development` | `development`\|`test`\|`production` |
-| `PORT` | `8090` | int 1–65535 |
-| `DATABASE_URL` | — (**required**) | must match `^postgresql://`; dev `postgresql://…@localhost:5433/mobile_purchase`. Only var with no default → boot fails if unset |
-| `LOG_LEVEL` | `info` | pino levels |
-| `ANALYTICS_INTERNAL_URL` | `http://localhost:8088` | base URL of analytics' internal role endpoint; must be a valid URL |
-| `STORE_CREDENTIALS_ENC_KEY` | (unset) | if set, must base64-decode to **exactly 32 bytes** (AES-256) or boot fails; **absence does NOT fail boot** — it only fails the connect-store path (503) and blocks decryption of stored blobs |
-| `APPLE_BUNDLE_IDS` | `com.myampix.app` | comma-separated; split/trimmed into `appleBundleIds[]` |
-| `APPLE_APP_APPLE_ID` | (unset) | numeric App Store Connect app id; **required to build a Production Apple verifier**, optional for Sandbox-only |
-| `APPLE_ROOT_CERT_DIR` | in-repo `certs/` next to the verifier | trust-anchor dir; resolved via `__dirname` (works from `src` or `dist`) |
-| `GOOGLE_PUSH_AUTH_MODE` | `shared_secret` | `shared_secret` (works now) \| `oidc` (deferred to X1, always fails closed) |
-| `GOOGLE_PUBSUB_SHARED_SECRET` | (unset) | **no dev default on purpose** — unset ⇒ every Google push is **401** (fail-closed) |
-| `DASHBOARD_ORIGINS` | `http://localhost:5173` | comma-separated CORS allowlist; empty ⇒ CORS closed |
-| `SCHEDULER_ENABLED` | `true` | `'false'` registers no crons (set in tests) |
-| `EXPIRY_SWEEP_CRON` | `*/5 * * * *` | cron for the expiry sweep; validated by the `cron` lib |
+| Var                           | Default                               | Fail behavior / notes                                                                                                                                                                         |
+| ----------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                    | `development`                         | `development`\|`test`\|`production`                                                                                                                                                           |
+| `PORT`                        | `8090`                                | int 1–65535                                                                                                                                                                                   |
+| `DATABASE_URL`                | — (**required**)                      | must match `^postgresql://`; dev `postgresql://…@localhost:5433/mobile_purchase`. Only var with no default → boot fails if unset                                                              |
+| `LOG_LEVEL`                   | `info`                                | pino levels                                                                                                                                                                                   |
+| `ANALYTICS_INTERNAL_URL`      | `http://localhost:8088`               | base URL of analytics' internal role endpoint; must be a valid URL                                                                                                                            |
+| `STORE_CREDENTIALS_ENC_KEY`   | (unset)                               | if set, must base64-decode to **exactly 32 bytes** (AES-256) or boot fails; **absence does NOT fail boot** — it only fails the connect-store path (503) and blocks decryption of stored blobs |
+| `APPLE_BUNDLE_IDS`            | `com.myampix.app`                     | comma-separated; split/trimmed into `appleBundleIds[]`                                                                                                                                        |
+| `APPLE_APP_APPLE_ID`          | (unset)                               | numeric App Store Connect app id; **required to build a Production Apple verifier**, optional for Sandbox-only                                                                                |
+| `APPLE_ROOT_CERT_DIR`         | in-repo `certs/` next to the verifier | trust-anchor dir; resolved via `__dirname` (works from `src` or `dist`)                                                                                                                       |
+| `GOOGLE_PUSH_AUTH_MODE`       | `shared_secret`                       | `shared_secret` (works now) \| `oidc` (deferred to X1, always fails closed)                                                                                                                   |
+| `GOOGLE_PUBSUB_SHARED_SECRET` | (unset)                               | **no dev default on purpose** — unset ⇒ every Google push is **401** (fail-closed)                                                                                                            |
+| `DASHBOARD_ORIGINS`           | `http://localhost:5173`               | comma-separated CORS allowlist; empty ⇒ CORS closed                                                                                                                                           |
+| `SCHEDULER_ENABLED`           | `true`                                | `'false'` registers no crons (set in tests)                                                                                                                                                   |
+| `EXPIRY_SWEEP_CRON`           | `*/5 * * * *`                         | cron for the expiry sweep; validated by the `cron` lib                                                                                                                                        |
 
 Boot logs a **redacted** view (`describeConfig`) — secrets show as `set`/`MISSING`, `DATABASE_URL`
 collapses to `set`.
@@ -644,8 +646,10 @@ routes are on `AppsController` (`catalog/controllers/apps.controller.ts`), scope
 the Google Play service-account JSON, pasted whole as a string:
 
 ```json
-{ "kind": "google_play",
-  "serviceAccountJson": "{\"type\":\"service_account\",\"project_id\":\"…\",\"client_email\":\"…\",\"private_key\":\"…\"}" }
+{
+  "kind": "google_play",
+  "serviceAccountJson": "{\"type\":\"service_account\",\"project_id\":\"…\",\"client_email\":\"…\",\"private_key\":\"…\"}"
+}
 ```
 
 Structural check: valid JSON with `type:"service_account"` + `client_email` + `private_key` + `project_id`.
@@ -653,11 +657,13 @@ Structural check: valid JSON with `type:"service_account"` + `client_email` + `p
 **iOS app** — App Store Connect API key blob:
 
 ```json
-{ "kind": "app_store",
+{
+  "kind": "app_store",
   "ascIssuerId": "<UUID>",
   "ascKeyId": "<10-char key id>",
   "ascPrivateKeyP8": "-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----",
-  "appAppleId": "<numeric app id>" }
+  "appAppleId": "<numeric app id>"
+}
 ```
 
 Validation: `ascIssuerId` UUID, `ascKeyId` exactly 10 chars, `ascPrivateKeyP8` contains the PEM
@@ -690,10 +696,10 @@ runtime** from a config file, so one build works against any environment.
 The dashboard talks to **two distinct backends** (both expose `/api/v1/projects/:projectId/…`, so
 they can't be same-origin):
 
-| Config key | Backend | Port | Used by |
-|---|---|---|---|
-| `apiBaseUrl` | `mobile_analytics` (MyAmplitude) | `:8088` | main app / analytics pages |
-| `purchaseApiBaseUrl` | `mobile_purchase` (MyRevenueCat) | `:8090` | MyRevenueCat pages |
+| Config key           | Backend                          | Port    | Used by                    |
+| -------------------- | -------------------------------- | ------- | -------------------------- |
+| `apiBaseUrl`         | `mobile_analytics` (MyAmplitude) | `:8088` | main app / analytics pages |
+| `purchaseApiBaseUrl` | `mobile_purchase` (MyRevenueCat) | `:8090` | MyRevenueCat pages         |
 
 `pnpm dev` starts **only** `mobile_analytics` (`:8088`) + the dashboard (`:5173`). To exercise the
 MyRevenueCat pages you must start `mobile_purchase` (`:8090`) separately.
@@ -725,7 +731,7 @@ The proxy only covers `/api` and `/ingest` → `:8088`. There is **no** proxy fo
 ```js
 // dashboard/public/config.js  (checked-in dev values)
 window.___MYAMPIX_CONFIG__ = {
-  apiBaseUrl: '',                              // '' = same origin → Vite proxy in dev / reverse proxy in prod
+  apiBaseUrl: '', // '' = same origin → Vite proxy in dev / reverse proxy in prod
   purchaseApiBaseUrl: 'http://localhost:8090', // mobile_purchase — MUST be absolute (no dev proxy for it)
 };
 ```
@@ -742,7 +748,7 @@ at deploy, swap `config.js` to point at that environment's origins:
 
 ```js
 window.___MYAMPIX_CONFIG__ = {
-  apiBaseUrl: '',                                  // '' if a reverse proxy fronts mobile_analytics same-origin
+  apiBaseUrl: '', // '' if a reverse proxy fronts mobile_analytics same-origin
   purchaseApiBaseUrl: 'https://rc.myampix.example', // mobile_purchase absolute origin (set by the X1 pipeline)
 };
 ```
@@ -821,3 +827,54 @@ MaterialApp(
 ```
 
 See [`HOW-TO-USE.md`](HOW-TO-USE.md) for privacy masking, stable screen naming, and the screenshot retake flow.
+
+---
+
+## 7. Admin console setup
+
+The ops console lives in `admin/` and uses its own database (`admin_console`) on the local Compose
+Postgres — the first migrate run creates it automatically.
+
+```bash
+pnpm infra:up
+# one-time: create DB + apply migrations against local Compose Postgres
+DATABASE_URL="postgresql://myampix:myampix_dev@localhost:5432/admin_console" \
+  pnpm --filter @myampix/admin exec prisma migrate deploy
+
+# dev server on :3100 (COOKIE_SECURE stays false in dev)
+DATABASE_URL="postgresql://myampix:myampix_dev@localhost:5432/admin_console" \
+  pnpm --filter @myampix/admin dev
+```
+
+There is no registration page. Seed the first account by running the migrate script with the
+default-account env (only seeds while the user table is empty; first login forces a password change):
+
+```bash
+DATABASE_URL="postgresql://myampix:myampix_dev@localhost:5432/admin_console" \
+ADMIN_DEFAULT_EMAIL=you@example.com ADMIN_DEFAULT_PASSWORD="a-dev-only-password" \
+  node admin/scripts/migrate.mjs
+```
+
+Optional env: `TOTP_ENC_KEY` (`openssl rand -base64 32`) enables 2FA enrolment;
+`ANALYTICS_DATABASE_URL` / `PURCHASE_DATABASE_URL` / `CLICKHOUSE_*` / `REDIS_URL` light up the
+datastore probes; `DOCKER_SOCK=/var/run/docker.sock` the Docker page; `ALERT_WEBHOOK_URL` pushes
+alert events. Outside a cluster the Kubernetes pages simply report "not running in a cluster".
+
+Tests / checks: `pnpm --filter @myampix/admin test | typecheck | build`.
+
+## 8. Full-stack test mode & production deploy
+
+**Test mode** — the entire platform (both backends + migrations, dashboard, admin console, ingress,
+HPAs) in a local kind cluster wired to your Compose databases:
+
+```bash
+brew install helm kind kubeconform   # once
+pnpm infra:up
+pnpm k8s:local                       # builds + deploys + smoke-tests, then prints the URLs
+# → http://app.localhost:8089 · http://admin.localhost:8089 (credentials printed) · api/purchase health
+pnpm k8s:local down                  # tear the cluster down (Compose DBs untouched)
+```
+
+**Production** — follow [`docs/runbooks/vps-k3s.md`](docs/runbooks/vps-k3s.md): VPS prep + firewall →
+host datastores (Compose prod overlay) → k3s + cert-manager → secrets (`scripts/k8s/secrets.sh`) →
+values → `scripts/k8s/deploy.sh <image-tag>`. Chart checks: `pnpm k8s:lint`.

@@ -2,6 +2,7 @@
 
 import type { StatusPayload } from '@/app/api/admin/status/route';
 import { Card, Dot, ErrorBanner, fmtAgo, fmtBytes, fmtCores, Meter, usePoll } from '@/components/ui';
+import { NodeSparklines } from '@/components/sparklines';
 
 export default function OverviewPage() {
   const { data, error } = usePoll<StatusPayload>('/api/admin/status');
@@ -57,6 +58,7 @@ export default function OverviewPage() {
           </div>
         </Card>
       </div>
+      <NodeSparklines />
     </div>
   );
 }
