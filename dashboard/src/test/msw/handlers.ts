@@ -1230,6 +1230,29 @@ export const handlers = [
     return HttpResponse.json(response);
   }),
 
+  // Owner-only, one step above PATCH's admin. Mirrors the server cascade: the org's projects (and
+  // their tokens/memberships) and its memberships and invitations all go with it.
+  http.delete('/api/v1/orgs/:orgId', ({ request, params }) => {
+    const user = userForToken(bearerToken(request));
+    if (!user) return problem(401, 'Access token invalid or expired');
+    const orgId = params.orgId as string;
+    if (!orgById(orgId)) return problem(404, 'Organization not found');
+    const role = roleFor(orgId, user.id);
+    if (!role) return problem(403, 'Not a member of this organization');
+    if (role !== 'owner') return problem(403, 'Only the owner can delete the organization');
+
+    const doomedProjects = orgsState.projects.filter((p) => p.orgId === orgId).map((p) => p.id);
+    orgsState.projects = orgsState.projects.filter((p) => p.orgId !== orgId);
+    orgsState.tokens = orgsState.tokens.filter((t) => !doomedProjects.includes(t.projectId));
+    orgsState.projectMemberships = orgsState.projectMemberships.filter(
+      (pm) => !doomedProjects.includes(pm.projectId),
+    );
+    orgsState.memberships = orgsState.memberships.filter((m) => m.orgId !== orgId);
+    orgsState.invitations = orgsState.invitations.filter((i) => i.orgId !== orgId);
+    orgsState.orgs = orgsState.orgs.filter((o) => o.id !== orgId);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   // --- Members & permissions (contracts §13) ---
 
   http.get('/api/v1/orgs/:orgId/members', ({ request, params }) => {

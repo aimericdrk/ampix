@@ -181,7 +181,7 @@ describe('AuthService', () => {
       expect(prisma.organizations[0].name).toBe("Ada's Workspace");
 
       expect(prisma.memberships).toEqual([
-        { userId: session.user.id, orgId: prisma.organizations[0].id, role: 'admin' },
+        { userId: session.user.id, orgId: prisma.organizations[0].id, role: 'owner' },
       ]);
 
       expect(prisma.projects).toHaveLength(1);

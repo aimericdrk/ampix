@@ -66,6 +66,17 @@ analytics:
   # UID/GID of the image's `app` user (useradd -r → 999 on node:22-bookworm-slim).
   runAsUser: 999
   runAsGroup: 999
+  # Google service-account JSON for Firebase Storage (screenshot persistence). The chart mounts the
+  # Secret read-only and derives GOOGLE_APPLICATION_CREDENTIALS from mountPath + fileName; you only
+  # create the Secret. See scripts/k8s/firebase-credentials.sh.
+  googleCredentials:
+    enabled: false
+    secretName: myampix-google-credentials
+    # Key inside the Secret holding the JSON. `kubectl create secret generic --from-file=<path>`
+    # names the key after the file, so keep these two consistent.
+    secretKey: service-account.json
+    fileName: service-account.json
+    mountPath: /var/run/secrets/google
   # Non-secret env (rendered into a ConfigMap; NODE_ENV and PORT are fixed by the template).
   env:
     CLICKHOUSE_URL: http://clickhouse:8123

@@ -65,7 +65,9 @@ kubectl get pods -A
 # cert-manager (Let's Encrypt)
 helm repo add jetstack https://charts.jetstack.io && helm repo update
 helm upgrade --install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set crds.enabled=true --wait
-# Traefik: redirect HTTP→HTTPS cluster-wide (k3s re-applies this file on restart)
+# Traefik: redirect HTTP→HTTPS cluster-wide (k3s re-applies this file on restart).
+# The key path is ports.web.HTTP.redirections.entryPoint — the older `ports.web.redirectTo.port`
+# form is silently IGNORED by the traefik 40.x chart k3s 1.36 ships, leaving port 80 serving plaintext.
 sudo tee /var/lib/rancher/k3s/server/manifests/traefik-config.yaml >/dev/null <<'EOF'
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
@@ -76,8 +78,12 @@ spec:
   valuesContent: |-
     ports:
       web:
-        redirectTo:
-          port: websecure
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
 EOF
 kubectl -n kube-system rollout status deploy/traefik --timeout=120s
 ```

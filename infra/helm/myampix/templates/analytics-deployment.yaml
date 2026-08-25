@@ -78,7 +78,26 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if $a.googleCredentials.enabled }}
+            # firebase-admin reads the service-account JSON from the path in
+            # GOOGLE_APPLICATION_CREDENTIALS (set in the ConfigMap). The file is projected from a
+            # Secret, so it never rides along in the image or the values file.
+            - name: google-credentials
+              mountPath: {{ $a.googleCredentials.mountPath }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if $a.googleCredentials.enabled }}
+        - name: google-credentials
+          secret:
+            secretName: {{ $a.googleCredentials.secretName }}
+            # 0400: readable only by the container's runAsUser. The pod already runs non-root with
+            # a read-only root filesystem, so this is the last privilege left to trim.
+            defaultMode: 0400
+            items:
+              - key: {{ $a.googleCredentials.secretKey }}
+                path: {{ $a.googleCredentials.fileName }}
+        {{- end }}
 {{- end }}

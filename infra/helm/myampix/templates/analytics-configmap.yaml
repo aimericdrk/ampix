@@ -9,6 +9,11 @@ metadata:
 data:
   NODE_ENV: production
   PORT: "8088"
+  {{- if .Values.analytics.googleCredentials.enabled }}
+  # Derived from the volume mount rather than hand-written, so the path the app reads and the path
+  # the Secret is projected to can never drift apart.
+  GOOGLE_APPLICATION_CREDENTIALS: {{ printf "%s/%s" (trimSuffix "/" .Values.analytics.googleCredentials.mountPath) .Values.analytics.googleCredentials.fileName | quote }}
+  {{- end }}
   {{- range $k, $v := .Values.analytics.env }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}

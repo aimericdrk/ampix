@@ -35,7 +35,7 @@ admin/
   src/lib/
     env.ts                zod-validated process.env → typed config (fail fast, aggregated errors)
     db.ts                 PrismaClient singleton
-    password.ts           argon2id hash/verify + zod password policy (≥12 chars)
+    password.ts           argon2id hash/verify + zod password policy (≥8 chars)
     session.ts            create/validate/touch/revoke sessions; cookie serialization (__Host-admx / admx)
     auth.ts               requireSession()/requireFreshPassword() server helpers; login/lockout logic
     origin.ts             assertSameOrigin(request) for mutating route handlers
@@ -121,7 +121,7 @@ model AdminAuditEvent {
 4. **Validation on every request** (server components + API routes via `requireSession()`): token → hash → lookup; reject if revoked, idle-expired, or absolute-expired; `lastSeenAt`/`idleExpiresAt` touched only when >5 min stale (write-throttling).
 5. **Logout** revokes the session; **logout-all** revokes all the user's sessions; `/account` lists active sessions (created, last seen, IP, UA) with per-session revoke.
 6. **CSRF:** SameSite=Lax cookie + `assertSameOrigin` (Origin — falling back to Referer — must match the request Host) on every mutating route handler; Server Actions additionally carry Next's built-in origin enforcement. No state-changing GETs.
-7. **Password policy:** ≥12 chars (zod). Change-password requires the current password and revokes all *other* sessions. `mustChangePassword` blocks every authenticated page/route except `/account` password change + logout (enforced in `(auth)/layout.tsx`).
+7. **Password policy:** ≥8 chars (zod). Change-password requires the current password and revokes all *other* sessions. `mustChangePassword` blocks every authenticated page/route except `/account` password change + logout (enforced in `(auth)/layout.tsx`).
 8. **Seeded default account:** `scripts/migrate.mjs` — after `prisma migrate deploy`, iff `AdminUser` is empty, create `ADMIN_DEFAULT_EMAIL` with `ADMIN_DEFAULT_PASSWORD` (argon2) and `mustChangePassword: true`. Idempotent; never touches a non-empty table (so deleting the default later is safe). The runbook tells the operator to log in and rotate immediately.
 9. **User management** (any active admin — single role in v1, all users are admins): create (with generated or supplied temp password, `mustChangePassword: true`), disable (revokes all their sessions), enable, reset password (revokes sessions, sets `mustChangePassword`). A user cannot disable themselves; the last enabled user cannot be disabled.
 10. **Audit:** every action in §2's `action` list, with actor, IP, UA and detail; `/audit` renders the latest 200 with filters.

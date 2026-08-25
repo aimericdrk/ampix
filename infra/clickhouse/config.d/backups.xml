@@ -1,0 +1,17 @@
+<!-- Enables `BACKUP DATABASE analytics TO Disk('backups', '…')`, used by scripts/ops/backup.sh.
+     The disk is a plain directory inside the container, bind-mounted to /var/backups/myampix/clickhouse
+     on the host by infra/docker-compose.prod.yml. -->
+<clickhouse>
+    <storage_configuration>
+        <disks>
+            <backups>
+                <type>local</type>
+                <path>/backups/</path>
+            </backups>
+        </disks>
+    </storage_configuration>
+    <backups>
+        <allowed_disk>backups</allowed_disk>
+        <allowed_path>/backups/</allowed_path>
+    </backups>
+</clickhouse>

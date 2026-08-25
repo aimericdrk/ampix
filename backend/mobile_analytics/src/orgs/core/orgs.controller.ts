@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { parseOrThrow } from '../../auth/schemas/auth.schemas';
 import type { AuthRequest } from '../../auth/auth.types';
 import { JwtAuthGuard } from '../../auth/tokens/jwt-auth.guard';
@@ -31,5 +42,17 @@ export class OrgsController {
   async rename(@Param('orgId') orgId: string, @Body() body: unknown): Promise<RenamedOrg> {
     const dto = parseOrThrow(renameOrgSchema, body);
     return this.orgs.rename(orgId, dto.name);
+  }
+
+  /**
+   * Owner-only, one step above `rename`'s admin: this destroys every project, member, invitation
+   * and event in the org. RolesGuard resolves `:orgId` (404 unknown, 403 non-owner) before this runs.
+   */
+  @Delete(':orgId')
+  @UseGuards(RolesGuard)
+  @Roles('owner')
+  @HttpCode(204)
+  async remove(@Req() req: AuthRequest, @Param('orgId') orgId: string): Promise<void> {
+    await this.orgs.remove(orgId, req.user!.id);
   }
 }

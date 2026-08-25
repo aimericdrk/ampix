@@ -9,6 +9,11 @@ services:
     ports: !override
       - "${BIND_IP}:8123:8123"
       - "${BIND_IP}:9000:9000"
+    # Appended to the base file's volumes: a writable backup disk + the config that declares it,
+    # so `BACKUP DATABASE analytics TO Disk('backups', …)` works (scripts/ops/backup.sh).
+    volumes:
+      - ./clickhouse/config.d/backups.xml:/etc/clickhouse-server/config.d/backups.xml:ro
+      - /var/backups/myampix/clickhouse:/backups
     environment:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
     healthcheck:

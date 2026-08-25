@@ -45,11 +45,19 @@ export class AuthService {
 
   /**
    * Creates the user and, in the SAME transaction (contracts §12), provisions their default
-   * workspace: an Organization ("<name>'s Workspace"), an admin Membership linking the user to
+   * workspace: an Organization ("<name>'s Workspace"), an OWNER Membership linking the user to
    * it, a "Default" Project (UTC) with an owner ProjectMembership for that same user (per-project
    * access model — org membership alone no longer grants project access), and an ingest SdkToken
    * for that project. A brand-new account therefore always has exactly one org/project/token to
    * instrument against. The signup RESPONSE shape (access_token + user) is unchanged by this.
+   *
+   * The org Membership is `owner`, matching `OrgsService.create` (an org's creator owns it). It
+   * used to be `admin`, written before the `owner` role existed; the 20260711102417 migration
+   * backfilled orgs that predated the role but this code path was never updated, so every account
+   * provisioned after that migration got an org with NO owner. That is a trap rather than a mere
+   * downgrade: owner-only actions (deleting the org, transferring ownership) become permanently
+   * unreachable, because promoting someone to owner itself requires an existing owner to hand it
+   * over. Migration 20260824210000 repairs the orgs already created that way.
    */
   async signup(dto: SignupDto): Promise<Session> {
     const email = dto.email.toLowerCase();
@@ -59,7 +67,7 @@ export class AuthService {
       user = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({ data: { email, passwordHash, name: dto.name } });
         const org = await tx.organization.create({ data: { name: `${dto.name}'s Workspace` } });
-        await tx.membership.create({ data: { userId: created.id, orgId: org.id, role: 'admin' } });
+        await tx.membership.create({ data: { userId: created.id, orgId: org.id, role: 'owner' } });
         const project = await tx.project.create({
           data: { orgId: org.id, name: 'Default', timezone: 'UTC', createdById: created.id },
         });

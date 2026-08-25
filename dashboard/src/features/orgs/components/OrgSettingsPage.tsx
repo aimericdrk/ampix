@@ -1,8 +1,9 @@
-import { useParams } from '@tanstack/react-router';
+import { useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { PageShell } from '../../../components/layout/PageShell';
 import { Badge, type BadgeProps } from '../../../components/ui/badge';
+import { Banner } from '../../../components/ui/banner';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
@@ -24,6 +25,7 @@ import { ORG_ROLES, type Invitation, type OrgMember, type OrgRole } from '../../
 import { useAuth } from '../../auth/store';
 import {
   useCreateInvitation,
+  useDeleteOrg,
   useInvitations,
   useMemberProjectAccess,
   useMembers,
@@ -78,6 +80,7 @@ export function OrgSettingsPage() {
   const canManage = role === 'owner' || role === 'admin';
   const { user } = useAuth();
   const currentUserId = user?.id;
+  const router = useRouter();
 
   return (
     <PageShell
@@ -128,8 +131,122 @@ export function OrgSettingsPage() {
             </Card>
           </Reveal>
         )}
+
+        {/* Owner-only, and last on the page: deleting the org takes every project with it. */}
+        {isOwner && org && (
+          <Reveal index={3} className="lg:col-span-2">
+            <DangerZoneSection
+              orgId={orgId}
+              orgName={org.name}
+              onDeleted={() => router.history.push('/projects')}
+            />
+          </Reveal>
+        )}
       </div>
     </PageShell>
+  );
+}
+
+// --- Danger zone --------------------------------------------------------------
+
+/**
+ * Delete-organization card. Mirrors ProjectDetailPage's danger zone, with the stricter
+ * type-the-name confirmation its purge dialog uses rather than the plain one its project delete
+ * uses — an org delete is strictly more destructive than either.
+ */
+function DangerZoneSection({
+  orgId,
+  orgName,
+  onDeleted,
+}: {
+  orgId: string;
+  orgName: string;
+  onDeleted: () => void;
+}) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
+  const deleteOrg = useDeleteOrg(orgId);
+  const nameMatches = confirmName.trim() === orgName;
+
+  const handleDelete = () => {
+    if (!nameMatches) return;
+    deleteOrg.mutate(undefined, {
+      onSuccess: () => {
+        setDialogOpen(false);
+        toast({ title: 'Organization deleted', description: orgName });
+        onDeleted();
+      },
+      onError: (error) => {
+        setDialogOpen(false);
+        toast({
+          title: 'Could not delete organization',
+          description: error instanceof ApiError ? error.problem.title : 'Something went wrong.',
+          variant: 'error',
+        });
+      },
+    });
+  };
+
+  return (
+    <Card className="border-danger/40">
+      <CardHeader>
+        <CardTitle>Danger zone</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {/* role="note", not "alert": permanent page furniture, not a transient error. */}
+        <Banner variant="danger" role="note">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p>
+              Deleting this organization permanently removes every project in it, along with all
+              collected analytics data, members, and invitations.
+            </p>
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) setConfirmName('');
+              }}
+            >
+              <Button variant="danger" onClick={() => setDialogOpen(true)}>
+                Delete organization
+              </Button>
+              <DialogContent>
+                <DialogTitle>Delete organization</DialogTitle>
+                <DialogDescription>
+                  This permanently deletes <span className="font-medium">{orgName}</span>, every
+                  project it contains, their SDK tokens, and all ingested event data. This cannot be
+                  undone.
+                </DialogDescription>
+                <div className="mt-4">
+                  <Label htmlFor="delete-org-confirm" className="mb-1 block">
+                    Type <span className="font-mono">{orgName}</span> to confirm
+                  </Label>
+                  <Input
+                    id="delete-org-confirm"
+                    value={confirmName}
+                    onChange={(event) => setConfirmName(event.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={!nameMatches || deleteOrg.isPending}
+                    onClick={handleDelete}
+                  >
+                    {deleteOrg.isPending ? 'Deleting…' : 'Delete organization'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </Banner>
+      </CardContent>
+    </Card>
   );
 }
 

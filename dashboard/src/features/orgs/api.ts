@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api/client';
+import { PROJECTS_QUERY_KEY } from '../projects/api';
 import type {
   AcceptInvitationResponse,
   CreateInvitationRequest,
@@ -52,6 +53,24 @@ export function useRenameOrg(orgId: string) {
       apiFetch<RenameOrgResponse>(`/api/v1/orgs/${orgId}`, { method: 'PATCH', body: input }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ORGS_QUERY_KEY });
+    },
+  });
+}
+
+/**
+ * Deletes the org and everything in it (owner-only, 204). Invalidates the orgs list so the
+ * switcher drops it immediately; the caller is responsible for navigating away from the now-dead
+ * `/orgs/:orgId/settings` route.
+ */
+export function useDeleteOrg(orgId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<void>(`/api/v1/orgs/${orgId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ORGS_QUERY_KEY });
+      // Projects are org-scoped and cascade server-side — drop their cache too, or the projects
+      // list keeps showing projects that no longer exist until its next natural refetch.
+      void queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY });
     },
   });
 }

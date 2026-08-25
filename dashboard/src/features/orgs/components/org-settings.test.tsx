@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { authStore } from '../../auth/store';
 import {
+  MFA_ACCESS_TOKEN,
   MFA_USER,
   TEST_ORG_ID,
   TEST_ORG_NAME,
@@ -140,5 +141,74 @@ describe('OrgSettingsPage — viewer (VIEWER_ORG)', () => {
 
     // The whole Invitations section is admin-only.
     expect(screen.queryByRole('heading', { name: 'Invitations' })).not.toBeInTheDocument();
+
+    // Deleting the org is owner-only — stricter than the admin gate above.
+    expect(screen.queryByRole('heading', { name: 'Danger zone' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete organization' })).not.toBeInTheDocument();
+  });
+});
+
+describe('OrgSettingsPage — admin (VIEWER_ORG, MFA_USER is admin there)', () => {
+  it('lets an admin rename and invite, but NEVER exposes the delete control', async () => {
+    // MFA_USER is `admin` in VIEWER_ORG — the role that CAN manage the org but must not destroy it.
+    // This is the gate that matters: `viewer` is blocked by the broader canManage check, so only an
+    // admin proves the delete control is gated on `isOwner` specifically and not on canManage.
+    authStore.setSession(MFA_ACCESS_TOKEN, MFA_USER);
+    renderApp(`/orgs/${VIEWER_ORG_ID}/settings`);
+    await screen.findByRole('heading', { name: VIEWER_ORG_NAME });
+
+    expect(screen.getByText('Your role: admin')).toBeInTheDocument();
+
+    // Admin powers are present…
+    expect(screen.getByLabelText('Name')).toBeEnabled();
+    expect(await screen.findByRole('heading', { name: 'Invitations' })).toBeInTheDocument();
+
+    // …but deletion is owner-only.
+    expect(screen.queryByRole('heading', { name: 'Danger zone' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete organization' })).not.toBeInTheDocument();
+  });
+});
+
+describe('OrgSettingsPage — delete organization', () => {
+  it('requires the exact org name before the delete button unlocks, then removes the org', async () => {
+    signIn();
+    renderApp(`/orgs/${TEST_ORG_ID}/settings`);
+    await screen.findByRole('heading', { name: TEST_ORG_NAME });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete organization' }));
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: 'Delete organization' });
+    // Guarded until the typed name matches exactly.
+    expect(confirmButton).toBeDisabled();
+
+    const confirmInput = within(dialog).getByLabelText(/Type .* to confirm/);
+    await userEvent.type(confirmInput, 'not the org name');
+    expect(confirmButton).toBeDisabled();
+
+    await userEvent.clear(confirmInput);
+    await userEvent.type(confirmInput, TEST_ORG_NAME);
+    await waitFor(() => expect(confirmButton).toBeEnabled());
+
+    await userEvent.click(confirmButton);
+
+    // Gone from the workspace switcher, and the page has navigated away from the dead route.
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: TEST_ORG_NAME })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('closes without deleting when cancelled', async () => {
+    signIn();
+    renderApp(`/orgs/${TEST_ORG_ID}/settings`);
+    await screen.findByRole('heading', { name: TEST_ORG_NAME });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete organization' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // Still on the org, still named the same.
+    expect(screen.getByRole('heading', { name: TEST_ORG_NAME })).toBeInTheDocument();
   });
 });
