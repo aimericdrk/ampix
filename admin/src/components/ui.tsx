@@ -1,18 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Polls a JSON endpoint every `intervalMs`, pausing while the tab is hidden. */
 export function usePoll<T>(
   url: string,
   intervalMs = 10_000,
-): { data: T | null; error: string | null; at: Date | null } {
+): { data: T | null; error: string | null; at: Date | null; refresh: () => void } {
   const [state, setState] = useState<{ data: T | null; error: string | null; at: Date | null }>({
     data: null,
     error: null,
     at: null,
   });
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Lets callers force an immediate re-fetch after a mutation instead of waiting out the interval.
+  // Held in a ref (not returned from the effect) so the identity stays stable across renders.
+  const forceTick = useRef<() => void>(() => {});
   useEffect(() => {
     let cancelled = false;
     const tick = async (force = false): Promise<void> => {
@@ -33,6 +36,7 @@ export function usePoll<T>(
           }));
       }
     };
+    forceTick.current = () => void tick(true);
     void tick(true);
     timer.current = setInterval(() => void tick(), intervalMs);
     const onVisible = (): void => {
@@ -41,11 +45,13 @@ export function usePoll<T>(
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
+      forceTick.current = () => {};
       if (timer.current) clearInterval(timer.current);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [url, intervalMs]);
-  return state;
+  const refresh = useCallback(() => forceTick.current(), []);
+  return { ...state, refresh };
 }
 
 export function fmtBytes(n: number | null | undefined): string {

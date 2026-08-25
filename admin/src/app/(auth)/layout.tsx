@@ -14,6 +14,7 @@ const NAV = [
   { href: '/kubernetes', label: 'Kubernetes' },
   { href: '/docker', label: 'Docker' },
   { href: '/datastores', label: 'Datastores' },
+  { href: '/backups', label: 'Backups' },
   { href: '/audit', label: 'Audit log' },
   { href: '/account', label: 'My account' },
 ] as const;

@@ -163,6 +163,18 @@ admin:
     path: /var/run/docker.sock
     # gid of the `docker` group on the VPS:  getent group docker | cut -d: -f3
     gid: 988
+  backups:
+    # Bind-mounts the host backup directory so the Backups page can list, download, delete, and
+    # request runs. Read-WRITE by necessity: deleting a backup and dropping the run-request marker
+    # are both writes. Scoped to this one directory — not the whole filesystem.
+    enabled: true
+    hostPath: /var/backups/myampix
+    mountPath: /var/backups/myampix
+    # gid of the `myampix-backup` group on the host, added to the pod's supplementalGroups. The
+    # backup tree is root:myampix-backup 2770 (setgid), so the console reads and writes through
+    # group membership and the files stay root-owned:
+    #   getent group myampix-backup | cut -d: -f3
+    gid: 2000
   # Extra non-secret env (merged into the ConfigMap).
   env: {}
   resources:
