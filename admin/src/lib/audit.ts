@@ -19,7 +19,9 @@ export type AuditAction =
   | 'totp.disable'
   | 'ops.restart'
   | 'ops.scale'
-  | 'ops.sample';
+  | 'ops.sample'
+  | 'backup.run'
+  | 'backup.delete';
 
 /** Fire-and-forget-safe audit write — an audit failure must never break the audited action. */
 export async function writeAudit(

@@ -160,6 +160,7 @@ cluster over SSH from this host. Nothing else is exposed.
 | `k3s.service` | enabled — recreates every pod from cluster state |
 | `myampix-backup.timer` | enabled — 03:30 UTC nightly, `Persistent=true` so a missed run fires at next boot |
 | `myampix-postboot-check.service` | enabled — after every boot, waits for the stack to converge and appends a verdict to `/var/log/myampix-postboot.log` |
+| `myampix-backup-trigger.path` | enabled — watches for `/var/backups/myampix/.run-now` so the admin console can request an out-of-schedule backup |
 
 Nothing here needs a human after a power cut. Startup order is not enforced between k3s and the
 datastores: if pods come up first they crash-loop for a few seconds with `P1001 Can't reach database
@@ -326,17 +327,41 @@ sudo docker logs myampix-postgres-1 --tail 100
 
 ### 4.5 Backups
 
-Nightly at 03:30 UTC into `/var/backups/myampix`, 14 days retained:
+Nightly at 03:30 UTC into `/var/backups/myampix`, **30 days retained**, pruned automatically:
 
 - `postgres/myampix-<ts>.dump` — orgs, users, projects, ingest tokens
 - `postgres/admin_console-<ts>.dump` — console users, alerts, samples
 - `postgres/mobile_purchase-<ts>.dump` — apps, subscribers, entitlements, purchases
-- `clickhouse/analytics-<ts>.zip` — the event store
+
+**ClickHouse events are deliberately NOT backed up.** They are the largest and fastest-growing
+dataset here and are reconstructible telemetry rather than system-of-record state — everything that
+defines the product (accounts, orgs, projects, ingest tokens, billing) lives in the three Postgres
+databases above. The ClickHouse `backups` disk stays configured, so a one-off snapshot is always
+available on demand (see the RESTORE/BACKUP commands below).
+
+Manage it all from the admin console's **Backups** page (`admin.<domain>/backups`): last-run status,
+next run, per-database freshness, run-now, download, delete, and the exact restore command per file.
+From the shell:
 
 ```bash
 sudo systemctl start myampix-backup.service          # run one now
 sudo journalctl -u myampix-backup.service -n 20      # check the last run
+sudo cat /var/backups/myampix/.last-run.json         # machine-readable status (the console reads this)
 ```
+
+**How the console triggers a run.** The admin pod cannot reach systemd, so "Run backup now" writes
+`/var/backups/myampix/.run-now`; `myampix-backup-trigger.path` notices and starts the same service
+the nightly timer does. There is exactly one backup implementation — the on-demand run and the
+scheduled run are byte-for-byte identical.
+
+**Permissions.** The backup tree is `root:myampix-backup` mode `2770` (setgid, so files the
+root-run script creates inherit the group). The admin pod joins that group via
+`admin.backups.gid` in the chart values — that is how a non-root pod reads and deletes
+root-created backups without the files ever leaving root ownership.
+
+Alerting is wired in: `backup.stale` (a database's newest backup >36h), `backup.failed` (last run
+errored), and `backup.missing` (a database with no backup at all) open alerts through the existing
+rules engine and webhook.
 
 Restore:
 
@@ -345,13 +370,20 @@ Restore:
 sudo docker exec -i -e PGPASSWORD=<pw> myampix-postgres-1 \
   pg_restore -U myampix -d myampix --clean --if-exists < /var/backups/myampix/postgres/myampix-<ts>.dump
 
-# ClickHouse
+# ClickHouse — only if you took a manual snapshot; the nightly job no longer produces these.
 sudo docker exec myampix-clickhouse-1 clickhouse-client --user default --password <pw> \
-  --query "RESTORE DATABASE analytics FROM Disk('backups','analytics-<ts>.zip')"
+  --query "BACKUP DATABASE analytics TO Disk('backups','manual-<ts>.zip')"
+sudo docker exec myampix-clickhouse-1 clickhouse-client --user default --password <pw> \
+  --query "RESTORE DATABASE analytics FROM Disk('backups','manual-<ts>.zip')"
 ```
 
+The console shows the exact restore command for any Postgres file ("Copy restore cmd"). Restoring is
+deliberately not a button: it overwrites a live database and cannot be undone.
+
 > **These backups are on the same disk as the data.** That protects against a bad migration or a
-> dropped table, not against losing the machine. See §5.3 for pushing them off-box.
+> dropped table, not against losing the machine. See §5.3 for pushing them off-box. The backup
+> script honours `BACKUP_DEST`, so pointing it at a mounted OVH Backup Storage share is a one-line
+> change.
 
 ### 4.6 Rotating a credential
 

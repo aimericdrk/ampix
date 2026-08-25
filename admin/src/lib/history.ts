@@ -74,3 +74,31 @@ export function fmtValue(v: number, unit: string): string {
   if (Number.isInteger(v)) return v.toFixed(0);
   return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1);
 }
+
+/**
+ * Pointer clientX → x in SVG user (viewBox) units.
+ *
+ * An `<svg viewBox="0 0 W H">` sized with `width:100%; height:Hpx` and the DEFAULT
+ * `preserveAspectRatio="xMidYMid meet"` does NOT stretch to fill its box: it scales uniformly to
+ * fit, then centres, leaving equal dead space left and right whenever the box is wider than the
+ * viewBox aspect ratio. Treating the pointer's fraction across the ELEMENT as its fraction across
+ * the viewBox therefore overshoots — the crosshair lands to the right of the real pointer by half
+ * the letterbox (≈30px in a two-column chart grid).
+ *
+ * Returns a value in viewBox units; it may fall outside [0, vbW] when the pointer is over the
+ * letterboxed margin, which callers clamp via their own snapping.
+ */
+export function clientXToViewBoxX(
+  clientX: number,
+  rect: { left: number; width: number; height: number },
+  vbW: number,
+  vbH: number,
+): number {
+  if (rect.width <= 0 || rect.height <= 0) return 0;
+  // "meet" = fit entirely inside → the smaller of the two scale factors.
+  const scale = Math.min(rect.width / vbW, rect.height / vbH);
+  if (scale <= 0) return 0;
+  // "xMid" = centred horizontally in whatever space is left over.
+  const offsetX = (rect.width - vbW * scale) / 2;
+  return (clientX - rect.left - offsetX) / scale;
+}

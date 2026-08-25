@@ -36,10 +36,17 @@ spec:
         {{- include "myampix.podSecurityContext" . | nindent 8 }}
         runAsUser: {{ $a.runAsUser }}
         runAsGroup: {{ $a.runAsGroup }}
-        {{- if $a.dockerSock.enabled }}
-        # Grants read access to the host docker.sock (root:docker, 660). Set admin.dockerSock.gid to
-        # the VPS's `docker` group id: getent group docker | cut -d: -f3
-        supplementalGroups: [{{ $a.dockerSock.gid }}]
+        {{- if or $a.dockerSock.enabled $a.backups.enabled }}
+        # Group memberships the container needs for its host mounts:
+        #   dockerSock.gid  → read the host docker.sock (root:docker, 660)
+        #   backups.gid     → read/write the backup tree (root:myampix-backup, 2770)
+        supplementalGroups:
+          {{- if $a.dockerSock.enabled }}
+          - {{ $a.dockerSock.gid }}
+          {{- end }}
+          {{- if $a.backups.enabled }}
+          - {{ $a.backups.gid }}
+          {{- end }}
         {{- end }}
       containers:
         - name: web
@@ -87,6 +94,11 @@ spec:
               mountPath: {{ $a.dockerSock.path }}
               readOnly: true
             {{- end }}
+            {{- if $a.backups.enabled }}
+            # Writable: deleting a backup and creating the run-request marker are both writes.
+            - name: backups
+              mountPath: {{ $a.backups.mountPath }}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -97,5 +109,11 @@ spec:
           hostPath:
             path: {{ $a.dockerSock.path }}
             type: Socket
+        {{- end }}
+        {{- if $a.backups.enabled }}
+        - name: backups
+          hostPath:
+            path: {{ $a.backups.hostPath }}
+            type: Directory
         {{- end }}
 {{- end }}

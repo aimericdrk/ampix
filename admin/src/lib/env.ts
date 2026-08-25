@@ -11,8 +11,14 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().regex(/^postgresql:\/\//, 'must be a postgresql:// URL'),
   // Optional probe targets — each unset value simply disables that probe/tile.
-  ANALYTICS_DATABASE_URL: z.string().regex(/^postgresql:\/\//).optional(),
-  PURCHASE_DATABASE_URL: z.string().regex(/^postgresql:\/\//).optional(),
+  ANALYTICS_DATABASE_URL: z
+    .string()
+    .regex(/^postgresql:\/\//)
+    .optional(),
+  PURCHASE_DATABASE_URL: z
+    .string()
+    .regex(/^postgresql:\/\//)
+    .optional(),
   CLICKHOUSE_URL: z.string().url().optional(),
   CLICKHOUSE_USER: z.string().default('default'),
   CLICKHOUSE_PASSWORD: z.string().optional(),
@@ -21,6 +27,8 @@ const envSchema = z.object({
   PURCHASE_INTERNAL_URL: z.string().url().optional(),
   // Unix socket path for the host Docker daemon; empty/unset disables the Docker page's data.
   DOCKER_SOCK: z.string().optional(),
+  // Host backup directory, bind-mounted into the pod; empty/unset disables the Backups page's data.
+  BACKUP_DIR: z.string().optional(),
   COOKIE_SECURE: boolish.default(false),
   // v2 Phase 1 — AES-256-GCM key for TOTP secrets (base64 or 64-hex, 32 bytes). Unset ⇒ 2FA
   // enrolment unavailable (login unaffected). Validation mirrors the analytics backend.

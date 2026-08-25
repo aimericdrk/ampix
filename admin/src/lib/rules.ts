@@ -72,6 +72,27 @@ export const RULES: Rule[] = [
     breach: (v) => v < 14,
     message: (k, v) => `Certificate ${k.split('/')[1]} expires in ${Math.floor(v)} days`,
   },
+  {
+    // Per-database age. 36h, not 24h: the timer has a 5-minute randomised delay and a run that
+    // slips past midnight must not page anyone, but two missed nights must.
+    kind: 'backup.stale',
+    matches: (k) => k.startsWith('backup.age.hours/'),
+    breach: (v) => v > 36,
+    message: (k, v) => `Backup of ${k.split('/')[1]} is ${Math.floor(v)}h old (>36h)`,
+  },
+  {
+    // Distinct from staleness: the last run errored even though older backups may still be fresh.
+    kind: 'backup.failed',
+    matches: (k) => k === 'backup.last.ok',
+    breach: (v) => v < 1,
+    message: () => 'Last backup run failed',
+  },
+  {
+    kind: 'backup.missing',
+    matches: (k) => k === 'backup.databases.missing',
+    breach: (v) => v > 0,
+    message: (_k, v) => `${Math.round(v)} database(s) have no backup at all`,
+  },
 ];
 
 export function evaluateRules(

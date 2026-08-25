@@ -18,6 +18,9 @@ data:
   {{- if $a.dockerSock.enabled }}
   DOCKER_SOCK: {{ $a.dockerSock.path | quote }}
   {{- end }}
+  {{- if $a.backups.enabled }}
+  BACKUP_DIR: {{ $a.backups.mountPath | quote }}
+  {{- end }}
   {{- range $k, $v := $a.env }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { fmtValue, niceTicks, timeTickLabel, type Point } from '@/lib/history';
+import { clientXToViewBoxX, fmtValue, niceTicks, timeTickLabel, type Point } from '@/lib/history';
 import { Card, usePoll } from '@/components/ui';
 
 /**
@@ -86,12 +86,22 @@ export function TimeSeriesChart({
 
   const onMove = (e: React.PointerEvent<SVGRectElement>): void => {
     if (times.length === 0) return;
-    const rect = (e.currentTarget.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
-    const fx = (e.clientX - rect.left) / rect.width; // 0..1 across the svg
-    const tPointer = t0 + ((fx * W - M.left) / PW) * (now - t0);
+    const svg = e.currentTarget.ownerSVGElement as SVGSVGElement | null;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    // The svg is `w-full` with a fixed pixel height and the default
+    // preserveAspectRatio="xMidYMid meet", so the 640-unit drawing is scaled to fit and CENTRED —
+    // in a two-column grid that leaves ~30px of dead space each side. Converting the pointer with
+    // a plain element fraction ignores that inset and lands the crosshair ~30px right of the
+    // pointer (see clientXToViewBoxX's regression test).
+    const svgX = clientXToViewBoxX(e.clientX, rect, W, H);
+    const tPointer = t0 + ((svgX - M.left) / PW) * (now - t0);
     let best = times[0]!;
     for (const t of times) if (Math.abs(t - tPointer) < Math.abs(best - tPointer)) best = t;
-    setHover({ t: best, xPx: x(best), ptrX: fx });
+    // Tooltip side is a container-relative question, not a viewBox one — keep it in element space.
+    const cRect = containerRef.current?.getBoundingClientRect() ?? rect;
+    const ptrX = cRect.width > 0 ? (e.clientX - cRect.left) / cRect.width : 0.5;
+    setHover({ t: best, xPx: x(best), ptrX: Math.min(1, Math.max(0, ptrX)) });
   };
 
   const hoverRows = hover
