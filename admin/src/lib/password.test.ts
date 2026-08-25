@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { DUMMY_HASH_PROMISE, hashPassword, passwordSchema, verifyPassword } from './password';
 
 describe('passwordSchema', () => {
-  it('rejects under 12 chars and over 256', () => {
+  it('rejects under 8 chars and over 256', () => {
     expect(passwordSchema.safeParse('short').success).toBe(false);
-    expect(passwordSchema.safeParse('a'.repeat(11)).success).toBe(false);
-    expect(passwordSchema.safeParse('a'.repeat(12)).success).toBe(true);
+    expect(passwordSchema.safeParse('a'.repeat(7)).success).toBe(false);
+    expect(passwordSchema.safeParse('a'.repeat(8)).success).toBe(true);
+    expect(passwordSchema.safeParse('a'.repeat(256)).success).toBe(true);
     expect(passwordSchema.safeParse('a'.repeat(257)).success).toBe(false);
   });
 });

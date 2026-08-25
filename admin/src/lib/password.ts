@@ -4,7 +4,7 @@ import { z } from 'zod';
 /** Password policy (design §3.7): length is the only hard rule — length beats composition theatre. */
 export const passwordSchema = z
   .string()
-  .min(12, 'password must be at least 12 characters')
+  .min(8, 'password must be at least 8 characters')
   .max(256, 'password must be at most 256 characters');
 
 const ARGON2_OPTIONS: argon2.Options = {

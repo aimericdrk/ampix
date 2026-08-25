@@ -59,8 +59,8 @@ const dbName = target.pathname.replace(/^\//, '') || 'admin_console';
       await client.end();
       process.exit(1);
     }
-    if (password.length < 12) {
-      console.error('[migrate] ADMIN_DEFAULT_PASSWORD must be at least 12 characters');
+    if (password.length < 8) {
+      console.error('[migrate] ADMIN_DEFAULT_PASSWORD must be at least 8 characters');
       await client.end();
       process.exit(1);
     }

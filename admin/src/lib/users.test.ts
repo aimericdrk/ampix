@@ -39,7 +39,7 @@ describe('createUser', () => {
   it('rejects duplicates, bad emails, and short supplied passwords', async () => {
     await expect(createUser(mockDb({ user: { id: 'x' } }), actor, { email: 'a@b.co', displayName: 'X' })).rejects.toThrow(UserManagementError);
     await expect(createUser(mockDb(), actor, { email: 'not-an-email', displayName: 'X' })).rejects.toThrow(UserManagementError);
-    await expect(createUser(mockDb(), actor, { email: 'a@b.co', displayName: 'X', password: 'short' })).rejects.toThrow(/12 characters/);
+    await expect(createUser(mockDb(), actor, { email: 'a@b.co', displayName: 'X', password: 'short' })).rejects.toThrow(/8 characters/);
   });
 });
 
@@ -82,7 +82,7 @@ describe('resetPassword / changeOwnPassword', () => {
     const hash = await hashPassword('the old password!');
     const db = mockDb({ user: { id: actor.id, passwordHash: hash } });
     await expect(changeOwnPassword(db, actor, 'the old password!', 'the old password!')).rejects.toThrow(/differ/);
-    await expect(changeOwnPassword(db, actor, 'the old password!', 'short')).rejects.toThrow(/12 characters/);
+    await expect(changeOwnPassword(db, actor, 'the old password!', 'short')).rejects.toThrow(/8 characters/);
   });
 });
 

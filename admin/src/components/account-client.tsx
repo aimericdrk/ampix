@@ -61,11 +61,11 @@ export function AccountClient({ sessions, mustChange }: { sessions: SessionRow[]
           />
         </label>
         <label className="text-sm">
-          <span className="block text-xs text-zinc-400">New password (min 12 characters)</span>
+          <span className="block text-xs text-zinc-400">New password (min 8 characters)</span>
           <input
             required
             type="password"
-            minLength={12}
+            minLength={8}
             autoComplete="new-password"
             value={pw.newPassword}
             onChange={(e) => setPw({ ...pw, newPassword: e.target.value })}
