@@ -36,6 +36,12 @@ spec:
         {{- include "myampix.podSecurityContext" . | nindent 8 }}
         runAsUser: {{ $a.runAsUser }}
         runAsGroup: {{ $a.runAsGroup }}
+        {{- if $a.googleCredentials.enabled }}
+        # Secret volumes are projected root-owned; without an fsGroup the non-root container cannot
+        # read the service-account JSON at all (firebase-admin fails with EACCES). fsGroup makes the
+        # kubelet chown the volume to this GID, which is what the 0440 mode below grants.
+        fsGroup: {{ $a.runAsGroup }}
+        {{- end }}
       containers:
         - name: api
           image: {{ include "myampix.image" (dict "root" . "name" "mobile-analytics") }}
@@ -93,9 +99,9 @@ spec:
         - name: google-credentials
           secret:
             secretName: {{ $a.googleCredentials.secretName }}
-            # 0400: readable only by the container's runAsUser. The pod already runs non-root with
-            # a read-only root filesystem, so this is the last privilege left to trim.
-            defaultMode: 0400
+            # 0440: owner is root, group is the pod's fsGroup (= runAsGroup), so only the container's
+            # own group can read it — the tightest mode that the non-root user can actually open.
+            defaultMode: 0440
             items:
               - key: {{ $a.googleCredentials.secretKey }}
                 path: {{ $a.googleCredentials.fileName }}
