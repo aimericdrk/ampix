@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { ClickHouseClient } from '@clickhouse/client';
 
 /** `infra/clickhouse/init.sql` (shared contracts §5 DDL), resolved from the repo root. */
-const INIT_SQL_PATH = path.resolve(__dirname, '../../../..', 'infra/clickhouse/init.sql');
+const INIT_SQL_PATH = path.resolve(__dirname, '../../../../..', 'infra/clickhouse/init.sql');
 
 function isCommentOrBlankLine(line: string): boolean {
   const trimmed = line.trim();
