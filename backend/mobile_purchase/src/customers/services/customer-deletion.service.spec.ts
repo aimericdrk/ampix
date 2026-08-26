@@ -92,4 +92,62 @@ describe('CustomerDeletionService', () => {
     });
     await expect(service.remove(projectId, foreignCustomer.id)).rejects.toMatchObject({ problem: { status: 404 } });
   });
+
+  it('removeByAppUserId deletes the customer and scrubs store_notifications journal rows in place (happy path)', async () => {
+    const appUserId = `erase-${randomUUID()}`;
+    const customer = await prisma.customer.create({ data: { projectId, appUserId } });
+    const notification = await prisma.storeNotification.create({
+      data: {
+        projectId,
+        store: 'APP_STORE',
+        storeEventId: `evt-${randomUUID()}`,
+        notificationType: 'DID_RENEW',
+        appUserId,
+        payload: { appAccountToken: 'sensitive' },
+        status: 'PROCESSED',
+      },
+    });
+
+    const result = await service.removeByAppUserId(projectId, appUserId);
+
+    expect(result).toEqual({ customerDeleted: true, storeNotificationsScrubbed: 1 });
+    expect(await prisma.customer.findUnique({ where: { id: customer.id } })).toBeNull();
+    const scrubbed = await prisma.storeNotification.findUnique({ where: { id: notification.id } });
+    expect(scrubbed).not.toBeNull();
+    expect(scrubbed?.appUserId).toBeNull();
+    expect(scrubbed?.payload).toEqual({});
+    expect(scrubbed?.storeEventId).toBe(notification.storeEventId);
+  });
+
+  it('removeByAppUserId is idempotent for an unknown appUserId and never crosses tenants (edge case)', async () => {
+    await expect(service.removeByAppUserId(projectId, `ghost-${randomUUID()}`)).resolves.toEqual({
+      customerDeleted: false,
+      storeNotificationsScrubbed: 0,
+    });
+
+    const otherProjectId = randomUUID();
+    const appUserId = `tenant-${randomUUID()}`;
+    const foreignCustomer = await prisma.customer.create({
+      data: { projectId: otherProjectId, appUserId },
+    });
+    const foreignNotification = await prisma.storeNotification.create({
+      data: {
+        projectId: otherProjectId,
+        store: 'PLAY_STORE',
+        storeEventId: `evt-${randomUUID()}`,
+        notificationType: 'SUBSCRIPTION_RENEWED',
+        appUserId,
+        payload: { token: 'keep-me' },
+        status: 'PROCESSED',
+      },
+    });
+
+    const result = await service.removeByAppUserId(projectId, appUserId);
+
+    expect(result).toEqual({ customerDeleted: false, storeNotificationsScrubbed: 0 });
+    expect(await prisma.customer.findUnique({ where: { id: foreignCustomer.id } })).not.toBeNull();
+    const untouched = await prisma.storeNotification.findUnique({ where: { id: foreignNotification.id } });
+    expect(untouched?.appUserId).toBe(appUserId);
+    expect(untouched?.payload).toEqual({ token: 'keep-me' });
+  });
 });

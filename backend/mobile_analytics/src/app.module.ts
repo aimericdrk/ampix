@@ -20,6 +20,7 @@ import { TemplatesModule } from './templates/templates.module';
 import { ScreenshotsModule } from './screenshots/screenshots.module';
 import { RevenueCatModule } from './revenuecat/revenuecat.module';
 import { InternalModule } from './internal/internal.module';
+import { ErasureModule } from './erasure/erasure.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { InternalModule } from './internal/internal.module';
     ScreenshotsModule,
     RevenueCatModule,
     InternalModule,
+    ErasureModule,
   ],
 })
 export class AppModule {}

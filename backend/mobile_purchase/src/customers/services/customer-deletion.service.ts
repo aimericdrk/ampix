@@ -17,4 +17,30 @@ export class CustomerDeletionService {
     if (!customer) throw new ProblemException({ status: 404, title: 'Customer not found' });
     await this.prisma.customer.delete({ where: { id: customerId } });
   }
+
+  /**
+   * Server-to-server erasure by the SDK-facing identity (account deletion / GDPR). Idempotent —
+   * an unknown appUserId is not an error, so the calling backend can safely retry. Beyond the
+   * Customer cascade above, this also scrubs the user's `store_notifications` journal rows
+   * (StoreNotification.appUserId has no FK, so the cascade never touches it): the rows themselves
+   * are KEPT so `(store, storeEventId)` idempotency still rejects store retries/replays — only the
+   * user link and the payload (which embeds store account tokens) are cleared.
+   */
+  async removeByAppUserId(
+    projectId: string,
+    appUserId: string,
+  ): Promise<{ customerDeleted: boolean; storeNotificationsScrubbed: number }> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { projectId_appUserId: { projectId, appUserId } },
+      select: { id: true },
+    });
+    if (customer) {
+      await this.prisma.customer.delete({ where: { id: customer.id } });
+    }
+    const scrubbed = await this.prisma.storeNotification.updateMany({
+      where: { projectId, appUserId },
+      data: { appUserId: null, payload: {}, error: null },
+    });
+    return { customerDeleted: customer !== null, storeNotificationsScrubbed: scrubbed.count };
+  }
 }

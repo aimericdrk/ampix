@@ -135,4 +135,45 @@ describe('ClickHouseService (integration)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].properties.plan).toBe('pro');
   });
+
+  it('deleteUserData removes only the target ids across events, profiles and identity mappings', async () => {
+    const projectId = randomUUID();
+    const anonId = randomUUID();
+    const now = Date.now();
+    await service.insertEvents([
+      // pre-login event: distinct_id still equals the anon id
+      makeEventRow({ project_id: projectId, distinct_id: anonId, anon_id: anonId }),
+      // post-login event under the user id
+      makeEventRow({ project_id: projectId, distinct_id: 'u_gone', anon_id: anonId }),
+      // bystander who must survive
+      makeEventRow({ project_id: projectId, distinct_id: 'u_stays', anon_id: randomUUID() }),
+    ]);
+    await service.insertProfiles([
+      { project_id: projectId, distinct_id: 'u_gone', properties: {}, updated_at: toChDateTime64(now) },
+      { project_id: projectId, distinct_id: 'u_stays', properties: {}, updated_at: toChDateTime64(now) },
+    ]);
+    await admin.insert({
+      table: 'identity_mappings',
+      values: [{ project_id: projectId, anon_id: anonId, canonical_id: 'u_gone', created_at: toChDateTime64(now) }],
+      format: 'JSONEachRow',
+    });
+
+    await service.deleteUserData(projectId, ['u_gone', anonId]);
+
+    const events = await service.query<{ distinct_id: string }>(
+      'SELECT DISTINCT distinct_id FROM events WHERE project_id = {p:UUID}',
+      { p: projectId },
+    );
+    expect(events.map((row) => row.distinct_id)).toEqual(['u_stays']);
+    const profiles = await service.query<{ distinct_id: string }>(
+      'SELECT DISTINCT distinct_id FROM user_profiles WHERE project_id = {p:UUID}',
+      { p: projectId },
+    );
+    expect(profiles.map((row) => row.distinct_id)).toEqual(['u_stays']);
+    const mappings = await service.query<{ n: string }>(
+      'SELECT count() AS n FROM identity_mappings WHERE project_id = {p:UUID}',
+      { p: projectId },
+    );
+    expect(Number(mappings[0].n)).toBe(0);
+  });
 });
