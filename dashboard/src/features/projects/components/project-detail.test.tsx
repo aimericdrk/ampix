@@ -80,14 +80,19 @@ describe('ProjectDetailPage', () => {
     expect(screen.queryByText('Total events')).not.toBeInTheDocument();
   });
 
-  it('rotates a token: creates a replacement with the same label, reveals it, then revokes the old one', async () => {
-    const createdBodies: Array<{ label?: string }> = [];
+  it('rotates a token: creates a replacement with the same label and source, reveals it, then revokes the old one', async () => {
+    const createdBodies: Array<{ label?: string; source?: string }> = [];
     const revokedIds: string[] = [];
     server.use(
       http.post('/api/v1/projects/:projectId/tokens', async ({ request }) => {
-        createdBodies.push((await request.json()) as { label?: string });
+        createdBodies.push((await request.json()) as { label?: string; source?: string });
         return HttpResponse.json(
-          { id: 'rotated-token-id', token: 'mam_rotatednewtoken000000000000000', label: 'Default' },
+          {
+            id: 'rotated-token-id',
+            token: 'mam_rotatednewtoken000000000000000',
+            label: 'Default',
+            source: 'client',
+          },
           { status: 201 },
         );
       }),
@@ -110,10 +115,54 @@ describe('ProjectDetailPage', () => {
 
     // The replacement token is revealed once for copying.
     expect(await screen.findByText('mam_rotatednewtoken000000000000000')).toBeInTheDocument();
-    // Created a replacement with the SAME label, then revoked the OLD token.
+    // Created a replacement with the SAME label and source, then revoked the OLD token.
     await waitFor(() => expect(revokedIds).toContain('token-1'));
-    expect(createdBodies).toEqual([{ label: 'Default' }]);
+    expect(createdBodies).toEqual([{ label: 'Default', source: 'client' }]);
     expect(await screen.findByText('Token rotated')).toBeInTheDocument();
+  });
+
+  // No handler override here: the token goes through the real one, so this also covers the source
+  // surviving the round-trip into the refetched list rather than only the create response.
+  it('creates a server token and labels it Server in the list', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    await userEvent.type(await screen.findByLabelText('Label (optional)'), 'billing worker');
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'server');
+    await userEvent.click(screen.getByRole('button', { name: 'New token' }));
+
+    const tokensTable = await screen.findByRole('table', { name: 'Ingest tokens' });
+    const row = await within(tokensTable).findByRole('row', { name: /billing worker/ });
+    expect(row).toHaveTextContent('Server');
+    // The seeded token stays what it was — creating one kind does not relabel the others.
+    expect(within(tokensTable).getByRole('row', { name: /Default/ })).toHaveTextContent('Client');
+  });
+
+  it('defaults a new token to client when the picker is left alone', async () => {
+    const createdBodies: Array<{ label?: string; source?: string }> = [];
+    server.use(
+      http.post('/api/v1/projects/:projectId/tokens', async ({ request }) => {
+        createdBodies.push((await request.json()) as { label?: string; source?: string });
+        return HttpResponse.json(
+          {
+            id: 'client-token-id',
+            token: 'mam_clienttoken00000000000000000000',
+            label: 'iOS app',
+            source: 'client',
+          },
+          { status: 201 },
+        );
+      }),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    await userEvent.type(await screen.findByLabelText('Label (optional)'), 'iOS app');
+    await userEvent.click(screen.getByRole('button', { name: 'New token' }));
+
+    await waitFor(() => expect(createdBodies).toEqual([{ label: 'iOS app', source: 'client' }]));
   });
 
   it('deletes selected data scopes only after a scope is picked and the name is typed', async () => {

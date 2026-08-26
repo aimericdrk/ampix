@@ -17,13 +17,14 @@ import {
 } from '../../../components/ui/dialog';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { IconButton } from '../../../components/ui/icon-button';
-import { Input } from '../../../components/ui/input';
+import { fieldLook, Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Reveal } from '../../../components/ui/reveal';
 import { Separator } from '../../../components/ui/separator';
 import { useToast } from '../../../components/ui/toast';
+import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
-import type { SdkToken } from '../../../lib/api/types';
+import type { IngestSource, SdkToken } from '../../../lib/api/types';
 import {
   useCreateToken,
   useDeleteProject,
@@ -244,7 +245,11 @@ function TokensSection({
     <Card>
       <CardHeader>
         <CardTitle>SDK tokens</CardTitle>
-        <CardDescription>Use these tokens to send events from your app.</CardDescription>
+        <CardDescription>
+          Use these tokens to send events. Each one is either a <strong>client</strong> token (ships
+          inside your app, treat as public) or a <strong>server</strong> token (stays on your
+          backend) — every event it sends is tagged with that source.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div
@@ -275,12 +280,23 @@ function TokensSection({
   );
 }
 
+/** Client vs server, in the token table and on the revealed token. Neutral colours: neither is a
+ *  warning state — they are just two kinds of token. */
+function SourceBadge({ source }: { source: IngestSource }) {
+  return (
+    <Badge variant={source === 'server' ? 'info' : 'accent'}>
+      {source === 'server' ? 'Server' : 'Client'}
+    </Badge>
+  );
+}
+
 function ManagedTokens({ projectId }: { projectId: string }) {
   const { data, isPending, error } = useTokens(projectId);
   const createToken = useCreateToken(projectId);
   const revokeToken = useRevokeToken(projectId);
   const { toast } = useToast();
   const [label, setLabel] = useState('');
+  const [source, setSource] = useState<IngestSource>('client');
   const [newToken, setNewToken] = useState<string | null>(null);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
   const [pendingRotate, setPendingRotate] = useState<SdkToken | null>(null);
@@ -288,11 +304,12 @@ function ManagedTokens({ projectId }: { projectId: string }) {
   const handleCreate = (event: FormEvent) => {
     event.preventDefault();
     createToken.mutate(
-      { label: label.trim() || undefined },
+      { label: label.trim() || undefined, source },
       {
         onSuccess: (token) => {
           setNewToken(token.token);
           setLabel('');
+          setSource('client');
         },
         onError: (error) =>
           toast({
@@ -318,11 +335,13 @@ function ManagedTokens({ projectId }: { projectId: string }) {
     });
   };
 
-  // Rotate = create a replacement with the SAME label, reveal it once, THEN revoke the old token —
-  // create-first so there is never a window without a working token (no dedicated rotate endpoint).
+  // Rotate = create a replacement with the SAME label AND source, reveal it once, THEN revoke the
+  // old token — create-first so there is never a window without a working token (no dedicated
+  // rotate endpoint). Carrying the source over matters: a rotated server token that came back as a
+  // client one would silently reclassify everything that backend sends from then on.
   const handleRotate = (token: SdkToken) => {
     createToken.mutate(
-      { label: token.label || undefined },
+      { label: token.label || undefined, source: token.source },
       {
         onSuccess: (created) => {
           setNewToken(created.token);
@@ -359,6 +378,11 @@ function ManagedTokens({ projectId }: { projectId: string }) {
   const columns: Array<DataTableColumn<SdkToken>> = [
     { key: 'label', header: 'Label' },
     {
+      key: 'source',
+      header: 'Source',
+      render: (token) => <SourceBadge source={token.source} />,
+    },
+    {
       key: 'token',
       header: 'Token',
       render: (token) => (
@@ -394,8 +418,8 @@ function ManagedTokens({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleCreate} className="flex items-end gap-2">
-        <div className="flex-1">
+      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-2">
+        <div className="min-w-[12rem] flex-1">
           <Label htmlFor="token-label" className="mb-1 block">
             Label (optional)
           </Label>
@@ -406,10 +430,29 @@ function ManagedTokens({ projectId }: { projectId: string }) {
             onChange={(e) => setLabel(e.target.value)}
           />
         </div>
+        <div>
+          <Label htmlFor="token-source" className="mb-1 block">
+            Source
+          </Label>
+          <select
+            id="token-source"
+            value={source}
+            onChange={(e) => setSource(e.target.value as IngestSource)}
+            className={cn(fieldLook, 'w-auto')}
+          >
+            <option value="client">Client (app or browser)</option>
+            <option value="server">Server (your backend)</option>
+          </select>
+        </div>
         <Button type="submit" disabled={createToken.isPending}>
           {createToken.isPending ? 'Creating…' : 'New token'}
         </Button>
       </form>
+      <p className="text-sm text-text-muted">
+        Events arrive tagged with the token&apos;s source — filter or break down any report by{' '}
+        <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-xs">source</code>. It
+        is fixed once the token exists: to change it, create a new token and revoke this one.
+      </p>
 
       {newToken && (
         <div className="space-y-2 rounded-lg border border-border bg-bg p-3">

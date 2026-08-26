@@ -31,7 +31,8 @@ export class IngestController {
   @HttpCode(202)
   async ingestEvents(@Body() body: unknown, @Req() req: IngestRequest): Promise<IngestResponse> {
     const items = this.parseEnvelope(body, ingestEventsRequestSchema, 'events');
-    const { rows, rejected } = this.normalizer.normalizeBatch(req.ingestAuth!.projectId, items);
+    const auth = req.ingestAuth!;
+    const { rows, rejected } = this.normalizer.normalizeBatch(auth.projectId, items, auth.source);
     await this.clickhouse.insertEvents(rows);
     return { accepted: rows.length, rejected };
   }

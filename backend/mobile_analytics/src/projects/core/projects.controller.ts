@@ -100,7 +100,7 @@ export class ProjectsController {
     @Body() body: unknown,
   ): Promise<CreatedToken> {
     const dto = parseOrThrow(createTokenSchema, body);
-    return this.projectManagement.createToken(projectId, dto.label);
+    return this.projectManagement.createToken(projectId, dto.label, dto.source);
   }
 
   @Delete(':projectId/tokens/:tokenId')

@@ -37,6 +37,7 @@ function makeEventRow(overrides: Partial<EventRow> = {}): EventRow {
     session_id: randomUUID(),
     timestamp: toChDateTime64(now),
     server_timestamp: toChDateTime64(now),
+    source: 'client',
     properties: { plan: 'pro', value: 9.99 },
     app_version: '1.4.2',
     app_build: '142',

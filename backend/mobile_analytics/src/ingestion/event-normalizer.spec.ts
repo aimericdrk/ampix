@@ -61,7 +61,7 @@ describe('EventNormalizer.normalizeBatch', () => {
   const normalizer = new EventNormalizer();
 
   it('maps a valid event to a ClickHouse row with authoritative server_timestamp', () => {
-    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [makeEvent()], NOW);
+    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [makeEvent()], 'client', NOW);
     expect(rejected).toEqual([]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -83,6 +83,7 @@ describe('EventNormalizer.normalizeBatch', () => {
     const { rows } = normalizer.normalizeBatch(
       PROJECT_ID,
       [makeEvent({ properties: undefined, context: undefined })],
+      'client',
       NOW,
     );
     expect(rows[0].properties).toEqual({});
@@ -93,7 +94,7 @@ describe('EventNormalizer.normalizeBatch', () => {
 
   it('rejects an item missing insert_id with the contract reason style', () => {
     const { insert_id, ...bad } = makeEvent();
-    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [bad], NOW);
+    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [bad], 'client', NOW);
     expect(rows).toEqual([]);
     expect(rejected).toEqual([{ index: 0, reason: 'missing insert_id' }]);
   });
@@ -102,6 +103,7 @@ describe('EventNormalizer.normalizeBatch', () => {
     const { rejected } = normalizer.normalizeBatch(
       PROJECT_ID,
       [makeEvent({ insert_id: 'nope' })],
+      'client',
       NOW,
     );
     expect(rejected[0].reason).toMatch(/^insert_id/);
@@ -113,14 +115,42 @@ describe('EventNormalizer.normalizeBatch', () => {
     const { rows, rejected } = normalizer.normalizeBatch(
       PROJECT_ID,
       [good1, { event: 'orphan' }, good2],
+      'client',
       NOW,
     );
     expect(rows).toHaveLength(2);
     expect(rejected).toEqual([{ index: 1, reason: 'missing insert_id' }]);
   });
 
+  it('stamps the token source onto every row of the batch', () => {
+    const { rows } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [makeEvent(), makeEvent({ insert_id: randomUUID() })],
+      'server',
+      NOW,
+    );
+    expect(rows.map((row) => row.source)).toEqual(['server', 'server']);
+  });
+
+  it('ignores a source the payload tries to claim for itself — the token decides', () => {
+    const { rows } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [makeEvent({ source: 'server', context: { source: 'server' } })],
+      'client',
+      NOW,
+    );
+    expect(rows[0].source).toBe('client');
+    // ...and it does not leak into the property bag either.
+    expect(rows[0].properties).not.toHaveProperty('source');
+  });
+
   it('clamps stale client timestamps to now-7d in the emitted row', () => {
-    const { rows } = normalizer.normalizeBatch(PROJECT_ID, [makeEvent({ timestamp: 1 })], NOW);
+    const { rows } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [makeEvent({ timestamp: 1 })],
+      'client',
+      NOW,
+    );
     expect(rows[0].timestamp).toBe('2026-06-25 12:00:00.000');
   });
 });

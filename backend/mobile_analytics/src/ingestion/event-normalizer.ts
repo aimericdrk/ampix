@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ZodError } from 'zod';
-import { IngestEvent, RejectedItem, ingestEventSchema } from '@myampix/contracts';
+import { IngestEvent, IngestSource, RejectedItem, ingestEventSchema } from '@myampix/contracts';
 import { EventRow, toChDateTime64 } from '../clickhouse/clickhouse.service';
 
 /** Contracts §4: client timestamp is clamped to [now-7d, now+5min]. */
@@ -32,7 +32,17 @@ export interface NormalizedBatch {
 /** Validates and normalizes a raw batch item-by-item (contracts §4: never all-or-nothing). */
 @Injectable()
 export class EventNormalizer {
-  normalizeBatch(projectId: string, items: unknown[], nowMs: number = Date.now()): NormalizedBatch {
+  /**
+   * `source` comes from the authenticated token (see SdkTokenGuard), not from the batch: it is a
+   * parameter here, and never read off the event or its context, so a client cannot claim to be a
+   * server by sending the field itself.
+   */
+  normalizeBatch(
+    projectId: string,
+    items: unknown[],
+    source: IngestSource,
+    nowMs: number = Date.now(),
+  ): NormalizedBatch {
     const rows: EventRow[] = [];
     const rejected: RejectedItem[] = [];
     items.forEach((item, index) => {
@@ -41,12 +51,17 @@ export class EventNormalizer {
         rejected.push({ index, reason: formatZodReason(parsed.error) });
         return;
       }
-      rows.push(this.toRow(projectId, parsed.data, nowMs));
+      rows.push(this.toRow(projectId, parsed.data, source, nowMs));
     });
     return { rows, rejected };
   }
 
-  private toRow(projectId: string, event: IngestEvent, nowMs: number): EventRow {
+  private toRow(
+    projectId: string,
+    event: IngestEvent,
+    source: IngestSource,
+    nowMs: number,
+  ): EventRow {
     const ctx = event.context ?? {};
     const str = (value: string | null | undefined): string => value ?? '';
     return {
@@ -58,6 +73,7 @@ export class EventNormalizer {
       session_id: event.session_id,
       timestamp: toChDateTime64(clampTimestamp(event.timestamp, nowMs)),
       server_timestamp: toChDateTime64(nowMs),
+      source,
       properties: event.properties ?? {},
       app_version: str(ctx.app_version),
       app_build: str(ctx.app_build),

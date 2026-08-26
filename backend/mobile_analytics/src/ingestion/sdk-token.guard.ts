@@ -1,13 +1,18 @@
 import { CanActivate, ExecutionContext, Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { SDK_TOKEN_REGEX } from '@myampix/contracts';
+import { DEFAULT_INGEST_SOURCE, SDK_TOKEN_REGEX, type IngestSource } from '@myampix/contracts';
 import { REDIS } from '../redis/redis.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
 import type { IngestRequest } from './ingest-auth';
 
+/**
+ * `v2` because the cached value gained `source`: a v1 entry written by a pod running the previous
+ * image would deserialize into `{ source: undefined }` and mislabel events for up to the TTL. A new
+ * key space means old and new pods simply miss each other's entries during a rollout.
+ */
 export function sdkTokenCacheKey(token: string): string {
-  return `sdk_token:${token}`;
+  return `sdk_token:v2:${token}`;
 }
 
 /** Revocation staleness bound: a revoked token stays valid at most this long unless the
@@ -16,6 +21,7 @@ export const SDK_TOKEN_CACHE_TTL_SECONDS = 60;
 
 interface CachedLookup {
   projectId: string | null;
+  source?: IngestSource;
 }
 
 /**
@@ -45,15 +51,23 @@ export class SdkTokenGuard implements CanActivate {
     const cached = await this.readCache(sdkTokenCacheKey(token));
     if (cached !== null) {
       if (!cached.projectId) throw this.unauthorized();
-      req.ingestAuth = { projectId: cached.projectId, token };
+      req.ingestAuth = {
+        projectId: cached.projectId,
+        token,
+        source: cached.source ?? DEFAULT_INGEST_SOURCE,
+      };
       return true;
     }
 
     const row = await this.prisma.sdkToken.findUnique({ where: { token } });
-    const projectId = row !== null && row.revokedAt === null ? row.projectId : null;
-    await this.writeCache(sdkTokenCacheKey(token), { projectId });
+    const live = row !== null && row.revokedAt === null ? row : null;
+    const projectId = live?.projectId ?? null;
+    // Cached alongside projectId rather than re-read per batch: source is immutable for the life of
+    // a token, so a cache hit can never carry a stale one.
+    const source = (live?.source as IngestSource | undefined) ?? DEFAULT_INGEST_SOURCE;
+    await this.writeCache(sdkTokenCacheKey(token), { projectId, source });
     if (!projectId) throw this.unauthorized();
-    req.ingestAuth = { projectId, token };
+    req.ingestAuth = { projectId, token, source };
     return true;
   }
 

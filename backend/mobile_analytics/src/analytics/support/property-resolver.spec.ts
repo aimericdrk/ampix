@@ -2,6 +2,7 @@ import { EVENT_COLUMN_WHITELIST, resolveProperty } from './property-resolver';
 
 const WHITELIST_COLUMNS = [
   'event',
+  'source',
   'distinct_id',
   'anon_id',
   'session_id',

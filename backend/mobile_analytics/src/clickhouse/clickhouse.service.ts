@@ -13,6 +13,8 @@ export interface EventRow {
   session_id: string;
   timestamp: string;
   server_timestamp: string;
+  /** 'client' | 'server' — from the ingest token, never from the payload. */
+  source: string;
   properties: Record<string, unknown>;
   app_version: string;
   app_build: string;

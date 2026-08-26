@@ -247,7 +247,7 @@ migrations and `prisma generate` are always run per-service with `--filter`.
 
 Source modules (`backend/mobile_analytics/src/`):
 
-- `ingestion/` — `POST /ingest/events`, `POST /ingest/profiles` (gzip batches from the SDK), token-authenticated.
+- `ingestion/` — `POST /ingest/events`, `POST /ingest/profiles` (gzip batches from the SDK), token-authenticated. The token also decides the event's `source` (`client` or `server`) — see §6.1.1.
 - `analytics/`, `cohorts/`, `dashboards/`, `reports/` — query APIs that power the dashboard's insights, funnels, retention, cohorts, and saved dashboards (backed by ClickHouse).
 - `auth/` — email/password login, JWT access/refresh tokens, TOTP 2FA. Sessions + rate limiting use Redis.
 - `orgs/`, `projects/`, `invitations/`, `authz/` — organizations, projects, membership, and per-project roles (owner/admin/member).
@@ -258,6 +258,27 @@ Source modules (`backend/mobile_analytics/src/`):
 
 Data stores: **Postgres** (accounts, orgs, projects, tokens), **ClickHouse** (events, profiles,
 identity mappings), **Redis** (sessions, rate limiting — mandatory).
+
+#### 6.1.1 Client vs server attribution
+
+A project can hold as many ingest tokens as it likes, and each one is minted as either a **client**
+token (ships inside an app or web page — treat it as public) or a **server** token (lives on a
+backend you control). Every event ingested with a token is stamped with that token's kind in the
+`source` column of `analytics.events`.
+
+The classification is taken from the authenticated token row, never from the request body: a payload
+that sets `source` itself is ignored, so a leaked client token cannot pass its traffic off as
+server-side. `source` is fixed when the token is created — rotating a token in the dashboard mints
+the replacement with the same source, and changing it on a live token would silently re-label
+everything sent after the change.
+
+- **Creating one:** project → *SDK tokens* → pick Source, or `POST
+  /api/v1/projects/:projectId/tokens` with `{"label": "...", "source": "client" | "server"}`.
+  Omitting `source` yields `client`, which is also what every token minted before this feature is.
+- **Using it:** `source` is a first-class query dimension — filter or break down any insight,
+  funnel, retention or flow by it, and it appears in `GET /meta/properties` as a column.
+- **RevenueCat webhooks** are recorded as `server`: they arrive machine-to-machine, with no device
+  and no ingest token involved.
 
 ### 6.2 mobile_purchase (the MyRevenueCat backend / billing authority)
 

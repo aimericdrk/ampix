@@ -217,14 +217,28 @@ curl -X POST http://localhost:8088/api/v1/orgs/<orgId>/projects \
 # Mint a new ingest token  (POST /api/v1/projects/:projectId/tokens — project role: admin)
 curl -X POST http://localhost:8088/api/v1/projects/<projectId>/tokens \
   -H "Authorization: Bearer <access_token>" -H 'Content-Type: application/json' \
-  -d '{"label":"production"}'
-# → { token: "mam_<32hex>", ... }  — copy it into your SDK config
+  -d '{"label":"production","source":"client"}'
+# → { token: "mam_<32hex>", source: "client", ... }  — copy it into your SDK config
+
+# A token for your own backend instead — its events land tagged source=server
+curl -X POST http://localhost:8088/api/v1/projects/<projectId>/tokens \
+  -H "Authorization: Bearer <access_token>" -H 'Content-Type: application/json' \
+  -d '{"label":"billing worker","source":"server"}'
 ```
 
 Token endpoints (`src/projects/core/projects.controller.ts`):
 `GET/POST /api/v1/projects/:projectId/tokens`, `DELETE .../tokens/:tokenId` to revoke. You can also
 inspect/insert tokens via Prisma Studio (`pnpm --filter @myampix/mobile-analytics exec prisma studio`)
 or Adminer against the `SdkToken` table.
+
+**`source`: client or server.** Every token is one or the other (`client` when omitted), and every
+event ingested with it is written to `analytics.events.source` with that value. It comes from the
+token row, never the request body — a payload claiming `"source":"server"` on a client token is
+ignored — so it stays trustworthy even if an app's token leaks. It is also immutable: to change how
+a sender is classified, mint a new token and revoke the old one (the dashboard's Rotate button
+deliberately keeps the source). Query it like any other column: filter or break down on `source`,
+which `GET /meta/properties` lists as a `column`. RevenueCat webhook events are recorded as
+`server`.
 
 ---
 

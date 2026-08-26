@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS analytics.events (
   session_id    UUID,
   timestamp     DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),
   server_timestamp DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),
+  source        LowCardinality(String) DEFAULT 'client',
   properties    JSON,
   app_version   LowCardinality(String), app_build LowCardinality(String),
   os            LowCardinality(String), os_version LowCardinality(String),
@@ -32,6 +33,12 @@ CREATE TABLE IF NOT EXISTS analytics.events (
 ENGINE = ReplacingMergeTree
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (project_id, event, timestamp, insert_id);
+
+-- Upgrade path for a data volume created before `source` existed: CREATE TABLE IF NOT EXISTS above
+-- is a no-op on an existing table, so the column has to be added explicitly. Rows written earlier
+-- read back as 'client' via the DEFAULT, which is what they were -- all ingest traffic was device
+-- traffic until server tokens shipped. Harmless on a fresh database, where the column already exists.
+ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS source LowCardinality(String) DEFAULT 'client';
 
 CREATE TABLE IF NOT EXISTS analytics.user_profiles (
   project_id UUID, distinct_id String,

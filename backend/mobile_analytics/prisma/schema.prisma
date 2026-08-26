@@ -22,6 +22,16 @@ enum ProjectRole {
 }
 
 /**
+ * Where events sent with a token get attributed: a device/browser (`client`) or your own backend
+ * (`server`). Fixed at token creation and copied onto every event the token ingests, so the
+ * dimension is as trustworthy as the token itself. See @myampix/contracts INGEST_SOURCES.
+ */
+enum IngestSource {
+  client
+  server
+}
+
+/**
  * §16 — the four analysis kinds a saved report / dashboard tile can hold.
  */
 enum ReportKind {
@@ -110,13 +120,16 @@ model Project {
 }
 
 model SdkToken {
-  id        String    @id @default(uuid(7)) @db.Uuid
-  projectId String    @map("project_id") @db.Uuid
-  token     String    @unique
+  id        String       @id @default(uuid(7)) @db.Uuid
+  projectId String       @map("project_id") @db.Uuid
+  token     String       @unique
   label     String
-  revokedAt DateTime? @map("revoked_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Immutable after creation — rotating a token mints a new one with the same source, and
+  /// re-pointing an existing token would silently re-label events already ingested with it.
+  source    IngestSource @default(client)
+  revokedAt DateTime?    @map("revoked_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("sdk_tokens")
 }

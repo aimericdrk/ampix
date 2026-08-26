@@ -107,6 +107,44 @@ describe('POST /ingest/events (e2e)', () => {
     expect(res.body.detail).toContain('INGEST_MAX_BATCH=100');
   });
 
+  // The whole point of token-borne attribution: two tokens on the same project, two sources, and
+  // the payload has no say in it.
+  it('classifies each batch by the token it was sent with, ignoring any source in the payload', async () => {
+    const serverToken = 'mam_' + randomUUID().replace(/-/g, '');
+    await stack.prisma.sdkToken.create({
+      data: {
+        projectId: stack.projectId,
+        token: serverToken,
+        label: 'e2e-server',
+        source: 'server',
+      },
+    });
+
+    const fromApp = makeEvent({ source: 'server' }); // client token, lying about its source
+    const fromBackend = makeEvent();
+
+    await request(stack.app.getHttpServer())
+      .post('/ingest/events')
+      .set('Authorization', `Bearer ${stack.sdkToken}`)
+      .send({ events: [fromApp] })
+      .expect(202);
+    await request(stack.app.getHttpServer())
+      .post('/ingest/events')
+      .set('Authorization', `Bearer ${serverToken}`)
+      .send({ events: [fromBackend] })
+      .expect(202);
+
+    const rs = await stack.ch.query({
+      query: 'SELECT insert_id, source FROM events WHERE insert_id IN ({a:UUID}, {b:UUID})',
+      query_params: { a: fromApp.insert_id, b: fromBackend.insert_id },
+      format: 'JSONEachRow',
+    });
+    const rows = await rs.json<{ insert_id: string; source: string }>();
+    const sourceOf = (id: unknown) => rows.find((r) => r.insert_id === id)?.source;
+    expect(sourceOf(fromApp.insert_id)).toBe('client');
+    expect(sourceOf(fromBackend.insert_id)).toBe('server');
+  });
+
   it('clamps stale client timestamps to now-7d and stamps server_timestamp', async () => {
     const stale = makeEvent({ timestamp: 1000 });
     await request(stack.app.getHttpServer())

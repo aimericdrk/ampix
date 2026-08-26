@@ -102,6 +102,11 @@ POST /ingest/profiles
 POST /ingest/screenshots
 ```
 
+Each `sdk_tokens` row is either a `client` or a `server` token, and `SdkTokenGuard` puts that on the
+request so `EventNormalizer` can stamp it into the `source` column of every row it writes. It comes
+from the token row alone — a `source` in the payload is ignored — which is what makes the dimension
+trustworthy. New tokens default to `client`; `source` is immutable once the token exists.
+
 Auth (`/api/v1/auth`): `POST signup · login · 2fa/verify · refresh · logout · password`,
 `GET/PATCH me`, `POST 2fa/setup · 2fa/activate · 2fa/disable`.
 

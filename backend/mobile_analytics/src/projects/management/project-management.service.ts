@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { DEFAULT_INGEST_SOURCE, type IngestSource } from '@myampix/contracts';
 import type Redis from 'ioredis';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClickHouseService } from '../../clickhouse/clickhouse.service';
@@ -155,15 +156,25 @@ export class ProjectManagementService {
       id: token.id,
       token: token.token,
       label: token.label,
+      source: token.source,
       created_at: token.createdAt.toISOString(),
     }));
   }
 
-  async createToken(projectId: string, label?: string): Promise<CreatedToken> {
+  /**
+   * `source` is write-once: there is no update path for it, and rotation (dashboard-side) creates a
+   * replacement carrying the same value. Changing it on a live token would silently re-classify
+   * every event ingested after the change while leaving the earlier ones under the old label.
+   */
+  async createToken(
+    projectId: string,
+    label?: string,
+    source: IngestSource = DEFAULT_INGEST_SOURCE,
+  ): Promise<CreatedToken> {
     const token = await this.prisma.sdkToken.create({
-      data: { projectId, token: generateSdkToken(), label: label ?? DEFAULT_TOKEN_LABEL },
+      data: { projectId, token: generateSdkToken(), label: label ?? DEFAULT_TOKEN_LABEL, source },
     });
-    return { id: token.id, token: token.token, label: token.label };
+    return { id: token.id, token: token.token, label: token.label, source: token.source };
   }
 
   /**

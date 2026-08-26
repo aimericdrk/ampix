@@ -3,6 +3,27 @@ import { z } from 'zod';
 /** Ingest SDK token format: `mam_` + 32 hex chars (shared contracts §4). */
 export const SDK_TOKEN_REGEX = /^mam_[0-9a-f]{32}$/;
 
+/**
+ * Where a batch of events came from, decided by the ingest token it was sent with — never by the
+ * payload. A token is minted as one or the other and cannot change afterwards, which is the whole
+ * point: `source` is the one dimension a compromised or misconfigured client cannot lie about.
+ *
+ *  - `client` — an end-user device or browser: the Flutter SDK, a web page, anything shipped to
+ *    users. The token travels inside the app, so treat it as public.
+ *  - `server` — your own backend calling the ingest API machine-to-machine. The token stays on a
+ *    machine you control, so events carrying it are as trustworthy as that machine.
+ */
+export const INGEST_SOURCES = ['client', 'server'] as const;
+export const ingestSourceSchema = z.enum(INGEST_SOURCES);
+export type IngestSource = (typeof INGEST_SOURCES)[number];
+
+/**
+ * What a token is when nobody says otherwise — including every token minted before this field
+ * existed. Client, because that is what all ingest traffic was until server tokens shipped:
+ * calling a pre-existing token `server` would retroactively mislabel real device events.
+ */
+export const DEFAULT_INGEST_SOURCE: IngestSource = 'client';
+
 /** Reserved event names emitted by SDK autocapture (shared contracts §4). */
 export const RESERVED_EVENTS = [
   '$first_open',

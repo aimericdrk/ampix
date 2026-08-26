@@ -16,6 +16,7 @@ interface FakeSdkToken {
   projectId: string;
   token: string;
   label: string;
+  source: 'client' | 'server';
   revokedAt: Date | null;
   createdAt: Date;
 }
@@ -59,7 +60,11 @@ class FakePrisma {
   savedReport = { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) };
 
   sdkToken = {
-    create: async ({ data }: { data: { projectId: string; token: string; label: string } }) => {
+    create: async ({
+      data,
+    }: {
+      data: { projectId: string; token: string; label: string; source: 'client' | 'server' };
+    }) => {
       const row: FakeSdkToken = {
         id: `sdk-${this.nextTokenId++}`,
         revokedAt: null,
@@ -232,6 +237,7 @@ describe('ProjectManagementService', () => {
           projectId: 'p1',
           token: 'mam_a',
           label: 'default',
+          source: 'client',
           revokedAt: null,
           createdAt: new Date(),
         },
@@ -240,6 +246,7 @@ describe('ProjectManagementService', () => {
           projectId: 'p1',
           token: 'mam_b',
           label: 'old',
+          source: 'client',
           revokedAt: new Date(),
           createdAt: new Date(),
         },
@@ -249,6 +256,37 @@ describe('ProjectManagementService', () => {
       const tokens = await service.listTokens('p1');
       expect(tokens).toHaveLength(1);
       expect(tokens[0]).toMatchObject({ id: 't1', token: 'mam_a', label: 'default' });
+    });
+
+    it('exposes each token\'s source so the dashboard can label them', async () => {
+      const prisma = new FakePrisma();
+      prisma.sdkTokens.push(
+        {
+          id: 't1',
+          projectId: 'p1',
+          token: 'mam_a',
+          label: 'mobile',
+          source: 'client',
+          revokedAt: null,
+          createdAt: new Date(),
+        },
+        {
+          id: 't2',
+          projectId: 'p1',
+          token: 'mam_b',
+          label: 'billing worker',
+          source: 'server',
+          revokedAt: null,
+          createdAt: new Date(),
+        },
+      );
+      const { service } = makeService(prisma);
+
+      const tokens = await service.listTokens('p1');
+      expect(tokens.map((t) => [t.id, t.source])).toEqual([
+        ['t1', 'client'],
+        ['t2', 'server'],
+      ]);
     });
   });
 
@@ -267,6 +305,22 @@ describe('ProjectManagementService', () => {
       const created = await service.createToken('p1');
       expect(created.label).toBe('default');
     });
+
+    it('defaults to a client token so an unspecified source never mislabels device traffic', async () => {
+      const prisma = new FakePrisma();
+      const { service } = makeService(prisma);
+      const created = await service.createToken('p1', 'mobile');
+      expect(created.source).toBe('client');
+      expect(prisma.sdkTokens.at(-1)?.source).toBe('client');
+    });
+
+    it('persists a server token and echoes the source back', async () => {
+      const prisma = new FakePrisma();
+      const { service } = makeService(prisma);
+      const created = await service.createToken('p1', 'billing worker', 'server');
+      expect(created.source).toBe('server');
+      expect(prisma.sdkTokens.at(-1)?.source).toBe('server');
+    });
   });
 
   describe('revokeToken', () => {
@@ -280,6 +334,7 @@ describe('ProjectManagementService', () => {
         projectId: 'p1',
         token: 'mam_abc',
         label: 'default',
+        source: 'client',
         revokedAt: null,
         createdAt: new Date(),
       });
@@ -306,6 +361,7 @@ describe('ProjectManagementService', () => {
         projectId: 'p1',
         token: 'mam_abc',
         label: 'default',
+        source: 'client',
         revokedAt: null,
         createdAt: new Date(),
       });
@@ -326,6 +382,7 @@ describe('ProjectManagementService', () => {
         projectId: 'other-project',
         token: 'mam_abc',
         label: 'default',
+        source: 'client',
         revokedAt: null,
         createdAt: new Date(),
       });
@@ -343,6 +400,7 @@ describe('ProjectManagementService', () => {
         projectId: 'p1',
         token: 'mam_abc',
         label: 'default',
+        source: 'client',
         revokedAt: new Date(),
         createdAt: new Date(),
       });
@@ -359,6 +417,7 @@ describe('ProjectManagementService', () => {
         projectId: 'p1',
         token: 'mam_abc',
         label: 'default',
+        source: 'client',
         revokedAt: null,
         createdAt: new Date(),
       });

@@ -1,9 +1,29 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { ClickHouseClient } from '@clickhouse/client';
 
-/** `infra/clickhouse/init.sql` (shared contracts §5 DDL), resolved from the repo root. */
-const INIT_SQL_PATH = path.resolve(__dirname, '../../../..', 'infra/clickhouse/init.sql');
+const INIT_SQL_RELATIVE = 'infra/clickhouse/init.sql';
+
+/**
+ * `infra/clickhouse/init.sql` (shared contracts §5 DDL), found by walking up from this file until
+ * the repo root turns up. A fixed `../../../..` was used here before and silently broke the moment
+ * the backend moved down a directory (1a6f5fb) — every suite that applies the schema failed with
+ * ENOENT on a path that no longer existed. Searching upward cannot rot that way.
+ */
+function findInitSql(): string {
+  let dir = __dirname;
+  for (;;) {
+    const candidate = path.join(dir, INIT_SQL_RELATIVE);
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error(`could not locate ${INIT_SQL_RELATIVE} in any ancestor of ${__dirname}`);
+    }
+    dir = parent;
+  }
+}
+
+const INIT_SQL_PATH = findInitSql();
 
 function isCommentOrBlankLine(line: string): boolean {
   const trimmed = line.trim();

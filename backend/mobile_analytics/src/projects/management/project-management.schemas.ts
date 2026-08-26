@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ingestSourceSchema } from '@myampix/contracts';
 
 const MAX_NAME_LENGTH = 200;
 const MAX_TIMEZONE_LENGTH = 64;
@@ -20,8 +21,13 @@ export const updateProjectSchema = z
   });
 export type UpdateProjectDto = z.infer<typeof updateProjectSchema>;
 
+/**
+ * `source` decides how every event sent with this token is classified, and is fixed for the token's
+ * lifetime. Omitted means `client` — the pre-existing behaviour, so old callers keep working.
+ */
 export const createTokenSchema = z.object({
   label: z.string().trim().min(1).max(MAX_LABEL_LENGTH).optional(),
+  source: ingestSourceSchema.optional(),
 });
 export type CreateTokenDto = z.infer<typeof createTokenSchema>;
 

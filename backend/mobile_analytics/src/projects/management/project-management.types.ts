@@ -1,3 +1,5 @@
+import type { IngestSource } from '@myampix/contracts';
+
 /** POST /api/v1/orgs/:orgId/projects response (contracts §13). */
 export interface CreatedProject {
   id: string;
@@ -28,6 +30,7 @@ export interface SdkTokenListItem {
   id: string;
   token: string;
   label: string;
+  source: IngestSource;
   created_at: string;
 }
 
@@ -36,4 +39,5 @@ export interface CreatedToken {
   id: string;
   token: string;
   label: string;
+  source: IngestSource;
 }

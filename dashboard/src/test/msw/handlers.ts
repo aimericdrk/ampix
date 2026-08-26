@@ -9,6 +9,7 @@ import type {
   AuthUser,
   CreatedProject,
   CreatedToken,
+  IngestSource,
   CreateInvitationResponse,
   CreateOrgResponse,
   CohortDefinition,
@@ -854,6 +855,7 @@ interface TokenRecord {
   projectId: string;
   token: string;
   label: string;
+  source: IngestSource;
   createdAt: string;
   revoked: boolean;
 }
@@ -900,6 +902,7 @@ function initialOrgsState() {
         projectId: TEST_PROJECT.id,
         token: TEST_PROJECT.ingest_token,
         label: 'Default',
+        source: 'client' as IngestSource,
         createdAt: futureIso(-30),
         revoked: false,
       },
@@ -1716,6 +1719,7 @@ export const handlers = [
       projectId: record.id,
       token: generateToken(),
       label: 'Default',
+      source: 'client',
       createdAt: new Date().toISOString(),
       revoked: false,
     };
@@ -1887,7 +1891,13 @@ export const handlers = [
     const response: ListTokensResponse = {
       tokens: orgsState.tokens
         .filter((t) => t.projectId === projectId && !t.revoked)
-        .map((t) => ({ id: t.id, token: t.token, label: t.label, created_at: t.createdAt })),
+        .map((t) => ({
+          id: t.id,
+          token: t.token,
+          label: t.label,
+          source: t.source,
+          created_at: t.createdAt,
+        })),
     };
     return HttpResponse.json(response);
   }),
@@ -1901,17 +1911,26 @@ export const handlers = [
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
     if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create tokens');
-    const body = (await request.json()) as { label?: string };
+    const body = (await request.json()) as { label?: string; source?: IngestSource };
+    if (body.source !== undefined && body.source !== 'client' && body.source !== 'server') {
+      return problem(400, 'source must be client or server');
+    }
     const token: TokenRecord = {
       id: nextId('token'),
       projectId,
       token: generateToken(),
       label: body.label?.trim() || 'Untitled',
+      source: body.source ?? 'client',
       createdAt: new Date().toISOString(),
       revoked: false,
     };
     orgsState.tokens.push(token);
-    const response: CreatedToken = { id: token.id, token: token.token, label: token.label };
+    const response: CreatedToken = {
+      id: token.id,
+      token: token.token,
+      label: token.label,
+      source: token.source,
+    };
     return HttpResponse.json(response, { status: 201 });
   }),
 

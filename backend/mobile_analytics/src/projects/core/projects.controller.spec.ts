@@ -176,25 +176,56 @@ describe('ProjectsController', () => {
   describe('createToken', () => {
     it('parses the optional label and delegates to ProjectManagementService', async () => {
       const { controller, projectManagement } = makeController();
-      projectManagement.createToken.mockResolvedValue({ id: 't1', token: 'mam_x', label: 'ci' });
+      projectManagement.createToken.mockResolvedValue({
+        id: 't1',
+        token: 'mam_x',
+        label: 'ci',
+        source: 'client',
+      });
 
       const body = await controller.createToken('p1', { label: 'ci' });
 
-      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', 'ci');
-      expect(body).toEqual({ id: 't1', token: 'mam_x', label: 'ci' });
+      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', 'ci', undefined);
+      expect(body).toEqual({ id: 't1', token: 'mam_x', label: 'ci', source: 'client' });
     });
 
-    it('works with no body at all (label optional)', async () => {
+    it('works with no body at all (label and source optional)', async () => {
       const { controller, projectManagement } = makeController();
       projectManagement.createToken.mockResolvedValue({
         id: 't1',
         token: 'mam_x',
         label: 'default',
+        source: 'client',
       });
 
       await controller.createToken('p1', {});
 
-      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', undefined);
+      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', undefined, undefined);
+    });
+
+    it('passes an explicit server source through to the service', async () => {
+      const { controller, projectManagement } = makeController();
+      projectManagement.createToken.mockResolvedValue({
+        id: 't2',
+        token: 'mam_y',
+        label: 'billing worker',
+        source: 'server',
+      });
+
+      const body = await controller.createToken('p1', {
+        label: 'billing worker',
+        source: 'server',
+      });
+
+      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', 'billing worker', 'server');
+      expect(body.source).toBe('server');
+    });
+
+    it('rejects a source outside the client/server enum', async () => {
+      const { controller, projectManagement } = makeController();
+
+      await expect(controller.createToken('p1', { source: 'backend' })).rejects.toThrow();
+      expect(projectManagement.createToken).not.toHaveBeenCalled();
     });
   });
 

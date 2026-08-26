@@ -27,6 +27,7 @@
 // caller's string), so a "whitelist hit" can only ever emit one of these ~20 fixed identifiers.
 const EVENT_COLUMNS: Readonly<Record<string, string>> = Object.freeze({
   event: 'event',
+  source: 'source',
   distinct_id: 'distinct_id',
   anon_id: 'anon_id',
   session_id: 'session_id',
