@@ -13,8 +13,6 @@ export interface EventRow {
   session_id: string;
   timestamp: string;
   server_timestamp: string;
-  /** 'client' | 'server' — from the ingest token, never from the payload. */
-  source: string;
   properties: Record<string, unknown>;
   app_version: string;
   app_build: string;
@@ -36,6 +34,11 @@ export interface EventRow {
   first_utm_source: string;
   first_utm_campaign: string;
   install_referrer: string;
+  /**
+   * 'client' | 'server' — taken from the ingest token, never from the payload. Reads back as ''
+   * only on rows written before the column existed.
+   */
+  source: string;
 }
 
 /** One row of analytics.user_profiles (shared contracts §5). */
@@ -140,6 +143,34 @@ export class ClickHouseService implements EventSink, OnApplicationShutdown {
       await this.client.command({
         query: `DELETE FROM ${table} WHERE project_id = {projectId:UUID}`,
         query_params: { projectId },
+      });
+    }
+  }
+
+  /**
+   * Per-table predicates for a single end-user's rows. `events` matches both id columns (a user's
+   * pre-login rows carry their anon_id as distinct_id); `identity_mappings` matches both link
+   * directions. The daily rollups hold only per-day aggregate states — they have no per-user rows
+   * to delete (and lightweight deletes can't reach inside an AggregateFunction state anyway).
+   */
+  private static readonly USER_SCOPED_DELETES = [
+    { table: 'events', predicate: '(distinct_id IN {ids:Array(String)} OR anon_id IN {ids:Array(String)})' },
+    { table: 'user_profiles', predicate: 'distinct_id IN {ids:Array(String)}' },
+    { table: 'identity_mappings', predicate: '(anon_id IN {ids:Array(String)} OR canonical_id IN {ids:Array(String)})' },
+  ] as const;
+
+  /**
+   * Lightweight-deletes every row belonging to one end-user (all of their known ids — the
+   * requested distinct_id plus any linked anon/canonical ids, expanded by the caller) across the
+   * user-scoped tables. Same conventions as {@link deleteProjectData}: table names and predicates
+   * are fixed constants, every value binds as a param and is never interpolated.
+   */
+  async deleteUserData(projectId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    for (const { table, predicate } of ClickHouseService.USER_SCOPED_DELETES) {
+      await this.client.command({
+        query: `DELETE FROM ${table} WHERE project_id = {projectId:UUID} AND ${predicate}`,
+        query_params: { projectId, ids },
       });
     }
   }

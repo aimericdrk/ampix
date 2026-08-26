@@ -3,6 +3,7 @@ import {
   clampPropertyValuesLimit,
   DEFAULT_LIMIT,
   MAX_LIMIT,
+  parseEventSourceParam,
   parseFiltersParam,
   parseIsoInstantParam,
   PROPERTY_VALUES_DEFAULT_LIMIT,
@@ -176,5 +177,23 @@ describe('parseFiltersParam (feat-02 §3.4/T2)', () => {
     expect(() => parseFiltersParam(encodeFilters({ property: 'os', op: 'eq', value: 'ios' }))).toThrow(
       expect.objectContaining({ problem: expect.objectContaining({ status: 400 }) }),
     );
+  });
+});
+
+describe('parseEventSourceParam', () => {
+  it('returns undefined when absent (no filter)', () => {
+    expect(parseEventSourceParam(undefined)).toBeUndefined();
+  });
+
+  it.each(['client', 'server'] as const)('passes %s through', (value) => {
+    expect(parseEventSourceParam(value)).toBe(value);
+  });
+
+  it('rejects any other value with a 400', () => {
+    for (const bad of ['backend', '', 'CLIENT', 'sdk']) {
+      expect(() => parseEventSourceParam(bad)).toThrow(
+        expect.objectContaining({ problem: expect.objectContaining({ status: 400 }) }),
+      );
+    }
   });
 });

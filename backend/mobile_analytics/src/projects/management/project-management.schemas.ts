@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ingestSourceSchema } from '@myampix/contracts';
+import { eventSourceSchema } from '@myampix/contracts';
 
 const MAX_NAME_LENGTH = 200;
 const MAX_TIMEZONE_LENGTH = 64;
@@ -27,7 +27,7 @@ export type UpdateProjectDto = z.infer<typeof updateProjectSchema>;
  */
 export const createTokenSchema = z.object({
   label: z.string().trim().min(1).max(MAX_LABEL_LENGTH).optional(),
-  source: ingestSourceSchema.optional(),
+  source: eventSourceSchema.optional(),
 });
 export type CreateTokenDto = z.infer<typeof createTokenSchema>;
 

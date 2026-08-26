@@ -197,6 +197,7 @@ describe('Analytics read endpoints (e2e, contracts §14)', () => {
         timestamp: new Date(order[8].timestamp).toISOString(),
         os: 'ios',
         app_version: '2.0.0',
+        source: 'client',
       });
       expect(res.body.next_before).toBe(new Date(order[0].timestamp).toISOString());
     });
@@ -251,15 +252,28 @@ describe('Analytics read endpoints (e2e, contracts §14)', () => {
       expect(res.body.users).toEqual([
         {
           distinct_id: ALICE,
+          first_seen: new Date(order[0].timestamp).toISOString(),
           last_seen: new Date(order[5].timestamp).toISOString(),
           event_count: 4,
+          name: null,
+          email: null,
         },
         {
           distinct_id: ALICE2,
+          first_seen: new Date(order[1].timestamp).toISOString(),
           last_seen: new Date(order[7].timestamp).toISOString(),
           event_count: 2,
+          name: null,
+          email: null,
         },
-        { distinct_id: BOB, last_seen: new Date(order[8].timestamp).toISOString(), event_count: 3 },
+        {
+          distinct_id: BOB,
+          first_seen: new Date(order[3].timestamp).toISOString(),
+          last_seen: new Date(order[8].timestamp).toISOString(),
+          event_count: 3,
+          name: null,
+          email: null,
+        },
       ]);
       expect(res.body.next_cursor).toBeNull();
     });
@@ -306,6 +320,7 @@ describe('Analytics read endpoints (e2e, contracts §14)', () => {
 
       expect(res.body).toEqual({
         distinct_id: ALICE,
+        distinct_ids: [ALICE],
         profile: { plan: 'pro', tier: 'gold' },
         first_seen: new Date(order[0].timestamp).toISOString(),
         last_seen: new Date(order[5].timestamp).toISOString(),
@@ -339,6 +354,7 @@ describe('Analytics read endpoints (e2e, contracts §14)', () => {
 
       expect(res.body).toEqual({
         distinct_id: 'totally-unknown-user',
+        distinct_ids: ['totally-unknown-user'],
         profile: {},
         first_seen: null,
         last_seen: null,

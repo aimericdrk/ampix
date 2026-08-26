@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ZodError } from 'zod';
-import { IngestEvent, IngestSource, RejectedItem, ingestEventSchema } from '@myampix/contracts';
+import { IngestEvent, EventSource, RejectedItem, ingestEventSchema } from '@myampix/contracts';
 import { EventRow, toChDateTime64 } from '../clickhouse/clickhouse.service';
 
 /** Contracts §4: client timestamp is clamped to [now-7d, now+5min]. */
@@ -40,7 +40,7 @@ export class EventNormalizer {
   normalizeBatch(
     projectId: string,
     items: unknown[],
-    source: IngestSource,
+    source: EventSource,
     nowMs: number = Date.now(),
   ): NormalizedBatch {
     const rows: EventRow[] = [];
@@ -59,7 +59,7 @@ export class EventNormalizer {
   private toRow(
     projectId: string,
     event: IngestEvent,
-    source: IngestSource,
+    source: EventSource,
     nowMs: number,
   ): EventRow {
     const ctx = event.context ?? {};

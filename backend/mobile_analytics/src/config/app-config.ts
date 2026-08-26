@@ -103,6 +103,11 @@ const envSchema = z.object({
   // "unconfigured" (MistralService maps this to a 503, not a boot-time config error).
   MISTRAL_API_KEY: z.string().optional(),
   MISTRAL_MODEL: z.string().default('mistral-small-latest'),
+  // End-user data erasure (account deletion / GDPR): shared secret that DELETE
+  // /ingest/users/:distinctId requires IN ADDITION to a valid SDK token. The SDK token ships
+  // inside the mobile app, so it alone must never authorize destructive deletes. Unset ⇒ the
+  // erasure endpoint is disabled (403) — fail closed, never fail open.
+  ERASURE_API_KEY: z.string().min(16, 'must be at least 16 characters').optional(),
 });
 
 export interface AppConfig {
@@ -125,6 +130,10 @@ export interface AppConfig {
   // needing an update; loadConfig() always populates both (mistralModel via its zod default).
   mistralApiKey?: string;
   mistralModel?: string;
+  // End-user data erasure shared secret — see envSchema comment. Optional both because the
+  // feature is opt-in (unset ⇒ endpoint disabled) and for the usual hand-built-fixture
+  // compatibility; loadConfig() always populates it (to undefined when unset).
+  erasureApiKey?: string;
   // §20 — pino base log level. Optional (rather than required) so pre-existing hand-built AppConfig
   // fixtures outside this task's scope (e.g. test/integration/clickhouse.int-spec.ts) keep compiling
   // without every fixture needing an update. loadConfig() always populates it (default 'info').
@@ -246,6 +255,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     signupEnabled: v.SIGNUP_ENABLED === 'true',
     mistralApiKey: v.MISTRAL_API_KEY,
     mistralModel: v.MISTRAL_MODEL,
+    erasureApiKey: v.ERASURE_API_KEY,
     auth: {
       accessTokenTtl,
       refreshTokenTtl,
@@ -325,6 +335,7 @@ export function describeConfig(config: AppConfig): Record<string, string> {
       config.firebaseStorageBucket ?? '(not set — in-memory screenshot store)',
     MISTRAL_API_KEY: redacted(config.mistralApiKey),
     MISTRAL_MODEL: config.mistralModel ?? 'mistral-small-latest',
+    ERASURE_API_KEY: redacted(config.erasureApiKey),
     TOTP_ISSUER: auth.totpIssuer,
     TOTP_ENC_KEY: redacted(auth.totpEncKey),
     ACCESS_TOKEN_TTL: String(auth.accessTokenTtl),

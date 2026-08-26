@@ -33,6 +33,7 @@ import type {
   ListReportsResponse,
   ListTemplatesResponse,
   ListUsersResponse,
+  EventSource,
   LiveEventsResponse,
   MetaEventsResponse,
   MetaPropertiesResponse,
@@ -309,13 +310,14 @@ export function useRunClickHeatmap(projectId: string) {
 
 const LIVE_EVENTS_PAGE_SIZE = 25;
 
-export function useLiveEvents(projectId: string) {
+export function useLiveEvents(projectId: string, source?: EventSource) {
   return useInfiniteQuery({
-    queryKey: ['analytics', projectId, 'live-events'],
+    queryKey: ['analytics', projectId, 'live-events', source ?? 'all'],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) => {
       const before = pageParam ? `&before=${encodeURIComponent(pageParam)}` : '';
+      const sourceParam = source ? `&source=${source}` : '';
       return apiFetch<LiveEventsResponse>(
-        `${base(projectId)}/events/live?limit=${LIVE_EVENTS_PAGE_SIZE}${before}`,
+        `${base(projectId)}/events/live?limit=${LIVE_EVENTS_PAGE_SIZE}${before}${sourceParam}`,
       );
     },
     initialPageParam: undefined as string | undefined,

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { DEFAULT_INGEST_SOURCE, type IngestSource } from '@myampix/contracts';
+import { DEFAULT_EVENT_SOURCE, type EventSource } from '@myampix/contracts';
 import type Redis from 'ioredis';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClickHouseService } from '../../clickhouse/clickhouse.service';
@@ -169,7 +169,7 @@ export class ProjectManagementService {
   async createToken(
     projectId: string,
     label?: string,
-    source: IngestSource = DEFAULT_INGEST_SOURCE,
+    source: EventSource = DEFAULT_EVENT_SOURCE,
   ): Promise<CreatedToken> {
     const token = await this.prisma.sdkToken.create({
       data: { projectId, token: generateSdkToken(), label: label ?? DEFAULT_TOKEN_LABEL, source },

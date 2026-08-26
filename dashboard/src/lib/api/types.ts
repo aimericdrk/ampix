@@ -310,18 +310,11 @@ export interface PurgeProjectDataResponse {
   };
 }
 
-/**
- * How events sent with a token are attributed. Chosen when the token is minted and fixed for its
- * lifetime — the backend stamps it onto every event, so it is the one dimension the sender cannot
- * misreport. Mirrors IngestSource in @myampix/contracts.
- */
-export type IngestSource = 'client' | 'server';
-
 export interface SdkToken {
   id: string;
   token: string;
   label: string;
-  source: IngestSource;
+  source: EventSource;
   created_at: string;
 }
 
@@ -332,7 +325,7 @@ export interface ListTokensResponse {
 export interface CreateTokenRequest {
   label?: string;
   /** Omitted means `client`, matching the server-side default. */
-  source?: IngestSource;
+  source?: EventSource;
 }
 
 /** `POST /projects/:projectId/tokens` response — the new token, shown once. */
@@ -340,7 +333,7 @@ export interface CreatedToken {
   id: string;
   token: string;
   label: string;
-  source: IngestSource;
+  source: EventSource;
 }
 
 // --- Account (self) management (contracts §13) ---
@@ -460,6 +453,12 @@ export interface EngagementResponse {
   new_vs_returning: EngagementNewReturningPoint[];
 }
 
+/**
+ * Who emitted an event: an SDK inside the app, or a trusted backend (app server, RC webhook).
+ * Set from the ingest token the batch arrived with, so it is also what an `SdkToken` is minted as.
+ */
+export type EventSource = 'client' | 'server';
+
 export interface LiveEvent {
   insert_id: string;
   event: string;
@@ -467,6 +466,7 @@ export interface LiveEvent {
   timestamp: string;
   os: string;
   app_version: string;
+  source: EventSource;
 }
 
 /** `GET /events/live` — newest-first; `next_before` feeds the next page's `before` param. */

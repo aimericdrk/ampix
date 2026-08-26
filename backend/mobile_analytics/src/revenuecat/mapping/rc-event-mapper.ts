@@ -67,9 +67,6 @@ export function toEventRow(
     session_id: '',
     timestamp: toChDateTime64(ev.event_timestamp_ms),
     server_timestamp: toChDateTime64(nowMs),
-    // A RevenueCat webhook is server-to-server by construction: no device sent this, RevenueCat's
-    // backend did. It carries no ingest token, so the classification is hardcoded rather than read.
-    source: 'server',
     properties,
     app_version: '',
     app_build: '',
@@ -91,6 +88,9 @@ export function toEventRow(
     first_utm_source: '',
     first_utm_campaign: '',
     install_referrer: '',
+    // A RevenueCat webhook is server-to-server by construction: no device sent this, RevenueCat's
+    // backend did. It carries no ingest token, so the classification is hardcoded rather than read.
+    source: 'server',
   };
 }
 

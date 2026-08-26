@@ -98,6 +98,19 @@ export function parseIsoInstantParam(
   return toChDateTime64(ms);
 }
 
+/**
+ * Parses the `/events/live` `source` query param. Returns `undefined` when absent (no filter);
+ * throws a 400 on anything other than the two known sources — same "malformed input -> 400"
+ * rule as {@link parseIsoInstantParam}.
+ */
+export function parseEventSourceParam(raw: string | undefined): 'client' | 'server' | undefined {
+  if (raw === undefined) return undefined;
+  if (raw !== 'client' && raw !== 'server') {
+    throw badRequest("source: must be 'client' or 'server'");
+  }
+  return raw;
+}
+
 export interface DateOnlyRange {
   from: string;
   to: string;

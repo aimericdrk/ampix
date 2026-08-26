@@ -24,7 +24,7 @@ import { Separator } from '../../../components/ui/separator';
 import { useToast } from '../../../components/ui/toast';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
-import type { IngestSource, SdkToken } from '../../../lib/api/types';
+import type { EventSource, SdkToken } from '../../../lib/api/types';
 import {
   useCreateToken,
   useDeleteProject,
@@ -282,7 +282,7 @@ function TokensSection({
 
 /** Client vs server, in the token table and on the revealed token. Neutral colours: neither is a
  *  warning state — they are just two kinds of token. */
-function SourceBadge({ source }: { source: IngestSource }) {
+function SourceBadge({ source }: { source: EventSource }) {
   return (
     <Badge variant={source === 'server' ? 'info' : 'accent'}>
       {source === 'server' ? 'Server' : 'Client'}
@@ -296,7 +296,7 @@ function ManagedTokens({ projectId }: { projectId: string }) {
   const revokeToken = useRevokeToken(projectId);
   const { toast } = useToast();
   const [label, setLabel] = useState('');
-  const [source, setSource] = useState<IngestSource>('client');
+  const [source, setSource] = useState<EventSource>('client');
   const [newToken, setNewToken] = useState<string | null>(null);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
   const [pendingRotate, setPendingRotate] = useState<SdkToken | null>(null);
@@ -437,7 +437,7 @@ function ManagedTokens({ projectId }: { projectId: string }) {
           <select
             id="token-source"
             value={source}
-            onChange={(e) => setSource(e.target.value as IngestSource)}
+            onChange={(e) => setSource(e.target.value as EventSource)}
             className={cn(fieldLook, 'w-auto')}
           >
             <option value="client">Client (app or browser)</option>

@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { DEFAULT_INGEST_SOURCE, SDK_TOKEN_REGEX, type IngestSource } from '@myampix/contracts';
+import { DEFAULT_EVENT_SOURCE, SDK_TOKEN_REGEX, type EventSource } from '@myampix/contracts';
 import { REDIS } from '../redis/redis.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProblemException } from '../common/problem-details';
@@ -21,7 +21,7 @@ export const SDK_TOKEN_CACHE_TTL_SECONDS = 60;
 
 interface CachedLookup {
   projectId: string | null;
-  source?: IngestSource;
+  source?: EventSource;
 }
 
 /**
@@ -54,7 +54,7 @@ export class SdkTokenGuard implements CanActivate {
       req.ingestAuth = {
         projectId: cached.projectId,
         token,
-        source: cached.source ?? DEFAULT_INGEST_SOURCE,
+        source: cached.source ?? DEFAULT_EVENT_SOURCE,
       };
       return true;
     }
@@ -64,7 +64,7 @@ export class SdkTokenGuard implements CanActivate {
     const projectId = live?.projectId ?? null;
     // Cached alongside projectId rather than re-read per batch: source is immutable for the life of
     // a token, so a cache hit can never carry a stale one.
-    const source = (live?.source as IngestSource | undefined) ?? DEFAULT_INGEST_SOURCE;
+    const source = (live?.source as EventSource | undefined) ?? DEFAULT_EVENT_SOURCE;
     await this.writeCache(sdkTokenCacheKey(token), { projectId, source });
     if (!projectId) throw this.unauthorized();
     req.ingestAuth = { projectId, token, source };

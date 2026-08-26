@@ -427,6 +427,23 @@ deliberately not a button: it overwrites a live database and cannot be undone.
 > script honours `BACKUP_DEST`, so pointing it at a mounted OVH Backup Storage share is a one-line
 > change.
 
+### 4.5b ClickHouse schema migrations
+
+There is no automatic ClickHouse migration runner: `infra/clickhouse/init.sql` only runs on a
+container's **first** boot, and the Helm pre-upgrade job migrates Postgres (Prisma) only. When a
+release adds a ClickHouse column, run the matching idempotent `ALTER` **before** rolling out the
+new analytics image — inserts fail if the app writes a column the table doesn't have yet. The
+`ALTER ... IF NOT EXISTS` statements live at the bottom of `init.sql`; apply them manually:
+
+```bash
+# events.source ('client'/'server' event origin — 2026-08 release):
+sudo docker exec myampix-clickhouse-1 clickhouse-client --user default --password <pw> \
+  --query "ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS source LowCardinality(String) DEFAULT ''"
+```
+
+Historical rows read as `''` and the API maps them to client/server via the RevenueCat
+`sdk_version` stamp, so no backfill mutation is needed.
+
 ### 4.6 Rotating a credential
 
 Edit the relevant `infra/k8s/secrets/*.env`, then:

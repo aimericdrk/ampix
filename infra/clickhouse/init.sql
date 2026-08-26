@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS analytics.events (
   session_id    UUID,
   timestamp     DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),
   server_timestamp DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),
-  source        LowCardinality(String) DEFAULT 'client',
   properties    JSON,
   app_version   LowCardinality(String), app_build LowCardinality(String),
   os            LowCardinality(String), os_version LowCardinality(String),
@@ -28,17 +27,21 @@ CREATE TABLE IF NOT EXISTS analytics.events (
   utm_source    LowCardinality(String), utm_medium LowCardinality(String),
   utm_campaign  String, utm_content String, utm_term String,
   first_utm_source LowCardinality(String), first_utm_campaign String,
-  install_referrer String CODEC(ZSTD(3))
+  install_referrer String CODEC(ZSTD(3)),
+  -- Who emitted the event: 'client' (SDK) or 'server' (a backend: RC webhook, app backend).
+  -- DEFAULT '' (not 'client') on purpose: pre-column rows read as '' and the read side maps
+  -- '' to server/client via the legacy sdk_version = 'revenuecat-webhook' stamp (EVENT_SOURCE_EXPR
+  -- in the analytics property resolver), so history stays correct without a mutation.
+  source LowCardinality(String) DEFAULT ''
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (project_id, event, timestamp, insert_id);
 
--- Upgrade path for a data volume created before `source` existed: CREATE TABLE IF NOT EXISTS above
--- is a no-op on an existing table, so the column has to be added explicitly. Rows written earlier
--- read back as 'client' via the DEFAULT, which is what they were -- all ingest traffic was device
--- traffic until server tokens shipped. Harmless on a fresh database, where the column already exists.
-ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS source LowCardinality(String) DEFAULT 'client';
+-- Schema evolution for ALREADY-INITIALIZED databases (this file only auto-runs on first container
+-- start, but is safe to re-run manually / is replayed by the test helpers). Keep each ALTER
+-- idempotent via IF NOT EXISTS, exactly like the CREATEs above.
+ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS source LowCardinality(String) DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS analytics.user_profiles (
   project_id UUID, distinct_id String,

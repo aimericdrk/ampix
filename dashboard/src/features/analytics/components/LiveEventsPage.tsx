@@ -11,9 +11,17 @@ import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { cn } from '../../../lib/cn';
 import { useReducedMotion } from '../../../lib/motion';
 import { ApiError } from '../../../lib/api/problem';
-import type { LiveEvent } from '../../../lib/api/types';
+import type { EventSource, LiveEvent } from '../../../lib/api/types';
 import { useLiveEvents } from '../api';
 import { StatTile } from './charts/StatTile';
+
+/** The source quick-filter's three states; 'all' means "no source filter sent". */
+const SOURCE_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'client', label: 'Client' },
+  { value: 'server', label: 'Server' },
+] as const;
+type SourceFilterValue = (typeof SOURCE_FILTERS)[number]['value'];
 
 /** How often the relative-time labels ("3s ago") re-render while the stream is live. */
 const RELATIVE_TIME_TICK_MS = 1000;
@@ -83,8 +91,9 @@ function LivePulse({ paused }: { paused: boolean }) {
  */
 export function LiveEventsPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/live' });
+  const [sourceFilter, setSourceFilter] = useState<SourceFilterValue>('all');
   const { data, isPending, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useLiveEvents(projectId);
+    useLiveEvents(projectId, sourceFilter === 'all' ? undefined : (sourceFilter as EventSource));
 
   const liveEvents = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
 
@@ -179,11 +188,36 @@ export function LiveEventsPage() {
           </SectionGrid>
 
           <Card>
-            <CardHeader className="flex-row items-center justify-between gap-3">
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
               <CardTitle>Event stream</CardTitle>
-              {paused && (
-                <span className="text-xs text-text-muted">Paused — new events are held back</span>
-              )}
+              <div className="flex items-center gap-3">
+                {paused && (
+                  <span className="text-xs text-text-muted">Paused — new events are held back</span>
+                )}
+                <div
+                  role="group"
+                  aria-label="Filter by event source"
+                  className="flex items-center gap-1.5"
+                >
+                  <span className="text-xs font-medium text-text-muted">Source:</span>
+                  {SOURCE_FILTERS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={sourceFilter === value}
+                      onClick={() => setSourceFilter(value)}
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-[0.98]',
+                        sourceFilter === value
+                          ? 'border-accent bg-accent-soft text-accent'
+                          : 'border-border-strong text-text-muted hover:border-accent hover:text-accent',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {events.length === 0 ? (
@@ -204,7 +238,12 @@ export function LiveEventsPage() {
                       )}
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <Badge variant="accent">{event.event}</Badge>
+                        {/* Server-emitted events wear the info hue (vs. accent for client ones)
+                            plus an explicit "server" pill — color alone must not carry meaning. */}
+                        <Badge variant={event.source === 'server' ? 'info' : 'accent'}>
+                          {event.event}
+                        </Badge>
+                        {event.source === 'server' && <Badge variant="info">server</Badge>}
                         {isSubscriptionEvent(event.event) && (
                           <Badge variant="accent">subscription</Badge>
                         )}

@@ -7,7 +7,8 @@ import type {
   UsersResponse,
 } from '../analytics.types';
 import { ALIASES_CTE, canonicalization, RESOLVE_CANONICAL_ID_SQL } from '../support/identity';
-import { clampLimit, parseIsoInstantParam } from '../support/read-query.util';
+import { clampLimit, parseEventSourceParam, parseIsoInstantParam } from '../support/read-query.util';
+import { EVENT_SOURCE_EXPR } from '../support/property-resolver';
 import { USER_SEARCH_PROFILE_KEYS } from './analytics.shared';
 
 interface LiveEventRow {
@@ -17,6 +18,7 @@ interface LiveEventRow {
   timestamp: string;
   os: string;
   app_version: string;
+  source: string;
 }
 
 interface UserRow {
@@ -79,10 +81,12 @@ export class UsersService {
     projectId: string,
     limitRaw?: string,
     beforeRaw?: string,
+    sourceRaw?: string,
   ): Promise<LiveEventsResponse> {
     await this.projects.assertMembership(userId, projectId);
     const limit = clampLimit(limitRaw);
     const before = parseIsoInstantParam(beforeRaw, 'before');
+    const source = parseEventSourceParam(sourceRaw);
 
     const params: Record<string, unknown> = { projectId, limit };
     let beforeClause = '';
@@ -90,12 +94,19 @@ export class UsersService {
       params.before = before;
       beforeClause = 'AND timestamp < {before:DateTime64}\n         ';
     }
+    // EVENT_SOURCE_EXPR is a fixed constant (see property-resolver); the value binds as a param.
+    let sourceClause = '';
+    if (source !== undefined) {
+      params.source = source;
+      sourceClause = `AND ${EVENT_SOURCE_EXPR} = {source:String}\n         `;
+    }
 
     const rows = await this.clickhouse.query<LiveEventRow>(
-      `SELECT insert_id, event, distinct_id, timestamp, os, app_version
+      `SELECT insert_id, event, distinct_id, timestamp, os, app_version,
+              ${EVENT_SOURCE_EXPR} AS source
        FROM events
        WHERE project_id = {projectId:UUID}
-         ${beforeClause}ORDER BY timestamp DESC
+         ${beforeClause}${sourceClause}ORDER BY timestamp DESC
        LIMIT {limit:UInt64}`,
       params,
     );
@@ -107,6 +118,7 @@ export class UsersService {
       timestamp: fromChDateTime64(row.timestamp),
       os: row.os,
       app_version: row.app_version,
+      source: row.source,
     }));
 
     return { events, next_before: events.length > 0 ? events[events.length - 1].timestamp : null };
@@ -240,6 +252,9 @@ export class UsersService {
            AND distinct_id = {canonicalId:String}
          LIMIT 1`,
         idParams,
+        // Same round-trip rule as ProfileWriter: without this, ClickHouse quotes 64-bit
+        // integers in JSON output and numeric profile values come back as strings.
+        { output_format_json_quote_64bit_integers: 0 },
       ),
       this.clickhouse.query<UserAggRow>(
         `WITH ${canon.cte}
@@ -270,7 +285,9 @@ export class UsersService {
          ORDER BY e.timestamp DESC
          LIMIT 50`,
         idParams,
-        canon.settings,
+        // canon.settings is REQUIRED for the canonicalizing LEFT JOIN; the 64-bit-integer
+        // setting keeps numeric event properties as numbers (see the profile query above).
+        { ...canon.settings, output_format_json_quote_64bit_integers: 0 },
       ),
       // §17 identity set: every anon_id whose canonical is this user. A plain aliases lookup (no
       // LEFT JOIN, so `canon.settings` is not needed) keyed by the resolved canonical id. Fed to the

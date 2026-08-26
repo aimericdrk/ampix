@@ -37,7 +37,6 @@ function makeEventRow(overrides: Partial<EventRow> = {}): EventRow {
     session_id: randomUUID(),
     timestamp: toChDateTime64(now),
     server_timestamp: toChDateTime64(now),
-    source: 'client',
     properties: { plan: 'pro', value: 9.99 },
     app_version: '1.4.2',
     app_build: '142',
@@ -59,6 +58,7 @@ function makeEventRow(overrides: Partial<EventRow> = {}): EventRow {
     first_utm_source: 'meta',
     first_utm_campaign: 'launch',
     install_referrer: '',
+    source: 'client',
     ...overrides,
   };
 }
@@ -135,5 +135,70 @@ describe('ClickHouseService (integration)', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].properties.plan).toBe('pro');
+  });
+
+  it('EVENT_SOURCE_EXPR classifies explicit sources and maps legacy rows via the RC sdk_version stamp', async () => {
+    const projectId = randomUUID();
+    await service.insertEvents([
+      makeEventRow({ project_id: projectId, event: 'client_evt', source: 'client' }),
+      makeEventRow({ project_id: projectId, event: 'server_evt', source: 'server' }),
+      // Legacy rows written before the column existed read as '' (the column default):
+      makeEventRow({ project_id: projectId, event: '$rc_renewal', source: '', sdk_version: 'revenuecat-webhook' }),
+      makeEventRow({ project_id: projectId, event: 'old_sdk_evt', source: '' }),
+    ]);
+
+    const { EVENT_SOURCE_EXPR } = await import('../../src/analytics/support/property-resolver');
+    const rows = await service.query<{ event: string; source: string }>(
+      `SELECT event, ${EVENT_SOURCE_EXPR} AS source FROM events
+       WHERE project_id = {p:UUID} ORDER BY event`,
+      { p: projectId },
+    );
+    expect(rows).toEqual([
+      { event: '$rc_renewal', source: 'server' },
+      { event: 'client_evt', source: 'client' },
+      { event: 'old_sdk_evt', source: 'client' },
+      { event: 'server_evt', source: 'server' },
+    ]);
+  });
+
+  it('deleteUserData removes only the target ids across events, profiles and identity mappings', async () => {
+    const projectId = randomUUID();
+    const anonId = randomUUID();
+    const now = Date.now();
+    await service.insertEvents([
+      // pre-login event: distinct_id still equals the anon id
+      makeEventRow({ project_id: projectId, distinct_id: anonId, anon_id: anonId }),
+      // post-login event under the user id
+      makeEventRow({ project_id: projectId, distinct_id: 'u_gone', anon_id: anonId }),
+      // bystander who must survive
+      makeEventRow({ project_id: projectId, distinct_id: 'u_stays', anon_id: randomUUID() }),
+    ]);
+    await service.insertProfiles([
+      { project_id: projectId, distinct_id: 'u_gone', properties: {}, updated_at: toChDateTime64(now) },
+      { project_id: projectId, distinct_id: 'u_stays', properties: {}, updated_at: toChDateTime64(now) },
+    ]);
+    await admin.insert({
+      table: 'identity_mappings',
+      values: [{ project_id: projectId, anon_id: anonId, canonical_id: 'u_gone', created_at: toChDateTime64(now) }],
+      format: 'JSONEachRow',
+    });
+
+    await service.deleteUserData(projectId, ['u_gone', anonId]);
+
+    const events = await service.query<{ distinct_id: string }>(
+      'SELECT DISTINCT distinct_id FROM events WHERE project_id = {p:UUID}',
+      { p: projectId },
+    );
+    expect(events.map((row) => row.distinct_id)).toEqual(['u_stays']);
+    const profiles = await service.query<{ distinct_id: string }>(
+      'SELECT DISTINCT distinct_id FROM user_profiles WHERE project_id = {p:UUID}',
+      { p: projectId },
+    );
+    expect(profiles.map((row) => row.distinct_id)).toEqual(['u_stays']);
+    const mappings = await service.query<{ n: string }>(
+      'SELECT count() AS n FROM identity_mappings WHERE project_id = {p:UUID}',
+      { p: projectId },
+    );
+    expect(Number(mappings[0].n)).toBe(0);
   });
 });

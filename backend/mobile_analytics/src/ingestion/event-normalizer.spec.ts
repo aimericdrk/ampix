@@ -79,6 +79,20 @@ describe('EventNormalizer.normalizeBatch', () => {
     });
   });
 
+  // A payload `source` is not a validation error, it is simply not a field: zod drops the unknown
+  // key and the token's value is used. Rejecting it instead would leak that the field once meant
+  // something, and would break any SDK build still sending it.
+  it('accepts an item carrying a junk source and stamps the token value anyway', () => {
+    const { rows, rejected } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [makeEvent({ source: 'robot' })],
+      'client',
+      NOW,
+    );
+    expect(rejected).toEqual([]);
+    expect(rows[0].source).toBe('client');
+  });
+
   it('fills contract defaults for missing context and properties', () => {
     const { rows } = normalizer.normalizeBatch(
       PROJECT_ID,

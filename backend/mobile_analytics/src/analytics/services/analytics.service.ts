@@ -80,8 +80,9 @@ export class AnalyticsService {
     projectId: string,
     limitRaw?: string,
     beforeRaw?: string,
+    sourceRaw?: string,
   ): Promise<LiveEventsResponse> {
-    return this.users.getLiveEvents(userId, projectId, limitRaw, beforeRaw);
+    return this.users.getLiveEvents(userId, projectId, limitRaw, beforeRaw, sourceRaw);
   }
 
   async listUsers(
