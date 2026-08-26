@@ -63,6 +63,14 @@ export const eventContextSchema = z
   })
   .partial();
 
+/**
+ * Who emitted an event: `client` = an SDK inside the app, `server` = a trusted backend
+ * (the app's own backend, the RevenueCat webhook). Absent defaults to `client` — SDKs never
+ * need to send it.
+ */
+export const EVENT_SOURCES = ['client', 'server'] as const;
+export const eventSourceSchema = z.enum(EVENT_SOURCES);
+
 /** One event as sent by the SDK to POST /ingest/events (shared contracts §4). */
 export const ingestEventSchema = z.object({
   insert_id: z.string().uuid(),
@@ -71,6 +79,7 @@ export const ingestEventSchema = z.object({
   anon_id: idSchema,
   session_id: z.string().uuid(),
   timestamp: epochMsSchema,
+  source: eventSourceSchema.optional(),
   properties: propertiesSchema.optional(),
   context: eventContextSchema.optional(),
 });
@@ -110,6 +119,7 @@ export const ingestProfilesRequestSchema = z.object({
 });
 
 export type EventContext = z.infer<typeof eventContextSchema>;
+export type EventSource = z.infer<typeof eventSourceSchema>;
 export type IngestEvent = z.infer<typeof ingestEventSchema>;
 export type ProfileOp = z.infer<typeof profileOpSchema>;
 export type ProfileOperation = z.infer<typeof profileOperationSchema>;

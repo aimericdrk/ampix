@@ -449,6 +449,9 @@ export interface EngagementResponse {
   new_vs_returning: EngagementNewReturningPoint[];
 }
 
+/** Who emitted an event: an SDK inside the app, or a trusted backend (app server, RC webhook). */
+export type EventSource = 'client' | 'server';
+
 export interface LiveEvent {
   insert_id: string;
   event: string;
@@ -456,6 +459,7 @@ export interface LiveEvent {
   timestamp: string;
   os: string;
   app_version: string;
+  source: EventSource;
 }
 
 /** `GET /events/live` — newest-first; `next_before` feeds the next page's `before` param. */

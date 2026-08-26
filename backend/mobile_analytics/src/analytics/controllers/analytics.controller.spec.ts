@@ -130,18 +130,25 @@ describe('AnalyticsController', () => {
   });
 
   describe('eventsLive', () => {
-    it('delegates to the service with the caller id, projectId, limit, and before', async () => {
+    it('delegates to the service with the caller id, projectId, limit, before, and source', async () => {
       const { controller, analytics } = makeController();
       const response = { events: [], next_before: null };
       analytics.getLiveEvents.mockResolvedValue(response);
 
-      const result = await controller.eventsLive(fakeRequest(), 'p1', '50', '2026-06-01T00:00:00Z');
+      const result = await controller.eventsLive(
+        fakeRequest(),
+        'p1',
+        '50',
+        '2026-06-01T00:00:00Z',
+        'server',
+      );
 
       expect(analytics.getLiveEvents).toHaveBeenCalledWith(
         USER.id,
         'p1',
         '50',
         '2026-06-01T00:00:00Z',
+        'server',
       );
       expect(result).toEqual(response);
     });
@@ -152,7 +159,13 @@ describe('AnalyticsController', () => {
 
       await controller.eventsLive(fakeRequest(), 'p1', undefined, undefined);
 
-      expect(analytics.getLiveEvents).toHaveBeenCalledWith(USER.id, 'p1', undefined, undefined);
+      expect(analytics.getLiveEvents).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        undefined,
+        undefined,
+        undefined,
+      );
     });
   });
 

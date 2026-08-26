@@ -23,10 +23,23 @@
  * inert data (no match, no error, table untouched).
  */
 
-// Keys are the only valid *input*; each value is our OWN literal column-name constant (never the
-// caller's string), so a "whitelist hit" can only ever emit one of these ~20 fixed identifiers.
+/**
+ * Canonical SQL expression for an event's source ('client' | 'server'). The `source` column is
+ * DEFAULT '' so rows written before the column existed read as '': for those, the RevenueCat
+ * webhook writer's historical `sdk_version = 'revenuecat-webhook'` stamp is the only server
+ * marker — everything else was SDK-emitted. Every literal here is OUR OWN fixed constant
+ * (same injection-safety argument as the `$identify` literals in the identity MV DDL); no
+ * caller input ever reaches this text.
+ */
+export const EVENT_SOURCE_EXPR =
+  "if(source != '', source, if(sdk_version = 'revenuecat-webhook', 'server', 'client'))";
+
+// Keys are the only valid *input*; each value is our OWN literal column-name constant or fixed
+// expression (never the caller's string), so a "whitelist hit" can only ever emit one of these
+// fixed SQL fragments.
 const EVENT_COLUMNS: Readonly<Record<string, string>> = Object.freeze({
   event: 'event',
+  source: EVENT_SOURCE_EXPR,
   distinct_id: 'distinct_id',
   anon_id: 'anon_id',
   session_id: 'session_id',

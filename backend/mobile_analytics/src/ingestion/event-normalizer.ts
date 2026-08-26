@@ -58,6 +58,7 @@ export class EventNormalizer {
       session_id: event.session_id,
       timestamp: toChDateTime64(clampTimestamp(event.timestamp, nowMs)),
       server_timestamp: toChDateTime64(nowMs),
+      source: event.source ?? 'client',
       properties: event.properties ?? {},
       app_version: str(ctx.app_version),
       app_build: str(ctx.app_build),

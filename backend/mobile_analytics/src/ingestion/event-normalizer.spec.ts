@@ -79,6 +79,26 @@ describe('EventNormalizer.normalizeBatch', () => {
     });
   });
 
+  it('defaults source to client and passes an explicit server source through', () => {
+    const { rows } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [makeEvent(), makeEvent({ insert_id: randomUUID(), source: 'server' })],
+      NOW,
+    );
+    expect(rows[0].source).toBe('client');
+    expect(rows[1].source).toBe('server');
+  });
+
+  it('rejects an unknown source value naming the field', () => {
+    const { rows, rejected } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [makeEvent({ source: 'robot' })],
+      NOW,
+    );
+    expect(rows).toEqual([]);
+    expect(rejected[0].reason).toMatch(/^source/);
+  });
+
   it('fills contract defaults for missing context and properties', () => {
     const { rows } = normalizer.normalizeBatch(
       PROJECT_ID,

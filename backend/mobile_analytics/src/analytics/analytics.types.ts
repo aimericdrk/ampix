@@ -44,6 +44,8 @@ export interface LiveEvent {
   timestamp: string;
   os: string;
   app_version: string;
+  /** 'client' (SDK-emitted) or 'server' (backend-emitted) — see EVENT_SOURCE_EXPR. */
+  source: string;
 }
 
 export interface LiveEventsResponse {

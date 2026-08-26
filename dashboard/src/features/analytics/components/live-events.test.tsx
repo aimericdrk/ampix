@@ -151,6 +151,90 @@ describe('LiveEventsPage', () => {
     expect(plainRow.queryByText('subscription')).not.toBeInTheDocument();
   });
 
+  it('renders server-emitted events with the info-hued name badge and an explicit "server" pill', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/events/live', () =>
+        HttpResponse.json({
+          events: [
+            {
+              insert_id: 'evt-server',
+              event: 'message_received',
+              distinct_id: 'user-001',
+              timestamp: '2026-07-02T12:32:00.000Z',
+              os: '',
+              app_version: '',
+              source: 'server',
+            },
+            {
+              insert_id: 'evt-client',
+              event: 'product_viewed',
+              distinct_id: 'user-002',
+              timestamp: '2026-07-02T12:31:00.000Z',
+              os: 'Android',
+              app_version: '2.0.0',
+              source: 'client',
+            },
+          ],
+          next_before: null,
+        }),
+      ),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/live`);
+
+    const stream = await screen.findByRole('log', { name: 'Live event stream, newest first' });
+    const rows = within(stream).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+
+    const serverRow = within(rows[0]!);
+    expect(serverRow.getByText('message_received')).toHaveClass('text-info');
+    expect(serverRow.getByText('server')).toBeInTheDocument();
+
+    const clientRow = within(rows[1]!);
+    expect(clientRow.getByText('product_viewed')).toHaveClass('text-accent');
+    expect(clientRow.queryByText('server')).not.toBeInTheDocument();
+  });
+
+  it('the Source quick-filter refetches the stream filtered to server events only', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/live`);
+
+    const stream = await screen.findByRole('log', { name: 'Live event stream, newest first' });
+    await waitFor(() => expect(within(stream).getAllByRole('listitem')).toHaveLength(25));
+
+    const sourceGroup = () => screen.getByRole('group', { name: 'Filter by event source' });
+    expect(within(sourceGroup()).getByRole('button', { name: 'All' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await userEvent.click(within(sourceGroup()).getByRole('button', { name: 'Server' }));
+
+    // Switching the filter changes the query key, so the page passes through its loading state
+    // and the stream (and pills) remount — always re-query, never hold element references.
+    const serverEvents = LIVE_EVENTS_FIXTURE.filter((e) => e.source === 'server');
+    await waitFor(() => {
+      const rows = within(
+        screen.getByRole('log', { name: 'Live event stream, newest first' }),
+      ).getAllByRole('listitem');
+      expect(rows).toHaveLength(serverEvents.length);
+    });
+    expect(within(sourceGroup()).getByRole('button', { name: 'Server' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await userEvent.click(within(sourceGroup()).getByRole('button', { name: 'All' }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('log', { name: 'Live event stream, newest first' })).getAllByRole(
+          'listitem',
+        ),
+      ).toHaveLength(25),
+    );
+  });
+
   it('loads older events via next_before when "Load older" is clicked', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/live`);

@@ -34,6 +34,8 @@ export interface EventRow {
   first_utm_source: string;
   first_utm_campaign: string;
   install_referrer: string;
+  /** 'client' | 'server' — who emitted the event ('' only on pre-column historical rows). */
+  source: string;
 }
 
 /** One row of analytics.user_profiles (shared contracts §5). */

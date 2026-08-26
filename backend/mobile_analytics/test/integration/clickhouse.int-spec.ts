@@ -58,6 +58,7 @@ function makeEventRow(overrides: Partial<EventRow> = {}): EventRow {
     first_utm_source: 'meta',
     first_utm_campaign: 'launch',
     install_referrer: '',
+    source: 'client',
     ...overrides,
   };
 }
@@ -134,6 +135,30 @@ describe('ClickHouseService (integration)', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].properties.plan).toBe('pro');
+  });
+
+  it('EVENT_SOURCE_EXPR classifies explicit sources and maps legacy rows via the RC sdk_version stamp', async () => {
+    const projectId = randomUUID();
+    await service.insertEvents([
+      makeEventRow({ project_id: projectId, event: 'client_evt', source: 'client' }),
+      makeEventRow({ project_id: projectId, event: 'server_evt', source: 'server' }),
+      // Legacy rows written before the column existed read as '' (the column default):
+      makeEventRow({ project_id: projectId, event: '$rc_renewal', source: '', sdk_version: 'revenuecat-webhook' }),
+      makeEventRow({ project_id: projectId, event: 'old_sdk_evt', source: '' }),
+    ]);
+
+    const { EVENT_SOURCE_EXPR } = await import('../../src/analytics/support/property-resolver');
+    const rows = await service.query<{ event: string; source: string }>(
+      `SELECT event, ${EVENT_SOURCE_EXPR} AS source FROM events
+       WHERE project_id = {p:UUID} ORDER BY event`,
+      { p: projectId },
+    );
+    expect(rows).toEqual([
+      { event: '$rc_renewal', source: 'server' },
+      { event: 'client_evt', source: 'client' },
+      { event: 'old_sdk_evt', source: 'client' },
+      { event: 'server_evt', source: 'server' },
+    ]);
   });
 
   it('deleteUserData removes only the target ids across events, profiles and identity mappings', async () => {

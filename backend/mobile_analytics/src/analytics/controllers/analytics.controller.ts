@@ -94,8 +94,9 @@ export class AnalyticsController {
     @Param('projectId') projectId: string,
     @Query('limit') limit?: string,
     @Query('before') before?: string,
+    @Query('source') source?: string,
   ): Promise<LiveEventsResponse> {
-    return this.analytics.getLiveEvents(req.user!.id, projectId, limit, before);
+    return this.analytics.getLiveEvents(req.user!.id, projectId, limit, before, source);
   }
 
   @Get('users')

@@ -88,6 +88,7 @@ export function toEventRow(
     first_utm_source: '',
     first_utm_campaign: '',
     install_referrer: '',
+    source: 'server',
   };
 }
 

@@ -1,4 +1,4 @@
-import { EVENT_COLUMN_WHITELIST, resolveProperty } from './property-resolver';
+import { EVENT_COLUMN_WHITELIST, EVENT_SOURCE_EXPR, resolveProperty } from './property-resolver';
 
 const WHITELIST_COLUMNS = [
   'event',
@@ -26,7 +26,8 @@ const WHITELIST_COLUMNS = [
 
 describe('resolveProperty', () => {
   it('exposes exactly the contracts §14 whitelist', () => {
-    expect([...EVENT_COLUMN_WHITELIST].sort()).toEqual([...WHITELIST_COLUMNS].sort());
+    // `source` is whitelisted too, but resolves to a fixed expression, not a bare column.
+    expect([...EVENT_COLUMN_WHITELIST].sort()).toEqual([...WHITELIST_COLUMNS, 'source'].sort());
   });
 
   it.each(WHITELIST_COLUMNS)(
@@ -40,6 +41,19 @@ describe('resolveProperty', () => {
       expect(params).toEqual({});
     },
   );
+
+  it('resolves "source" to the fixed client/server expression with no bound param', () => {
+    const params: Record<string, unknown> = {};
+    const resolved = resolveProperty('source', 'someParam', params);
+
+    expect(resolved).toEqual({ expr: EVENT_SOURCE_EXPR, isColumn: true });
+    expect(params).toEqual({});
+    // The expression is a fixed constant mapping '' (pre-column rows) via the historical
+    // RevenueCat sdk_version stamp; both branches must be present.
+    expect(EVENT_SOURCE_EXPR).toContain("'revenuecat-webhook'");
+    expect(EVENT_SOURCE_EXPR).toContain("'client'");
+    expect(EVENT_SOURCE_EXPR).toContain("'server'");
+  });
 
   it('resolves a non-whitelisted property to a JSONExtractString(toJSONString(...)) call with the key bound as a param', () => {
     const params: Record<string, unknown> = {};

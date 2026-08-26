@@ -175,6 +175,8 @@ export const LIVE_EVENTS_FIXTURE: LiveEvent[] = Array.from({ length: 30 }, (_, i
     timestamp: `2026-07-02T12:${String(n).padStart(2, '0')}:00.000Z`,
     os: n % 2 === 0 ? 'Android' : 'iOS',
     app_version: n >= 15 ? '2.0.0' : '1.4.0',
+    // Every 5th event is backend-emitted so tests exercise the server badge + source filter.
+    source: n % 5 === 0 ? 'server' : 'client',
   };
 });
 
@@ -2132,9 +2134,13 @@ export const handlers = [
     const limitParam = Number(url.searchParams.get('limit') ?? '50');
     const limit = Math.min(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50, 100);
     const before = url.searchParams.get('before');
-    const pool = before
+    const source = url.searchParams.get('source');
+    if (source !== null && source !== 'client' && source !== 'server')
+      return problem(400, "source: must be 'client' or 'server'");
+    let pool = before
       ? LIVE_EVENTS_FIXTURE.filter((e) => e.timestamp < before)
       : LIVE_EVENTS_FIXTURE;
+    if (source) pool = pool.filter((e) => e.source === source);
     const page = pool.slice(0, limit);
     const next_before = pool.length > limit ? (page.at(-1)?.timestamp ?? null) : null;
     const response: LiveEventsResponse = { events: page, next_before };
