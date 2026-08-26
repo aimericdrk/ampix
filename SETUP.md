@@ -480,7 +480,7 @@ Parses the multipart file (multer memory storage, hard cap 8 MiB) + fields, then
 | Env var                          | Default   | Effect                                                                                                                |
 | -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
 | `SCREENSHOT_MAX_KB`              | `512`     | Per-image size cap (KB) → 413 when exceeded                                                                           |
-| `FIREBASE_STORAGE_BUCKET`        | _(unset)_ | **Unset ⇒ in-memory fake store** — bytes NOT persisted across restarts, logs a warning. Set ⇒ persist to Firebase/GCS |
+| `FIREBASE_STORAGE_BUCKET`        | _(unset)_ | **Unset ⇒ in-memory fake store** — bytes NOT persisted across restarts, logs a warning. Set ⇒ persist to Firebase/GCS. Plain bucket name, **no `gs://` prefix** |
 | `GOOGLE_APPLICATION_CREDENTIALS` | _(unset)_ | Path to service-account JSON; read by `firebase-admin` via ADC                                                        |
 
 **Metadata vs bytes split** (`screenshots.service.ts`): the image **bytes** go to object storage;
@@ -520,7 +520,7 @@ React Query hooks (`src/features/analytics/api.ts`): `useScreens` (catalog), `us
    - _Quick local check (bytes ephemeral):_ leave `FIREBASE_STORAGE_BUCKET` unset. Uploads 202 and metadata rows appear, but images vanish on backend restart (the warning tells you so).
    - _Persist images:_ set in the backend env:
      ```bash
-     export FIREBASE_STORAGE_BUCKET="my-project.appspot.com"
+     export FIREBASE_STORAGE_BUCKET="my-bucket"   # plain bucket name, no gs:// prefix
      export GOOGLE_APPLICATION_CREDENTIALS="/abs/path/service-account.json"  # never commit
      export SCREENSHOT_MAX_KB=512   # optional
      ```

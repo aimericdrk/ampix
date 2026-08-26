@@ -234,7 +234,6 @@ where it lives, and what breaks without it.
 | `JWT_REFRESH_SECRET` | `openssl rand -base64 32` | Same |
 | `TOTP_ENC_KEY` | `openssl rand -hex 32` (must decode to exactly 32 bytes) | Refuses to boot. **Rotating it makes every enrolled 2FA secret undecryptable** — every user must re-enrol. |
 | `MISTRAL_API_KEY` | *not set* | "Ask your data" returns 503. Optional. |
-| `FIREBASE_STORAGE_BUCKET` | *not set* | SDK screenshots fall back to an in-memory store (lost on restart). Optional; also needs `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account JSON, which the chart does not mount yet. |
 
 ### 3.3 `infra/k8s/secrets/purchase.env` → Secret `myampix-purchase`
 
@@ -268,6 +267,8 @@ tls:    { enabled: true, issuer: letsencrypt, email: aimeric.rouyer.pro@gmail.co
 hostDbs.ip: 172.17.0.1
 analytics.env.SIGNUP_ENABLED: "false"       # closed instance, see §4.3
 analytics.env.COOKIE_SECURE: "true"         # mandatory in production; the app refuses to boot otherwise
+analytics.googleCredentials.enabled: true   # mounts the service-account Secret, see §3.6
+analytics.env.FIREBASE_STORAGE_BUCKET: app-sport-analytics
 analytics.autoscaling:  { min 2, max 8, target 70% CPU }
 purchase.api.autoscaling: { min 2, max 4, target 70% CPU }
 admin.dockerSock: { enabled: true, gid: 986 }   # `getent group docker | cut -d: -f3`
@@ -275,6 +276,47 @@ admin.dockerSock: { enabled: true, gid: 986 }   # `getent group docker | cut -d:
 
 Autoscaling ranges are raised above the chart defaults (which assume a 4 vCPU / 8 GB VPS) because
 this machine has 12 vCPU and 62 GB. At max scale the workloads request ~3.4 vCPU — comfortable.
+
+### 3.6 Firebase Storage for SDK screenshots
+
+**Live.** SDK screenshot bytes go to the GCS bucket `gs://app-sport-analytics` (project
+`app-sport-7f225`, EU multi-region) via the service account
+`firebase-adminsdk-j3339@app-sport-7f225.iam.gserviceaccount.com`.
+
+Two halves, deliberately kept apart:
+
+| Half | Where it lives | How it got there |
+|---|---|---|
+| The bucket name | `analytics.env.FIREBASE_STORAGE_BUCKET` in `infra/values.prod.yaml` → ConfigMap | plain edit + `scripts/k8s/deploy.sh <tag>` |
+| The credentials | Secret `myampix-google-credentials`, key `service-account.json` | `scripts/k8s/firebase-credentials.sh /path/to/key.json` |
+
+The JSON never enters the repo, the image, or the values file. The chart mounts the Secret read-only
+at `/var/run/secrets/google` and *derives* `GOOGLE_APPLICATION_CREDENTIALS` from the mount path, so
+the path the app reads and the path the Secret is projected to cannot drift.
+
+The bucket name is the **plain GCS bucket name — no `gs://` prefix**; `firebase-admin` takes a name,
+not a URI. (A `.appspot.com` / `.firebasestorage.app` name is equally fine — it just has to be the
+bucket's real name.)
+
+Rotating the key: run `firebase-credentials.sh` again with the new JSON, then
+`kubectl -n myampix rollout restart deploy/mobile-analytics`. No Helm change needed — the Secret is
+mounted by name, and the projected file updates in place, but the process only reads it at boot.
+
+To turn the whole thing off, set `analytics.googleCredentials.enabled: false` and drop
+`FIREBASE_STORAGE_BUCKET`: the chart then renders zero references to the Secret and the backend
+falls back to its in-memory store (screenshots visible until the pod restarts, then gone).
+
+Each pod probes the bucket at boot, so the state is always in the logs — one line, either way:
+
+```
+✓ Firebase Storage reachable: gs://app-sport-analytics
+✗ Firebase Storage NOT reachable: <reason> — screenshot uploads will fail until this is fixed
+```
+
+> **`fsGroup` is load-bearing.** Kubernetes projects Secret volumes root-owned, and the analytics pod
+> runs as UID 999. The chart therefore sets `fsGroup: 999` on the pod and mode `0440` on the volume.
+> Mode `0400` — the intuitive "only the owner may read it" — makes the file readable by *root only*
+> and the container gets `EACCES`, which surfaces as the `✗` line above and nothing else.
 
 ---
 
@@ -500,9 +542,8 @@ ever fails to boot.
    changed during initial deploy to avoid churning a working image.
 4. **First-boot DB race.** Pods can start before the datastores accept connections and crash-loop
    briefly. Self-healing (§2.4). An init container that waits on Postgres would make boot silent.
-5. **Firebase screenshot storage is unconfigured**, so screenshots live in an in-memory store and are
-   lost on pod restart. Needs `FIREBASE_STORAGE_BUCKET` plus a mounted service-account JSON —
-   the Helm chart has no volume for the credentials file yet, so this needs a small chart change.
+5. ~~**Firebase screenshot storage is unconfigured.**~~ **Done** (2026-08-26): the chart mounts the
+   service-account Secret and screenshots persist to `gs://app-sport-analytics`. See §3.6.
 6. **`admin.dockerSock` is enabled**, which is root-equivalent access to the host for anything that
    compromises the admin pod. It is what makes the console's Docker page work. Set
    `admin.dockerSock.enabled: false` in `infra/values.prod.yaml` if you would rather not have it.

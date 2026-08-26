@@ -10,7 +10,7 @@
 #       googleCredentials:
 #         enabled: true
 #       env:
-#         FIREBASE_STORAGE_BUCKET: your-bucket.appspot.com
+#         FIREBASE_STORAGE_BUCKET: your-bucket        # plain bucket name, no gs:// prefix
 # then redeploy:  scripts/k8s/deploy.sh <tag>
 set -euo pipefail
 SRC="${1:?usage: firebase-credentials.sh /path/to/service-account.json}"
