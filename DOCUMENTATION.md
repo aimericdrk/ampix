@@ -253,6 +253,11 @@ Source modules (`backend/mobile_analytics/src/`):
 - `orgs/`, `projects/`, `invitations/`, `authz/` — organizations, projects, membership, and per-project roles (owner/admin/member).
 - `screenshots/` — reference-screenshot upload/serve for the user-path map + heatmaps (bytes to Firebase Storage, metadata in Postgres).
 - `erasure/` — `DELETE /ingest/users/:distinctId`, the server-to-server end-user erasure endpoint (§6.1.2).
+- `analytics/` also serves the profile timeline's paging: `GET /users/:distinctId/events` returns one
+  page of a user's events newest-first, cursored by the composite `{before, before_id}` the previous
+  page returned (a bare timestamp would skip rows tied on the boundary millisecond, which batched
+  SDK uploads produce routinely). Each row carries its `session_id`, which is what lets the
+  dashboard mark where the user left the app and came back.
 - `internal/` — the internal role-resolution endpoint `mobile_purchase` calls (`ANALYTICS_INTERNAL_URL`).
 - `revenuecat/` — the **legacy** RevenueCat integration mirror. The active MyRevenueCat clone reads `mobile_purchase` instead; this remains for the old integration path.
 - `clickhouse/`, `prisma/`, `redis/`, `health/`, `common/`, `config/`, `templates/` — infrastructure.

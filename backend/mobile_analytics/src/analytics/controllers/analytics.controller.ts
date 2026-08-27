@@ -25,6 +25,7 @@ import type {
   PropertyValuesResponse,
   RevenueSummaryResponse,
   SessionsSummaryResponse,
+  UserEventsResponse,
   UserProfileResponse,
   UsersResponse,
 } from '../analytics.types';
@@ -117,6 +118,21 @@ export class AnalyticsController {
     @Param('distinctId') distinctId: string,
   ): Promise<UserProfileResponse> {
     return this.analytics.getUserProfile(req.user!.id, projectId, distinctId);
+  }
+
+  /**
+   * The profile timeline's "load more": page `before` the composite cursor the previous page
+   * returned. Both cursor halves travel together — see UsersService.getUserEvents.
+   */
+  @Get('users/:distinctId/events')
+  async userEvents(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Param('distinctId') distinctId: string,
+    @Query('before') before?: string,
+    @Query('before_id') beforeId?: string,
+  ): Promise<UserEventsResponse> {
+    return this.analytics.getUserEvents(req.user!.id, projectId, distinctId, before, beforeId);
   }
 
   @Get('sessions/summary')

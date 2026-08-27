@@ -89,6 +89,12 @@ export interface RecentEvent {
   insert_id: string;
   event: string;
   timestamp: string;
+  /**
+   * The SDK's session id. Consecutive events sharing one are a single visit to the app; a change
+   * means the app was away long enough (default 30 min backgrounded) to start a new session, which
+   * is what lets the timeline show where the user quit and came back.
+   */
+  session_id: string;
   /** The `$screen_name` of `$screen_view`/`$tap` events; null for events without one. */
   screen_name: string | null;
   /** Every custom property (contracts §4 flat map) attached to this event, verbatim. */
@@ -109,6 +115,20 @@ export interface UserProfileResponse {
    * `distinct_ids` for identity-correct per-user results.
    */
   distinct_ids: string[];
+}
+
+/**
+ * GET /users/:distinctId/events response — the same rows as `recent_events`, keyset-paginated so
+ * the profile timeline can page backwards instead of stopping at its first 50.
+ */
+export interface UserEventsResponse {
+  events: RecentEvent[];
+  /**
+   * Feed back as `before` to get the next (older) page; `null` when the last page was reached.
+   * A composite cursor, not a bare timestamp: a batching SDK regularly writes several events in
+   * the same millisecond, and `timestamp < last` would silently drop every tied row.
+   */
+  next_before: { timestamp: string; insert_id: string } | null;
 }
 
 /** GET /sessions/summary response (contracts §14). */

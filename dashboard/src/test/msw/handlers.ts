@@ -65,6 +65,7 @@ import type {
   UpdatedProjectMember,
   UpdateProjectResponse,
   UserListItem,
+  UserEventsResponse,
   UserProfileResponse,
   UserSubscription,
   UserSubscriptionResponse,
@@ -271,6 +272,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-108',
       event: '$rc_renewal',
       timestamp: '2026-07-01T10:05:00.000Z',
+      session_id: 'sess-2',
       screen_name: null,
       properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -279,6 +281,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-106',
       event: 'checkout_completed',
       timestamp: '2026-07-01T10:00:00.000Z',
+      session_id: 'sess-2',
       screen_name: null,
       properties: { country: 'FR', $price: 42.5, currency: 'EUR', order_id: 'ord-9' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -287,6 +290,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-107',
       event: '$rc_initial_purchase',
       timestamp: '2026-07-01T09:59:00.000Z',
+      session_id: 'sess-2',
       screen_name: null,
       properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -295,6 +299,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-105',
       event: '$screen_view',
       timestamp: '2026-07-01T09:58:00.000Z',
+      session_id: 'sess-1',
       screen_name: 'cart',
       properties: { country: 'FR', $screen_name: 'cart' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -303,6 +308,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-104',
       event: '$screen_view',
       timestamp: '2026-07-01T09:56:00.000Z',
+      session_id: 'sess-1',
       screen_name: 'catalog',
       properties: { country: 'FR', $screen_name: 'catalog' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -311,6 +317,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-103',
       event: '$screen_view',
       timestamp: '2026-07-01T09:54:00.000Z',
+      session_id: 'sess-1',
       screen_name: 'catalog',
       properties: { country: 'FR', $screen_name: 'catalog' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -319,6 +326,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-102',
       event: '$screen_view',
       timestamp: '2026-07-01T09:52:00.000Z',
+      session_id: 'sess-1',
       screen_name: 'home',
       properties: { country: 'FR', $screen_name: 'home' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -327,6 +335,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       insert_id: 'evt-101',
       event: 'app_opened',
       timestamp: '2026-07-01T09:50:00.000Z',
+      session_id: 'sess-1',
       screen_name: null,
       properties: { country: 'FR' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -2233,6 +2242,27 @@ export const handlers = [
       last_seen: user.last_seen,
       event_count: user.event_count,
       ...USER_PROFILE_FIXTURE,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  /**
+   * The profile timeline's pages. Serves the same rows as the profile in one page by default, so
+   * every existing timeline assertion still sees the whole fixture; a test that needs to exercise
+   * "load more" overrides this handler with its own paging.
+   */
+  http.get('/api/v1/projects/:projectId/users/:distinctId/events', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const url = new URL(request.url, 'http://localhost');
+    // Mirrors the API's rule: the cursor's two halves travel together or not at all.
+    if (url.searchParams.has('before') !== url.searchParams.has('before_id')) {
+      return problem(400, 'before_id is required alongside before');
+    }
+    const response: UserEventsResponse = {
+      events: USER_PROFILE_FIXTURE.recent_events,
+      next_before: null,
     };
     return HttpResponse.json(response);
   }),

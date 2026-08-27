@@ -10,6 +10,7 @@ import type {
   PropertyValuesResponse,
   RevenueSummaryResponse,
   SessionsSummaryResponse,
+  UserEventsResponse,
   UserProfileResponse,
   UsersResponse,
 } from '../analytics.types';
@@ -101,6 +102,16 @@ export class AnalyticsService {
     distinctId: string,
   ): Promise<UserProfileResponse> {
     return this.users.getUserProfile(userId, projectId, distinctId);
+  }
+
+  async getUserEvents(
+    userId: string,
+    projectId: string,
+    distinctId: string,
+    beforeRaw?: string,
+    beforeIdRaw?: string,
+  ): Promise<UserEventsResponse> {
+    return this.users.getUserEvents(userId, projectId, distinctId, beforeRaw, beforeIdRaw);
   }
 
   async getSessionsSummary(

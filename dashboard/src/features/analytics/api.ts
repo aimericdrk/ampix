@@ -52,6 +52,7 @@ import type {
   UpdateReportRequest,
   UpdateTileRequest,
   DashboardSummary,
+  UserEventsResponse,
   UserProfileResponse,
 } from '../../lib/api/types';
 
@@ -351,6 +352,30 @@ export function useUserProfile(projectId: string, distinctId: string) {
     queryKey: ['analytics', projectId, 'user', distinctId],
     queryFn: () =>
       apiFetch<UserProfileResponse>(`${base(projectId)}/users/${encodeURIComponent(distinctId)}`),
+  });
+}
+
+/**
+ * The profile timeline's pages. The first page is fetched here too rather than reused from
+ * `useUserProfile.recent_events`: one source for the list means "load more" appends onto rows of
+ * the same shape, and a refetch can't leave page 1 out of step with the rest.
+ *
+ * The cursor is the composite `{timestamp, insert_id}` the API returns — a bare timestamp would
+ * skip events sharing the boundary millisecond, which a batching SDK produces routinely.
+ */
+export function useUserEvents(projectId: string, distinctId: string) {
+  return useInfiniteQuery({
+    queryKey: ['analytics', projectId, 'user', distinctId, 'events'],
+    queryFn: ({ pageParam }: { pageParam: UserEventsResponse['next_before'] }) => {
+      const cursor = pageParam
+        ? `?before=${encodeURIComponent(pageParam.timestamp)}&before_id=${encodeURIComponent(pageParam.insert_id)}`
+        : '';
+      return apiFetch<UserEventsResponse>(
+        `${base(projectId)}/users/${encodeURIComponent(distinctId)}/events${cursor}`,
+      );
+    },
+    initialPageParam: null as UserEventsResponse['next_before'],
+    getNextPageParam: (lastPage) => lastPage.next_before ?? undefined,
   });
 }
 

@@ -19,7 +19,13 @@ import type {
   UserSubscription,
 } from '../../../lib/api/types';
 import { formatCurrency, formatExactNumber } from '../format';
-import { useRunClickHeatmap, useRunScreenPaths, useScreens, useUserProfile } from '../api';
+import {
+  useRunClickHeatmap,
+  useRunScreenPaths,
+  useScreens,
+  useUserEvents,
+  useUserProfile,
+} from '../api';
 import { FavoriteButton } from '../../favorites/FavoriteButton';
 import { useFavorites } from '../../favorites/favorites';
 import { useRecents } from '../../favorites/recents';
@@ -43,6 +49,58 @@ const EXPLORER_LAUNCHERS: Array<{ tab: ExplorerTab; label: string; icon: typeof 
 const SCREEN_VIEW_EVENT = '$screen_view';
 /** RevenueCat timeline event prefix (spec §4.7) — `$rc_initial_purchase`, `$rc_renewal`, etc. */
 const RC_EVENT_PREFIX = '$rc_';
+
+/**
+ * App-lifecycle autocapture (contracts §4). The raw names are accurate but read like plumbing in a
+ * timeline; these are the same facts in the words someone reading a user's activity wants: when
+ * they left the app and when they came back.
+ */
+const LIFECYCLE_LABELS: Record<string, string> = {
+  $app_open: 'Opened the app',
+  $app_background: 'Left the app',
+  $session_start: 'Session started',
+  $session_end: 'Session ended',
+  $first_open: 'First ever open',
+};
+
+/** `1h 04m` / `4m 12s` / `18s` — a gap between two events, at the coarsest useful precision. */
+function formatGap(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+  return `${seconds}s`;
+}
+
+/**
+ * Where the app was closed and reopened, read off `session_id` rather than off `$app_open` events.
+ * The SDK rotates the session id once the app has been backgrounded past its timeout (30 min by
+ * default), so a change between two adjacent events IS a quit-and-return — and it still shows up
+ * for users whose lifecycle autocapture never fired, or whose `$app_open` was lost in an
+ * uninstalled queue.
+ *
+ * `events` is newest-first, so `events[i]` starting a different session than `events[i - 1]` means
+ * the boundary sits between them: the older event ended the previous visit, the newer one began
+ * the next. An empty session id (events ingested before the SDK carried one) is "unknown", never a
+ * boundary — inventing a reopen out of missing data would be worse than showing none.
+ */
+function sessionBreakBefore(
+  events: UserRecentEvent[],
+  index: number,
+): { awayMs: number; reopenedAt: string } | null {
+  if (index === 0) return null;
+  const older = events[index];
+  const newer = events[index - 1];
+  if (!older || !newer) return null;
+  if (!older.session_id || !newer.session_id) return null;
+  if (older.session_id === newer.session_id) return null;
+  return {
+    awayMs: new Date(newer.timestamp).getTime() - new Date(older.timestamp).getTime(),
+    reopenedAt: newer.timestamp,
+  };
+}
 
 /**
  * A RevenueCat subscription lifecycle event. `$rc_link` shares the `$rc_` prefix but is an SDK
@@ -203,7 +261,13 @@ export function UserProfileModal({
   // The event whose detail is shown on the right. `null` means "follow the latest" (recent_events
   // is newest-first, so index 0). Clicking a timeline event pins it here.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const events = data?.recent_events ?? [];
+  // The timeline pages independently of the profile: page 1 here is the same window
+  // `data.recent_events` holds, and every page after it is appended as the list scrolls.
+  const eventsQuery = useUserEvents(projectId, distinctId);
+  const events = useMemo(
+    () => eventsQuery.data?.pages.flatMap((page) => page.events) ?? data?.recent_events ?? [],
+    [eventsQuery.data, data?.recent_events],
+  );
   const selectedEvent = events.find((e) => e.insert_id === selectedId) ?? events[0];
   const firstSubIndex = useMemo(() => firstSubscribedIndex(events), [events]);
 
@@ -228,6 +292,28 @@ export function UserProfileModal({
       ? profileEntries
       : [['country', derivedCountry], ...profileEntries];
   }, [data, derivedCountry]);
+
+  // Infinite scroll for the timeline. The sentinel sits after the last row INSIDE the scroll
+  // container, so `root: null` (the viewport) would never intersect — the container is what
+  // scrolls, and it is what has to be the root.
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = eventsQuery;
+  const [timelineViewport, setTimelineViewport] = useState<HTMLDivElement | null>(null);
+  const [loadMoreSentinel, setLoadMoreSentinel] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!timelineViewport || !loadMoreSentinel || !hasNextPage || isFetchingNextPage) return;
+    // Not universal (and absent in jsdom): without it the button below is the whole story, which
+    // is why paging is never left to the observer alone.
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void fetchNextPage();
+      },
+      // A little early, so the next page is on its way before the user hits the true bottom.
+      { root: timelineViewport, rootMargin: '200px' },
+    );
+    observer.observe(loadMoreSentinel);
+    return () => observer.disconnect();
+  }, [timelineViewport, loadMoreSentinel, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Record this profile visit in Recents (feat-13 §3) as soon as it's opened — keyed on `distinctId`.
   useEffect(() => {
@@ -470,9 +556,12 @@ export function UserProfileModal({
                 <CardContent>
                   <CollapsibleSection title="Activity timeline" defaultOpen>
                     {events.length === 0 ? (
-                      <p className="text-text-muted">No recent events.</p>
+                      <p className="text-text-muted">
+                        {eventsQuery.isPending ? 'Loading events…' : 'No recent events.'}
+                      </p>
                     ) : (
                       <div
+                        ref={setTimelineViewport}
                         className="max-h-[80vh] overflow-y-auto pr-1"
                         data-testid="activity-timeline-scroll"
                       >
@@ -480,6 +569,8 @@ export function UserProfileModal({
                           {events.map((event, index) => {
                             const isSelected = event.insert_id === selectedEvent?.insert_id;
                             const isRcEvent = isSubscriptionEvent(event.event);
+                            const lifecycleLabel = LIFECYCLE_LABELS[event.event];
+                            const sessionBreak = sessionBreakBefore(events, index);
                             return (
                               <Fragment key={event.insert_id}>
                                 {index === firstSubIndex && (
@@ -488,6 +579,24 @@ export function UserProfileModal({
                                     className="-ml-4 pl-4 py-1 text-xs font-semibold text-accent"
                                   >
                                     ★ First subscribed
+                                  </li>
+                                )}
+                                {sessionBreak && (
+                                  <li
+                                    role="presentation"
+                                    className="-ml-[1.4rem] my-1 flex items-center gap-2 py-1 text-xs text-text-muted"
+                                  >
+                                    <span
+                                      aria-hidden
+                                      className="size-2.5 rounded-full border-2 border-dashed border-text-muted"
+                                    />
+                                    <span>
+                                      Left the app ·{' '}
+                                      <span className="font-medium text-text">
+                                        away {formatGap(sessionBreak.awayMs)}
+                                      </span>{' '}
+                                      · reopened {new Date(sessionBreak.reopenedAt).toLocaleString()}
+                                    </span>
                                   </li>
                                 )}
                                 <li className="relative">
@@ -514,7 +623,18 @@ export function UserProfileModal({
                                     )}
                                   >
                                     <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-medium">{event.event}</span>
+                                      <span className="font-medium">
+                                        {lifecycleLabel ?? event.event}
+                                      </span>
+                                      {/* The raw name stays visible next to the friendly one —
+                                          renaming an event in the UI without showing what it
+                                          actually is makes the timeline impossible to match
+                                          against a query or a filter. */}
+                                      {lifecycleLabel && (
+                                        <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-[0.7rem] text-text-muted">
+                                          {event.event}
+                                        </code>
+                                      )}
                                       {event.screen_name && (
                                         <Badge variant="outline">{event.screen_name}</Badge>
                                       )}
@@ -529,6 +649,26 @@ export function UserProfileModal({
                             );
                           })}
                         </ol>
+                        {/* The sentinel the observer watches; the button is the same action for
+                            anyone who can't scroll it into view (keyboard, reduced motion, or a
+                            browser without IntersectionObserver). */}
+                        {hasNextPage && (
+                          <div ref={setLoadMoreSentinel} className="pt-3 text-center">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={isFetchingNextPage}
+                              onClick={() => void fetchNextPage()}
+                            >
+                              {isFetchingNextPage ? 'Loading…' : 'Load older events'}
+                            </Button>
+                          </div>
+                        )}
+                        {!hasNextPage && events.length > 0 && (
+                          <p className="pt-3 text-center text-xs text-text-muted">
+                            Beginning of this user&apos;s history
+                          </p>
+                        )}
                       </div>
                     )}
                   </CollapsibleSection>

@@ -611,6 +611,7 @@ describe('AnalyticsService', () => {
             insert_id: 'i2',
             event: '$screen_view',
             timestamp: '2026-06-02 09:00:00.000',
+            session_id: 'sess-2',
             screen_name: 'home',
             properties: { $screen_name: 'home', country: 'FR' },
             os: 'ios',
@@ -671,6 +672,7 @@ describe('AnalyticsService', () => {
             insert_id: 'i2',
             event: '$screen_view',
             timestamp: '2026-06-02T09:00:00.000Z',
+            session_id: 'sess-2',
             screen_name: 'home',
             properties: { $screen_name: 'home', country: 'FR' },
             context: {
@@ -690,6 +692,9 @@ describe('AnalyticsService', () => {
             insert_id: 'i1',
             event: 'a',
             timestamp: '2026-06-01T09:00:00.000Z',
+            // The fixture row carries no session_id (an event from before the SDK had them);
+            // it must surface as '' so the timeline groups it rather than crashing on undefined.
+            session_id: '',
             screen_name: null,
             properties: {},
             context: {
@@ -785,6 +790,122 @@ describe('AnalyticsService', () => {
       const service = makeService(clickhouse, projects);
 
       await expect(service.getUserProfile(USER_ID, PROJECT_ID, DISTINCT_ID)).rejects.toMatchObject({
+        problem: { status: 403 },
+      });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getUserEvents', () => {
+    const DISTINCT_ID = 'u1';
+    /** A full page's worth of rows — the service reads "page is full" as "there may be more". */
+    const fullPage = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        insert_id: `i${i}`,
+        event: 'a',
+        timestamp: '2026-06-01 09:00:00.000',
+        session_id: 's1',
+        screen_name: '',
+        properties: {},
+        os: '',
+        os_version: '',
+        app_version: '',
+        app_build: '',
+        device_model: '',
+        device_manufacturer: '',
+        locale: '',
+        timezone: '',
+        network: '',
+        sdk_version: '',
+      }));
+
+    it('returns a page keyed by the canonical id, newest-first', async () => {
+      const clickhouse = makeClickhouse([[{ canonical_id: 'user_42' }], fullPage(1)]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getUserEvents(USER_ID, PROJECT_ID, 'anon_x');
+
+      const [sql, params] = clickhouse.query.mock.calls[1];
+      expect(params).toMatchObject({ canonicalId: 'user_42' });
+      expect(sql).toContain('ORDER BY e.timestamp DESC, e.insert_id DESC');
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toMatchObject({ insert_id: 'i0', session_id: 's1' });
+    });
+
+    // A short page is the end of the history: no cursor, so the frontend stops asking.
+    it('next_before is null when the page is not full', async () => {
+      const clickhouse = makeClickhouse([[{ canonical_id: '' }], fullPage(3)]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getUserEvents(USER_ID, PROJECT_ID, DISTINCT_ID);
+
+      expect(result.next_before).toBeNull();
+    });
+
+    it('a full page returns the last row as the composite cursor', async () => {
+      const clickhouse = makeClickhouse([[{ canonical_id: '' }], fullPage(50)]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getUserEvents(USER_ID, PROJECT_ID, DISTINCT_ID);
+
+      expect(result.next_before).toEqual({
+        timestamp: '2026-06-01T09:00:00.000Z',
+        insert_id: 'i49',
+      });
+    });
+
+    /**
+     * The whole reason the cursor is a tuple: the SDK uploads queued events in batches, so several
+     * rows routinely share a millisecond. A `timestamp <` cursor would drop every row tied with the
+     * page boundary — silently, and only for the users who generate the most events.
+     */
+    it('compares (timestamp, insert_id) as a tuple so tied timestamps are not skipped', async () => {
+      const clickhouse = makeClickhouse([[{ canonical_id: '' }], []]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.getUserEvents(
+        USER_ID,
+        PROJECT_ID,
+        DISTINCT_ID,
+        '2026-06-01T09:00:00.000Z',
+        'i49',
+      );
+
+      const [sql, params] = clickhouse.query.mock.calls[1];
+      expect(sql).toContain(
+        '(e.timestamp, e.insert_id) < ({before:DateTime64}, {beforeId:String})',
+      );
+      expect(params).toMatchObject({ beforeId: 'i49' });
+    });
+
+    // Half a cursor can't identify a boundary row. Ignoring it would restart the timeline from the
+    // top mid-scroll, which reads as duplicated events rather than as an error.
+    it('rejects `before` without `before_id`', async () => {
+      const clickhouse = makeClickhouse([[{ canonical_id: '' }]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await expect(
+        service.getUserEvents(USER_ID, PROJECT_ID, DISTINCT_ID, '2026-06-01T09:00:00.000Z'),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
+    });
+
+    it('rejects a malformed `before` instant', async () => {
+      const clickhouse = makeClickhouse([[{ canonical_id: '' }]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await expect(
+        service.getUserEvents(USER_ID, PROJECT_ID, DISTINCT_ID, 'not-a-date', 'i1'),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
+    });
+
+    it('propagates a membership rejection without querying ClickHouse', async () => {
+      const projects = makeProjects(() =>
+        Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
+      );
+      const clickhouse = makeClickhouse();
+      const service = makeService(clickhouse, projects);
+
+      await expect(service.getUserEvents(USER_ID, PROJECT_ID, DISTINCT_ID)).rejects.toMatchObject({
         problem: { status: 403 },
       });
       expect(clickhouse.query).not.toHaveBeenCalled();

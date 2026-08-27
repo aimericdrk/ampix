@@ -212,6 +212,14 @@ describe('UserProfilePage', () => {
 
   it('badges $rc_ subscription timeline events but not the $rc_link identity event', async () => {
     const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    // The timeline reads /users/:id/events, not the profile's recent_events, so the rows under
+    // test are stubbed there; the profile is stubbed too so the rest of the page stays coherent.
+    const rows = [
+      { insert_id: 'evt-link', event: '$rc_link', timestamp: '2026-07-01T10:06:00.000Z', session_id: 's1', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 'evt-ren', event: '$rc_renewal', timestamp: '2026-07-01T10:05:00.000Z', session_id: 's1', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 'evt-init', event: '$rc_initial_purchase', timestamp: '2026-07-01T09:59:00.000Z', session_id: 's1', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 'evt-plain', event: 'checkout_completed', timestamp: '2026-07-01T09:58:00.000Z', session_id: 's1', screen_name: null, properties: {}, context: ctx },
+    ];
     server.use(
       http.get('/api/v1/projects/:projectId/users/:distinctId', () =>
         HttpResponse.json({
@@ -219,13 +227,11 @@ describe('UserProfilePage', () => {
           last_seen: '2026-07-01T10:06:00.000Z',
           event_count: 4,
           ...USER_PROFILE_FIXTURE,
-          recent_events: [
-            { insert_id: 'evt-link', event: '$rc_link', timestamp: '2026-07-01T10:06:00.000Z', screen_name: null, properties: {}, context: ctx },
-            { insert_id: 'evt-ren', event: '$rc_renewal', timestamp: '2026-07-01T10:05:00.000Z', screen_name: null, properties: {}, context: ctx },
-            { insert_id: 'evt-init', event: '$rc_initial_purchase', timestamp: '2026-07-01T09:59:00.000Z', screen_name: null, properties: {}, context: ctx },
-            { insert_id: 'evt-plain', event: 'checkout_completed', timestamp: '2026-07-01T09:58:00.000Z', screen_name: null, properties: {}, context: ctx },
-          ],
+          recent_events: rows,
         }),
+      ),
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json({ events: rows, next_before: null }),
       ),
     );
 
@@ -242,6 +248,112 @@ describe('UserProfilePage', () => {
 
     const linkRow = within(timeline).getByText('$rc_link').closest('li')! as HTMLElement;
     expect(within(linkRow).queryByText('subscription')).not.toBeInTheDocument();
+  });
+
+  it('marks where the user quit and reopened the app', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+
+    // The fixture's two sessions split at 09:58 → 09:59, so exactly one break is shown, and it
+    // reports the gap between the last event of one visit and the first of the next.
+    const breaks = within(timeline).getAllByText(/away/);
+    expect(breaks).toHaveLength(1);
+    expect(breaks[0]).toHaveTextContent('away 1m 00s');
+  });
+
+  it('shows no session break when the events never leave one session', async () => {
+    const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    const rows = USER_PROFILE_FIXTURE.recent_events.map((event) => ({
+      ...event,
+      session_id: 'only-one',
+      context: ctx,
+    }));
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json({ events: rows, next_before: null }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    await within(timeline).findByText('checkout_completed');
+    expect(within(timeline).queryByText(/away/)).not.toBeInTheDocument();
+  });
+
+  it('labels app-lifecycle events in plain language, keeping the raw name visible', async () => {
+    const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    const rows = [
+      { insert_id: 'evt-open', event: '$app_open', timestamp: '2026-07-01T10:00:00.000Z', session_id: 's2', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 'evt-bg', event: '$app_background', timestamp: '2026-07-01T09:00:00.000Z', session_id: 's1', screen_name: null, properties: {}, context: ctx },
+    ];
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json({ events: rows, next_before: null }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    expect(await within(timeline).findByText('Opened the app')).toBeInTheDocument();
+    expect(within(timeline).getByText('Left the app')).toBeInTheDocument();
+    // The raw names stay on screen so a row can still be matched against a query or a filter.
+    expect(within(timeline).getByText('$app_open')).toBeInTheDocument();
+    expect(within(timeline).getByText('$app_background')).toBeInTheDocument();
+    // An hour away between the two sessions.
+    expect(within(timeline).getByText(/away 1h 00m/)).toBeInTheDocument();
+  });
+
+  it('loads older events, passing the composite cursor back to the API', async () => {
+    const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    const page1 = [
+      { insert_id: 'evt-new', event: 'newest_event', timestamp: '2026-07-01T10:00:00.000Z', session_id: 's1', screen_name: null, properties: {}, context: ctx },
+    ];
+    const page2 = [
+      { insert_id: 'evt-old', event: 'oldest_event', timestamp: '2026-06-30T10:00:00.000Z', session_id: 's1', screen_name: null, properties: {}, context: ctx },
+    ];
+    const cursors: Array<string | null> = [];
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', ({ request }) => {
+        const url = new URL(request.url);
+        const before = url.searchParams.get('before');
+        cursors.push(before);
+        return before === null
+          ? HttpResponse.json({
+              events: page1,
+              next_before: { timestamp: page1[0]!.timestamp, insert_id: page1[0]!.insert_id },
+            })
+          : HttpResponse.json({ events: page2, next_before: null });
+      }),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    expect(await within(timeline).findByText('newest_event')).toBeInTheDocument();
+    expect(within(timeline).queryByText('oldest_event')).not.toBeInTheDocument();
+
+    await userEvent.click(within(timeline).getByRole('button', { name: 'Load older events' }));
+
+    // The older page is APPENDED, not swapped in — the timeline keeps what it already had.
+    expect(await within(timeline).findByText('oldest_event')).toBeInTheDocument();
+    expect(within(timeline).getByText('newest_event')).toBeInTheDocument();
+    // Both cursor halves travelled, so a tied millisecond can't silently drop rows.
+    expect(cursors).toEqual([null, '2026-07-01T10:00:00.000Z']);
+    await waitFor(() =>
+      expect(within(timeline).getByText(/Beginning of this user/)).toBeInTheDocument(),
+    );
   });
 
   it('renders no subscription card when RC is not connected', async () => {

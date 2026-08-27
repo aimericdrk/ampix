@@ -3,9 +3,12 @@ import { ClickHouseService, fromChDateTime64 } from '../../clickhouse/clickhouse
 import { ProjectsService } from '../../projects/core/projects.service';
 import type {
   LiveEventsResponse,
+  RecentEvent,
+  UserEventsResponse,
   UserProfileResponse,
   UsersResponse,
 } from '../analytics.types';
+import { ProblemException } from '../../common/problem-details';
 import { ALIASES_CTE, canonicalization, RESOLVE_CANONICAL_ID_SQL } from '../support/identity';
 import { clampLimit, parseEventSourceParam, parseIsoInstantParam } from '../support/read-query.util';
 import { EVENT_SOURCE_EXPR } from '../support/property-resolver';
@@ -44,6 +47,7 @@ interface RecentEventRow {
   insert_id: string;
   event: string;
   timestamp: string;
+  session_id: string;
   screen_name: string;
   properties: Record<string, unknown>;
   os: string;
@@ -57,6 +61,23 @@ interface RecentEventRow {
   network: string;
   sdk_version: string;
 }
+
+/**
+ * The columns a profile-timeline row needs, shared verbatim by the first page (`getUserProfile`)
+ * and every page after it (`getUserEvents`) — the two must stay identical or the frontend would
+ * append rows of a different shape onto the ones it already has.
+ */
+const RECENT_EVENT_COLUMNS = `e.insert_id AS insert_id, e.event AS event, e.timestamp AS timestamp,
+                toString(e.session_id) AS session_id,
+                JSONExtractString(toJSONString(e.properties), '$screen_name') AS screen_name,
+                e.properties AS properties,
+                e.os AS os, e.os_version AS os_version, e.app_version AS app_version,
+                e.app_build AS app_build, e.device_model AS device_model,
+                e.device_manufacturer AS device_manufacturer, e.locale AS locale,
+                e.timezone AS timezone, e.network AS network, e.sdk_version AS sdk_version`;
+
+/** How many timeline rows one page holds — the first page and every `load more` after it. */
+const USER_EVENTS_PAGE_SIZE = 50;
 
 /**
  * `AnalyticsService`'s users endpoints (contracts §17): the live event feed, the users explorer
@@ -271,19 +292,13 @@ export class UsersService {
       ),
       this.clickhouse.query<RecentEventRow>(
         `WITH ${canon.cte}
-         SELECT e.insert_id AS insert_id, e.event AS event, e.timestamp AS timestamp,
-                JSONExtractString(toJSONString(e.properties), '$screen_name') AS screen_name,
-                e.properties AS properties,
-                e.os AS os, e.os_version AS os_version, e.app_version AS app_version,
-                e.app_build AS app_build, e.device_model AS device_model,
-                e.device_manufacturer AS device_manufacturer, e.locale AS locale,
-                e.timezone AS timezone, e.network AS network, e.sdk_version AS sdk_version
+         SELECT ${RECENT_EVENT_COLUMNS}
          FROM events AS e
          ${canon.join}
          WHERE e.project_id = {projectId:UUID}
            AND ${canon.uid} = {canonicalId:String}
-         ORDER BY e.timestamp DESC
-         LIMIT 50`,
+         ORDER BY e.timestamp DESC, e.insert_id DESC
+         LIMIT ${USER_EVENTS_PAGE_SIZE}`,
         idParams,
         // canon.settings is REQUIRED for the canonicalizing LEFT JOIN; the 64-bit-integer
         // setting keeps numeric event properties as numbers (see the profile query above).
@@ -314,26 +329,99 @@ export class UsersService {
       first_seen: firstSeen,
       last_seen: lastSeen,
       event_count: eventCount,
-      recent_events: recentRows.map((row) => ({
-        insert_id: row.insert_id,
-        event: row.event,
-        timestamp: fromChDateTime64(row.timestamp),
-        screen_name: row.screen_name || null,
-        properties: row.properties ?? {},
-        context: {
-          os: row.os ?? '',
-          os_version: row.os_version ?? '',
-          app_version: row.app_version ?? '',
-          app_build: row.app_build ?? '',
-          device_model: row.device_model ?? '',
-          device_manufacturer: row.device_manufacturer ?? '',
-          locale: row.locale ?? '',
-          timezone: row.timezone ?? '',
-          network: row.network ?? '',
-          sdk_version: row.sdk_version ?? '',
-        },
-      })),
+      recent_events: recentRows.map(toRecentEvent),
       distinct_ids: distinctIds,
     };
   }
+
+  /**
+   * GET /users/:distinctId/events — the page after the profile's first 50, newest-first, so the
+   * timeline can keep loading as it scrolls instead of ending at a fixed window.
+   *
+   * Identity resolution is exactly the profile's: resolve to the canonical id, then read events by
+   * canonical `uid`, so paging never drifts out of the merged identity the first page showed.
+   *
+   * The cursor is the composite `(timestamp, insert_id)` of the last row served, compared as a
+   * tuple. A bare `timestamp <` cursor would skip every row sharing the boundary millisecond —
+   * routine here, because the SDK queues events locally and uploads them in batches.
+   */
+  async getUserEvents(
+    userId: string,
+    projectId: string,
+    distinctId: string,
+    beforeRaw?: string,
+    beforeIdRaw?: string,
+  ): Promise<UserEventsResponse> {
+    await this.projects.assertMembership(userId, projectId);
+
+    const resolvedRows = await this.clickhouse.query<{ canonical_id: string }>(
+      RESOLVE_CANONICAL_ID_SQL,
+      { projectId, distinctId },
+    );
+    const canonicalId = resolvedRows[0]?.canonical_id || distinctId;
+
+    const canon = canonicalization();
+    const params: Record<string, unknown> = { projectId, canonicalId };
+    let beforeClause = '';
+    // Both halves or neither: a timestamp without its tie-breaker can't identify a boundary row,
+    // and silently treating it as "no cursor" would restart the timeline from the top mid-scroll.
+    if (beforeRaw !== undefined || beforeIdRaw !== undefined) {
+      params.before = parseIsoInstantParam(beforeRaw, 'before');
+      if (!beforeIdRaw) {
+        throw new ProblemException({
+          status: 400,
+          title: 'Bad Request',
+          detail: 'before_id is required alongside before',
+        });
+      }
+      params.beforeId = beforeIdRaw;
+      beforeClause = 'AND (e.timestamp, e.insert_id) < ({before:DateTime64}, {beforeId:String})\n         ';
+    }
+
+    const rows = await this.clickhouse.query<RecentEventRow>(
+      `WITH ${canon.cte}
+       SELECT ${RECENT_EVENT_COLUMNS}
+       FROM events AS e
+       ${canon.join}
+       WHERE e.project_id = {projectId:UUID}
+         AND ${canon.uid} = {canonicalId:String}
+         ${beforeClause}ORDER BY e.timestamp DESC, e.insert_id DESC
+       LIMIT ${USER_EVENTS_PAGE_SIZE}`,
+      params,
+      { ...canon.settings, output_format_json_quote_64bit_integers: 0 },
+    );
+
+    const events = rows.map(toRecentEvent);
+    // A short page means the end: asking for one more row just to prove it costs a scan of every
+    // remaining event for this user, and the frontend stops on a null cursor either way.
+    const last = events.length === USER_EVENTS_PAGE_SIZE ? events[events.length - 1] : undefined;
+    return {
+      events,
+      next_before: last ? { timestamp: last.timestamp, insert_id: last.insert_id } : null,
+    };
+  }
+}
+
+/** One ClickHouse row → one timeline event. Shared so both pages produce identical shapes. */
+function toRecentEvent(row: RecentEventRow): RecentEvent {
+  return {
+    insert_id: row.insert_id,
+    event: row.event,
+    timestamp: fromChDateTime64(row.timestamp),
+    session_id: row.session_id ?? '',
+    screen_name: row.screen_name || null,
+    properties: row.properties ?? {},
+    context: {
+      os: row.os ?? '',
+      os_version: row.os_version ?? '',
+      app_version: row.app_version ?? '',
+      app_build: row.app_build ?? '',
+      device_model: row.device_model ?? '',
+      device_manufacturer: row.device_manufacturer ?? '',
+      locale: row.locale ?? '',
+      timezone: row.timezone ?? '',
+      network: row.network ?? '',
+      sdk_version: row.sdk_version ?? '',
+    },
+  };
 }

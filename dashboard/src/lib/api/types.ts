@@ -537,6 +537,8 @@ export interface UserRecentEvent {
   insert_id: string;
   event: string;
   timestamp: string;
+  /** The SDK session this event belongs to; a change between events means the app was reopened. */
+  session_id: string;
   /** The `$screen_name` of `$screen_view`/`$tap` events; null for events without one. */
   screen_name: string | null;
   /** Every custom property (contracts §4 flat map) attached to this event, verbatim. */
@@ -558,6 +560,13 @@ export interface UserProfileResponse {
    * `distinct_ids` for identity-correct per-user results.
    */
   distinct_ids: string[];
+}
+
+/** `GET /users/:distinctId/events` — the timeline's pages after the first, newest-first. */
+export interface UserEventsResponse {
+  events: UserRecentEvent[];
+  /** Feed back as `before`/`before_id`; `null` once the timeline has reached the user's first event. */
+  next_before: { timestamp: string; insert_id: string } | null;
 }
 
 export interface SessionsByDay {
