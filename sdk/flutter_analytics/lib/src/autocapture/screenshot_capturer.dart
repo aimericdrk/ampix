@@ -160,13 +160,22 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
   }
 
   /// The screen's main vertical scrollable: the one with the largest viewport
-  /// that actually scrolls. Largest, not first, for the same reason
-  /// [_largestBoundary] picks the largest boundary — a depth-first walk hits
-  /// small nested lists (a chip row, a comment thread) long before the page's
-  /// own scroller.
+  /// that actually scrolls AND is actually visible. Largest, not first, for
+  /// the same reason [_largestBoundary] picks the largest boundary — a
+  /// depth-first walk hits small nested lists (a chip row, a comment thread)
+  /// long before the page's own scroller.
   ///
-  /// Returns null when nothing scrolls, which is the ordinary case and means
-  /// the existing single-frame capture is already correct.
+  /// Visible, because the element tree still contains everything the user is
+  /// NOT looking at: the Navigator keeps the routes underneath the top one
+  /// mounted (offstage), and an `IndexedStack` keeps every tab alive — all
+  /// laid out with real viewport dimensions. Picking one of those made
+  /// `_captureFullPage` scroll a page nobody can see: every rendered frame
+  /// showed the same visible content, and the stitch came out as the first
+  /// fold repeated with an offset. [_isOnScreen] hit-tests the candidate to
+  /// keep only scrollables that are actually painted and reachable.
+  ///
+  /// Returns null when nothing visible scrolls, which is the ordinary case and
+  /// means the existing single-frame capture is already correct.
   ScrollableState? _primaryVerticalScrollable() {
     try {
       final root = WidgetsBinding.instance.rootElement;
@@ -182,7 +191,8 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
                 position.hasPixels &&
                 position.hasContentDimensions &&
                 position.maxScrollExtent > 0 &&
-                position.viewportDimension > bestViewport) {
+                position.viewportDimension > bestViewport &&
+                _isOnScreen(candidate)) {
               bestViewport = position.viewportDimension;
               best = candidate;
             }
@@ -197,6 +207,54 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
       return best;
     } on Object {
       return null;
+    }
+  }
+
+  /// Test-only view of [_primaryVerticalScrollable] so the visibility filter
+  /// (offstage routes, hidden `IndexedStack` tabs, covered pages) can be
+  /// regression-tested without a live engine render. The stitching itself
+  /// stays untested by design — it needs real `toImage` frames.
+  @visibleForTesting
+  ScrollableState? debugPrimaryVerticalScrollable() =>
+      _primaryVerticalScrollable();
+
+  /// Whether [candidate] is the scrollable the user is actually looking at,
+  /// established by hit-testing: a point inside a painted, reachable widget
+  /// resolves through it; a point inside an offstage route or a hidden
+  /// `IndexedStack` tab never does (offstage subtrees are laid out but not
+  /// painted or hit-tested).
+  ///
+  /// Three sample points along the scrollable's vertical midline, because a
+  /// single centre probe can land on a floating button or overlay that
+  /// swallows the hit. Never throws; an unmeasurable candidate is "not
+  /// visible".
+  bool _isOnScreen(ScrollableState candidate) {
+    try {
+      final obj = candidate.context.findRenderObject();
+      if (obj is! RenderBox || !obj.attached || !obj.hasSize) return false;
+      final viewId = View.maybeOf(candidate.context)?.viewId;
+      if (viewId == null) return false;
+      final centerX = obj.size.width / 2;
+      for (final fractionY in const [0.5, 0.25, 0.75]) {
+        final point = obj.localToGlobal(
+          Offset(centerX, obj.size.height * fractionY),
+        );
+        final result = HitTestResult();
+        WidgetsBinding.instance.hitTestInView(result, point, viewId);
+        for (final entry in result.path) {
+          // The scrollable counts as hit when it — or anything inside it —
+          // is on the hit path: its own outer render object defers to its
+          // children, so the entries are usually the list's content.
+          final target = entry.target;
+          if (target is! RenderObject) continue;
+          for (RenderObject? node = target; node != null; node = node.parent) {
+            if (identical(node, obj)) return true;
+          }
+        }
+      }
+      return false;
+    } on Object {
+      return false;
     }
   }
 
@@ -225,14 +283,32 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
       final maxExtent = position.maxScrollExtent;
       if (viewportHeight <= 0 || maxExtent <= 0) return null;
 
-      final viewportWidth = boundary.size.width;
-      if (viewportWidth <= 0) return null;
+      // The render is the WHOLE screen; the stitch's coordinate system is the
+      // scrollable's CONTENT. Compositing full frames put the status-bar band
+      // above the viewport at the top of the image, repeated the fixed chrome
+      // once per frame, and clipped the last frame mid-chrome at the canvas
+      // edge. Crop every frame to the scrollable's own viewport rect instead:
+      // the reference image for a scrolling page is the page content, in
+      // exactly the space a tap's $content_y is measured in. Fixed chrome
+      // (app bars, floating nav bars) is deliberately not part of it.
+      final scrollBox = scrollable.context.findRenderObject();
+      if (scrollBox is! RenderBox || !scrollBox.hasSize) return null;
+      // Throws when [boundary] isn't an ancestor of the scrollable (possible
+      // under the largest-boundary fallback) — caught below, falling back to
+      // the single-frame capture.
+      final cropTopLeft = scrollBox.localToGlobal(
+        Offset.zero,
+        ancestor: boundary,
+      );
+      final cropWidth = scrollBox.size.width;
+      final cropHeight = scrollBox.size.height;
+      if (cropWidth <= 0 || cropHeight <= 0) return null;
 
       // Width, not longest side: a stitched page IS long, and the single-frame
       // rule ([kMaxScreenshotEdge] on the longest side) would crush a
       // 6-viewport capture to 640px tall and destroy its width with it.
-      final pixelRatio = viewportWidth > kMaxScreenshotEdge
-          ? kMaxScreenshotEdge / viewportWidth
+      final pixelRatio = cropWidth > kMaxScreenshotEdge
+          ? kMaxScreenshotEdge / cropWidth
           : 1.0;
 
       // Stop at the frame budget rather than at the bottom when a page is very
@@ -249,7 +325,7 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
 
       final capturedExtent = frames.last;
       final contentHeight = capturedExtent + viewportHeight;
-      final canvasWidth = (viewportWidth * pixelRatio).round();
+      final canvasWidth = (cropWidth * pixelRatio).round();
       final canvasHeight = (contentHeight * pixelRatio).round();
       if (canvasWidth <= 0 || canvasHeight <= 0) return null;
 
@@ -261,9 +337,18 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
         await _awaitUiSettled();
         final frame = await _renderFrame(boundary, pixelRatio);
         if (frame == null) return null;
+        // Viewport-only slice of the full-screen frame (privacy masks were
+        // applied by _renderFrame while the frame was still in screen space).
+        final cropped = img.copyCrop(
+          frame,
+          x: (cropTopLeft.dx * pixelRatio).round().clamp(0, frame.width - 1),
+          y: (cropTopLeft.dy * pixelRatio).round().clamp(0, frame.height - 1),
+          width: (cropWidth * pixelRatio).round().clamp(1, frame.width),
+          height: (cropHeight * pixelRatio).round().clamp(1, frame.height),
+        );
         img.compositeImage(
           canvas,
-          frame,
+          cropped,
           dstY: (offset * pixelRatio).round(),
         );
       }
