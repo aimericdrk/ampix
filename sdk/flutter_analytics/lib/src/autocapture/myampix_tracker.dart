@@ -78,9 +78,49 @@ class _RecentTap {
 }
 
 class _TapTarget {
-  _TapTarget({this.widgetType, this.label});
+  _TapTarget({
+    this.widgetType,
+    this.label,
+    this.scrollY,
+    this.contentY,
+    this.contentHeight,
+    this.viewportHeight,
+  });
   final String? widgetType;
   final String? label;
+
+  /// Scroll offset of the enclosing vertical scrollable when the tap happened.
+  final double? scrollY;
+
+  /// The tap's y in CONTENT space: how far down the scrollable's full content
+  /// it landed, independent of where the user had scrolled to. This is the one
+  /// a heatmap can place; `$pos_y` alone cannot, because it is measured against
+  /// the visible viewport.
+  final double? contentY;
+
+  /// Total scrollable content height (`maxScrollExtent + viewportDimension`) —
+  /// what [contentY] should be normalized against.
+  final double? contentHeight;
+
+  /// Height of the scrollable's viewport, i.e. how much of [contentHeight] was
+  /// visible at once.
+  final double? viewportHeight;
+}
+
+/// The scroll geometry of one tap, resolved from the tapped widget's nearest
+/// enclosing VERTICAL scrollable. Null when the tap wasn't inside one (a fixed
+/// screen), which is exactly when `$pos_y` is already sufficient.
+class _ScrollGeometry {
+  _ScrollGeometry({
+    required this.scrollY,
+    required this.contentY,
+    required this.contentHeight,
+    required this.viewportHeight,
+  });
+  final double scrollY;
+  final double contentY;
+  final double contentHeight;
+  final double viewportHeight;
 }
 
 class _MyAmpixTrackerState extends State<MyAmpixTracker> {
@@ -132,6 +172,15 @@ class _MyAmpixTrackerState extends State<MyAmpixTracker> {
         r'$screen_name': MyAmpixObserver.currentScreenName,
       r'$pos_x': position.dx,
       r'$pos_y': position.dy,
+      // Scroll geometry, present only when the tap landed inside a vertical
+      // scrollable that actually scrolls. `$content_y` is the placeable one:
+      // `$pos_y` is measured against the visible viewport, so on a tall screen
+      // it says nothing about where in the page the tap landed.
+      if (target?.scrollY != null) r'$scroll_y': target!.scrollY,
+      if (target?.contentY != null) r'$content_y': target!.contentY,
+      if (target?.contentHeight != null) r'$content_height': target!.contentHeight,
+      if (target?.viewportHeight != null)
+        r'$viewport_height': target!.viewportHeight,
     };
     _track(r'$tap', properties);
     _checkRageTap(position, properties);
@@ -196,9 +245,88 @@ class _MyAmpixTrackerState extends State<MyAmpixTracker> {
           .map((m) => m.$1)
           .firstWhere(_isInteresting, orElse: () => matches.first.$1);
 
+      final scroll = _resolveScrollGeometry(chosen, position);
       return _TapTarget(
         widgetType: chosen.widget.runtimeType.toString(),
         label: _resolveLabel(chosen),
+        scrollY: scroll?.scrollY,
+        contentY: scroll?.contentY,
+        contentHeight: scroll?.contentHeight,
+        viewportHeight: scroll?.viewportHeight,
+      );
+    } on Object catch (_) {
+      return null;
+    }
+  }
+
+  /// Resolves the scroll geometry of [chosen] — the widget the tap hit — by
+  /// walking up to its nearest enclosing VERTICAL scrollable.
+  ///
+  /// Why this exists: `$pos_x`/`$pos_y` are the raw pointer position, i.e.
+  /// VIEWPORT coordinates. On a screen taller than the viewport the same
+  /// content sits at a different `$pos_y` depending on where the user had
+  /// scrolled to, so every scroll position collapses onto the same band of a
+  /// heatmap and none of them can be placed against a reference screenshot.
+  /// `contentY` restores that: it is the tap's position in the scrollable's
+  /// full content, which is stable no matter how far the user had scrolled.
+  ///
+  /// The nearest scrollable is deliberately filtered to the vertical axis: a
+  /// tap inside a horizontal carousel nested in a vertical list would otherwise
+  /// report the carousel's offset, which says nothing about how far down the
+  /// page the tap landed.
+  ///
+  /// Never throws — a failure here degrades to "no scroll geometry", i.e. the
+  /// tap is still recorded, exactly as before this existed.
+  _ScrollGeometry? _resolveScrollGeometry(Element chosen, Offset globalPosition) {
+    try {
+      ScrollableState? scrollable;
+      // The chosen element itself may BE the scrollable's descendant chain
+      // start; visitAncestorElements walks strictly upwards from it.
+      chosen.visitAncestorElements((ancestor) {
+        try {
+          if (ancestor is StatefulElement && ancestor.state is ScrollableState) {
+            final candidate = ancestor.state as ScrollableState;
+            // `position` throws when the scrollable has no attached controller
+            // yet — skip that ancestor rather than abandoning the whole walk,
+            // or one not-yet-attached list would hide the page's real scroller.
+            if (candidate.position.axis == Axis.vertical) {
+              scrollable = candidate;
+              return false; // innermost vertical one wins; stop here.
+            }
+          }
+        } on Object catch (_) {
+          // Keep walking upwards.
+        }
+        return true;
+      });
+
+      final state = scrollable;
+      if (state == null) return null;
+
+      final position = state.position;
+      // A position that hasn't been laid out yet has neither; reading either
+      // would throw, and a half-known geometry is worse than none.
+      if (!position.hasPixels || !position.hasContentDimensions) return null;
+
+      final viewportHeight = position.viewportDimension;
+      final contentHeight = position.maxScrollExtent + viewportHeight;
+      // Not actually scrollable (content fits): `$pos_y` already places the tap
+      // correctly, and emitting a content height equal to the viewport would
+      // just add noise.
+      if (viewportHeight <= 0 || position.maxScrollExtent <= 0) return null;
+
+      // The viewport is rarely flush with the top of the screen (app bars,
+      // safe areas), so the tap's offset INSIDE the viewport is what adds to
+      // the scroll offset — not its raw screen y.
+      final box = state.context.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return null;
+      final localY = box.globalToLocal(globalPosition).dy;
+
+      return _ScrollGeometry(
+        scrollY: position.pixels,
+        contentY: position.pixels + localY,
+        contentHeight: contentHeight,
+        viewportHeight: viewportHeight,
       );
     } on Object catch (_) {
       return null;

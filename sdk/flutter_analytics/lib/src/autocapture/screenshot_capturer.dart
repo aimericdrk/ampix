@@ -14,6 +14,11 @@ const int kMaxScreenshotEdge = 640;
 /// JPEG quality for encoded screenshots (shared-contracts §18, q≈70).
 const int kScreenshotJpegQuality = 70;
 
+/// How many viewports a full-page capture will stitch before giving up and
+/// keeping what it has. A bound on memory and upload size, not a judgement:
+/// an infinite-scroll feed has no end, and a 20-screen JPEG helps nobody.
+const int kMaxStitchedViewports = 6;
+
 /// A captured, already-encoded screenshot ready to upload.
 ///
 /// [bytes] are the final JPEG payload (what gets hashed + POSTed); [width]
@@ -24,11 +29,29 @@ class CapturedScreenshot {
     required this.bytes,
     required this.width,
     required this.height,
+    this.contentHeight,
+    this.viewportHeight,
   });
 
   final Uint8List bytes;
   final int width;
   final int height;
+
+  /// Logical height of the scrollable content this image covers, when the
+  /// screen was taller than one viewport and the capture stitched it. Null on
+  /// a screen that fits, where the image simply IS the whole screen.
+  ///
+  /// A heatmap needs this to normalize a tap's `$content_y`: without it the
+  /// image's own pixel height says how tall the picture is, not how tall the
+  /// page was.
+  final double? contentHeight;
+
+  /// Logical height of one viewport — how much of [contentHeight] the user saw
+  /// at a time. Null for the same reason as [contentHeight].
+  final double? viewportHeight;
+
+  /// True when this image covers more than one viewport of a scrollable page.
+  bool get isFullPage => contentHeight != null;
 }
 
 /// Test seam (`SdkOverrides.screenshotCapturer`) that produces the JPEG bytes
@@ -79,6 +102,18 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
       await _awaitUiSettled();
       final boundary = _resolveBoundary();
       if (boundary == null || !boundary.hasSize) return null;
+
+      // A screen taller than its viewport cannot be represented by one frame:
+      // the reference image would show the first fold, and every tap recorded
+      // further down the page would have nothing to sit on. Stitch it instead.
+      final scrollable = _primaryVerticalScrollable();
+      if (scrollable != null) {
+        final stitched = await _captureFullPage(boundary, scrollable);
+        // A stitch that fails falls through to the single-frame path below —
+        // one fold of the page beats no screenshot at all.
+        if (stitched != null) return stitched;
+      }
+
       final logicalLongest = boundary.size.longestSide;
       if (logicalLongest <= 0) return null;
       // Render straight to the target scale so no second resize is needed.
@@ -121,6 +156,167 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
       // Never-throw guarantee (design §13): any rendering/encoding failure
       // degrades to "no screenshot", never a crash.
       return null;
+    }
+  }
+
+  /// The screen's main vertical scrollable: the one with the largest viewport
+  /// that actually scrolls. Largest, not first, for the same reason
+  /// [_largestBoundary] picks the largest boundary — a depth-first walk hits
+  /// small nested lists (a chip row, a comment thread) long before the page's
+  /// own scroller.
+  ///
+  /// Returns null when nothing scrolls, which is the ordinary case and means
+  /// the existing single-frame capture is already correct.
+  ScrollableState? _primaryVerticalScrollable() {
+    try {
+      final root = WidgetsBinding.instance.rootElement;
+      if (root == null) return null;
+      ScrollableState? best;
+      var bestViewport = 0.0;
+      void visit(Element element) {
+        try {
+          if (element is StatefulElement && element.state is ScrollableState) {
+            final candidate = element.state as ScrollableState;
+            final position = candidate.position;
+            if (position.axis == Axis.vertical &&
+                position.hasPixels &&
+                position.hasContentDimensions &&
+                position.maxScrollExtent > 0 &&
+                position.viewportDimension > bestViewport) {
+              bestViewport = position.viewportDimension;
+              best = candidate;
+            }
+          }
+        } on Object {
+          // Skip a scrollable we can't measure; keep scanning the rest.
+        }
+        element.visitChildren(visit);
+      }
+
+      visit(root);
+      return best;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Scrolls the page from top to bottom, capturing each viewport, and
+  /// composites the frames into one tall image of the whole scrollable content.
+  ///
+  /// Each frame is drawn at its own scroll offset, so the final overlapping
+  /// frame (when the content isn't an exact multiple of the viewport) simply
+  /// overwrites the pixels it shares with the previous one — no tail arithmetic
+  /// and no seam. The scroll position is restored afterwards no matter what.
+  ///
+  /// Honest about its limits: content that reacts to scrolling rather than
+  /// moving with it — sticky headers, parallax, appear-on-scroll animations —
+  /// is captured once per frame and will repeat down the stitched image. This
+  /// runs only in debug builds as a developer's reference capture, so the cost
+  /// of an imperfect image is a slightly odd background, never a user-visible
+  /// effect.
+  Future<CapturedScreenshot?> _captureFullPage(
+    RenderRepaintBoundary boundary,
+    ScrollableState scrollable,
+  ) async {
+    final position = scrollable.position;
+    final originalOffset = position.pixels;
+    try {
+      final viewportHeight = position.viewportDimension;
+      final maxExtent = position.maxScrollExtent;
+      if (viewportHeight <= 0 || maxExtent <= 0) return null;
+
+      final viewportWidth = boundary.size.width;
+      if (viewportWidth <= 0) return null;
+
+      // Width, not longest side: a stitched page IS long, and the single-frame
+      // rule ([kMaxScreenshotEdge] on the longest side) would crush a
+      // 6-viewport capture to 640px tall and destroy its width with it.
+      final pixelRatio = viewportWidth > kMaxScreenshotEdge
+          ? kMaxScreenshotEdge / viewportWidth
+          : 1.0;
+
+      // Stop at the frame budget rather than at the bottom when a page is very
+      // long (or endless). `contentHeight` then describes what was CAPTURED,
+      // so a tap below it is simply outside the image rather than mis-placed.
+      final frames = <double>[];
+      for (var offset = 0.0; frames.length < kMaxStitchedViewports; ) {
+        frames.add(offset);
+        if (offset >= maxExtent) break;
+        // `clamp` is declared on num and returns num — .toDouble() keeps this
+        // assignable to the double it came from.
+        offset = (offset + viewportHeight).clamp(0.0, maxExtent).toDouble();
+      }
+
+      final capturedExtent = frames.last;
+      final contentHeight = capturedExtent + viewportHeight;
+      final canvasWidth = (viewportWidth * pixelRatio).round();
+      final canvasHeight = (contentHeight * pixelRatio).round();
+      if (canvasWidth <= 0 || canvasHeight <= 0) return null;
+
+      final canvas = img.Image(width: canvasWidth, height: canvasHeight);
+      for (final offset in frames) {
+        position.jumpTo(offset);
+        // Let the jump paint (and any scroll-triggered animation settle) before
+        // reading pixels, or the frame is the PREVIOUS offset's content.
+        await _awaitUiSettled();
+        final frame = await _renderFrame(boundary, pixelRatio);
+        if (frame == null) return null;
+        img.compositeImage(
+          canvas,
+          frame,
+          dstY: (offset * pixelRatio).round(),
+        );
+      }
+
+      final jpeg = img.encodeJpg(canvas, quality: kScreenshotJpegQuality);
+      return CapturedScreenshot(
+        bytes: jpeg,
+        width: canvas.width,
+        height: canvas.height,
+        contentHeight: contentHeight,
+        viewportHeight: viewportHeight,
+      );
+    } on Object {
+      return null;
+    } finally {
+      // Never leave the user's page parked where the capture left it.
+      try {
+        if (position.hasPixels && position.pixels != originalOffset) {
+          position.jumpTo(originalOffset);
+        }
+      } on Object {
+        // The scrollable may have been disposed mid-capture; nothing to restore.
+      }
+    }
+  }
+
+  /// Renders the boundary once at [pixelRatio], with privacy masks applied.
+  /// Masks are applied per frame, while their rects still describe what is on
+  /// screen — they are viewport coordinates, so applying them to the finished
+  /// stitch would black out the wrong rows.
+  Future<img.Image?> _renderFrame(
+    RenderRepaintBoundary boundary,
+    double pixelRatio,
+  ) async {
+    final uiImage = await boundary.toImage(pixelRatio: pixelRatio);
+    try {
+      final rgba = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (rgba == null) return null;
+      final bytes = rgba.buffer.asUint8List(
+        rgba.offsetInBytes,
+        rgba.lengthInBytes,
+      );
+      final image = img.Image.fromBytes(
+        width: uiImage.width,
+        height: uiImage.height,
+        bytes: Uint8List.fromList(bytes).buffer,
+        numChannels: 4,
+        order: img.ChannelOrder.rgba,
+      );
+      _applyPrivacyMasks(image, pixelRatio);
+      return image;
+    } finally {
+      uiImage.dispose();
     }
   }
 
