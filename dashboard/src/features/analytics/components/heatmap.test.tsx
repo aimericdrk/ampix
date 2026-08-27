@@ -85,6 +85,65 @@ describe('HeatmapPage — click heatmap viewer', () => {
     expect(bodies[1]!.screen_name).toBe('home');
   });
 
+  /**
+   * The ranked list is the answer for screens taller than the viewport: tap positions carry no
+   * scroll offset, so the canvas above cannot place them, but the widget identity is exact.
+   */
+  it('queries the tapped elements from the same selection and ranks them', async () => {
+    const bodies: Array<{ screen_name?: string; date_range?: unknown }> = [];
+    server.use(
+      http.get('/api/v1/projects/:projectId/screens', () => HttpResponse.json(SCREENS)),
+      http.post('/api/v1/projects/:projectId/query/tap-elements', async ({ request }) => {
+        bodies.push((await request.json()) as { screen_name?: string });
+        return HttpResponse.json({
+          screen_name: 'checkout',
+          total: 96,
+          truncated: false,
+          elements: [
+            { widget_type: 'ElevatedButton', widget_label: 'Pay now', count: 52, users: 31 },
+            { widget_type: '', widget_label: '', count: 16, users: 12 },
+          ],
+        });
+      }),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
+
+    await screen.findByRole('option', { name: 'checkout' });
+    await userEvent.selectOptions(screen.getByLabelText('Screen'), 'checkout');
+
+    expect(await screen.findByText('Pay now')).toBeInTheDocument();
+    expect(screen.getByText('52')).toBeInTheDocument();
+    // A tap that hit no identifiable widget is shown, never dropped — a screen whose taps are
+    // mostly unidentified is itself the finding.
+    expect(screen.getByText('Unidentified element')).toBeInTheDocument();
+    // Same screen and window as the heatmap query beside it.
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]!.screen_name).toBe('checkout');
+    expect(bodies[0]!.date_range).toMatchObject({ from: expect.stringMatching(DATE) });
+  });
+
+  it('says so when the ranked list is truncated, so the total cannot be misread', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/screens', () => HttpResponse.json(SCREENS)),
+      http.post('/api/v1/projects/:projectId/query/tap-elements', () =>
+        HttpResponse.json({
+          screen_name: 'checkout',
+          total: 10,
+          truncated: true,
+          elements: [{ widget_type: 'IconButton', widget_label: 'Back', count: 10, users: 4 }],
+        }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
+
+    await screen.findByRole('option', { name: 'checkout' });
+    await userEvent.selectOptions(screen.getByLabelText('Screen'), 'checkout');
+
+    expect(await screen.findByText(/more were tapped on this screen/)).toBeInTheDocument();
+  });
+
   it('shows an empty state when the screen has no taps in range', async () => {
     server.use(
       http.get('/api/v1/projects/:projectId/screens', () => HttpResponse.json(SCREENS)),

@@ -8,8 +8,13 @@ import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { PageShell } from '../../../components/layout/PageShell';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
-import type { ClickHeatmapQuery, ClickHeatmapResponse, HeatmapGrid } from '../../../lib/api/types';
-import { useRunClickHeatmap, useScreens } from '../api';
+import type {
+  ClickHeatmapQuery,
+  ClickHeatmapResponse,
+  HeatmapGrid,
+  TapElementsResponse,
+} from '../../../lib/api/types';
+import { useRunClickHeatmap, useRunTapElements, useScreens } from '../api';
 import { DateRangeControl, useDateRange } from '../date-range';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { ChartCard } from './charts/ChartCard';
@@ -23,6 +28,9 @@ export function HeatmapPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/heatmap' });
   const screens = useScreens(projectId);
   const runHeatmap = useRunClickHeatmap(projectId);
+  // Run alongside the heatmap, from the same selection: on a screen taller than the viewport the
+  // positional view cannot be trusted, and this one still can.
+  const runTapElements = useRunTapElements(projectId);
   // Time-scoped by the global range (Phase 2): seeded here and surfaced via `<DateRangeControl/>`
   // in the header, so Heatmap shares the same window as every other analytics page.
   const { from: dateFrom, to: dateTo } = useDateRange();
@@ -32,6 +40,7 @@ export function HeatmapPage() {
   const [selectedScreen, setSelectedScreen] = useState('');
   const [opacity, setOpacity] = useState(0.85);
   const [result, setResult] = useState<ClickHeatmapResponse | null>(null);
+  const [elements, setElements] = useState<TapElementsResponse | null>(null);
   const [activeGrid, setActiveGrid] = useState<HeatmapGrid>(DEFAULT_GRID);
 
   const screenList = screens.data?.screens ?? [];
@@ -47,11 +56,20 @@ export function HeatmapPage() {
     };
     setActiveGrid(DEFAULT_GRID);
     runHeatmap.mutate(query, { onSuccess: setResult });
+    runTapElements.mutate(
+      {
+        screen_name: screenName,
+        date_range: { from: dateFrom, to: dateTo },
+        filters: mergeGlobalFilters([], globalFilters),
+      },
+      { onSuccess: setElements },
+    );
   };
 
   const onSelectScreen = (screenName: string) => {
     setSelectedScreen(screenName);
     setResult(null);
+    setElements(null);
     run(screenName);
   };
 
@@ -178,8 +196,83 @@ export function HeatmapPage() {
               />
             </div>
           </ChartCard>
+
+          <ChartCard
+            title="Most-tapped elements"
+            state={elements && elements.elements.length > 0 ? 'ready' : 'empty'}
+            emptyText="No taps recorded for this screen in the selected range."
+          >
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-text-muted">
+                What was tapped, rather than where. Tap positions are recorded relative to the
+                visible screen and carry no scroll offset, so on a screen taller than one viewport
+                the heatmap above cannot place them against the screenshot — this list stays exact
+                either way.
+              </p>
+              {elements && <TapElementsTable data={elements} />}
+            </div>
+          </ChartCard>
         </Reveal>
       )}
     </PageShell>
+  );
+}
+
+/** The ranked list: what was tapped, how often, and by how many people. */
+function TapElementsTable({ data }: { data: TapElementsResponse }) {
+  const max = data.elements.reduce((m, e) => Math.max(m, e.count), 0);
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <caption className="sr-only">Most-tapped elements</caption>
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
+            <th scope="col" className="py-2 pr-4 font-medium">Element</th>
+            <th scope="col" className="py-2 pr-4 text-right font-medium">Taps</th>
+            <th scope="col" className="py-2 pr-4 text-right font-medium">Users</th>
+            <th scope="col" className="py-2 font-medium">Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.elements.map((element) => {
+            const label = element.widget_label || element.widget_type;
+            return (
+              <tr
+                key={`${element.widget_type}|${element.widget_label}`}
+                className="border-t border-border"
+              >
+                <td className="py-2 pr-4">
+                  {/* A tap that hit no identifiable widget is shown, not hidden: a screen whose
+                      taps are mostly unidentified is itself the finding. */}
+                  {label ? (
+                    <span className="font-medium">{label}</span>
+                  ) : (
+                    <span className="text-text-muted">Unidentified element</span>
+                  )}
+                  {element.widget_label && element.widget_type && (
+                    <span className="ml-2 text-xs text-text-muted">{element.widget_type}</span>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-right tabular-nums">{element.count}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">{element.users}</td>
+                <td className="w-1/3 py-2">
+                  <div className="h-2 rounded-full bg-surface-raised">
+                    <div
+                      className="h-2 rounded-full bg-accent"
+                      style={{ width: `${max > 0 ? (element.count / max) * 100 : 0}%` }}
+                    />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {data.truncated && (
+        <p className="pt-2 text-xs text-text-muted">
+          Showing the top {data.elements.length} elements — more were tapped on this screen.
+        </p>
+      )}
+    </div>
   );
 }

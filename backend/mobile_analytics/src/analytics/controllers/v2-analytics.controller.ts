@@ -6,6 +6,7 @@ import type {
   EngagementResponse,
   FlowResponse,
   HistogramResponse,
+  TapElementsResponse,
 } from '../analytics.types';
 import { V2AnalyticsService } from '../services/v2-analytics.service';
 
@@ -28,6 +29,20 @@ export class V2AnalyticsController {
     @Body() body: unknown,
   ): Promise<ClickHeatmapResponse> {
     return this.v2.runClickHeatmap(req.user!.id, projectId, body);
+  }
+
+  /**
+   * The heatmap's companion: what was tapped, ranked. Correct on screens taller than the viewport,
+   * where a tap's position cannot be placed against a reference screenshot.
+   */
+  @Post('query/tap-elements')
+  @HttpCode(200) // a query, not a resource creation
+  async tapElements(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ): Promise<TapElementsResponse> {
+    return this.v2.runTapElements(req.user!.id, projectId, body);
   }
 
   @Post('query/histogram')

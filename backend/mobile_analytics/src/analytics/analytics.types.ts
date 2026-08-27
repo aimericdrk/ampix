@@ -247,6 +247,31 @@ export interface ClickHeatmapResponse {
   cells: HeatmapCell[];
 }
 
+/**
+ * POST /query/tap-elements response — what was tapped on a screen, ranked. The positional
+ * companion to the click-heatmap, and the reliable one on screens taller than the viewport, where
+ * a tap's recorded position has no scroll offset to place it by.
+ */
+export interface TapElement {
+  /** `$widget_type` — e.g. `ElevatedButton`. Empty when the tap hit no identifiable widget. */
+  widget_type: string;
+  /** `$widget_label` — the visible text, when the widget had one. Empty otherwise. */
+  widget_label: string;
+  /** Taps on this element. */
+  count: number;
+  /** Distinct raw ids that tapped it (not canonicalized — same rule as the heatmap's filter). */
+  users: number;
+}
+
+export interface TapElementsResponse {
+  screen_name: string;
+  /** Total taps across the returned elements — NOT the screen's total if `limit` truncated. */
+  total: number;
+  /** True when more elements existed than `limit` returned, so `total` is a partial sum. */
+  truncated: boolean;
+  elements: TapElement[];
+}
+
 /** GET /metrics/engagement response (contracts §19). All user counts use the canonical `uid` (§17). */
 export type EngagementMetric = 'dau' | 'wau' | 'mau';
 

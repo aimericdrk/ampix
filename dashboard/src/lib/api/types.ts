@@ -569,6 +569,34 @@ export interface UserEventsResponse {
   next_before: { timestamp: string; insert_id: string } | null;
 }
 
+/** `POST /query/tap-elements` request — the heatmap's selection, grouped by what was tapped. */
+export interface TapElementsQuery {
+  screen_name: string;
+  date_range: { from: string; to: string };
+  filters?: InsightsFilter[];
+  distinct_ids?: string[];
+  limit?: number;
+}
+
+export interface TapElement {
+  widget_type: string;
+  widget_label: string;
+  count: number;
+  users: number;
+}
+
+/**
+ * `POST /query/tap-elements` response. Unlike the heatmap this carries no geometry, which is what
+ * makes it correct on a screen taller than the viewport — see the note on the Heatmap page.
+ */
+export interface TapElementsResponse {
+  screen_name: string;
+  total: number;
+  /** True when more elements existed than `limit` returned, so `total` is a partial sum. */
+  truncated: boolean;
+  elements: TapElement[];
+}
+
 export interface SessionsByDay {
   t: string;
   sessions: number;

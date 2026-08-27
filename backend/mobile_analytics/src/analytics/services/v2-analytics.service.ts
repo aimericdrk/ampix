@@ -4,6 +4,7 @@ import { ClickHouseService } from '../../clickhouse/clickhouse.service';
 import { ProjectsService } from '../../projects/core/projects.service';
 import type {
   ClickHeatmapResponse,
+  TapElementsResponse,
   EngagementResponse,
   FlowResponse,
   HeatmapCell,
@@ -13,6 +14,8 @@ import type {
 import { buildBucketGrid } from '../support/bucket-grid';
 import { clickHeatmapQuerySchema } from '../queries/click-heatmap/click-heatmap.schema';
 import { compileClickHeatmapQuery } from '../queries/click-heatmap/click-heatmap.compiler';
+import { tapElementsQuerySchema } from '../queries/tap-elements/tap-elements.schema';
+import { compileTapElementsQuery } from '../queries/tap-elements/tap-elements.compiler';
 import { ENGAGEMENT_METRIC, compileEngagement } from '../queries/engagement/engagement.compiler';
 import { engagementIntervalSchema } from '../queries/engagement/engagement.schema';
 import { buildFlowGraph, FlowUnitRow } from '../queries/flows/flows.compiler';
@@ -25,6 +28,13 @@ import { screenPathsQuerySchema } from '../queries/screen-paths/screen-paths.sch
 /** Rounds a stickiness ratio to 4 decimals (mirrors AdvancedAnalyticsService's `round4`). */
 function round4(value: number): number {
   return Math.round(value * 10_000) / 10_000;
+}
+
+interface TapElementRow {
+  widget_type: string;
+  widget_label: string;
+  cnt: string;
+  users: string;
 }
 
 interface HeatmapCellRow {
@@ -100,6 +110,41 @@ export class V2AnalyticsService {
     }));
     const total = cells.reduce((sum, cell) => sum + cell.count, 0);
     return { screen_name: query.screen_name, total, cells };
+  }
+
+  /**
+   * POST /query/tap-elements — the `$tap`s on one screen ranked by the widget they hit.
+   *
+   * Unlike the heatmap this makes no geometric assumption, so it is the one that stays correct on
+   * a screen taller than the viewport: tap positions are recorded in viewport coordinates with no
+   * scroll offset, so they cannot be placed against a reference screenshot, but the widget that
+   * was tapped is unambiguous wherever it happened to be.
+   */
+  async runTapElements(
+    userId: string,
+    projectId: string,
+    body: unknown,
+  ): Promise<TapElementsResponse> {
+    await this.projects.assertMembership(userId, projectId);
+    const query = parseOrThrow(tapElementsQuerySchema, body);
+    const compiled = compileTapElementsQuery(query, projectId);
+    const rows = await this.clickhouse.query<TapElementRow>(compiled.sql, compiled.params);
+
+    const elements = rows.map((row) => ({
+      widget_type: row.widget_type ?? '',
+      widget_label: row.widget_label ?? '',
+      count: Number(row.cnt),
+      users: Number(row.users),
+    }));
+    // `total` sums what came back, and `truncated` says so — reporting a screen total we did not
+    // query would be a number nobody can reconcile against the list under it.
+    const total = elements.reduce((sum, element) => sum + element.count, 0);
+    return {
+      screen_name: query.screen_name,
+      total,
+      truncated: elements.length === query.limit,
+      elements,
+    };
   }
 
   /**

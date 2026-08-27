@@ -53,6 +53,8 @@ import type {
   UpdateTileRequest,
   DashboardSummary,
   UserEventsResponse,
+  TapElementsQuery,
+  TapElementsResponse,
   UserProfileResponse,
 } from '../../lib/api/types';
 
@@ -301,6 +303,21 @@ export function useRunClickHeatmap(projectId: string) {
   return useMutation({
     mutationFn: (query: ClickHeatmapQuery) =>
       apiFetch<ClickHeatmapResponse>(`${base(projectId)}/query/click-heatmap`, {
+        method: 'POST',
+        body: query,
+      }),
+  });
+}
+
+/**
+ * `POST /query/tap-elements` — the same selection as the heatmap, grouped by the widget tapped.
+ * Correct on screens taller than the viewport, where a tap's position carries no scroll offset and
+ * so cannot be placed against the reference screenshot.
+ */
+export function useRunTapElements(projectId: string) {
+  return useMutation({
+    mutationFn: (query: TapElementsQuery) =>
+      apiFetch<TapElementsResponse>(`${base(projectId)}/query/tap-elements`, {
         method: 'POST',
         body: query,
       }),

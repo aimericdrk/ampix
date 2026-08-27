@@ -65,6 +65,7 @@ import type {
   UpdatedProjectMember,
   UpdateProjectResponse,
   UserListItem,
+  TapElementsResponse,
   UserEventsResponse,
   UserProfileResponse,
   UserSubscription,
@@ -343,6 +344,19 @@ export const USER_PROFILE_FIXTURE: Omit<
   ],
   // §17 identity set — canonical id + an aliased anon_id — for the identity-correct per-user heatmap.
   distinct_ids: ['user-001', 'anon-001'],
+};
+
+/** Deterministic ranked elements for `POST /query/tap-elements`. One row is deliberately
+ *  unlabelled — a tap that hit no identifiable widget, which the UI must still show. */
+export const TAP_ELEMENTS_FIXTURE: TapElementsResponse = {
+  screen_name: 'home',
+  total: 96,
+  truncated: false,
+  elements: [
+    { widget_type: 'ElevatedButton', widget_label: 'Continue', count: 52, users: 31 },
+    { widget_type: 'IconButton', widget_label: 'Close', count: 28, users: 20 },
+    { widget_type: '', widget_label: '', count: 16, users: 12 },
+  ],
 };
 
 export const SESSIONS_SUMMARY_FIXTURE: SessionsSummaryResponse = {
@@ -2179,6 +2193,15 @@ export const handlers = [
     if (cols < 1 || cols > 100 || rows < 1 || rows > 100)
       return problem(400, 'Invalid heatmap: grid out of range');
     return HttpResponse.json({ ...CLICK_HEATMAP_FIXTURE, screen_name: body.screen_name });
+  }),
+
+  http.post('/api/v1/projects/:projectId/query/tap-elements', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as { screen_name?: string };
+    if (!body.screen_name) return problem(400, 'Invalid query: screen_name required');
+    return HttpResponse.json({ ...TAP_ELEMENTS_FIXTURE, screen_name: body.screen_name });
   }),
 
   http.get('/api/v1/projects/:projectId/events/live', ({ request }) => {
