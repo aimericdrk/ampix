@@ -13,6 +13,9 @@ export interface StoreScreenshotInput {
   appVersion: string;
   width: number;
   height: number;
+  /** Set only for a stitched full-page capture; see ScreenCapture.contentHeight. */
+  contentHeight?: number;
+  viewportHeight?: number;
   imageHash: string;
   contentType: string;
   image: Buffer;
@@ -29,6 +32,14 @@ export interface ScreenListItem {
   latest_image_hash: string;
   /** App version of the newest capture. */
   latest_app_version: string;
+  /**
+   * Logical height of the page the newest capture covers, when it is a stitched full-page image;
+   * null for a single-viewport capture. The dashboard needs it to know the image spans more than
+   * one screen — and the heatmap grid over it spans the same content.
+   */
+  content_height: number | null;
+  /** Logical height of one viewport within that page; null for the same reason. */
+  viewport_height: number | null;
 }
 
 /** The JPEG stream + content type served by `GET /screens/:screenName/image`. */
@@ -168,6 +179,8 @@ export class ScreenshotsService implements OnModuleInit {
         contentType: input.contentType,
         width: input.width,
         height: input.height,
+        contentHeight: input.contentHeight ?? null,
+        viewportHeight: input.viewportHeight ?? null,
         imageHash: input.imageHash,
       },
       update: {
@@ -175,6 +188,11 @@ export class ScreenshotsService implements OnModuleInit {
         contentType: input.contentType,
         width: input.width,
         height: input.height,
+        // Written on every upsert, null included: re-capturing a screen that stopped being
+        // scrollable must clear the old page geometry, not leave it describing an image that no
+        // longer exists.
+        contentHeight: input.contentHeight ?? null,
+        viewportHeight: input.viewportHeight ?? null,
         imageHash: input.imageHash,
       },
     });
@@ -227,6 +245,8 @@ export class ScreenshotsService implements OnModuleInit {
         capturedAt: true,
         imageHash: true,
         appVersion: true,
+        contentHeight: true,
+        viewportHeight: true,
       },
       orderBy: { capturedAt: 'desc' },
     });
@@ -246,6 +266,8 @@ export class ScreenshotsService implements OnModuleInit {
           height: row.height,
           latest_image_hash: row.imageHash,
           latest_app_version: row.appVersion,
+          content_height: row.contentHeight,
+          viewport_height: row.viewportHeight,
         });
       }
     }

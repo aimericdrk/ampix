@@ -680,6 +680,9 @@ export const SCREENS_FIXTURE: ScreensResponse = {
       height: 844,
       latest_image_hash: 'hash-home',
       latest_app_version: '1.0.0',
+      // A stitched full-page capture: 2110 logical px of page, 844 per viewport.
+      content_height: 2110,
+      viewport_height: 844,
     },
     {
       screen_name: 'catalog',
@@ -689,6 +692,8 @@ export const SCREENS_FIXTURE: ScreensResponse = {
       height: 844,
       latest_image_hash: 'hash-catalog',
       latest_app_version: '1.0.0',
+      content_height: null,
+      viewport_height: null,
     },
     {
       screen_name: 'checkout',
@@ -698,6 +703,8 @@ export const SCREENS_FIXTURE: ScreensResponse = {
       height: 844,
       latest_image_hash: 'hash-checkout',
       latest_app_version: '1.0.0',
+      content_height: null,
+      viewport_height: null,
     },
   ],
 };

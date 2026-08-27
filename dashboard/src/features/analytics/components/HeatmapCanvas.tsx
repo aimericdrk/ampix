@@ -1,4 +1,5 @@
 import type { ClickHeatmapResponse, HeatmapGrid, ScreenSummary } from '../../../lib/api/types';
+import { cn } from '../../../lib/cn';
 import { formatExactNumber } from '../format';
 import { SEQUENTIAL_BLUE_RAMP, sequentialColor } from '../palette';
 import { ScreenImage } from './ScreenImage';
@@ -47,18 +48,41 @@ export function HeatmapCanvas({
   opacity: number;
 }) {
   // The screenshot keeps its aspect ratio; normalized [0,1] cell coords map onto the displayed box.
+  // For a stitched full-page capture that box IS the whole page, which is exactly why the heatmap's
+  // rows now span content height — the grid lines up with the image without any special casing.
   const aspectRatio =
     summary && summary.width > 0 && summary.height > 0
       ? `${summary.width} / ${summary.height}`
       : '9 / 19.5';
 
+  // How many screens tall the capture is, when it covers more than one.
+  const screensTall =
+    summary?.content_height && summary.viewport_height && summary.viewport_height > 0
+      ? summary.content_height / summary.viewport_height
+      : null;
+
   return (
+    <div className="flex flex-col gap-2">
+      {screensTall !== null && screensTall > 1 && (
+        <p className="text-center text-xs text-text-muted">
+          Full-page capture — {screensTall.toFixed(1)}× screen height. Taps are placed against the
+          whole page, not the visible screen.
+        </p>
+      )}
+      {/* A 6-viewport page is far taller than any useful viewport, so the image scrolls inside a
+          bounded box rather than pushing the rest of the page off screen. */}
+      <div
+        className={cn(
+          'mx-auto w-full max-w-xs',
+          screensTall !== null && screensTall > 1 && 'max-h-[75vh] overflow-y-auto',
+        )}
+      >
     <ScreenImage
       projectId={projectId}
       screenName={screenName}
       alt={`Screenshot of ${screenName}`}
       cacheKey={summary?.latest_image_hash}
-      className="mx-auto w-full max-w-xs rounded-xl border border-border shadow-sm"
+      className="w-full rounded-xl border border-border shadow-sm"
       aspectRatio={aspectRatio}
     >
       <div className="pointer-events-none absolute inset-0" style={{ opacity }} aria-hidden={false}>
@@ -82,5 +106,7 @@ export function HeatmapCanvas({
         })}
       </div>
     </ScreenImage>
+      </div>
+    </div>
   );
 }

@@ -822,6 +822,14 @@ export interface ScreenSummary {
   latest_image_hash: string;
   /** App version of the newest capture. */
   latest_app_version: string;
+  /**
+   * Logical height of the page this screenshot covers, when the SDK stitched a screen taller than
+   * one viewport; null for a single-viewport capture. Together with `viewport_height` it says how
+   * many screens tall the image is — which is why the heatmap's rows span the whole page.
+   */
+  content_height: number | null;
+  /** Logical height of one viewport within that page; null for the same reason. */
+  viewport_height: number | null;
 }
 
 export interface ScreensResponse {

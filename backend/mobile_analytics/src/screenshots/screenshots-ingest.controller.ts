@@ -38,6 +38,9 @@ interface ScreenshotFields {
   app_version?: string;
   width?: string;
   height?: string;
+  /** Full-page captures only — see ScreenCapture.contentHeight. Absent on a single-viewport shot. */
+  content_height?: string;
+  viewport_height?: string;
   image_hash?: string;
 }
 
@@ -45,6 +48,17 @@ interface ScreenshotFields {
 function toNonNegativeInt(value: string | undefined): number {
   const n = Number.parseInt(value ?? '', 10);
   return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+/**
+ * Optional positive float field → `undefined` when absent OR unparseable. Deliberately NOT 0: these
+ * describe a full-page capture's geometry, and 0 would claim "a page of no height" rather than
+ * "this was a single-viewport capture", which is what the read path keys off.
+ */
+function toOptionalPositiveFloat(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
 /**
@@ -81,6 +95,8 @@ export class ScreenshotsIngestController {
       appVersion: (body.app_version ?? '').trim(),
       width: toNonNegativeInt(body.width),
       height: toNonNegativeInt(body.height),
+      contentHeight: toOptionalPositiveFloat(body.content_height),
+      viewportHeight: toOptionalPositiveFloat(body.viewport_height),
       imageHash: (body.image_hash ?? '').trim(),
       contentType: file.mimetype,
       image: file.buffer,

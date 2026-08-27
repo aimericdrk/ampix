@@ -14,8 +14,8 @@ function signIn() {
 
 const SCREENS: ScreensResponse = {
   screens: [
-    { screen_name: 'home', capture_count: 2, latest_captured_at: '2026-07-01T10:00:00Z', width: 390, height: 844, latest_image_hash: 'hash-home', latest_app_version: '1.0.0' },
-    { screen_name: 'checkout', capture_count: 1, latest_captured_at: '2026-07-01T10:10:00Z', width: 390, height: 844, latest_image_hash: 'hash-checkout', latest_app_version: '1.0.0' },
+    { screen_name: 'home', capture_count: 2, latest_captured_at: '2026-07-01T10:00:00Z', width: 390, height: 844, latest_image_hash: 'hash-home', latest_app_version: '1.0.0', content_height: null, viewport_height: null },
+    { screen_name: 'checkout', capture_count: 1, latest_captured_at: '2026-07-01T10:10:00Z', width: 390, height: 844, latest_image_hash: 'hash-checkout', latest_app_version: '1.0.0', content_height: null, viewport_height: null },
   ],
 };
 
@@ -142,6 +142,58 @@ describe('HeatmapPage — click heatmap viewer', () => {
     await userEvent.selectOptions(screen.getByLabelText('Screen'), 'checkout');
 
     expect(await screen.findByText(/more were tapped on this screen/)).toBeInTheDocument();
+  });
+
+  /**
+   * A stitched capture covers several viewports, so the picture is not "the screen" any more. The
+   * page says so, because a heatmap read as one screenful would be badly misinterpreted.
+   */
+  it('labels a full-page capture with how many screens tall it is', async () => {
+    const tall = {
+      screens: [
+        {
+          screen_name: 'feed',
+          capture_count: 1,
+          latest_captured_at: '2026-07-01T10:00:00Z',
+          width: 390,
+          height: 2110,
+          latest_image_hash: 'hash-feed',
+          latest_app_version: '1.0.0',
+          content_height: 2110,
+          viewport_height: 844,
+        },
+      ],
+    };
+    server.use(
+      http.get('/api/v1/projects/:projectId/screens', () => HttpResponse.json(tall)),
+      http.post('/api/v1/projects/:projectId/query/click-heatmap', () =>
+        HttpResponse.json({ ...HEATMAP, screen_name: 'feed' }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
+
+    await screen.findByRole('option', { name: 'feed' });
+    await userEvent.selectOptions(screen.getByLabelText('Screen'), 'feed');
+
+    expect(await screen.findByText(/Full-page capture/)).toHaveTextContent('2.5× screen height');
+  });
+
+  it('does not call a single-viewport capture a full-page one', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/screens', () => HttpResponse.json(SCREENS)),
+      http.post('/api/v1/projects/:projectId/query/click-heatmap', () =>
+        HttpResponse.json({ ...HEATMAP, screen_name: 'checkout' }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
+
+    await screen.findByRole('option', { name: 'checkout' });
+    await userEvent.selectOptions(screen.getByLabelText('Screen'), 'checkout');
+
+    await screen.findAllByTestId('heatmap-cell');
+    expect(screen.queryByText(/Full-page capture/)).not.toBeInTheDocument();
   });
 
   it('shows an empty state when the screen has no taps in range', async () => {

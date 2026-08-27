@@ -279,6 +279,16 @@ model ScreenCapture {
   contentType String   @map("content_type")
   width       Int
   height      Int
+  /// Logical height of the scrollable content this image covers, when the screen was taller than
+  /// one viewport and the SDK stitched it. NULL means a single-viewport capture — every row that
+  /// existed before full-page capture, and every screen that simply fits.
+  ///
+  /// The heatmap needs it to normalize a tap's `$content_y`: the image's own pixel height says how
+  /// tall the picture is, not how tall the page was.
+  contentHeight  Float?  @map("content_height")
+  /// Logical height of one viewport — how much of `contentHeight` was visible at a time. NULL for
+  /// the same reason.
+  viewportHeight Float?  @map("viewport_height")
   appVersion  String   @map("app_version")
   imageHash   String   @map("image_hash")
   capturedAt  DateTime @default(now()) @map("captured_at")
