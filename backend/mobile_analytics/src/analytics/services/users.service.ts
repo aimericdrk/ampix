@@ -402,13 +402,22 @@ export class UsersService {
   }
 }
 
+/**
+ * The nil uuid stored by writers that have no device session to report — RevenueCat webhooks, and
+ * anything else server-side. `events.session_id` is a UUID column, so "none" cannot be an empty
+ * string at rest; it becomes one here, because the timeline's rule is "empty means unknown" and a
+ * nil uuid treated as a real session id would fabricate a quit-and-reopen around every webhook.
+ */
+const NIL_SESSION_ID = '00000000-0000-0000-0000-000000000000';
+
 /** One ClickHouse row → one timeline event. Shared so both pages produce identical shapes. */
 function toRecentEvent(row: RecentEventRow): RecentEvent {
+  const sessionId = row.session_id ?? '';
   return {
     insert_id: row.insert_id,
     event: row.event,
     timestamp: fromChDateTime64(row.timestamp),
-    session_id: row.session_id ?? '',
+    session_id: sessionId === NIL_SESSION_ID ? '' : sessionId,
     screen_name: row.screen_name || null,
     properties: row.properties ?? {},
     context: {

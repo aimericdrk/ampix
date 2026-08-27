@@ -59,7 +59,13 @@ describe('toEventRow', () => {
     expect(row.distinct_id).toBe('distinct-1');
     expect(row.insert_id).toBe('evt-uuid-1');
     expect(row.anon_id).toBe('');
-    expect(row.session_id).toBe('');
+    // `events.session_id` is a UUID column: ClickHouse rejects '' with CANNOT_PARSE_UUID and
+    // fails the whole insert, so a webhook event (which has no device session) must still carry a
+    // parseable uuid. The read side maps the nil uuid back to "no session".
+    expect(row.session_id).toBe('00000000-0000-0000-0000-000000000000');
+    expect(row.session_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
     expect(row.properties).toMatchObject({
       $rc_event_type: 'INITIAL_PURCHASE',
       $price: 9.99,

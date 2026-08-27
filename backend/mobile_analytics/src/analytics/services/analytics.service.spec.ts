@@ -898,6 +898,22 @@ describe('AnalyticsService', () => {
       ).rejects.toMatchObject({ problem: { status: 400 } });
     });
 
+    /**
+     * Server-side writers (RevenueCat webhooks) have no device session, but `events.session_id` is
+     * a UUID column, so "none" is stored as the nil uuid. Surfacing that verbatim would make the
+     * timeline read every webhook as its own session and fabricate a quit-and-reopen around it.
+     */
+    it('reads the nil uuid back as "no session"', async () => {
+      const rows = fullPage(1);
+      rows[0]!.session_id = '00000000-0000-0000-0000-000000000000';
+      const clickhouse = makeClickhouse([[{ canonical_id: '' }], rows]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.getUserEvents(USER_ID, PROJECT_ID, DISTINCT_ID);
+
+      expect(result.events[0]!.session_id).toBe('');
+    });
+
     it('propagates a membership rejection without querying ClickHouse', async () => {
       const projects = makeProjects(() =>
         Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),

@@ -38,6 +38,14 @@ export function computeMrrCents(
   return Math.round((priceCents * 30) / cycleDays);
 }
 
+/**
+ * ClickHouse's `events.session_id` is a UUID column, and a webhook event has no device session to
+ * report. It must still be a PARSEABLE uuid: an empty string is rejected outright
+ * (CANNOT_PARSE_UUID) and takes the whole insert down with it, so the row is written with the nil
+ * uuid and read back as "no session" (see UsersService's toRecentEvent).
+ */
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
 export function toEventRow(
   projectId: string,
   distinctId: string,
@@ -64,7 +72,7 @@ export function toEventRow(
     event: name,
     distinct_id: distinctId,
     anon_id: '',
-    session_id: '',
+    session_id: NIL_UUID,
     timestamp: toChDateTime64(ev.event_timestamp_ms),
     server_timestamp: toChDateTime64(nowMs),
     properties,
