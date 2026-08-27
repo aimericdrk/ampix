@@ -112,6 +112,8 @@ MyAmpix.instance.people.deleteUser();
 
 These map 1:1 to `POST /ingest/profiles` operations (`set`/`set_once`/`increment`/`append`/`unset`/`delete`). The flat-properties rule from §4 applies to profile properties too. All calls are fire-and-forget and attributed to the current `distinct_id` at the time they run.
 
+> `deleteUser()` deletes the **profile**, not the account. The user's events, identity mappings and billing records stay. For account deletion, see §10 — it's a call your backend makes, not an SDK method.
+
 ## 7. Timed events
 
 ```dart

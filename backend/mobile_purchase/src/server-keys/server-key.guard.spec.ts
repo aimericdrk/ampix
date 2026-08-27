@@ -34,12 +34,15 @@ describe('ServerKeyGuard', () => {
     expect(findUnique).not.toHaveBeenCalled();
   });
 
-  // A public SDK key is `mp_pub_…`: it fails the format check, so presenting one here never even
-  // reaches the database — the two credentials cannot be used interchangeably by accident.
-  it('rejects a public SDK key without touching the database', async () => {
+  // A public SDK key is `mp_pub_…`: presenting one here never reaches the database — the two
+  // credentials cannot be used interchangeably by accident. It is also the predictable mistake (an
+  // app already holds that key), so the rejection names the credential to use instead.
+  it('rejects a public SDK key without touching the database, and says what to use', async () => {
     const { guard, findUnique } = makeGuard(null);
     const { ctx } = ctxFor({ authorization: `Bearer mp_pub_${'0'.repeat(32)}` });
-    await expect(guard.canActivate(ctx)).rejects.toMatchObject({ problem: { status: 401 } });
+    await expect(guard.canActivate(ctx)).rejects.toMatchObject({
+      problem: { status: 401, detail: expect.stringContaining('mp_srv_') },
+    });
     expect(findUnique).not.toHaveBeenCalled();
   });
 

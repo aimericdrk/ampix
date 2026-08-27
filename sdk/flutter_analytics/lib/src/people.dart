@@ -72,6 +72,14 @@ class People {
   void unset(List<String> propertyNames) =>
       _enqueue('unset', {for (final name in propertyNames) name: null});
 
+  /// Deletes this user's PROFILE only — the `set`/`increment`/… properties above.
+  ///
+  /// It is not account erasure: the user's events, identity mappings and billing
+  /// records are untouched, and it travels over the normal ingest path with the
+  /// client token like every other profile op. Full erasure is a server-to-server
+  /// call your backend makes (`DELETE /ingest/users/<distinct_id>` with a server
+  /// token that carries the erasure capability) — deliberately not reachable from
+  /// here, because a credential that ships inside an app can be extracted from it.
   void deleteUser() => _enqueue('delete', const {});
 
   void _enqueue(String op, Map<String, Object?> properties) {
