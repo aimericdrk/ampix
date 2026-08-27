@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthzModule } from '../authz/authz.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
-import { ErasureKeyGuard } from '../common/erasure-key.guard';
+import { ServerKeysModule } from '../server-keys/server-keys.module';
 import { PromotionalEntitlementsController } from './controllers/promotional-entitlements.controller';
 import { CustomerDeletionController } from './controllers/customer-deletion.controller';
 import { SubscriberDeletionController } from './controllers/subscriber-deletion.controller';
@@ -21,15 +21,16 @@ import { RefundService } from './services/refund.service';
  * reuses — D1 design §1.4: no second, divergent store client).
  */
 @Module({
-  // CatalogModule is imported for its exported PublicApiKeyGuard — the SDK-key auth the
-  // subscriber-erasure route shares with /v1/offerings and /v1/subscribers reads.
-  imports: [AuthzModule, WebhooksModule, CatalogModule],
+  // ServerKeysModule is imported for its exported ServerKeyGuard + ErasureCapabilityGuard — the
+  // backend-only credential the subscriber-erasure route authenticates with, deliberately NOT the
+  // public SDK key /v1/offerings and /v1/subscribers reads use (that one ships inside the app).
+  imports: [AuthzModule, WebhooksModule, CatalogModule, ServerKeysModule],
   controllers: [
     PromotionalEntitlementsController,
     CustomerDeletionController,
     SubscriberDeletionController,
     RefundController,
   ],
-  providers: [PromotionalEntitlementsService, CustomerDeletionService, RefundService, ErasureKeyGuard],
+  providers: [PromotionalEntitlementsService, CustomerDeletionService, RefundService],
 })
 export class CustomerWritesModule {}

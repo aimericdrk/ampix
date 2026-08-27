@@ -117,7 +117,7 @@ describe('ProjectDetailPage', () => {
     expect(await screen.findByText('mam_rotatednewtoken000000000000000')).toBeInTheDocument();
     // Created a replacement with the SAME label and source, then revoked the OLD token.
     await waitFor(() => expect(revokedIds).toContain('token-1'));
-    expect(createdBodies).toEqual([{ label: 'Default', source: 'client' }]);
+    expect(createdBodies).toEqual([{ label: 'Default', source: 'client', can_erase: false }]);
     expect(await screen.findByText('Token rotated')).toBeInTheDocument();
   });
 
@@ -162,7 +162,103 @@ describe('ProjectDetailPage', () => {
     await userEvent.type(await screen.findByLabelText('Label (optional)'), 'iOS app');
     await userEvent.click(screen.getByRole('button', { name: 'New token' }));
 
-    await waitFor(() => expect(createdBodies).toEqual([{ label: 'iOS app', source: 'client' }]));
+    await waitFor(() =>
+      expect(createdBodies).toEqual([{ label: 'iOS app', source: 'client', can_erase: false }]),
+    );
+  });
+
+  // The erasure capability is the reason the old global ERASURE_API_KEY is gone: it is granted per
+  // token, from this page, so no shared secret has to be handed to another project's members.
+  it('offers the erasure capability only for a server token', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+    await screen.findByLabelText('Label (optional)');
+
+    expect(screen.queryByText('Allow erasing end-user data')).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'server');
+    expect(screen.getByText('Allow erasing end-user data')).toBeInTheDocument();
+
+    // Switching back hides it again — the API rejects can_erase on a client token, so the form
+    // must never be able to submit that pair.
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'client');
+    expect(screen.queryByText('Allow erasing end-user data')).not.toBeInTheDocument();
+  });
+
+  it('creates a server token with the erasure capability and marks it in the list', async () => {
+    const createdBodies: Array<{ label?: string; source?: string; can_erase?: boolean }> = [];
+    server.use(
+      http.post('/api/v1/projects/:projectId/tokens', async ({ request }) => {
+        const body = (await request.json()) as {
+          label?: string;
+          source?: string;
+          can_erase?: boolean;
+        };
+        createdBodies.push(body);
+        return HttpResponse.json(
+          {
+            id: 'erase-token-id',
+            token: 'mam_erasetoken0000000000000000000',
+            label: 'account deletion',
+            source: 'server',
+            can_erase: true,
+          },
+          { status: 201 },
+        );
+      }),
+      http.get('/api/v1/projects/:projectId/tokens', () =>
+        HttpResponse.json({
+          tokens: [
+            {
+              id: 'erase-token-id',
+              token: 'mam_erasetoken0000000000000000000',
+              label: 'account deletion',
+              source: 'server',
+              can_erase: true,
+              created_at: new Date().toISOString(),
+            },
+          ],
+        }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    await userEvent.type(await screen.findByLabelText('Label (optional)'), 'account deletion');
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'server');
+    await userEvent.click(screen.getByRole('checkbox', { name: /Allow erasing end-user data/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New token' }));
+
+    await waitFor(() =>
+      expect(createdBodies).toEqual([
+        { label: 'account deletion', source: 'server', can_erase: true },
+      ]),
+    );
+    const tokensTable = await screen.findByRole('table', { name: 'Ingest tokens' });
+    const row = await within(tokensTable).findByRole('row', { name: /account deletion/ });
+    expect(row).toHaveTextContent('Erase');
+  });
+
+  it('mints a purchase server key with the erasure capability', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    expect(await screen.findByText('No server keys.')).toBeInTheDocument();
+
+    await userEvent.type(
+      await screen.findByLabelText('Key label (optional)'),
+      'account deletion job',
+    );
+    await userEvent.click(screen.getByRole('checkbox', { name: /Allow erasing subscriber data/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New server key' }));
+
+    const keysTable = await screen.findByRole('table', { name: 'Server keys' });
+    const row = await within(keysTable).findByRole('row', { name: /account deletion job/ });
+    expect(row).toHaveTextContent('Erase');
+    expect(row).toHaveTextContent(/^.*mp_srv_/);
   });
 
   it('deletes selected data scopes only after a scope is picked and the name is typed', async () => {

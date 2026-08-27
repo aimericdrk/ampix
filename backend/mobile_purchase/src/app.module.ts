@@ -13,6 +13,7 @@ import { SubscribersModule } from './subscribers/subscribers.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { ServerKeysModule } from './server-keys/server-keys.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 
 @Module({
@@ -53,6 +54,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
     WebhooksModule,
     ReceiptsModule,
     MetricsModule,
+    ServerKeysModule,
     SchedulerModule,
   ],
 })

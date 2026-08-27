@@ -24,14 +24,17 @@ import { Separator } from '../../../components/ui/separator';
 import { useToast } from '../../../components/ui/toast';
 import { cn } from '../../../lib/cn';
 import { ApiError } from '../../../lib/api/problem';
-import type { EventSource, SdkToken } from '../../../lib/api/types';
+import type { EventSource, PurchaseServerKey, SdkToken } from '../../../lib/api/types';
 import {
+  useCreatePurchaseServerKey,
   useCreateToken,
   useDeleteProject,
   usePurgeProjectData,
   useEventSummary,
   useProjectRole,
   useProjects,
+  usePurchaseServerKeys,
+  useRevokePurchaseServerKey,
   useRevokeToken,
   useTokens,
   useUpdateProject,
@@ -95,18 +98,24 @@ export function ProjectDetailPage() {
           </Reveal>
         )}
 
-        <Reveal index={4} className="lg:col-span-2">
+        {project && isAdmin && (
+          <Reveal index={4} className="lg:col-span-2">
+            <ServerKeysSection projectId={project.id} />
+          </Reveal>
+        )}
+
+        <Reveal index={5} className="lg:col-span-2">
           <DataSection projectId={projectId} project={project} />
         </Reveal>
 
         {project && isAdmin && (
-          <Reveal index={5} className="lg:col-span-2">
+          <Reveal index={6} className="lg:col-span-2">
             <IntegrationsSection projectId={project.id} />
           </Reveal>
         )}
 
         {project && isOwner && (
-          <Reveal index={6} className="lg:col-span-2">
+          <Reveal index={7} className="lg:col-span-2">
             <DangerZoneSection
               projectId={project.id}
               projectName={project.name}
@@ -297,6 +306,9 @@ function ManagedTokens({ projectId }: { projectId: string }) {
   const { toast } = useToast();
   const [label, setLabel] = useState('');
   const [source, setSource] = useState<EventSource>('client');
+  // Erasure rights. Kept out of the request unless the token is a server one — the API refuses the
+  // pair, and a checkbox that survived a switch back to Client would submit a guaranteed 400.
+  const [canErase, setCanErase] = useState(false);
   const [newToken, setNewToken] = useState<string | null>(null);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
   const [pendingRotate, setPendingRotate] = useState<SdkToken | null>(null);
@@ -304,12 +316,13 @@ function ManagedTokens({ projectId }: { projectId: string }) {
   const handleCreate = (event: FormEvent) => {
     event.preventDefault();
     createToken.mutate(
-      { label: label.trim() || undefined, source },
+      { label: label.trim() || undefined, source, can_erase: source === 'server' && canErase },
       {
         onSuccess: (token) => {
           setNewToken(token.token);
           setLabel('');
           setSource('client');
+          setCanErase(false);
         },
         onError: (error) =>
           toast({
@@ -335,13 +348,15 @@ function ManagedTokens({ projectId }: { projectId: string }) {
     });
   };
 
-  // Rotate = create a replacement with the SAME label AND source, reveal it once, THEN revoke the
-  // old token — create-first so there is never a window without a working token (no dedicated
-  // rotate endpoint). Carrying the source over matters: a rotated server token that came back as a
-  // client one would silently reclassify everything that backend sends from then on.
+  // Rotate = create a replacement with the SAME label, source AND capability, reveal it once, THEN
+  // revoke the old token — create-first so there is never a window without a working token (no
+  // dedicated rotate endpoint). Carrying the source over matters: a rotated server token that came
+  // back as a client one would silently reclassify everything that backend sends from then on.
+  // Carrying can_erase matters for the same reason in the other direction — rotating the token a
+  // backend deletes users with must not quietly leave it unable to.
   const handleRotate = (token: SdkToken) => {
     createToken.mutate(
-      { label: token.label || undefined, source: token.source },
+      { label: token.label || undefined, source: token.source, can_erase: token.can_erase },
       {
         onSuccess: (created) => {
           setNewToken(created.token);
@@ -380,7 +395,16 @@ function ManagedTokens({ projectId }: { projectId: string }) {
     {
       key: 'source',
       header: 'Source',
-      render: (token) => <SourceBadge source={token.source} />,
+      render: (token) => (
+        <div className="flex flex-wrap items-center gap-1">
+          <SourceBadge source={token.source} />
+          {token.can_erase && (
+            <Badge variant="danger" title="May erase end-user data">
+              Erase
+            </Badge>
+          )}
+        </div>
+      ),
     },
     {
       key: 'token',
@@ -448,10 +472,31 @@ function ManagedTokens({ projectId }: { projectId: string }) {
           {createToken.isPending ? 'Creating…' : 'New token'}
         </Button>
       </form>
+      {source === 'server' && (
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            checked={canErase}
+            onCheckedChange={(checked) => setCanErase(checked === true)}
+            aria-describedby="token-can-erase-help"
+          />
+          <span>
+            <span className="font-medium">Allow erasing end-user data</span>
+            <span id="token-can-erase-help" className="block text-text-muted">
+              Lets this token call{' '}
+              <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-xs">
+                DELETE /ingest/users/:distinct_id
+              </code>{' '}
+              for this project. Leave it off for a backend that only sends events.
+            </span>
+          </span>
+        </label>
+      )}
       <p className="text-sm text-text-muted">
         Events arrive tagged with the token&apos;s source — filter or break down any report by{' '}
         <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-xs">source</code>. It
-        is fixed once the token exists: to change it, create a new token and revoke this one.
+        is fixed once the token exists: to change it, create a new token and revoke this one. Only a
+        server token can be allowed to erase data: a client token ships inside your app, where
+        anyone can read it out.
       </p>
 
       {newToken && (
@@ -528,6 +573,193 @@ function ManagedTokens({ projectId }: { projectId: string }) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// --- 2b) Purchase server keys -------------------------------------------------
+
+/**
+ * Server keys for the purchase service — the credential a project's own backend uses to call
+ * `DELETE /v1/subscribers/:app_user_id`. It is deliberately NOT the public SDK key the app ships
+ * with, and deliberately NOT the analytics SDK token above: the two services keep separate
+ * databases and each verifies its own callers, so neither has to trust the other (or a shared
+ * secret) to authorize a delete. Admin-only, like the analytics token list.
+ */
+function ServerKeysSection({ projectId }: { projectId: string }) {
+  const { data, isPending, error } = usePurchaseServerKeys(projectId);
+  const createKey = useCreatePurchaseServerKey(projectId);
+  const revokeKey = useRevokePurchaseServerKey(projectId);
+  const { toast } = useToast();
+  const [label, setLabel] = useState('');
+  const [canErase, setCanErase] = useState(false);
+  const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
+
+  const handleCreate = (event: FormEvent) => {
+    event.preventDefault();
+    createKey.mutate(
+      { label: label.trim() || undefined, can_erase: canErase },
+      {
+        onSuccess: () => {
+          setLabel('');
+          setCanErase(false);
+        },
+        onError: (error) =>
+          toast({
+            title: 'Could not create server key',
+            description: error instanceof ApiError ? error.problem.title : 'Something went wrong.',
+            variant: 'error',
+          }),
+      },
+    );
+  };
+
+  const handleRevoke = (keyId: string) => {
+    revokeKey.mutate(keyId, {
+      onSuccess: () => setPendingRevokeId(null),
+      onError: (error) => {
+        setPendingRevokeId(null);
+        toast({
+          title: 'Could not revoke server key',
+          description: error instanceof ApiError ? error.problem.title : 'Something went wrong.',
+          variant: 'error',
+        });
+      },
+    });
+  };
+
+  const columns: Array<DataTableColumn<PurchaseServerKey>> = [
+    { key: 'label', header: 'Label' },
+    {
+      key: 'can_erase',
+      header: 'Rights',
+      render: (key) =>
+        key.can_erase ? (
+          <Badge variant="danger" title="May erase subscriber data">
+            Erase
+          </Badge>
+        ) : (
+          <Badge variant="default">Read only</Badge>
+        ),
+    },
+    {
+      key: 'key',
+      header: 'Key',
+      render: (key) => (
+        <div className="flex items-center gap-2">
+          <code className="break-all rounded-lg bg-surface-raised px-2 py-1 font-mono text-xs">
+            {key.key}
+          </code>
+          <CopyIconButton value={key.key} label="server key" />
+        </div>
+      ),
+    },
+    {
+      key: 'created_at',
+      header: 'Created',
+      sortable: true,
+      render: (key) => (
+        <span className="whitespace-nowrap text-text-muted">{formatDate(key.created_at)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (key) => (
+        <Button variant="danger" size="sm" onClick={() => setPendingRevokeId(key.id)}>
+          Revoke
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Server keys (purchases)</CardTitle>
+        <CardDescription>
+          Keys your own backend uses to call the purchase API. Keep them on your server — never ship
+          one in an app.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[12rem] flex-1">
+            <Label htmlFor="server-key-label" className="mb-1 block">
+              Key label (optional)
+            </Label>
+            <Input
+              id="server-key-label"
+              value={label}
+              placeholder="e.g. account deletion job"
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </div>
+          <Button type="submit" disabled={createKey.isPending}>
+            {createKey.isPending ? 'Creating…' : 'New server key'}
+          </Button>
+        </form>
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            checked={canErase}
+            onCheckedChange={(checked) => setCanErase(checked === true)}
+            aria-describedby="server-key-can-erase-help"
+          />
+          <span>
+            <span className="font-medium">Allow erasing subscriber data</span>
+            <span id="server-key-can-erase-help" className="block text-text-muted">
+              Lets this key call{' '}
+              <code className="rounded bg-surface-raised px-1 py-0.5 font-mono text-xs">
+                DELETE /v1/subscribers/:app_user_id
+              </code>{' '}
+              for this project. Leave it off for a backend that only reads.
+            </span>
+          </span>
+        </label>
+
+        {isPending && <p className="text-sm text-text-muted">Loading server keys…</p>}
+        {error && (
+          <p role="alert" className="text-danger">
+            {error instanceof ApiError ? error.problem.title : 'Failed to load server keys'}
+          </p>
+        )}
+
+        {data && data.length > 0 && (
+          <DataTable
+            caption="Server keys"
+            columns={columns}
+            rows={data}
+            rowKey={(key) => key.id}
+          />
+        )}
+        {data && data.length === 0 && <EmptyState title="No server keys." />}
+
+        <Dialog
+          open={pendingRevokeId !== null}
+          onOpenChange={(open) => !open && setPendingRevokeId(null)}
+        >
+          <DialogContent>
+            <DialogTitle>Revoke server key</DialogTitle>
+            <DialogDescription>
+              Any backend using this key will immediately stop being able to call the purchase API.
+              This cannot be undone.
+            </DialogDescription>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setPendingRevokeId(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={revokeKey.isPending}
+                onClick={() => pendingRevokeId && handleRevoke(pendingRevokeId)}
+              >
+                {revokeKey.isPending ? 'Revoking…' : 'Revoke'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }
 

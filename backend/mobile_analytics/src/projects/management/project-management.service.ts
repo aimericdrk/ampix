@@ -157,6 +157,7 @@ export class ProjectManagementService {
       token: token.token,
       label: token.label,
       source: token.source,
+      can_erase: token.canErase,
       created_at: token.createdAt.toISOString(),
     }));
   }
@@ -165,16 +166,41 @@ export class ProjectManagementService {
    * `source` is write-once: there is no update path for it, and rotation (dashboard-side) creates a
    * replacement carrying the same value. Changing it on a live token would silently re-classify
    * every event ingested after the change while leaving the earlier ones under the old label.
+   *
+   * `canErase` is write-once for the same reason and refused outright on a `client` token — the
+   * request schema rejects that pair first, and this is the second, independent check, so no
+   * future caller of this service can grant a client token delete rights by passing the flag.
+   * The DB's `sdk_tokens_can_erase_server_only` CHECK is the third.
    */
   async createToken(
     projectId: string,
     label?: string,
     source: EventSource = DEFAULT_EVENT_SOURCE,
+    canErase = false,
   ): Promise<CreatedToken> {
+    if (canErase && source !== 'server') {
+      throw new ProblemException({
+        status: 400,
+        title: 'Bad Request',
+        detail: 'can_erase requires source "server"',
+      });
+    }
     const token = await this.prisma.sdkToken.create({
-      data: { projectId, token: generateSdkToken(), label: label ?? DEFAULT_TOKEN_LABEL, source },
+      data: {
+        projectId,
+        token: generateSdkToken(),
+        label: label ?? DEFAULT_TOKEN_LABEL,
+        source,
+        canErase,
+      },
     });
-    return { id: token.id, token: token.token, label: token.label, source: token.source };
+    return {
+      id: token.id,
+      token: token.token,
+      label: token.label,
+      source: token.source,
+      can_erase: token.canErase,
+    };
   }
 
   /**

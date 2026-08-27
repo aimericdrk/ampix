@@ -115,6 +115,28 @@ model App {
   @@map("apps")
 }
 
+/// Backend-only credential for a project, minted from the dashboard's project settings.
+/// Unlike `App.publicSdkKey` — which ships inside the app and is extractable — a server key never
+/// leaves the customer's own infrastructure, which is what makes it the only credential allowed to
+/// carry `canErase`. Mirrors the analytics service's server SDK tokens: same idea, same UI, each
+/// service holding (and verifying) its own key locally, so erasure never depends on a cross-service
+/// call and no shared secret has to be handed to another project's members.
+model ServerKey {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  projectId String    @map("project_id") @db.Uuid
+  label     String
+  /// Format: `mp_srv_<32 hex>`. Unique across projects — it IS the project scope of a request.
+  key       String    @unique
+  /// Grants DELETE /v1/subscribers/:appUserId. Off unless asked for; write-once (rotation mints a
+  /// replacement) so a live credential never silently gains delete rights.
+  canErase  Boolean   @default(false) @map("can_erase")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("server_keys")
+}
+
 model Product {
   id                  String               @id @default(uuid(7)) @db.Uuid
   projectId           String               @map("project_id") @db.Uuid

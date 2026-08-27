@@ -315,6 +315,8 @@ export interface SdkToken {
   token: string;
   label: string;
   source: EventSource;
+  /** Whether this token may erase end-user data. Only ever true on a `server` token. */
+  can_erase: boolean;
   created_at: string;
 }
 
@@ -326,6 +328,8 @@ export interface CreateTokenRequest {
   label?: string;
   /** Omitted means `client`, matching the server-side default. */
   source?: EventSource;
+  /** Erasure rights. Rejected with 400 unless `source` is `server` — see the ingest guards. */
+  can_erase?: boolean;
 }
 
 /** `POST /projects/:projectId/tokens` response — the new token, shown once. */
@@ -334,6 +338,29 @@ export interface CreatedToken {
   token: string;
   label: string;
   source: EventSource;
+  can_erase: boolean;
+}
+
+// --- Purchase-service server keys (the mobile_purchase mirror of a server SDK token) ---
+
+/**
+ * A project's backend credential on the purchase service. Separate from the analytics SDK token
+ * because the two services hold separate databases and verify their own callers — one project,
+ * one settings page, but two credentials, so neither service depends on the other to authorize a
+ * delete. `key` is listable rather than shown once: it lives in the project's own settings, behind
+ * the same admin-only gate that can mint a replacement anyway.
+ */
+export interface PurchaseServerKey {
+  id: string;
+  key: string;
+  label: string;
+  can_erase: boolean;
+  created_at: string;
+}
+
+export interface CreateServerKeyRequest {
+  label?: string;
+  can_erase?: boolean;
 }
 
 // --- Account (self) management (contracts §13) ---

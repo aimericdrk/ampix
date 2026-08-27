@@ -17,6 +17,7 @@ interface FakeSdkToken {
   token: string;
   label: string;
   source: 'client' | 'server';
+  canErase: boolean;
   revokedAt: Date | null;
   createdAt: Date;
 }
@@ -63,10 +64,17 @@ class FakePrisma {
     create: async ({
       data,
     }: {
-      data: { projectId: string; token: string; label: string; source: 'client' | 'server' };
+      data: {
+        projectId: string;
+        token: string;
+        label: string;
+        source: 'client' | 'server';
+        canErase?: boolean;
+      };
     }) => {
       const row: FakeSdkToken = {
         id: `sdk-${this.nextTokenId++}`,
+        canErase: false,
         revokedAt: null,
         createdAt: new Date(),
         ...data,
@@ -238,6 +246,7 @@ describe('ProjectManagementService', () => {
           token: 'mam_a',
           label: 'default',
           source: 'client',
+          canErase: false,
           revokedAt: null,
           createdAt: new Date(),
         },
@@ -247,6 +256,7 @@ describe('ProjectManagementService', () => {
           token: 'mam_b',
           label: 'old',
           source: 'client',
+          canErase: false,
           revokedAt: new Date(),
           createdAt: new Date(),
         },
@@ -267,6 +277,7 @@ describe('ProjectManagementService', () => {
           token: 'mam_a',
           label: 'mobile',
           source: 'client',
+          canErase: false,
           revokedAt: null,
           createdAt: new Date(),
         },
@@ -276,6 +287,7 @@ describe('ProjectManagementService', () => {
           token: 'mam_b',
           label: 'billing worker',
           source: 'server',
+          canErase: false,
           revokedAt: null,
           createdAt: new Date(),
         },
@@ -321,6 +333,33 @@ describe('ProjectManagementService', () => {
       expect(created.source).toBe('server');
       expect(prisma.sdkTokens.at(-1)?.source).toBe('server');
     });
+
+    it('withholds the erase capability unless it is asked for', async () => {
+      const prisma = new FakePrisma();
+      const { service } = makeService(prisma);
+      const created = await service.createToken('p1', 'billing worker', 'server');
+      expect(created.can_erase).toBe(false);
+      expect(prisma.sdkTokens.at(-1)?.canErase).toBe(false);
+    });
+
+    it('persists the erase capability on a server token', async () => {
+      const prisma = new FakePrisma();
+      const { service } = makeService(prisma);
+      const created = await service.createToken('p1', 'account deletion', 'server', true);
+      expect(created.can_erase).toBe(true);
+      expect(prisma.sdkTokens.at(-1)?.canErase).toBe(true);
+    });
+
+    // Independent of the request schema's refine: no caller of this service, now or later, can
+    // hand delete rights to a token that ships inside the app.
+    it('refuses the erase capability on a client token and writes nothing', async () => {
+      const prisma = new FakePrisma();
+      const { service } = makeService(prisma);
+      await expect(service.createToken('p1', 'mobile', 'client', true)).rejects.toMatchObject({
+        problem: { status: 400 },
+      });
+      expect(prisma.sdkTokens).toHaveLength(0);
+    });
   });
 
   describe('revokeToken', () => {
@@ -335,6 +374,7 @@ describe('ProjectManagementService', () => {
         token: 'mam_abc',
         label: 'default',
         source: 'client',
+        canErase: false,
         revokedAt: null,
         createdAt: new Date(),
       });
@@ -362,6 +402,7 @@ describe('ProjectManagementService', () => {
         token: 'mam_abc',
         label: 'default',
         source: 'client',
+        canErase: false,
         revokedAt: null,
         createdAt: new Date(),
       });
@@ -383,6 +424,7 @@ describe('ProjectManagementService', () => {
         token: 'mam_abc',
         label: 'default',
         source: 'client',
+        canErase: false,
         revokedAt: null,
         createdAt: new Date(),
       });
@@ -401,6 +443,7 @@ describe('ProjectManagementService', () => {
         token: 'mam_abc',
         label: 'default',
         source: 'client',
+        canErase: false,
         revokedAt: new Date(),
         createdAt: new Date(),
       });
@@ -418,6 +461,7 @@ describe('ProjectManagementService', () => {
         token: 'mam_abc',
         label: 'default',
         source: 'client',
+        canErase: false,
         revokedAt: null,
         createdAt: new Date(),
       });

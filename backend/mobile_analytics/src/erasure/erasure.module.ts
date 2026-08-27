@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { IngestModule } from '../ingestion/ingest.module';
 import { ErasureController } from './erasure.controller';
-import { ErasureKeyGuard } from './erasure-key.guard';
+import { ErasureCapabilityGuard } from './erasure-capability.guard';
 import { ErasureService } from './erasure.service';
 
 /**
@@ -13,6 +13,6 @@ import { ErasureService } from './erasure.service';
 @Module({
   imports: [IngestModule],
   controllers: [ErasureController],
-  providers: [ErasureService, ErasureKeyGuard],
+  providers: [ErasureService, ErasureCapabilityGuard],
 })
 export class ErasureModule {}

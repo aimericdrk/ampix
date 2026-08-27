@@ -23,7 +23,12 @@ class FakeRedis {
 
 function makeGuard(opts: {
   cached?: string;
-  dbRow?: { projectId: string; revokedAt: Date | null; source?: 'client' | 'server' } | null;
+  dbRow?: {
+    projectId: string;
+    revokedAt: Date | null;
+    source?: 'client' | 'server';
+    canErase?: boolean;
+  } | null;
   redisGetError?: Error;
   redisSetError?: Error;
 }) {
@@ -65,11 +70,16 @@ describe('SdkTokenGuard', () => {
 
   it('serves a cached valid token without a postgres lookup', async () => {
     const { guard, findUnique } = makeGuard({
-      cached: JSON.stringify({ projectId: PROJECT_ID, source: 'client' }),
+      cached: JSON.stringify({ projectId: PROJECT_ID, source: 'client', canErase: false }),
     });
     const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(req.ingestAuth).toEqual({ projectId: PROJECT_ID, token: TOKEN, source: 'client' });
+    expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'client',
+      canErase: false,
+    });
     expect(findUnique).not.toHaveBeenCalled();
   });
 
@@ -89,9 +99,14 @@ describe('SdkTokenGuard', () => {
     const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(findUnique).toHaveBeenCalledWith({ where: { token: TOKEN } });
-    expect(req.ingestAuth).toEqual({ projectId: PROJECT_ID, token: TOKEN, source: 'client' });
+    expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'client',
+      canErase: false,
+    });
     expect(redis.store.get(sdkTokenCacheKey(TOKEN))).toBe(
-      JSON.stringify({ projectId: PROJECT_ID, source: 'client' }),
+      JSON.stringify({ projectId: PROJECT_ID, source: 'client', canErase: false }),
     );
     expect(redis.ttls.get(sdkTokenCacheKey(TOKEN))).toBe(60);
   });
@@ -101,7 +116,7 @@ describe('SdkTokenGuard', () => {
     const { ctx } = ctxFor({ authorization: `Bearer ${TOKEN}` });
     await expect(guard.canActivate(ctx)).rejects.toThrow(ProblemException);
     expect(redis.store.get(sdkTokenCacheKey(TOKEN))).toBe(
-      JSON.stringify({ projectId: null, source: 'client' }),
+      JSON.stringify({ projectId: null, source: 'client', canErase: false }),
     );
   });
 
@@ -110,7 +125,7 @@ describe('SdkTokenGuard', () => {
     const { ctx } = ctxFor({ authorization: `Bearer ${TOKEN}` });
     await expect(guard.canActivate(ctx)).rejects.toThrow(ProblemException);
     expect(redis.store.get(sdkTokenCacheKey(TOKEN))).toBe(
-      JSON.stringify({ projectId: null, source: 'client' }),
+      JSON.stringify({ projectId: null, source: 'client', canErase: false }),
     );
   });
 
@@ -120,17 +135,46 @@ describe('SdkTokenGuard', () => {
     });
     const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(req.ingestAuth).toEqual({ projectId: PROJECT_ID, token: TOKEN, source: 'server' });
+    expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'server',
+      canErase: false,
+    });
     expect(redis.store.get(sdkTokenCacheKey(TOKEN))).toBe(
-      JSON.stringify({ projectId: PROJECT_ID, source: 'server' }),
+      JSON.stringify({ projectId: PROJECT_ID, source: 'server', canErase: false }),
     );
   });
 
+  it('carries the erase capability through to the ingest context and the cache', async () => {
+    const { guard, redis } = makeGuard({
+      dbRow: { projectId: PROJECT_ID, revokedAt: null, source: 'server', canErase: true },
+    });
+    const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'server',
+      canErase: true,
+    });
+    expect(redis.store.get(sdkTokenCacheKey(TOKEN))).toBe(
+      JSON.stringify({ projectId: PROJECT_ID, source: 'server', canErase: true }),
+    );
+  });
+
+  // A v2 entry can't be read under the v3 key space, but if one ever were, the capability must
+  // default to *off*: an absent field is never a grant.
   it('falls back to client for a cache entry written before source existed', async () => {
     const { guard, findUnique } = makeGuard({ cached: JSON.stringify({ projectId: PROJECT_ID }) });
     const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(req.ingestAuth).toEqual({ projectId: PROJECT_ID, token: TOKEN, source: 'client' });
+    expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'client',
+      canErase: false,
+    });
     expect(findUnique).not.toHaveBeenCalled();
   });
 
@@ -153,7 +197,12 @@ describe('SdkTokenGuard', () => {
       const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
       expect(findUnique).toHaveBeenCalledWith({ where: { token: TOKEN } });
-      expect(req.ingestAuth).toEqual({ projectId: PROJECT_ID, token: TOKEN, source: 'client' });
+      expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'client',
+      canErase: false,
+    });
       expect(warnSpy).toHaveBeenCalled();
     });
 
@@ -165,7 +214,12 @@ describe('SdkTokenGuard', () => {
       const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
       expect(findUnique).toHaveBeenCalledWith({ where: { token: TOKEN } });
-      expect(req.ingestAuth).toEqual({ projectId: PROJECT_ID, token: TOKEN, source: 'client' });
+      expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'client',
+      canErase: false,
+    });
       expect(warnSpy).toHaveBeenCalled();
     });
 
@@ -177,9 +231,14 @@ describe('SdkTokenGuard', () => {
       const { ctx, req } = ctxFor({ authorization: `Bearer ${TOKEN}` });
       await expect(guard.canActivate(ctx)).resolves.toBe(true);
       expect(findUnique).toHaveBeenCalledWith({ where: { token: TOKEN } });
-      expect(req.ingestAuth).toEqual({ projectId: PROJECT_ID, token: TOKEN, source: 'client' });
+      expect(req.ingestAuth).toEqual({
+      projectId: PROJECT_ID,
+      token: TOKEN,
+      source: 'client',
+      canErase: false,
+    });
       expect(redis.store.get(sdkTokenCacheKey(TOKEN))).toBe(
-        JSON.stringify({ projectId: PROJECT_ID, source: 'client' }),
+        JSON.stringify({ projectId: PROJECT_ID, source: 'client', canErase: false }),
       );
       expect(warnSpy).toHaveBeenCalled();
     });

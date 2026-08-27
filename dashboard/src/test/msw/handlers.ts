@@ -852,12 +852,23 @@ interface ProjectMembershipRecord {
   role: ProjectRole;
 }
 
+interface ServerKeyRecord {
+  id: string;
+  projectId: string;
+  key: string;
+  label: string;
+  canErase: boolean;
+  createdAt: string;
+  revoked: boolean;
+}
+
 interface TokenRecord {
   id: string;
   projectId: string;
   token: string;
   label: string;
   source: EventSource;
+  canErase: boolean;
   createdAt: string;
   revoked: boolean;
 }
@@ -905,10 +916,13 @@ function initialOrgsState() {
         token: TEST_PROJECT.ingest_token,
         label: 'Default',
         source: 'client' as EventSource,
+        canErase: false,
         createdAt: futureIso(-30),
         revoked: false,
       },
     ] as TokenRecord[],
+    /** Empty by default: a project starts with no backend credential on the purchase service. */
+    serverKeys: [] as ServerKeyRecord[],
     /**
      * TEST_USER owns TEST_PROJECT; MFA_USER is a project admin. THIRD_ORG_USER is deliberately left
      * off — an org member not yet on the project, for the add-member picker.
@@ -932,6 +946,7 @@ export function resetOrgsState(): void {
   orgsState.invitations = fresh.invitations;
   orgsState.projects = fresh.projects;
   orgsState.tokens = fresh.tokens;
+  orgsState.serverKeys = fresh.serverKeys;
   orgsState.projectMemberships = fresh.projectMemberships;
   orgsState.userNames = fresh.userNames;
   orgsState.nextId = fresh.nextId;
@@ -1722,6 +1737,7 @@ export const handlers = [
       token: generateToken(),
       label: 'Default',
       source: 'client',
+      canErase: false,
       createdAt: new Date().toISOString(),
       revoked: false,
     };
@@ -1898,6 +1914,7 @@ export const handlers = [
           token: t.token,
           label: t.label,
           source: t.source,
+          can_erase: t.canErase,
           created_at: t.createdAt,
         })),
     };
@@ -1913,9 +1930,17 @@ export const handlers = [
     const callerRole = roleFor(record.orgId, caller.id);
     if (!callerRole) return problem(403, 'Not a member of this organization');
     if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create tokens');
-    const body = (await request.json()) as { label?: string; source?: EventSource };
+    const body = (await request.json()) as {
+      label?: string;
+      source?: EventSource;
+      can_erase?: boolean;
+    };
     if (body.source !== undefined && body.source !== 'client' && body.source !== 'server') {
       return problem(400, 'source must be client or server');
+    }
+    // Mirrors the API's refine: erasure rights are only ever grantable to a server token.
+    if (body.can_erase === true && body.source !== 'server') {
+      return problem(400, 'can_erase requires source "server"');
     }
     const token: TokenRecord = {
       id: nextId('token'),
@@ -1923,6 +1948,7 @@ export const handlers = [
       token: generateToken(),
       label: body.label?.trim() || 'Untitled',
       source: body.source ?? 'client',
+      canErase: body.can_erase === true,
       createdAt: new Date().toISOString(),
       revoked: false,
     };
@@ -1932,6 +1958,7 @@ export const handlers = [
       token: token.token,
       label: token.label,
       source: token.source,
+      can_erase: token.canErase,
     };
     return HttpResponse.json(response, { status: 201 });
   }),
@@ -2266,6 +2293,82 @@ export const handlers = [
       count,
       sample: ['user-001', 'user-002'],
     } satisfies CohortPreviewResponse);
+  }),
+
+  // --- Purchase-service server keys ---
+  //
+  // Served from the same origin here because tests leave `purchaseApiBaseUrl` unset; in the running
+  // app these live on the mobile_purchase service. Admin-only, mirroring the real controller.
+
+  http.get('/api/v1/projects/:projectId/server-keys', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can view server keys');
+    return HttpResponse.json(
+      orgsState.serverKeys
+        .filter((k) => k.projectId === projectId && !k.revoked)
+        .map((k) => ({
+          id: k.id,
+          key: k.key,
+          label: k.label,
+          can_erase: k.canErase,
+          created_at: k.createdAt,
+        })),
+    );
+  }),
+
+  http.post('/api/v1/projects/:projectId/server-keys', async ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can create server keys');
+    const body = (await request.json()) as { label?: string; can_erase?: boolean };
+    const key: ServerKeyRecord = {
+      id: nextId('server-key'),
+      projectId,
+      key: `mp_srv_${nextId('srv').replace(/\D/g, '').padStart(32, '0')}`,
+      label: body.label?.trim() || 'default',
+      canErase: body.can_erase === true,
+      createdAt: new Date().toISOString(),
+      revoked: false,
+    };
+    orgsState.serverKeys.push(key);
+    return HttpResponse.json(
+      {
+        id: key.id,
+        key: key.key,
+        label: key.label,
+        can_erase: key.canErase,
+        created_at: key.createdAt,
+      },
+      { status: 201 },
+    );
+  }),
+
+  http.delete('/api/v1/projects/:projectId/server-keys/:keyId', ({ request, params }) => {
+    const caller = userForToken(bearerToken(request));
+    if (!caller) return problem(401, 'Access token invalid or expired');
+    const projectId = params.projectId as string;
+    const record = projectRecordById(projectId);
+    if (!record) return problem(404, 'Project not found');
+    const callerRole = roleFor(record.orgId, caller.id);
+    if (!callerRole) return problem(403, 'Not a member of this organization');
+    if (!isAdminOrOwner(callerRole)) return problem(403, 'Only admins can revoke server keys');
+    const key = orgsState.serverKeys.find(
+      (k) => k.id === params.keyId && k.projectId === projectId && !k.revoked,
+    );
+    if (!key) return problem(404, 'Server key not found');
+    key.revoked = true;
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // --- Cohorts, saved reports & custom dashboards (contracts §16) + templates apply (§19) ---

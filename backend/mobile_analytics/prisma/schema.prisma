@@ -127,6 +127,10 @@ model SdkToken {
   /// Immutable after creation — rotating a token mints a new one with the same source, and
   /// re-pointing an existing token would silently re-label events already ingested with it.
   source    IngestSource @default(client)
+  /// Capability, not identity: a `server` token may additionally be allowed to erase end-user data
+  /// (DELETE /ingest/users/:distinctId). Off unless asked for, and never set on a `client` token —
+  /// that one ships inside the app, so it must never authorize a destructive delete.
+  canErase  Boolean      @default(false) @map("can_erase")
   revokedAt DateTime?    @map("revoked_at")
   createdAt DateTime     @default(now()) @map("created_at")
   project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)

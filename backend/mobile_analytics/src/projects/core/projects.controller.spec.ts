@@ -181,12 +181,19 @@ describe('ProjectsController', () => {
         token: 'mam_x',
         label: 'ci',
         source: 'client',
+        can_erase: false,
       });
 
       const body = await controller.createToken('p1', { label: 'ci' });
 
-      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', 'ci', undefined);
-      expect(body).toEqual({ id: 't1', token: 'mam_x', label: 'ci', source: 'client' });
+      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', 'ci', undefined, undefined);
+      expect(body).toEqual({
+        id: 't1',
+        token: 'mam_x',
+        label: 'ci',
+        source: 'client',
+        can_erase: false,
+      });
     });
 
     it('works with no body at all (label and source optional)', async () => {
@@ -196,11 +203,12 @@ describe('ProjectsController', () => {
         token: 'mam_x',
         label: 'default',
         source: 'client',
+        can_erase: false,
       });
 
       await controller.createToken('p1', {});
 
-      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', undefined, undefined);
+      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', undefined, undefined, undefined);
     });
 
     it('passes an explicit server source through to the service', async () => {
@@ -210,6 +218,7 @@ describe('ProjectsController', () => {
         token: 'mam_y',
         label: 'billing worker',
         source: 'server',
+        can_erase: false,
       });
 
       const body = await controller.createToken('p1', {
@@ -217,8 +226,56 @@ describe('ProjectsController', () => {
         source: 'server',
       });
 
-      expect(projectManagement.createToken).toHaveBeenCalledWith('p1', 'billing worker', 'server');
+      expect(projectManagement.createToken).toHaveBeenCalledWith(
+        'p1',
+        'billing worker',
+        'server',
+        undefined,
+      );
       expect(body.source).toBe('server');
+    });
+
+    it('forwards the erase capability for a server token', async () => {
+      const { controller, projectManagement } = makeController();
+      projectManagement.createToken.mockResolvedValue({
+        id: 't3',
+        token: 'mam_z',
+        label: 'account deletion',
+        source: 'server',
+        can_erase: true,
+      });
+
+      const body = await controller.createToken('p1', {
+        label: 'account deletion',
+        source: 'server',
+        can_erase: true,
+      });
+
+      expect(projectManagement.createToken).toHaveBeenCalledWith(
+        'p1',
+        'account deletion',
+        'server',
+        true,
+      );
+      expect(body.can_erase).toBe(true);
+    });
+
+    // The pair is refused at the request boundary, before the service is ever consulted: a client
+    // token ships inside the app, so it can never be allowed to delete end-user data.
+    it('rejects can_erase on a client token', async () => {
+      const { controller, projectManagement } = makeController();
+
+      await expect(
+        controller.createToken('p1', { source: 'client', can_erase: true }),
+      ).rejects.toThrow();
+      expect(projectManagement.createToken).not.toHaveBeenCalled();
+    });
+
+    it('rejects can_erase when no source is given (defaults to client)', async () => {
+      const { controller, projectManagement } = makeController();
+
+      await expect(controller.createToken('p1', { can_erase: true })).rejects.toThrow();
+      expect(projectManagement.createToken).not.toHaveBeenCalled();
     });
 
     it('rejects a source outside the client/server enum', async () => {

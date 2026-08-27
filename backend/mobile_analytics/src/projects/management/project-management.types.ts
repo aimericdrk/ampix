@@ -31,6 +31,8 @@ export interface SdkTokenListItem {
   token: string;
   label: string;
   source: EventSource;
+  /** True when this token may also erase end-user data — always false for a `client` token. */
+  can_erase: boolean;
   created_at: string;
 }
 
@@ -40,4 +42,5 @@ export interface CreatedToken {
   token: string;
   label: string;
   source: EventSource;
+  can_erase: boolean;
 }

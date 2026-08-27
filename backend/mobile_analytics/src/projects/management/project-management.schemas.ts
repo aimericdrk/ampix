@@ -25,10 +25,22 @@ export type UpdateProjectDto = z.infer<typeof updateProjectSchema>;
  * `source` decides how every event sent with this token is classified, and is fixed for the token's
  * lifetime. Omitted means `client` — the pre-existing behaviour, so old callers keep working.
  */
-export const createTokenSchema = z.object({
-  label: z.string().trim().min(1).max(MAX_LABEL_LENGTH).optional(),
-  source: eventSourceSchema.optional(),
-});
+export const createTokenSchema = z
+  .object({
+    label: z.string().trim().min(1).max(MAX_LABEL_LENGTH).optional(),
+    source: eventSourceSchema.optional(),
+    /**
+     * Grants this token the end-user erasure capability (DELETE /ingest/users/:distinctId).
+     * Server-only and refused on a `client` token: that one ships inside the app where anyone can
+     * extract it, so it must never authorize a destructive delete. Fixed for the token's lifetime,
+     * like `source` — rotation mints a replacement carrying the same capability.
+     */
+    can_erase: z.boolean().optional(),
+  })
+  .refine((v) => v.can_erase !== true || v.source === 'server', {
+    path: ['can_erase'],
+    message: 'can_erase requires source "server"',
+  });
 export type CreateTokenDto = z.infer<typeof createTokenSchema>;
 
 /**

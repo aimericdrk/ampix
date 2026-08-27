@@ -7,12 +7,14 @@ import { ProblemException } from '../common/problem-details';
 import type { IngestRequest } from './ingest-auth';
 
 /**
- * `v2` because the cached value gained `source`: a v1 entry written by a pod running the previous
- * image would deserialize into `{ source: undefined }` and mislabel events for up to the TTL. A new
- * key space means old and new pods simply miss each other's entries during a rollout.
+ * `v3` for the same reason `v2` existed: the cached value gained `canErase`, and a v2 entry written
+ * by a pod running the previous image would deserialize into `{ canErase: undefined }`. That one
+ * would fail *closed* (no erase rights) rather than mislabel events, but a new key space still
+ * beats a TTL window where a freshly granted capability is silently ignored — old and new pods
+ * simply miss each other's entries during a rollout.
  */
 export function sdkTokenCacheKey(token: string): string {
-  return `sdk_token:v2:${token}`;
+  return `sdk_token:v3:${token}`;
 }
 
 /** Revocation staleness bound: a revoked token stays valid at most this long unless the
@@ -22,6 +24,7 @@ export const SDK_TOKEN_CACHE_TTL_SECONDS = 60;
 interface CachedLookup {
   projectId: string | null;
   source?: EventSource;
+  canErase?: boolean;
 }
 
 /**
@@ -55,6 +58,7 @@ export class SdkTokenGuard implements CanActivate {
         projectId: cached.projectId,
         token,
         source: cached.source ?? DEFAULT_EVENT_SOURCE,
+        canErase: cached.canErase ?? false,
       };
       return true;
     }
@@ -65,9 +69,13 @@ export class SdkTokenGuard implements CanActivate {
     // Cached alongside projectId rather than re-read per batch: source is immutable for the life of
     // a token, so a cache hit can never carry a stale one.
     const source = (live?.source as EventSource | undefined) ?? DEFAULT_EVENT_SOURCE;
-    await this.writeCache(sdkTokenCacheKey(token), { projectId, source });
+    // Same reasoning as `source`: the capability is fixed for the life of a token (granting it
+    // means minting a new one), so a cache hit can never carry a stale one. Revocation still
+    // clears the entry eagerly — see revokeToken.
+    const canErase = live?.canErase ?? false;
+    await this.writeCache(sdkTokenCacheKey(token), { projectId, source, canErase });
     if (!projectId) throw this.unauthorized();
-    req.ingestAuth = { projectId, token, source };
+    req.ingestAuth = { projectId, token, source, canErase };
     return true;
   }
 

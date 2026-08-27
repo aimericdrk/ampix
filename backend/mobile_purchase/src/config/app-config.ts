@@ -63,11 +63,6 @@ const envSchema = z.object({
   // Cron expression for the subscription-expiry sweep (design §1). Default every 5 minutes —
   // RC-faithful promptness without load. The `cron` lib validates the expression at job construction.
   EXPIRY_SWEEP_CRON: z.string().min(1).default('*/5 * * * *'),
-  // End-user data erasure (account deletion / GDPR): shared secret that DELETE
-  // /v1/subscribers/:appUserId requires IN ADDITION to a valid public SDK key. The public key
-  // ships inside the mobile app, so it alone must never authorize destructive deletes. Unset ⇒
-  // the erasure endpoint is disabled (403) — fail closed, never fail open.
-  ERASURE_API_KEY: z.string().min(16, 'must be at least 16 characters').optional(),
 });
 
 export interface AppConfig {
@@ -98,10 +93,6 @@ export interface AppConfig {
   // compatibility reason as the Apple/Google fields; loadConfig() always populates both.
   schedulerEnabled?: boolean;
   expirySweepCron?: string;
-  // End-user data erasure shared secret — see envSchema comment. Optional both because the
-  // feature is opt-in (unset ⇒ endpoint disabled) and for the usual hand-built-fixture-
-  // compatibility reason; loadConfig() always populates it (to undefined when unset).
-  erasureApiKey?: string;
 }
 
 /**
@@ -141,7 +132,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .filter((origin) => origin.length > 0),
     schedulerEnabled: v.SCHEDULER_ENABLED === 'true',
     expirySweepCron: v.EXPIRY_SWEEP_CRON,
-    erasureApiKey: v.ERASURE_API_KEY,
   };
 }
 
@@ -185,6 +175,5 @@ export function describeConfig(config: AppConfig): Record<string, string> {
     DASHBOARD_ORIGINS: (config.dashboardOrigins ?? []).join(',') || 'MISSING',
     SCHEDULER_ENABLED: String(config.schedulerEnabled ?? true),
     EXPIRY_SWEEP_CRON: config.expirySweepCron ?? '*/5 * * * *',
-    ERASURE_API_KEY: redacted(config.erasureApiKey),
   };
 }

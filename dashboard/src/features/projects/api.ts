@@ -1,16 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api/client';
+import { purchaseApiFetch } from '../../lib/api/purchase-client';
 import type {
   AddProjectMemberRequest,
   CreateProjectRequest,
   CreatedProject,
   CreatedToken,
+  CreateServerKeyRequest,
   CreateTokenRequest,
   EventSummaryResponse,
   ListProjectMembersResponse,
   ListProjectsResponse,
   ListTokensResponse,
   ProjectStatsResponse,
+  PurchaseServerKey,
   PurgeProjectDataRequest,
   PurgeProjectDataResponse,
   UpdatedProjectMember,
@@ -138,6 +141,46 @@ export function useRevokeToken(projectId: string) {
       apiFetch<void>(`/api/v1/projects/${projectId}/tokens/${tokenId}`, { method: 'DELETE' }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tokens'] });
+    },
+  });
+}
+
+// --- Purchase-service server keys ---
+//
+// These live on the mobile_purchase service (its own database, its own guards), so they go out
+// through purchaseApiFetch rather than apiFetch. Same project, same settings page, two services
+// each holding the credential they verify — no cross-service call sits in a delete path.
+
+export function usePurchaseServerKeys(projectId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'server-keys'],
+    queryFn: () => purchaseApiFetch<PurchaseServerKey[]>(`/api/v1/projects/${projectId}/server-keys`),
+  });
+}
+
+export function useCreatePurchaseServerKey(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateServerKeyRequest) =>
+      purchaseApiFetch<PurchaseServerKey>(`/api/v1/projects/${projectId}/server-keys`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'server-keys'] });
+    },
+  });
+}
+
+export function useRevokePurchaseServerKey(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (keyId: string) =>
+      purchaseApiFetch<void>(`/api/v1/projects/${projectId}/server-keys/${keyId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'server-keys'] });
     },
   });
 }
