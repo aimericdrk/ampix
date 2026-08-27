@@ -260,9 +260,10 @@ describe('UserProfilePage', () => {
 
     // The fixture's two sessions split at 09:58 → 09:59, so exactly one break is shown, and it
     // reports the gap between the last event of one visit and the first of the next.
-    const breaks = within(timeline).getAllByText(/away/);
+    const breaks = within(timeline).getAllByText(/App closed/);
     expect(breaks).toHaveLength(1);
-    expect(breaks[0]).toHaveTextContent('away 1m 00s');
+    expect(breaks[0]).toHaveTextContent('1m 00s');
+    expect(breaks[0]).toHaveTextContent('reopened');
   });
 
   it('shows no session break when the events never leave one session', async () => {
@@ -284,7 +285,59 @@ describe('UserProfilePage', () => {
       await screen.findByRole('button', { name: 'Activity timeline' })
     ).closest('.rounded-xl')! as HTMLElement;
     await within(timeline).findByText('checkout_completed');
-    expect(within(timeline).queryByText(/away/)).not.toBeInTheDocument();
+    // Same session AND every gap under 30 minutes, so nothing breaks the list.
+    expect(within(timeline).queryByText(/App closed|Paused/)).not.toBeInTheDocument();
+  });
+
+  // A gap past the SDK's 30-minute session timeout reads as "they were gone" whether or not the
+  // session id happened to rotate — an app left open overnight is the case this catches.
+  it('separates a pause of more than 30 minutes within a single session', async () => {
+    const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    const rows = [
+      { insert_id: 'evt-after', event: 'after_pause', timestamp: '2026-07-01T12:00:00.000Z', session_id: 'same', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 'evt-before', event: 'before_pause', timestamp: '2026-07-01T11:00:00.000Z', session_id: 'same', screen_name: null, properties: {}, context: ctx },
+      // 20 minutes earlier — under the threshold, so this pair is NOT separated.
+      { insert_id: 'evt-early', event: 'earlier_event', timestamp: '2026-07-01T10:40:00.000Z', session_id: 'same', screen_name: null, properties: {}, context: ctx },
+    ];
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json({ events: rows, next_before: null }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    await within(timeline).findByText('after_pause');
+
+    const pauses = within(timeline).getAllByText(/Paused/);
+    expect(pauses).toHaveLength(1);
+    expect(pauses[0]).toHaveTextContent('1h 00m');
+    expect(pauses[0]).toHaveTextContent('resumed');
+    // The session never changed, so it is a pause, not a quit-and-return.
+    expect(within(timeline).queryByText(/App closed/)).not.toBeInTheDocument();
+  });
+
+  it('surfaces an error when the timeline page fails, instead of looking finished', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Internal Server Error', status: 500 },
+          { status: 500 },
+        ),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    expect(await within(timeline).findByRole('alert')).toHaveTextContent('Internal Server Error');
+    // Crucially NOT a silent list of 50 with no way to load more.
+    expect(within(timeline).queryByText(/Beginning of this user/)).not.toBeInTheDocument();
   });
 
   it('labels app-lifecycle events in plain language, keeping the raw name visible', async () => {
@@ -310,7 +363,7 @@ describe('UserProfilePage', () => {
     expect(within(timeline).getByText('$app_open')).toBeInTheDocument();
     expect(within(timeline).getByText('$app_background')).toBeInTheDocument();
     // An hour away between the two sessions.
-    expect(within(timeline).getByText(/away 1h 00m/)).toBeInTheDocument();
+    expect(within(timeline).getByText(/App closed/)).toHaveTextContent('1h 00m');
   });
 
   it('loads older events, passing the composite cursor back to the API', async () => {

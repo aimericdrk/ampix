@@ -86,20 +86,44 @@ function formatGap(ms: number): string {
  * the next. An empty session id (events ingested before the SDK carried one) is "unknown", never a
  * boundary — inventing a reopen out of missing data would be worse than showing none.
  */
-function sessionBreakBefore(
+/**
+ * The SDK's default `sessionTimeout`: 30 minutes backgrounded before the session id rotates. A gap
+ * at least this long is worth breaking the timeline over even when the session id did NOT change —
+ * an app left open and untouched overnight is the same "they were gone" the reader is looking for,
+ * and it is what makes a burst of activity legible as one sitting.
+ */
+const LONG_PAUSE_MS = 30 * 60 * 1000;
+
+/**
+ * Why the timeline should break between `events[index - 1]` (newer) and `events[index]` (older),
+ * or null for no break. `events` is newest-first, so the gap runs from the older row up to the
+ * newer one.
+ *
+ * `session` is the stronger signal: the SDK rotates the session id when the app comes back from
+ * the background, so it is a real quit-and-return even if the clock gap is short. It is read off
+ * the id rather than off `$app_open`, so it still shows for users whose lifecycle autocapture
+ * never fired. An empty session id (server-side events, or events from before the SDK carried
+ * one) is "unknown" and never a boundary — inventing a reopen out of missing data is worse than
+ * showing none.
+ */
+function timelineBreakBefore(
   events: UserRecentEvent[],
   index: number,
-): { awayMs: number; reopenedAt: string } | null {
+): { kind: 'session' | 'pause'; awayMs: number; resumedAt: string } | null {
   if (index === 0) return null;
   const older = events[index];
   const newer = events[index - 1];
   if (!older || !newer) return null;
-  if (!older.session_id || !newer.session_id) return null;
-  if (older.session_id === newer.session_id) return null;
-  return {
-    awayMs: new Date(newer.timestamp).getTime() - new Date(older.timestamp).getTime(),
-    reopenedAt: newer.timestamp,
-  };
+
+  const awayMs = new Date(newer.timestamp).getTime() - new Date(older.timestamp).getTime();
+  const knownSessions = Boolean(older.session_id) && Boolean(newer.session_id);
+  if (knownSessions && older.session_id !== newer.session_id) {
+    return { kind: 'session', awayMs, resumedAt: newer.timestamp };
+  }
+  if (awayMs >= LONG_PAUSE_MS) {
+    return { kind: 'pause', awayMs, resumedAt: newer.timestamp };
+  }
+  return null;
 }
 
 /**
@@ -264,9 +288,12 @@ export function UserProfileModal({
   // The timeline pages independently of the profile: page 1 here is the same window
   // `data.recent_events` holds, and every page after it is appended as the list scrolls.
   const eventsQuery = useUserEvents(projectId, distinctId);
+  // No fallback to `data.recent_events` on purpose: a failed page would then render as 50 events
+  // with nothing more to load, which is indistinguishable from "you have reached the end" — the
+  // exact shape of a timeline that looks fine and silently refuses to grow. An error is shown.
   const events = useMemo(
-    () => eventsQuery.data?.pages.flatMap((page) => page.events) ?? data?.recent_events ?? [],
-    [eventsQuery.data, data?.recent_events],
+    () => eventsQuery.data?.pages.flatMap((page) => page.events) ?? [],
+    [eventsQuery.data],
   );
   const selectedEvent = events.find((e) => e.insert_id === selectedId) ?? events[0];
   const firstSubIndex = useMemo(() => firstSubscribedIndex(events), [events]);
@@ -555,14 +582,20 @@ export function UserProfileModal({
               <Card className="border-accent/30">
                 <CardContent>
                   <CollapsibleSection title="Activity timeline" defaultOpen>
-                    {events.length === 0 ? (
+                    {eventsQuery.error ? (
+                      <p role="alert" className="text-danger">
+                        {eventsQuery.error instanceof ApiError
+                          ? eventsQuery.error.problem.title
+                          : 'Failed to load events'}
+                      </p>
+                    ) : events.length === 0 ? (
                       <p className="text-text-muted">
                         {eventsQuery.isPending ? 'Loading events…' : 'No recent events.'}
                       </p>
                     ) : (
                       <div
                         ref={setTimelineViewport}
-                        className="max-h-[80vh] overflow-y-auto pr-1"
+                        className="max-h-[80vh] overflow-y-auto pl-3 pr-1"
                         data-testid="activity-timeline-scroll"
                       >
                         <ol className="flex flex-col gap-1 border-l border-border pl-4 text-sm">
@@ -570,7 +603,7 @@ export function UserProfileModal({
                             const isSelected = event.insert_id === selectedEvent?.insert_id;
                             const isRcEvent = isSubscriptionEvent(event.event);
                             const lifecycleLabel = LIFECYCLE_LABELS[event.event];
-                            const sessionBreak = sessionBreakBefore(events, index);
+                            const timelineBreak = timelineBreakBefore(events, index);
                             return (
                               <Fragment key={event.insert_id}>
                                 {index === firstSubIndex && (
@@ -581,22 +614,30 @@ export function UserProfileModal({
                                     ★ First subscribed
                                   </li>
                                 )}
-                                {sessionBreak && (
+                                {timelineBreak && (
                                   <li
                                     role="presentation"
-                                    className="-ml-[1.4rem] my-1 flex items-center gap-2 py-1 text-xs text-text-muted"
+                                    className="-ml-4 my-2 flex items-center gap-2 pl-[0.35rem] text-xs text-text-muted"
                                   >
                                     <span
                                       aria-hidden
-                                      className="size-2.5 rounded-full border-2 border-dashed border-text-muted"
+                                      className="size-2 flex-none rounded-full border border-dashed border-text-muted bg-surface"
                                     />
-                                    <span>
-                                      Left the app ·{' '}
+                                    <span className="whitespace-nowrap">
+                                      {timelineBreak.kind === 'session' ? 'App closed' : 'Paused'}{' '}
                                       <span className="font-medium text-text">
-                                        away {formatGap(sessionBreak.awayMs)}
+                                        {formatGap(timelineBreak.awayMs)}
                                       </span>{' '}
-                                      · reopened {new Date(sessionBreak.reopenedAt).toLocaleString()}
+                                      ·{' '}
+                                      {timelineBreak.kind === 'session' ? 'reopened' : 'resumed'}{' '}
+                                      {new Date(timelineBreak.resumedAt).toLocaleString()}
                                     </span>
+                                    {/* The rule is the separation itself: a dashed line across the
+                                        list, so one sitting reads as a block at a glance. */}
+                                    <span
+                                      aria-hidden
+                                      className="h-px flex-1 border-t border-dashed border-border"
+                                    />
                                   </li>
                                 )}
                                 <li className="relative">
