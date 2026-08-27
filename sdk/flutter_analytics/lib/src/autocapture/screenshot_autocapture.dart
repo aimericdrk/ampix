@@ -157,6 +157,18 @@ class ScreenshotAutocapture {
                 contentType: MediaType('image', 'jpeg'),
               ),
             );
+      // Sent ONLY for a stitched full-page capture, so a single-viewport upload's payload stays
+      // byte-identical to before. The server reads an absent field as "not a full-page capture"
+      // and stores NULL, which is what its heatmap keys off to fall back to viewport geometry —
+      // sending 0 or "null" here would claim a page of no height instead.
+      final contentHeight = shot.contentHeight;
+      final viewportHeight = shot.viewportHeight;
+      if (contentHeight != null) {
+        request.fields['content_height'] = '$contentHeight';
+      }
+      if (viewportHeight != null) {
+        request.fields['viewport_height'] = '$viewportHeight';
+      }
       final response = await _client.send(request);
       // The backend answers 202 whether it stored or skipped a dup.
       if (response.statusCode == 202) {

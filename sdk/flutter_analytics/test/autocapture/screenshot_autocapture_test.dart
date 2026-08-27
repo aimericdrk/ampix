@@ -36,12 +36,19 @@ class FakeScreenshotCapturer implements ScreenshotCapturer {
   }
 }
 
-CapturedScreenshot shot(List<int> bytes, {int width = 480, int height = 640}) =>
-    CapturedScreenshot(
-      bytes: Uint8List.fromList(bytes),
-      width: width,
-      height: height,
-    );
+CapturedScreenshot shot(
+  List<int> bytes, {
+  int width = 480,
+  int height = 640,
+  double? contentHeight,
+  double? viewportHeight,
+}) => CapturedScreenshot(
+  bytes: Uint8List.fromList(bytes),
+  width: width,
+  height: height,
+  contentHeight: contentHeight,
+  viewportHeight: viewportHeight,
+);
 
 /// Minimal `multipart/form-data` parser: text fields → values, file parts →
 /// their field names. Enough to assert the §18 upload shape without a real
@@ -134,6 +141,34 @@ void main() {
       expect(parsed.files, contains('image'));
       expect(parsed.raw.toLowerCase(), contains('filename="screenshot.jpg"'));
       expect(parsed.raw.toLowerCase(), contains('content-type: image/jpeg'));
+      // A single-viewport capture sends no page geometry at all: the server reads absent as
+      // "not a full-page capture" and stores NULL, which is what makes its heatmap fall back to
+      // viewport coordinates. Sending 0 here would claim a page of no height.
+      expect(parsed.fields.containsKey('content_height'), isFalse);
+      expect(parsed.fields.containsKey('viewport_height'), isFalse);
+    });
+
+    test('a stitched full-page capture reports what the image covers', () async {
+      final bytes = [9, 8, 7];
+      final capturer = FakeScreenshotCapturer(
+        result: shot(
+          bytes,
+          width: 390,
+          height: 2110,
+          contentHeight: 2110,
+          viewportHeight: 844,
+        ),
+      );
+      await build(capturer: capturer, client: recordingClient()).onScreenView(
+        'Feed',
+      );
+
+      final parsed = parseMultipart(requests.single);
+      expect(parsed.fields['content_height'], '2110.0');
+      expect(parsed.fields['viewport_height'], '844.0');
+      // The image's own pixel height says how tall the PICTURE is; content_height says how tall
+      // the PAGE was. They coincide here only because the fixture chose them to.
+      expect(parsed.fields['height'], '2110');
     });
 
     test('captures a screen once per app_version and persists the skip across '
