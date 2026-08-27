@@ -43,6 +43,24 @@ const CONTENT_HEIGHT_EXPR = "JSONExtractFloat(toJSONString(properties), '$conten
  */
 const VERTICAL_FRACTION_EXPR = `if(${CONTENT_HEIGHT_EXPR} > 0, ${CONTENT_Y_EXPR} / ${CONTENT_HEIGHT_EXPR}, ${POS_Y_EXPR} / screen_height)`;
 
+/**
+ * The page geometry of the screen's stored reference capture, when it is a stitched full-page
+ * image. Both values are LOGICAL pixels, exactly as the SDK uploaded them alongside the image.
+ *
+ * Why the compiler needs it: the heatmap grid is stretched over the stored image, so a tap's
+ * vertical fraction must be measured against the geometry of THAT image — not against whatever the
+ * page measured at tap time. The two differ whenever the capture was truncated at the SDK's
+ * stitching budget (`kMaxStitchedViewports`): normalizing a tap by its own `$content_height` (the
+ * full page) and rendering the fraction over a shorter image shifts every mark up proportionally.
+ * The SDK's contract is explicit — "`contentHeight` then describes what was CAPTURED, so a tap
+ * below it is simply outside the image rather than mis-placed" — which is only true if this side
+ * divides by the capture's height and drops the taps beyond it.
+ */
+export interface CaptureGeometry {
+  contentHeight: number;
+  viewportHeight: number;
+}
+
 export interface CompiledHeatmapQuery {
   sql: string;
   params: Record<string, unknown>;
@@ -70,6 +88,7 @@ function fractionCellExpr(fractionExpr: string, gridParam: string): string {
 export function compileClickHeatmapQuery(
   query: ClickHeatmapQuery,
   projectId: string,
+  capture?: CaptureGeometry,
 ): CompiledHeatmapQuery {
   const params: Record<string, unknown> = {
     projectId,
@@ -78,6 +97,22 @@ export function compileClickHeatmapQuery(
     rows: query.grid.rows,
     ...compileDateRange(query.date_range.from, query.date_range.to),
   };
+
+  // With a stored full-page capture, y is measured against THAT image's geometry (see
+  // CaptureGeometry). Content-space taps divide by the capture's height; viewport-only taps
+  // (older SDKs, fixed chrome) are placed at their scroll-0 position — `$pos_y` scaled into the
+  // page's first viewport — the only defensible reading of a tap whose scroll offset was never
+  // recorded, and exact for the taps that actually happened unscrolled. Without a full-page
+  // capture the image IS one viewport and the original expression already matches it.
+  let verticalFractionExpr = VERTICAL_FRACTION_EXPR;
+  if (capture && capture.contentHeight > 0 && capture.viewportHeight > 0) {
+    params.imageContentHeight = capture.contentHeight;
+    params.imageViewportHeight = capture.viewportHeight;
+    verticalFractionExpr =
+      `if(${CONTENT_HEIGHT_EXPR} > 0, ` +
+      `${CONTENT_Y_EXPR} / {imageContentHeight:Float64}, ` +
+      `(${POS_Y_EXPR} / screen_height) * ({imageViewportHeight:Float64} / {imageContentHeight:Float64}))`;
+  }
 
   const whereClauses = [
     'project_id = {projectId:UUID}',
@@ -92,6 +127,15 @@ export function compileClickHeatmapQuery(
     `(${CONTENT_HEIGHT_EXPR} > 0 OR screen_height > 0)`,
     ...compileFilterClauses(query.filters, params),
   ];
+
+  if (capture && capture.contentHeight > 0 && capture.viewportHeight > 0) {
+    // A content-space tap below the captured extent is OUTSIDE the image (the SDK stitches at
+    // most kMaxStitchedViewports): drop it rather than clamp it into the bottom row, where it
+    // would paint a false hot band on content it never touched.
+    whereClauses.push(
+      `(${CONTENT_HEIGHT_EXPR} <= 0 OR ${CONTENT_Y_EXPR} <= {imageContentHeight:Float64})`,
+    );
+  }
 
   // §17 identity-correct per-user filter: the caller passes the canonical id + its aliased anon_ids
   // and we restrict to those exact RAW `distinct_id` values. The raw column is deliberately NOT
@@ -108,7 +152,7 @@ export function compileClickHeatmapQuery(
     'FROM (',
     '  SELECT',
     `    ${cellExpr(POS_X_EXPR, 'screen_width', 'cols')} AS cx,`,
-    `    ${fractionCellExpr(VERTICAL_FRACTION_EXPR, 'rows')} AS cy`,
+    `    ${fractionCellExpr(verticalFractionExpr, 'rows')} AS cy`,
     '  FROM events',
     `  WHERE ${whereClauses.join('\n    AND ')}`,
     ')',

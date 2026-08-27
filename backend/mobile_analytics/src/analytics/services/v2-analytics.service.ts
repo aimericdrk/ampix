@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { parseOrThrow } from '../../auth/schemas/auth.schemas';
 import { ClickHouseService } from '../../clickhouse/clickhouse.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ProjectsService } from '../../projects/core/projects.service';
 import type {
   ClickHeatmapResponse,
@@ -86,6 +87,7 @@ export class V2AnalyticsService {
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly projects: ProjectsService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -100,7 +102,23 @@ export class V2AnalyticsService {
   ): Promise<ClickHeatmapResponse> {
     await this.projects.assertMembership(userId, projectId);
     const query = parseOrThrow(clickHeatmapQuerySchema, body);
-    const compiled = compileClickHeatmapQuery(query, projectId);
+    // The grid is stretched over the screen's stored reference image, so when the LATEST capture
+    // (the one the dashboard displays) is a stitched full-page image, taps must be normalized
+    // against ITS geometry — not each tap's own page height, which diverges whenever the stitch
+    // was truncated at the SDK's viewport budget (see CaptureGeometry in the compiler).
+    const latestCapture = await this.prisma.screenCapture.findFirst({
+      where: { projectId, screenName: query.screen_name },
+      orderBy: { capturedAt: 'desc' },
+      select: { contentHeight: true, viewportHeight: true },
+    });
+    const capture =
+      latestCapture?.contentHeight && latestCapture.viewportHeight
+        ? {
+            contentHeight: latestCapture.contentHeight,
+            viewportHeight: latestCapture.viewportHeight,
+          }
+        : undefined;
+    const compiled = compileClickHeatmapQuery(query, projectId, capture);
     const rows = await this.clickhouse.query<HeatmapCellRow>(compiled.sql, compiled.params);
 
     const cells: HeatmapCell[] = rows.map((row) => ({

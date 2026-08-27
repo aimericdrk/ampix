@@ -1,19 +1,32 @@
 import type { ClickHouseService } from '../../clickhouse/clickhouse.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import type { ProjectsService } from '../../projects/core/projects.service';
 import { V2AnalyticsService } from './v2-analytics.service';
 
 const USER = 'user-1';
 const PROJECT = '018f6b2e-0000-7000-8000-0000000000a1';
 
-/** `queryImpl` dispatches on the SQL text so multi-query methods get the right rows per call. */
-function makeService(queryImpl: (sql: string) => unknown[]) {
+/** `queryImpl` dispatches on the SQL text so multi-query methods get the right rows per call.
+ *  `latestCapture` is what the prisma screenCapture lookup returns — the screen's newest stored
+ *  reference image's geometry (null = no capture / not a full-page one). */
+function makeService(
+  queryImpl: (sql: string) => unknown[],
+  latestCapture: { contentHeight: number | null; viewportHeight: number | null } | null = null,
+) {
   const query = jest.fn(
     async (sql: string, _params?: Record<string, unknown>) => queryImpl(sql),
   );
   const clickhouse = { query } as unknown as ClickHouseService;
   const assertMembership = jest.fn().mockResolvedValue(undefined);
   const projects = { assertMembership } as unknown as ProjectsService;
-  return { service: new V2AnalyticsService(clickhouse, projects), query, assertMembership };
+  const findFirst = jest.fn().mockResolvedValue(latestCapture);
+  const prisma = { screenCapture: { findFirst } } as unknown as PrismaService;
+  return {
+    service: new V2AnalyticsService(clickhouse, projects, prisma),
+    query,
+    assertMembership,
+    findFirst,
+  };
 }
 
 /** feat-02 §3.4/T2: the `filters` query param is base64url(JSON.stringify(InsightsFilter[])). */
@@ -51,6 +64,35 @@ describe('V2AnalyticsService', () => {
       const { service } = makeService(() => []);
       const res = await service.runClickHeatmap(USER, PROJECT, body);
       expect(res).toEqual({ screen_name: 'checkout', total: 0, cells: [] });
+    });
+
+    it('passes the latest full-page capture geometry into the compiled query', async () => {
+      const { service, query, findFirst } = makeService(() => [], {
+        contentHeight: 4800,
+        viewportHeight: 800,
+      });
+      await service.runClickHeatmap(USER, PROJECT, body);
+
+      expect(findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { projectId: PROJECT, screenName: 'checkout' },
+        }),
+      );
+      const params = query.mock.calls[0][1] as Record<string, unknown>;
+      expect(params.imageContentHeight).toBe(4800);
+      expect(params.imageViewportHeight).toBe(800);
+    });
+
+    it('a single-viewport capture (null geometry) keeps the original normalization', async () => {
+      const { service, query } = makeService(() => [], {
+        contentHeight: null,
+        viewportHeight: null,
+      });
+      await service.runClickHeatmap(USER, PROJECT, body);
+
+      const params = query.mock.calls[0][1] as Record<string, unknown>;
+      expect(params.imageContentHeight).toBeUndefined();
+      expect(params.imageViewportHeight).toBeUndefined();
     });
   });
 

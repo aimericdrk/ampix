@@ -116,6 +116,53 @@ describe('compileClickHeatmapQuery (contracts §19)', () => {
     });
   });
 
+  /**
+   * The heatmap grid is stretched over the screen's STORED image. When that image is a stitched
+   * full-page capture, taps must be normalized against ITS geometry: a tap's own $content_height
+   * is the whole page, which is taller than the image whenever the stitch stopped at the SDK's
+   * viewport budget — dividing by it shifted every mark up proportionally (field bug: a tap on a
+   * button several sections down rendered over a section near the top).
+   */
+  describe('full-page capture geometry', () => {
+    const CAPTURE = { contentHeight: 4800, viewportHeight: 800 };
+
+    it("normalizes content taps against the capture's height, not the tap's own", () => {
+      const { sql, params } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID, CAPTURE);
+
+      expect(sql).toContain(
+        "JSONExtractFloat(toJSONString(properties), '$content_y') / {imageContentHeight:Float64}",
+      );
+      expect(params.imageContentHeight).toBe(4800);
+      expect(params.imageViewportHeight).toBe(800);
+    });
+
+    it('drops content taps below the captured extent instead of clamping them into the bottom row', () => {
+      const { sql } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID, CAPTURE);
+
+      expect(sql).toContain(
+        "JSONExtractFloat(toJSONString(properties), '$content_y') <= {imageContentHeight:Float64}",
+      );
+    });
+
+    it('places viewport-only taps at their scroll-0 position within the page', () => {
+      const { sql } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID, CAPTURE);
+
+      expect(sql).toContain(
+        "'$pos_y') / screen_height) * ({imageViewportHeight:Float64} / {imageContentHeight:Float64})",
+      );
+    });
+
+    it('without capture geometry the original expressions and params are untouched', () => {
+      const { sql, params } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID);
+
+      expect(sql).toContain(
+        "JSONExtractFloat(toJSONString(properties), '$content_y') / JSONExtractFloat(toJSONString(properties), '$content_height')",
+      );
+      expect(params.imageContentHeight).toBeUndefined();
+      expect(params.imageViewportHeight).toBeUndefined();
+    });
+  });
+
   describe('INJECTION', () => {
     it('a malicious screen_name / filter value is bound, never inlined', () => {
       const attack = "'; DROP TABLE events; --";
