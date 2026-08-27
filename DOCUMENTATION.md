@@ -251,7 +251,7 @@ Source modules (`backend/mobile_analytics/src/`):
 - `analytics/`, `cohorts/`, `dashboards/`, `reports/` — query APIs that power the dashboard's insights, funnels, retention, cohorts, and saved dashboards (backed by ClickHouse).
 - `auth/` — email/password login, JWT access/refresh tokens, TOTP 2FA. Sessions + rate limiting use Redis.
 - `orgs/`, `projects/`, `invitations/`, `authz/` — organizations, projects, membership, and per-project roles (owner/admin/member).
-- `screenshots/` — reference-screenshot upload/serve for the user-path map + heatmaps (bytes to Firebase Storage, metadata in Postgres).
+- `screenshots/` — reference-screenshot upload/serve for the user-path map + heatmaps (bytes to Firebase Storage, metadata in Postgres). A capture of a screen taller than the viewport is a stitched full-page image; `content_height`/`viewport_height` record what it covers (§6.1.3).
 - `erasure/` — `DELETE /ingest/users/:distinctId`, the server-to-server end-user erasure endpoint (§6.1.2).
 - `analytics/` also serves the profile timeline's paging: `GET /users/:distinctId/events` returns one
   page of a user's events newest-first, cursored by the composite `{before, before_id}` the previous
@@ -320,6 +320,61 @@ be shared between projects or teammates: revoking one token affects only that pr
 
 A token that authenticates but isn't allowed here gets **403** (not 401), naming which half is
 missing — mint a token with the capability rather than hunting for a bad credential.
+
+#### 6.1.3 Heatmaps on scrollable screens
+
+A click heatmap overlays `$tap` positions on a reference screenshot of a screen. That only works
+while a screen fits in one viewport, and the reason is worth stating plainly because it is not
+fixable from the query side:
+
+- A tap records `$pos_x`/`$pos_y` — the raw pointer position, i.e. **viewport** coordinates.
+- The reference screenshot captures one viewport, taken once per `(screen_name, app_version)`.
+
+So on a scrollable screen the same content reports a different `$pos_y` depending on how far the
+user had scrolled: every scroll position collapses onto the same band of the grid, drawn over an
+image of the page's first fold. The number needed to place those taps was never recorded, so it has
+to be captured at the source.
+
+**Two things fix it, and both live in the SDK.** A tap inside a vertical scrollable additionally
+carries `$content_y` (its position in the page's full content), `$scroll_y`, `$content_height` and
+`$viewport_height`; and a reference capture of a tall screen stitches several viewports into one
+full-page image, recorded as `content_height`/`viewport_height` on the `screen_captures` row.
+
+**The read side prefers page geometry and falls back to the viewport:**
+
+```sql
+if(content_height > 0, content_y / content_height, pos_y / screen_height)
+```
+
+That fallback is permanent, not transitional. An SDK change only reaches users through an app-store
+release, so viewport-only taps keep arriving for months; a screen that doesn't scroll never emits
+content geometry at all; and every event collected before the change has none. For the same reason
+the un-normalizable-row filter is `(content_height > 0 OR screen_height > 0)` — requiring a screen
+height would drop exactly the taps that are most placeable. The x axis is untouched: pages scroll
+vertically, so `$pos_x` never needed correcting.
+
+The dashboard labels a stitched capture with how many screens tall it is, since a multi-screen image
+read as one screenful would be badly misinterpreted.
+
+> **Status:** the read side (query, storage, dashboard) is live. The SDK half is written but not yet
+> released, so captures are currently stored as single-viewport and the heatmap behaves as it always
+> has. Nothing breaks in the meantime — that is what the fallback is for.
+
+#### 6.1.4 What was tapped, rather than where
+
+`POST /query/tap-elements` takes the same selection as the click-heatmap (screen, date range, §14
+filters, the §17 identity set) and groups `$tap` by `$widget_type`/`$widget_label`, ranked by count
+with a distinct-user count beside it. The dashboard shows it under the canvas as **Most-tapped
+elements**.
+
+It carries **no geometry at all**, which is the point: it is exact wherever the element happened to
+sit on screen, so it stays correct on a scrollable screen regardless of the above, and it works on
+data already collected rather than waiting for an SDK release. Its spec asserts the generated SQL
+never references `screen_width`/`screen_height`/`$pos_x`/`$pos_y` — that absence is the feature.
+
+Unlabelled taps are ranked, not dropped: a screen whose taps mostly hit no identifiable widget is
+itself the finding. `truncated` says when `limit` cut the list, so `total` can't be misread as the
+screen's total.
 
 ### 6.2 mobile_purchase (the MyRevenueCat backend / billing authority)
 
