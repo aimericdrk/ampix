@@ -252,6 +252,7 @@ Source modules (`backend/mobile_analytics/src/`):
 - `auth/` — email/password login, JWT access/refresh tokens, TOTP 2FA. Sessions + rate limiting use Redis.
 - `orgs/`, `projects/`, `invitations/`, `authz/` — organizations, projects, membership, and per-project roles (owner/admin/member).
 - `screenshots/` — reference-screenshot upload/serve for the user-path map + heatmaps (bytes to Firebase Storage, metadata in Postgres).
+- `erasure/` — `DELETE /ingest/users/:distinctId`, the server-to-server end-user erasure endpoint (§6.1.2).
 - `internal/` — the internal role-resolution endpoint `mobile_purchase` calls (`ANALYTICS_INTERNAL_URL`).
 - `revenuecat/` — the **legacy** RevenueCat integration mirror. The active MyRevenueCat clone reads `mobile_purchase` instead; this remains for the old integration path.
 - `clickhouse/`, `prisma/`, `redis/`, `health/`, `common/`, `config/`, `templates/` — infrastructure.
@@ -275,10 +276,45 @@ everything sent after the change.
 - **Creating one:** project → *SDK tokens* → pick Source, or `POST
   /api/v1/projects/:projectId/tokens` with `{"label": "...", "source": "client" | "server"}`.
   Omitting `source` yields `client`, which is also what every token minted before this feature is.
+  A server token can additionally be granted erasure rights — see §6.1.2.
 - **Using it:** `source` is a first-class query dimension — filter or break down any insight,
   funnel, retention or flow by it, and it appears in `GET /meta/properties` as a column.
 - **RevenueCat webhooks** are recorded as `server`: they arrive machine-to-machine, with no device
   and no ingest token involved.
+
+#### 6.1.2 End-user erasure (account deletion / GDPR)
+
+`DELETE /ingest/users/:distinctId` removes everything the project holds about one end user — events,
+profile, and identity mappings — across ClickHouse. It is idempotent (erasing an unknown user still
+succeeds, so a caller can retry safely) and returns what was actually cleared:
+
+```bash
+curl -X DELETE https://api.example.com/ingest/users/user-123 \
+  -H "Authorization: Bearer mam_<your server token>"
+# → {"distinct_id":"user-123","deleted":true,"cleared":{...}}
+```
+
+**Authorization is per project, and lives on the token.** There is no shared secret and nothing to
+configure — a `ERASURE_API_KEY` env var used to gate this and is gone. The token must satisfy two
+conditions, both read from the token row and never from the request:
+
+| Condition | Why |
+| --------- | --- |
+| `source` is `server` | A client token ships inside your app where anyone can extract it, so it can never authorize a delete. |
+| the erasure capability is granted | Opt-in per token, so a backend that only relays events holds a token that deletes nothing. |
+
+Grant it at creation: project → *SDK tokens* → Source **Server** → tick **Allow erasing end-user
+data**, or `POST /api/v1/projects/:projectId/tokens` with
+`{"source": "server", "can_erase": true}`. The pair `client` + `can_erase` is refused at the request
+schema, in the service, and by a Postgres `CHECK` — a client token cannot hold the capability by any
+route, including a direct write to the table. Like `source`, the capability is fixed for the token's
+life; the dashboard's *Rotate* carries it to the replacement.
+
+Because the credential is minted per project by that project's own admins, nothing sensitive has to
+be shared between projects or teammates: revoking one token affects only that project.
+
+A token that authenticates but isn't allowed here gets **403** (not 401), naming which half is
+missing — mint a token with the capability rather than hunting for a bad credential.
 
 ### 6.2 mobile_purchase (the MyRevenueCat backend / billing authority)
 
@@ -290,9 +326,37 @@ Source modules (`backend/mobile_purchase/src/`):
 - `entitlements/` — entitlement definitions and **compute-on-read** entitlement resolution (a customer's active access is computed from their subscription state, not stored denormalized).
 - `catalog/` — products, offerings, packages, and the per-app **store-credentials** connect flow (encrypted at rest with `STORE_CREDENTIALS_ENC_KEY`).
 - `metrics/` — `GET …/metrics/summary`: MRR, active/trial counts, churn, by-product/by-store breakdowns, recent events — the MyRevenueCat Overview page.
+- `server-keys/` — per-project backend credentials (`mp_srv_…`) and the guards that read them (§6.2.1).
 - `receipts/`, `scheduler/` (the expiry sweep cron), `authz/`, `prisma/`, `config/`, `health/`, `common/`.
 
 Data store: its **own Postgres** on `:5433`. It never reads the analytics databases.
+
+#### 6.2.1 Server keys and subscriber erasure
+
+The `/v1` routes an app calls (`offerings`, `subscribers`, receipts) authenticate with an App's
+**public SDK key** (`mp_pub_…`) — a credential that ships to devices. Deleting a subscriber must not
+rely on that, so it has its own:
+
+- **Server key** (`mp_srv_…`) — a per-project credential that never leaves your backend, minted at
+  project → *Server keys (purchases)* or `POST /api/v1/projects/:projectId/server-keys` with
+  `{"label": "...", "can_erase": true}`. Admin-only, including the list: a key is a live secret, not
+  configuration.
+
+`DELETE /v1/subscribers/:appUserId` (RevenueCat parity) requires a server key carrying the erasure
+capability. It is idempotent and mirrors RC's response, `{"app_user_id": "...", "deleted": true}`:
+
+```bash
+curl -X DELETE https://purchase.example.com/v1/subscribers/user-123 \
+  -H "Authorization: Bearer mp_srv_<your server key>"
+```
+
+A public SDK key presented here fails the key-format check before any database lookup, so the two
+credentials can never be used interchangeably by accident.
+
+This mirrors the analytics side (§6.1.2) deliberately: **one project, one settings page, two
+credentials**. Each service stores and verifies the key it holds, so no delete path depends on a
+cross-service call, and no shared secret exists to leak. The old `ERASURE_API_KEY` env var that
+gated this endpoint is gone.
 
 **Store connection today vs. later:** the connect-stores UI stores Google Play / App Store
 credentials per app, encrypted. Verifying purchases from **inbound webhooks** (Apple ASSN, Google
@@ -322,7 +386,9 @@ window.___MYAMPIX_CONFIG__ = {
 
 `getRuntimeConfig()` merges these over defaults. `apiBaseUrl` targets `mobile_analytics`;
 `purchaseApiBaseUrl` targets `mobile_purchase` (it must be an absolute origin in dev because both
-backends expose `/api/v1/projects/:id/…` and can't share an origin).
+backends expose `/api/v1/projects/:id/…` and can't share an origin). Project **settings** is the one
+page that talks to both: *SDK tokens* reads `mobile_analytics`, *Server keys (purchases)* reads
+`mobile_purchase` — see §6.1.2 and §6.2.1.
 
 **Navigation** is split into two tool groups: **MyAmplitude** (analytics — Home, insights,
 funnels, retention, user paths, heatmaps, cohorts, dashboards) and **MyRevenueCat** (billing —
