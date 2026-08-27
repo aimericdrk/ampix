@@ -19,10 +19,8 @@ import { DateRangeControl, useDateRange } from '../date-range';
 import { mergeGlobalFilters, useGlobalFilters } from '../global-filters';
 import { ChartCard } from './charts/ChartCard';
 import { KpiTile } from './charts/KpiTile';
-import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
+import { HeatmapCanvas, HeatmapLegend, squareHeatmapGrid } from './HeatmapCanvas';
 import { RetakeScreenButton } from './RetakeScreenButton';
-
-const DEFAULT_GRID: HeatmapGrid = { cols: 20, rows: 40 };
 
 export function HeatmapPage() {
   const { projectId } = useParams({ from: '/private/projects/$projectId/heatmap' });
@@ -41,20 +39,26 @@ export function HeatmapPage() {
   const [opacity, setOpacity] = useState(0.85);
   const [result, setResult] = useState<ClickHeatmapResponse | null>(null);
   const [elements, setElements] = useState<TapElementsResponse | null>(null);
-  const [activeGrid, setActiveGrid] = useState<HeatmapGrid>(DEFAULT_GRID);
+  // The grid the CURRENT result was bucketed into — it depends on the screen's capture shape, so
+  // it is captured at run time and reused for rendering rather than recomputed while the cells are
+  // still those of the previous screen.
+  const [activeGrid, setActiveGrid] = useState<HeatmapGrid>(() => squareHeatmapGrid());
 
   const screenList = screens.data?.screens ?? [];
   const selectedSummary = screenList.find((s) => s.screen_name === selectedScreen);
 
   const run = (screenName: string) => {
     if (!screenName || !dateFrom || !dateTo) return;
+    // Sized from THIS screen's capture, looked up by name: `selectedSummary` still points at the
+    // previous screen when `onSelectScreen` runs, because the state update has not landed yet.
+    const grid = squareHeatmapGrid(screenList.find((s) => s.screen_name === screenName));
     const query: ClickHeatmapQuery = {
       screen_name: screenName,
       date_range: { from: dateFrom, to: dateTo },
-      grid: DEFAULT_GRID,
+      grid,
       filters: mergeGlobalFilters([], globalFilters),
     };
-    setActiveGrid(DEFAULT_GRID);
+    setActiveGrid(grid);
     runHeatmap.mutate(query, { onSuccess: setResult });
     runTapElements.mutate(
       {

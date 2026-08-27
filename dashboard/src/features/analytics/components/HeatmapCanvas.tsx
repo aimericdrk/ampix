@@ -9,6 +9,45 @@ import { ScreenImage } from './ScreenImage';
  * the per-user profile heatmap can reuse the exact same rendering (same cells, palette, and layout).
  */
 
+/** Shape assumed for a screen with no stored capture yet — a portrait phone. */
+const FALLBACK_ASPECT = { width: 9, height: 19.5 };
+
+/** Horizontal resolution: one cell is 1/20th of the image width. Rows follow from the aspect. */
+const HEATMAP_COLS = 20;
+/** Must stay within the API's grid bounds (backend click-heatmap.schema.ts). */
+const MAX_COLS = 100;
+const MAX_ROWS = 400;
+
+/**
+ * The displayed size of a screen's stored capture — the box the heatmap grid is stretched over.
+ * For a stitched full-page screenshot this is the whole page, several viewports tall.
+ */
+function captureAspect(summary?: Pick<ScreenSummary, 'width' | 'height'>) {
+  return summary && summary.width > 0 && summary.height > 0
+    ? { width: summary.width, height: summary.height }
+    : FALLBACK_ASPECT;
+}
+
+/**
+ * The grid to bucket taps into, so that a cell comes out SQUARE over this particular capture.
+ *
+ * The two axes measure different things — columns span one screen width, rows span the capture's
+ * full content height — so a fixed `cols x rows` only looks right at the one aspect it was picked
+ * for. Over a full-page capture N viewports tall, a fixed grid stretches every cell to N times its
+ * width, and the heatmap draws tall bars instead of tap-sized spots. Deriving rows from the same
+ * aspect the image is displayed at keeps a cell square at any page height.
+ *
+ * Past `MAX_ROWS` the grid stops growing and columns shrink instead: squareness is preserved, at a
+ * coarser resolution, rather than letting the cells distort again at the extreme.
+ */
+export function squareHeatmapGrid(summary?: Pick<ScreenSummary, 'width' | 'height'>): HeatmapGrid {
+  const { width, height } = captureAspect(summary);
+  const rows = Math.round(HEATMAP_COLS * (height / width));
+  if (rows <= MAX_ROWS) return { cols: HEATMAP_COLS, rows: Math.max(1, rows) };
+  const cols = Math.round(MAX_ROWS * (width / height));
+  return { cols: Math.min(MAX_COLS, Math.max(1, cols)), rows: MAX_ROWS };
+}
+
 export function HeatmapLegend({ total, maxCount }: { total: number; maxCount: number }) {
   const gradient = `linear-gradient(to right, ${SEQUENTIAL_BLUE_RAMP.join(', ')})`;
   return (
@@ -50,10 +89,9 @@ export function HeatmapCanvas({
   // The screenshot keeps its aspect ratio; normalized [0,1] cell coords map onto the displayed box.
   // For a stitched full-page capture that box IS the whole page, which is exactly why the heatmap's
   // rows now span content height — the grid lines up with the image without any special casing.
-  const aspectRatio =
-    summary && summary.width > 0 && summary.height > 0
-      ? `${summary.width} / ${summary.height}`
-      : '9 / 19.5';
+  // Same source as `squareHeatmapGrid`, so the cells stay square against whatever is displayed.
+  const shape = captureAspect(summary);
+  const aspectRatio = `${shape.width} / ${shape.height}`;
 
   // How many screens tall the capture is, when it covers more than one.
   const screensTall =

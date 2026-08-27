@@ -34,7 +34,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Fingerprint, Maximize2, RotateCw, Route, Waypoints, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { defaultDate } from './builder-controls';
-import { HeatmapCanvas, HeatmapLegend } from './HeatmapCanvas';
+import { HeatmapCanvas, HeatmapLegend, squareHeatmapGrid } from './HeatmapCanvas';
 import { PathMap } from './PathMap';
 
 /** The three data-heavy exploration views launched into a larger modal over the profile. */
@@ -133,7 +133,6 @@ function timelineBreakBefore(
 function isSubscriptionEvent(name: string): boolean {
   return name.startsWith(RC_EVENT_PREFIX) && name !== '$rc_link';
 }
-const HEATMAP_GRID: HeatmapGrid = { cols: 20, rows: 40 };
 
 /** Subscription status -> Badge variant (spec §4.7). Unlisted statuses fall back to `default`. */
 const SUBSCRIPTION_STATUS_VARIANT: Record<
@@ -859,6 +858,9 @@ function UserTapHeatmap({
   const runHeatmap = useRunClickHeatmap(projectId);
   const [selectedScreen, setSelectedScreen] = useState('');
   const [result, setResult] = useState<ClickHeatmapResponse | null>(null);
+  // Bucketing depends on the selected screen's capture shape; held so the overlay is drawn with the
+  // same grid the result was computed in (see HeatmapPage for the same reasoning).
+  const [activeGrid, setActiveGrid] = useState<HeatmapGrid>(() => squareHeatmapGrid());
 
   const screenList = screens.data?.screens ?? [];
   const selectedSummary = screenList.find((s) => s.screen_name === selectedScreen);
@@ -867,11 +869,13 @@ function UserTapHeatmap({
     setSelectedScreen(screenName);
     setResult(null);
     if (!screenName) return;
+    const grid = squareHeatmapGrid(screenList.find((s) => s.screen_name === screenName));
+    setActiveGrid(grid);
     runHeatmap.mutate(
       {
         screen_name: screenName,
         date_range: { from: defaultDate(30), to: defaultDate(0) },
-        grid: HEATMAP_GRID,
+        grid,
         filters: [],
         // §17: scope the heatmap to this user's whole identity set (anon + identified ids).
         distinct_ids: distinctIds,
@@ -930,7 +934,7 @@ function UserTapHeatmap({
             screenName={selectedScreen}
             summary={selectedSummary}
             result={result}
-            grid={HEATMAP_GRID}
+            grid={activeGrid}
             maxCount={maxCount}
             opacity={0.85}
           />

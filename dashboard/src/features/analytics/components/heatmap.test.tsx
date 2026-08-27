@@ -74,7 +74,8 @@ describe('HeatmapPage — click heatmap viewer', () => {
     expect(bodies).toHaveLength(1);
     const first = bodies[0]!;
     expect(first.screen_name).toBe('checkout');
-    expect(first.grid).toEqual({ cols: 20, rows: 40 });
+    // Rows follow the capture's aspect (390x844) so a cell is square: 20 * 844/390 -> 43.
+    expect(first.grid).toEqual({ cols: 20, rows: 43 });
     expect(first.filters).toEqual([]);
     expect(first.date_range.from).toMatch(DATE);
     expect(first.date_range.to).toMatch(DATE);
@@ -149,6 +150,7 @@ describe('HeatmapPage — click heatmap viewer', () => {
    * page says so, because a heatmap read as one screenful would be badly misinterpreted.
    */
   it('labels a full-page capture with how many screens tall it is', async () => {
+    const bodies: Array<{ grid?: { cols: number; rows: number } }> = [];
     const tall = {
       screens: [
         {
@@ -166,9 +168,10 @@ describe('HeatmapPage — click heatmap viewer', () => {
     };
     server.use(
       http.get('/api/v1/projects/:projectId/screens', () => HttpResponse.json(tall)),
-      http.post('/api/v1/projects/:projectId/query/click-heatmap', () =>
-        HttpResponse.json({ ...HEATMAP, screen_name: 'feed' }),
-      ),
+      http.post('/api/v1/projects/:projectId/query/click-heatmap', async ({ request }) => {
+        bodies.push((await request.json()) as { grid?: { cols: number; rows: number } });
+        return HttpResponse.json({ ...HEATMAP, screen_name: 'feed' });
+      }),
     );
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/heatmap`);
@@ -177,6 +180,12 @@ describe('HeatmapPage — click heatmap viewer', () => {
     await userEvent.selectOptions(screen.getByLabelText('Screen'), 'feed');
 
     expect(await screen.findByText(/Full-page capture/)).toHaveTextContent('2.5× screen height');
+
+    // The grid grows with the page instead of stretching over it: a fixed 20x43 would make every
+    // cell 2.5x taller than it is wide on this capture. 20 * 2110/390 -> 108 keeps cells square,
+    // and 108 rows only exist because the API's row cap is higher than its column cap.
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]!.grid).toEqual({ cols: 20, rows: 108 });
   });
 
   it('does not call a single-viewport capture a full-page one', async () => {

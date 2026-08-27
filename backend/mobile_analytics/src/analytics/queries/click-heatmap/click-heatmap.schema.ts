@@ -8,12 +8,22 @@ import { dateRangeSchema, insightsFilterSchema } from '../insights/insights-quer
  */
 
 const MIN_GRID = 1;
-const MAX_GRID = 100;
+const MAX_COLS = 100;
+/**
+ * Rows are capped higher than columns because the two axes no longer span the same thing. Columns
+ * span one screen width; rows span the stored capture's full content height, which for a stitched
+ * full-page screenshot is up to `kMaxStitchedViewports` (6) viewports tall. A grid with SQUARE
+ * cells therefore needs roughly `cols x (height / width)` rows — about 260 for a 6-viewport 9:19.5
+ * page — and capping rows at 100 would force the caller to choose between square cells and
+ * horizontal resolution. Neither bound costs anything at query time: the grid is pure arithmetic
+ * over the scanned rows, and the response carries only the cells that actually hold taps.
+ */
+const MAX_ROWS = 400;
 const MAX_FILTERS = 20;
 
 export const heatmapGridSchema = z.object({
-  cols: z.number().int('cols must be an integer').min(MIN_GRID, 'cols must be >= 1').max(MAX_GRID, 'cols must be <= 100'),
-  rows: z.number().int('rows must be an integer').min(MIN_GRID, 'rows must be >= 1').max(MAX_GRID, 'rows must be <= 100'),
+  cols: z.number().int('cols must be an integer').min(MIN_GRID, 'cols must be >= 1').max(MAX_COLS, 'cols must be <= 100'),
+  rows: z.number().int('rows must be an integer').min(MIN_GRID, 'rows must be >= 1').max(MAX_ROWS, 'rows must be <= 400'),
 });
 export type HeatmapGrid = z.infer<typeof heatmapGridSchema>;
 
