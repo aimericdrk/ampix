@@ -278,9 +278,8 @@ export interface HistoryPayload {
 export function useHistory(
   query: string,
   refreshMs = 60_000,
-): { data: HistoryPayload | null; error: string | null } {
-  const { data, error } = usePoll<HistoryPayload>(`/api/admin/history?${query}`, refreshMs);
-  return { data, error };
+): { data: HistoryPayload | null; error: string | null; at: Date | null; refresh: () => void } {
+  return usePoll<HistoryPayload>(`/api/admin/history?${query}`, refreshMs);
 }
 
 export function seriesFor(data: HistoryPayload | null, prefix: string): Series[] {

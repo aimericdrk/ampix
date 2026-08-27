@@ -25,7 +25,7 @@ const QUERY_PREFIXES = [
 
 export default function MetricsPage() {
   const [hours, setHours] = useState<number>(24);
-  const { data, error } = useHistory(
+  const { data, error, at, refresh } = useHistory(
     `prefix=${encodeURIComponent(QUERY_PREFIXES)}&hours=${hours}`,
     60_000,
   );
@@ -41,16 +41,31 @@ export default function MetricsPage() {
       <header className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Metrics</h1>
         {/* one filter row, above the charts — it scopes every chart on the page */}
-        <div className="flex items-center gap-1 rounded-lg border border-zinc-800 p-1">
-          {RANGES.map((r) => (
-            <button
-              key={r.label}
-              onClick={() => setHours(r.hours)}
-              className={`rounded-md px-3 py-1 text-sm ${hours === r.hours ? 'bg-zinc-100 font-medium text-zinc-950' : 'text-zinc-400 hover:text-white'}`}
-            >
-              {r.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          {/* `at` is null until the first fetch resolves, on the server and on the client alike —
+              so the timestamp never differs between the two renders. */}
+          <span className="text-xs text-zinc-500">
+            {at ? `updated ${at.toLocaleTimeString()}` : 'loading\u2026'}
+          </span>
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-800 p-1">
+            {RANGES.map((r) => (
+              <button
+                key={r.label}
+                onClick={() => setHours(r.hours)}
+                className={`rounded-md px-3 py-1 text-sm ${hours === r.hours ? 'bg-zinc-100 font-medium text-zinc-950' : 'text-zinc-400 hover:text-white'}`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          {/* Forces a fetch even while the tab is hidden, unlike the 60s interval. */}
+          <button
+            type="button"
+            onClick={refresh}
+            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800"
+          >
+            Reload
+          </button>
         </div>
       </header>
       {error ? <ErrorBanner text={`Failed to load: ${error}`} /> : null}
