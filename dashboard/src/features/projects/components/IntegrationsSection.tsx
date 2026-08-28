@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../../components/ui/dialog';
 import { IconButton } from '../../../components/ui/icon-button';
 import { Input } from '../../../components/ui/input';
@@ -57,36 +56,28 @@ function formatDate(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-/** Project settings card for the optional RevenueCat integration (spec §4.7). Disconnected shows
+/** Project settings body for the optional RevenueCat integration (spec §4.7). Disconnected shows
  *  the connect form; connected shows the webhook URL/secret, health counters, and journal/backfill
- *  controls. Rendered only for project admins (gated in ProjectDetailPage). */
+ *  controls. Rendered only for project admins (gated in ProjectDetailPage), inside that page's
+ *  `SettingsLayout` panel — which supplies the title, description and `rc-integration-card` id. */
 export function IntegrationsSection({ projectId }: { projectId: string }) {
   const { data: status, isPending, isError, error } = useRcStatus(projectId);
 
   return (
-    <Card data-testid="rc-integration-card">
-      <CardHeader>
-        <CardTitle>RevenueCat</CardTitle>
-        <CardDescription>
-          Subscription events, revenue, and lifecycle analytics. Optional — nothing changes until
-          you connect.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isPending && <p className="text-sm text-text-muted">Loading…</p>}
-        {isError && (
-          <p role="alert" className="text-danger">
-            {error instanceof ApiError ? error.problem.title : 'Failed to load RevenueCat status'}
-          </p>
-        )}
-        {status &&
-          (status.connected ? (
-            <ConnectedPanel projectId={projectId} status={status} />
-          ) : (
-            <ConnectForm projectId={projectId} status={status} />
-          ))}
-      </CardContent>
-    </Card>
+    <>
+      {isPending && <p className="text-sm text-text-muted">Loading…</p>}
+      {isError && (
+        <p role="alert" className="text-danger">
+          {error instanceof ApiError ? error.problem.title : 'Failed to load RevenueCat status'}
+        </p>
+      )}
+      {status &&
+        (status.connected ? (
+          <ConnectedPanel projectId={projectId} status={status} />
+        ) : (
+          <ConnectForm projectId={projectId} status={status} />
+        ))}
+    </>
   );
 }
 

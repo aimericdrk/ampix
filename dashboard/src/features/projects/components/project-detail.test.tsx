@@ -41,6 +41,32 @@ describe('ProjectDetailPage', () => {
     }
   });
 
+  it('marks MyAmpix as the current settings scope and links across to the MyRevenueCat half', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    const main = within(screen.getByRole('main'));
+    const switcher = within(main.getByRole('navigation', { name: 'Settings area' }));
+    expect(switcher.getByRole('link', { name: /MyAmpix/ })).toHaveAttribute('aria-current', 'page');
+    expect(switcher.getByRole('link', { name: /MyRevenueCat/ })).toHaveAttribute(
+      'href',
+      `/projects/${TEST_PROJECT.id}/rc/settings`,
+    );
+  });
+
+  it('jumps to a panel from the section rail', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}`);
+    await screen.findByRole('heading', { name: TEST_PROJECT.name });
+
+    const rail = within(
+      within(screen.getByRole('main')).getByRole('navigation', { name: 'Settings sections' }),
+    );
+    await userEvent.click(rail.getByRole('link', { name: 'Data' }));
+    expect(document.getElementById('data')).toHaveFocus();
+  });
+
   it('shows an empty state when the project has no events yet', async () => {
     server.use(
       http.get('/api/v1/projects/:projectId/events/summary', ({ params }) =>

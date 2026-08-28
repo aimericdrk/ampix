@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Users } from 'lucide-react';
 import { Badge, type BadgeProps } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import {
   Dialog,
@@ -40,23 +39,15 @@ function roleBadgeVariant(role: ProjectRole): BadgeProps['variant'] {
  * Project members section (mirrors OrgSettingsPage's MembersSection). Management is gated on the
  * caller's project role: owner/admin get the full editing surface, analyst/viewer get a read-only
  * list — the section itself is always visible so every member can see who has access.
+ *
+ * Body only: the titled card around it is the settings page's `SettingsLayout` panel.
  */
 export function ProjectMembersSection({ projectId, orgId }: { projectId: string; orgId: string }) {
   const role = useProjectRole(projectId);
   const canManage = role === 'owner' || role === 'admin';
   const isOwner = role === 'owner';
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Members</CardTitle>
-        <CardDescription>Who has access to this project, and at what role.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <MembersList projectId={projectId} orgId={orgId} canManage={canManage} isOwner={isOwner} />
-      </CardContent>
-    </Card>
-  );
+  return <MembersList projectId={projectId} orgId={orgId} canManage={canManage} isOwner={isOwner} />;
 }
 
 function MembersList({

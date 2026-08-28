@@ -117,7 +117,7 @@ describe('RcSettingsPage — store connections', () => {
     ]);
     renderApp(SETTINGS_URL);
     const main = within(await screen.findByRole('main'));
-    expect(await main.findByRole('heading', { name: 'Integration settings' })).toBeInTheDocument();
+    expect(await main.findByRole('heading', { name: 'Store connections' })).toBeInTheDocument();
     await main.findByText('Aurora iOS');
 
     const iosRow = within(row(IOS_APP.id));
@@ -317,6 +317,23 @@ describe('RcSettingsPage — store connections', () => {
       await dialog.findByText('Set STORE_CREDENTIALS_ENC_KEY on the server first.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('marks MyRevenueCat as the current settings scope and links back to the MyAmpix half', async () => {
+    signInOwner();
+    mockStoreCredentials([{ ...IOS_APP }]);
+    renderApp(SETTINGS_URL);
+    const main = within(await screen.findByRole('main'));
+    await main.findByText('Aurora iOS');
+
+    const switcher = within(main.getByRole('navigation', { name: 'Settings area' }));
+    expect(switcher.getByRole('link', { name: /MyRevenueCat/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    const ampix = switcher.getByRole('link', { name: /MyAmpix/ });
+    expect(ampix).not.toHaveAttribute('aria-current');
+    expect(ampix).toHaveAttribute('href', `/projects/${PID}`);
   });
 
   it('renders read-only for a viewer: status visible, no connect/manage/disconnect controls', async () => {
