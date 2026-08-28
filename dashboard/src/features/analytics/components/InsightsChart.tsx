@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Segmented } from '../../../components/ui/segmented';
+import { CollapsibleTable } from '../../../components/ui/CollapsibleTable';
 import { formatCompactNumber, formatExactNumber } from '../format';
 import { assignSeriesColors, seriesKey, seriesLabel } from '../palette';
 import type { InsightsSeries } from '../../../lib/api/types';
@@ -68,7 +69,8 @@ function pivot(series: InsightsSeries[]): {
 
 /**
  * Renders an insights result set with a chart-type picker (line · bar · area · stacked · pie ·
- * number · table) over the primary visualization, plus an ALWAYS-visible raw data table underneath.
+ * number · table) over the primary visualization, plus a raw data table underneath — collapsed by
+ * default (it is the same numbers the chart already draws), except when `table` IS the chart type.
  * Per the dataviz spec, identity is never carried by color alone: the table (and, for 2+ series, the
  * legend) stays reachable regardless of which chart is selected, and colors are assigned by series
  * identity in fixed order (never repainted when a series drops out). The picker is controlled by the
@@ -214,10 +216,9 @@ export function InsightsChart({
       {chartType === 'table' ? (
         <RawDataTable series={series} />
       ) : (
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-text-muted">Table</h3>
+        <CollapsibleTable count={series.reduce((total, s) => total + s.data.length, 0)}>
           <RawDataTable series={series} />
-        </div>
+        </CollapsibleTable>
       )}
     </div>
   );

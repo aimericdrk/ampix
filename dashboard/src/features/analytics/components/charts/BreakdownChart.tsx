@@ -14,6 +14,7 @@ import {
 import { colorForIndex } from '../../palette';
 import { formatExactNumber } from '../../format';
 import { ChartTooltip, axisProps, useChartAnimationProps, gridProps } from './chart-theme';
+import { CollapsibleTable } from '../../../../components/ui/CollapsibleTable';
 
 /** A single label→value bar for the non-stacked variant. */
 export interface BreakdownDatum {
@@ -205,43 +206,45 @@ function SingleBreakdownTable({
   selectedValue?: string;
 }) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">{`${ariaLabel} data table`}</caption>
-      <thead>
-        <tr className="border-b border-border">
-          <th scope="col" className="py-2 font-medium">
-            Label
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            Value
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => {
-          const { selectable, isSelected } = selectableCellState(row.label, onSelectValue, selectedValue);
-          return (
-            <tr key={row.label} className="border-b border-border">
-              <td className="py-2">
-                {selectable ? (
-                  <button
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => onSelectValue!(row.label)}
-                    className={SELECTABLE_LABEL_CLASS}
-                  >
-                    {row.label}
-                  </button>
-                ) : (
-                  row.label
-                )}
-              </td>
-              <td className="py-2 text-right tabular-nums">{formatExactNumber(row.value)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <CollapsibleTable count={rows.length}>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">{`${ariaLabel} data table`}</caption>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="py-2 font-medium">
+              Label
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              Value
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const { selectable, isSelected } = selectableCellState(row.label, onSelectValue, selectedValue);
+            return (
+              <tr key={row.label} className="border-b border-border">
+                <td className="py-2">
+                  {selectable ? (
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => onSelectValue!(row.label)}
+                      className={SELECTABLE_LABEL_CLASS}
+                    >
+                      {row.label}
+                    </button>
+                  ) : (
+                    row.label
+                  )}
+                </td>
+                <td className="py-2 text-right tabular-nums">{formatExactNumber(row.value)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </CollapsibleTable>
   );
 }
 
@@ -364,57 +367,59 @@ function StackedBreakdownTable({
   selectedValue?: string;
 }) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">{`${ariaLabel} data table`}</caption>
-      <thead>
-        <tr className="border-b border-border">
-          <th scope="col" className="py-2 font-medium">
-            Label
-          </th>
-          {segmentKeys.map((key) => (
-            <th key={key} scope="col" className="py-2 text-right font-medium">
-              {capitalize(key)}
+    <CollapsibleTable count={data.length}>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">{`${ariaLabel} data table`}</caption>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="py-2 font-medium">
+              Label
             </th>
-          ))}
-          <th scope="col" className="py-2 text-right font-medium">
-            Total
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((row) => {
-          const valueByKey = new Map(row.segments.map((segment) => [segment.key, segment.value]));
-          const total = row.segments.reduce((sum, segment) => sum + segment.value, 0);
-          const { selectable, isSelected } = selectableCellState(row.label, onSelectValue, selectedValue);
-          return (
-            <tr key={row.label} className="border-b border-border">
-              <td className="py-2">
-                {selectable ? (
-                  <button
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => onSelectValue!(row.label)}
-                    className={SELECTABLE_LABEL_CLASS}
-                  >
-                    {row.label}
-                  </button>
-                ) : (
-                  row.label
-                )}
-              </td>
-              {segmentKeys.map((key) => {
-                const value = valueByKey.get(key);
-                return (
-                  <td key={key} className="py-2 text-right tabular-nums">
-                    {value === undefined ? '—' : formatExactNumber(value)}
-                  </td>
-                );
-              })}
-              <td className="py-2 text-right tabular-nums font-medium">{formatExactNumber(total)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+            {segmentKeys.map((key) => (
+              <th key={key} scope="col" className="py-2 text-right font-medium">
+                {capitalize(key)}
+              </th>
+            ))}
+            <th scope="col" className="py-2 text-right font-medium">
+              Total
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => {
+            const valueByKey = new Map(row.segments.map((segment) => [segment.key, segment.value]));
+            const total = row.segments.reduce((sum, segment) => sum + segment.value, 0);
+            const { selectable, isSelected } = selectableCellState(row.label, onSelectValue, selectedValue);
+            return (
+              <tr key={row.label} className="border-b border-border">
+                <td className="py-2">
+                  {selectable ? (
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => onSelectValue!(row.label)}
+                      className={SELECTABLE_LABEL_CLASS}
+                    >
+                      {row.label}
+                    </button>
+                  ) : (
+                    row.label
+                  )}
+                </td>
+                {segmentKeys.map((key) => {
+                  const value = valueByKey.get(key);
+                  return (
+                    <td key={key} className="py-2 text-right tabular-nums">
+                      {value === undefined ? '—' : formatExactNumber(value)}
+                    </td>
+                  );
+                })}
+                <td className="py-2 text-right tabular-nums font-medium">{formatExactNumber(total)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </CollapsibleTable>
   );
 }

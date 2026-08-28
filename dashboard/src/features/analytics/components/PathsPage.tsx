@@ -3,6 +3,7 @@ import { Inbox } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { CollapsibleTable } from '../../../components/ui/CollapsibleTable';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { fieldLook, Input } from '../../../components/ui/input';
 import { Reveal } from '../../../components/ui/reveal';
@@ -537,35 +538,37 @@ function TransitionsTable({ result }: { result: ScreenPathsResponse }) {
       <CardHeader>
         <CardTitle className="text-sm font-medium text-text-muted">Transitions</CardTitle>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
-        <table className="w-full max-w-xl border-collapse text-left text-sm">
-          <caption className="sr-only">Screen-path transitions</caption>
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className="py-2 font-medium">
-                From
-              </th>
-              <th scope="col" className="py-2 font-medium">
-                To
-              </th>
-              <th scope="col" className="py-2 text-right font-medium">
-                Users
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.links.map((link, index) => (
-              <tr
-                key={`${link.source}-${link.target}-${index}`}
-                className="border-b border-border transition-colors hover:bg-surface-raised/60"
-              >
-                <td className="py-2">{labelById.get(link.source) ?? link.source}</td>
-                <td className="py-2">{labelById.get(link.target) ?? link.target}</td>
-                <td className="py-2 text-right tabular-nums">{formatExactNumber(link.value)}</td>
+      <CardContent>
+        <CollapsibleTable count={result.links.length}>
+          <table className="w-full max-w-xl border-collapse text-left text-sm">
+            <caption className="sr-only">Screen-path transitions</caption>
+            <thead>
+              <tr className="border-b border-border">
+                <th scope="col" className="py-2 font-medium">
+                  From
+                </th>
+                <th scope="col" className="py-2 font-medium">
+                  To
+                </th>
+                <th scope="col" className="py-2 text-right font-medium">
+                  Users
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {result.links.map((link, index) => (
+                <tr
+                  key={`${link.source}-${link.target}-${index}`}
+                  className="border-b border-border transition-colors hover:bg-surface-raised/60"
+                >
+                  <td className="py-2">{labelById.get(link.source) ?? link.source}</td>
+                  <td className="py-2">{labelById.get(link.target) ?? link.target}</td>
+                  <td className="py-2 text-right tabular-nums">{formatExactNumber(link.value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CollapsibleTable>
       </CardContent>
     </Card>
   );

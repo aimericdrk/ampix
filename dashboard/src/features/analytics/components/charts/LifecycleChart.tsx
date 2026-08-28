@@ -2,6 +2,7 @@ import type { EngagementNewReturningPoint } from '../../../../lib/api/types';
 import { formatExactNumber } from '../../format';
 import { colorForIndex } from '../../palette';
 import { StackedBarChart } from './SeriesCharts';
+import { CollapsibleTable } from '../../../../components/ui/CollapsibleTable';
 
 const KEYS = ['new', 'returning'];
 const LABELS = new Map<string, string>([
@@ -60,36 +61,38 @@ function LifecycleTable({
   ariaLabel: string;
 }) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">{`${ariaLabel} data table`}</caption>
-      <thead>
-        <tr className="border-b border-border">
-          <th scope="col" className="py-2 font-medium">
-            Date
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            New
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            Returning
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            Total
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {points.map((point) => (
-          <tr key={point.t} className="border-b border-border">
-            <td className="py-2">{point.t}</td>
-            <td className="py-2 text-right tabular-nums">{formatExactNumber(point.new)}</td>
-            <td className="py-2 text-right tabular-nums">{formatExactNumber(point.returning)}</td>
-            <td className="py-2 text-right tabular-nums font-medium">
-              {formatExactNumber(point.new + point.returning)}
-            </td>
+    <CollapsibleTable count={points.length}>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">{`${ariaLabel} data table`}</caption>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="py-2 font-medium">
+              Date
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              New
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              Returning
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              Total
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {points.map((point) => (
+            <tr key={point.t} className="border-b border-border">
+              <td className="py-2">{point.t}</td>
+              <td className="py-2 text-right tabular-nums">{formatExactNumber(point.new)}</td>
+              <td className="py-2 text-right tabular-nums">{formatExactNumber(point.returning)}</td>
+              <td className="py-2 text-right tabular-nums font-medium">
+                {formatExactNumber(point.new + point.returning)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </CollapsibleTable>
   );
 }

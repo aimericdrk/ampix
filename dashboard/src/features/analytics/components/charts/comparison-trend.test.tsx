@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Anomaly } from '../../anomaly';
 import type { Annotation } from '../../annotations';
 import { ComparisonTrend } from './ComparisonTrend';
+import { openDataTables } from '../../../../test/data-tables';
 
 const current = [
   { day: '2026-06-29', sessions: 120 },
@@ -31,7 +32,7 @@ describe('ComparisonTrend', () => {
     expect(screen.queryByText('Previous')).not.toBeInTheDocument();
   });
 
-  it('lists the current values in the accessible data table, without a previous column', () => {
+  it('lists the current values in the accessible data table, without a previous column', async () => {
     render(
       <ComparisonTrend
         current={current}
@@ -41,6 +42,7 @@ describe('ComparisonTrend', () => {
         ariaLabel="Sessions trend"
       />,
     );
+    await openDataTables();
     const table = screen.getByRole('table');
     expect(within(table).getByText('2026-06-29')).toBeInTheDocument();
     expect(within(table).getByText('120')).toBeInTheDocument();
@@ -79,7 +81,7 @@ describe('ComparisonTrend', () => {
     expect(within(figure).getByText('Previous')).toBeInTheDocument();
   });
 
-  it('includes a previous column in the accessible table, aligned by index', () => {
+  it('includes a previous column in the accessible table, aligned by index', async () => {
     render(
       <ComparisonTrend
         current={current}
@@ -90,6 +92,7 @@ describe('ComparisonTrend', () => {
         ariaLabel="Sessions trend"
       />,
     );
+    await openDataTables();
     const table = screen.getByRole('table');
     const headers = within(table).getAllByRole('columnheader').map((cell) => cell.textContent);
     expect(headers).toEqual(['Day', 'Sessions', 'Previous']);

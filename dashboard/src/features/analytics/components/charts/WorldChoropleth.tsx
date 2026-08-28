@@ -10,6 +10,7 @@ import { iso3Name } from '../../geo/country-codes';
 import { SEQUENTIAL_BLUE_RAMP, sequentialColor } from '../../palette';
 import { formatExactNumber, formatPercent } from '../../format';
 import { cn } from '../../../../lib/cn';
+import { CollapsibleTable } from '../../../../components/ui/CollapsibleTable';
 
 const VIEWBOX_WIDTH = 1000;
 const VIEWBOX_HEIGHT = 500;
@@ -230,32 +231,34 @@ function WorldChoroplethTable({
   ariaLabel: string;
 }) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">{`${ariaLabel} data table`}</caption>
-      <thead>
-        <tr className="border-b border-border">
-          <th scope="col" className="py-2 font-medium">
-            Country
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            Value
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            Share
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.iso3} className="border-b border-border">
-            <td className="py-2">{row.name}</td>
-            <td className="py-2 text-right tabular-nums">{formatExactNumber(row.value)}</td>
-            <td className="py-2 text-right tabular-nums">
-              {total > 0 ? formatPercent(row.value / total) : '—'}
-            </td>
+    <CollapsibleTable count={rows.length}>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">{`${ariaLabel} data table`}</caption>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="py-2 font-medium">
+              Country
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              Value
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              Share
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.iso3} className="border-b border-border">
+              <td className="py-2">{row.name}</td>
+              <td className="py-2 text-right tabular-nums">{formatExactNumber(row.value)}</td>
+              <td className="py-2 text-right tabular-nums">
+                {total > 0 ? formatPercent(row.value / total) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </CollapsibleTable>
   );
 }

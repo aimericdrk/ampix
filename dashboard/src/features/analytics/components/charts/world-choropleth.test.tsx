@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WorldChoropleth } from './WorldChoropleth';
+import { openDataTables } from '../../../../test/data-tables';
 
 // A tiny 3-country fixture (2 "real" + 1 with no geometry-matching data) stands in for the
 // bundled 180-country geometry so tests stay deterministic and fast.
@@ -65,14 +66,14 @@ vi.mock('../../geo/world-countries.geo.json', () => ({
 
 describe('WorldChoropleth', () => {
   it('renders an accessible labelled figure with one path per bundled country feature', () => {
-    const { container } = render(
-      <WorldChoropleth data={{ USA: 900, FRA: 100 }} ariaLabel="Installations by country" />,
-    );
-    expect(screen.getByRole('img', { name: 'Installations by country' })).toBeInTheDocument();
-    expect(container.querySelectorAll('svg path')).toHaveLength(3);
+    render(<WorldChoropleth data={{ USA: 900, FRA: 100 }} ariaLabel="Installations by country" />);
+    const map = screen.getByRole('img', { name: 'Installations by country' });
+    expect(map).toBeInTheDocument();
+    // Scoped to the map: the data table's disclosure chevron is an svg path too.
+    expect(map.querySelectorAll('svg path')).toHaveLength(3);
   });
 
-  it("gives a valued country's path an aria-label with the formatted value + valueLabel, mirrored in the table", () => {
+  it("gives a valued country's path an aria-label with the formatted value + valueLabel, mirrored in the table", async () => {
     render(
       <WorldChoropleth
         data={{ USA: 1234, FRA: 100 }}
@@ -80,6 +81,7 @@ describe('WorldChoropleth', () => {
         valueLabel="installs"
       />,
     );
+    await openDataTables();
     expect(
       screen.getByRole('img', { name: 'United States of America: 1,234 installs' }),
     ).toBeInTheDocument();
@@ -136,10 +138,9 @@ describe('WorldChoropleth', () => {
   });
 
   it('is keyboard-focusable via tabIndex on every country path', () => {
-    const { container } = render(
-      <WorldChoropleth data={{ USA: 900 }} ariaLabel="Installations by country" />,
-    );
-    const paths = container.querySelectorAll('svg path');
+    render(<WorldChoropleth data={{ USA: 900 }} ariaLabel="Installations by country" />);
+    const map = screen.getByRole('img', { name: 'Installations by country' });
+    const paths = map.querySelectorAll('svg path');
     paths.forEach((path) => {
       expect(path.getAttribute('tabindex')).toBe('0');
     });
@@ -165,21 +166,23 @@ describe('WorldChoropleth', () => {
     ).not.toThrow();
   });
 
-  it('lists a country present in data but absent from geometry only in the table, not on the map', () => {
+  it('lists a country present in data but absent from geometry only in the table, not on the map', async () => {
     render(
       <WorldChoropleth
         data={{ USA: 900, TWN: 50 }}
         ariaLabel="Installations by country"
       />,
     );
+    await openDataTables();
     const table = screen.getByRole('table');
     expect(within(table).getByText('Taiwan, Province of China')).toBeInTheDocument();
     // No matching feature was mocked for TWN, so the map itself never renders a path for it.
     expect(screen.queryByRole('img', { name: /Taiwan/ })).not.toBeInTheDocument();
   });
 
-  it('computes table share % against the total of the values given', () => {
+  it('computes table share % against the total of the values given', async () => {
     render(<WorldChoropleth data={{ USA: 75, FRA: 25 }} ariaLabel="Installations by country" />);
+    await openDataTables();
     const table = screen.getByRole('table');
     expect(within(table).getByText('75%')).toBeInTheDocument();
     expect(within(table).getByText('25%')).toBeInTheDocument();

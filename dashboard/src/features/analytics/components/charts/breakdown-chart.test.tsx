@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { BreakdownChart, type BreakdownChartProps } from './BreakdownChart';
+import { openDataTables } from '../../../../test/data-tables';
 
 // A wrong data shape for a given `stacked` value must fail to compile, not crash at runtime — the
 // discriminated union is the whole point of this prop type.
@@ -10,7 +11,7 @@ const _invalidStackedProps: BreakdownChartProps = { stacked: true, data: [{ labe
 void _invalidStackedProps;
 
 describe('BreakdownChart', () => {
-  it('renders an accessible labelled figure with a bar per label, sorted desc by value', () => {
+  it('renders an accessible labelled figure with a bar per label, sorted desc by value', async () => {
     render(
       <BreakdownChart
         data={[
@@ -21,6 +22,7 @@ describe('BreakdownChart', () => {
         ariaLabel="OS breakdown"
       />,
     );
+    await openDataTables();
     expect(screen.getByRole('img', { name: 'OS breakdown' })).toBeInTheDocument();
 
     const table = screen.getByRole('table');
@@ -57,7 +59,7 @@ describe('BreakdownChart', () => {
     expect(fills.size).toBe(1);
   });
 
-  it('lists exact values in the accessible table', () => {
+  it('lists exact values in the accessible table', async () => {
     render(
       <BreakdownChart
         data={[
@@ -67,19 +69,21 @@ describe('BreakdownChart', () => {
         ariaLabel="OS breakdown"
       />,
     );
+    await openDataTables();
     const table = screen.getByRole('table');
     expect(within(table).getByText('120')).toBeInTheDocument();
     expect(within(table).getByText('40')).toBeInTheDocument();
   });
 
-  it('does not truncate the data it is given — top-N stays the caller\'s responsibility', () => {
+  it('does not truncate the data it is given — top-N stays the caller\'s responsibility', async () => {
     const data = Array.from({ length: 12 }, (_, index) => ({ label: `Item ${index}`, value: index + 1 }));
     render(<BreakdownChart data={data} ariaLabel="Full breakdown" />);
+    await openDataTables();
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(13); // header + 12 data rows
   });
 
-  it('renders a legend entry and a table column per segment key when stacked', () => {
+  it('renders a legend entry and a table column per segment key when stacked', async () => {
     render(
       <BreakdownChart
         stacked
@@ -102,6 +106,7 @@ describe('BreakdownChart', () => {
         ariaLabel="OS breakdown by user type"
       />,
     );
+    await openDataTables();
     const figure = screen.getByRole('img', { name: 'OS breakdown by user type' });
     expect(within(figure).getByText('New')).toBeInTheDocument();
     expect(within(figure).getByText('Returning')).toBeInTheDocument();
@@ -119,7 +124,7 @@ describe('BreakdownChart', () => {
     expect(within(rows[1]!).getByText('40')).toBeInTheDocument();
   });
 
-  it('fills a missing segment for a label with a dash rather than dropping the column', () => {
+  it('fills a missing segment for a label with a dash rather than dropping the column', async () => {
     render(
       <BreakdownChart
         stacked
@@ -139,6 +144,7 @@ describe('BreakdownChart', () => {
         ariaLabel="OS breakdown by user type"
       />,
     );
+    await openDataTables();
     const table = screen.getByRole('table');
     const rows = within(table).getAllByRole('row');
     expect(within(rows[1]!).getByText('—')).toBeInTheDocument();
@@ -176,12 +182,13 @@ describe('BreakdownChart', () => {
           onSelectValue={onSelectValue}
         />,
       );
+      await openDataTables();
       const table = screen.getByRole('table');
       await userEvent.click(within(table).getByRole('button', { name: 'Android' }));
       expect(onSelectValue).toHaveBeenCalledWith('Android');
     });
 
-    it('does not make a synthetic $other/Other rollup bucket selectable', () => {
+    it('does not make a synthetic $other/Other rollup bucket selectable', async () => {
       const onSelectValue = vi.fn();
       render(
         <BreakdownChart
@@ -194,6 +201,7 @@ describe('BreakdownChart', () => {
           onSelectValue={onSelectValue}
         />,
       );
+      await openDataTables();
       const table = screen.getByRole('table');
       expect(within(table).queryByRole('button', { name: '$other' })).not.toBeInTheDocument();
       expect(within(table).queryByRole('button', { name: 'Other' })).not.toBeInTheDocument();
@@ -201,7 +209,7 @@ describe('BreakdownChart', () => {
       expect(within(table).getByText('Other')).toBeInTheDocument();
     });
 
-    it('marks the active selection with aria-pressed on its table-row button', () => {
+    it('marks the active selection with aria-pressed on its table-row button', async () => {
       render(
         <BreakdownChart
           data={[
@@ -213,6 +221,7 @@ describe('BreakdownChart', () => {
           selectedValue="Android"
         />,
       );
+      await openDataTables();
       const table = screen.getByRole('table');
       expect(within(table).getByRole('button', { name: 'Android' })).toHaveAttribute(
         'aria-pressed',
@@ -224,8 +233,9 @@ describe('BreakdownChart', () => {
       );
     });
 
-    it('renders plain label text with no click handler when onSelectValue is absent', () => {
+    it('renders plain label text with no click handler when onSelectValue is absent', async () => {
       render(<BreakdownChart data={[{ label: 'iOS', value: 40 }]} ariaLabel="OS breakdown" />);
+      await openDataTables();
       const table = screen.getByRole('table');
       expect(within(table).queryByRole('button')).not.toBeInTheDocument();
       expect(within(table).getByText('iOS')).toBeInTheDocument();

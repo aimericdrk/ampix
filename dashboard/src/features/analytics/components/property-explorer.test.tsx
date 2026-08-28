@@ -7,6 +7,7 @@ import { META_PROPERTIES_FIXTURE, TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } 
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 import type { InsightsQueryDefinition } from '../../../lib/api/types';
+import { openDataTables } from '../../../test/data-tables';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -121,6 +122,7 @@ describe('PropertyExplorerPage', () => {
 
     const findBarsTable = async () => {
       const figure = await main.findByRole('img', { name: `Top values for ${PLAN_PROPERTY}` });
+      await openDataTables();
       return within(figure.parentElement as HTMLElement).getByRole('table');
     };
 

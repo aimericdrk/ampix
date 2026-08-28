@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Badge } from '../../../components/ui/badge';
+import { CollapsibleTable } from '../../../components/ui/CollapsibleTable';
 import { formatExactNumber, formatPercent } from '../format';
 import { assignSeriesColors, seriesKey } from '../palette';
 import type { FunnelBreakdownResult, FunnelResultStep } from '../../../lib/api/types';
@@ -149,8 +150,7 @@ function FunnelTable({
   );
 
   return (
-    <div>
-      <h3 className="mb-2 text-sm font-medium text-text-muted">Table</h3>
+    <CollapsibleTable count={rows.length}>
       <table className="w-full border-collapse text-left text-sm">
         <caption className="sr-only">Funnel data table</caption>
         <thead>
@@ -194,6 +194,6 @@ function FunnelTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </CollapsibleTable>
   );
 }

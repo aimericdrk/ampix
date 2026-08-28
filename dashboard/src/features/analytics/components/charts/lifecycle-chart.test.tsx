@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { EngagementNewReturningPoint } from '../../../../lib/api/types';
 import { LifecycleChart } from './LifecycleChart';
+import { openDataTables } from '../../../../test/data-tables';
 
 const POINTS: EngagementNewReturningPoint[] = [
   { t: '2026-06-29', new: 30, returning: 90 },
@@ -18,8 +19,9 @@ describe('LifecycleChart', () => {
     expect(screen.getAllByText('Returning').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('lists both series plus the per-bucket total in the accessible data table', () => {
+  it('lists both series plus the per-bucket total in the accessible data table', async () => {
     render(<LifecycleChart points={POINTS} ariaLabel="User lifecycle trend" />);
+    await openDataTables();
     const table = screen.getByRole('table', { name: /User lifecycle trend/ });
     const rows = within(table).getAllByRole('row');
     // header + 3 data rows
@@ -32,13 +34,14 @@ describe('LifecycleChart', () => {
     expect(row.getByText('120')).toBeInTheDocument(); // total = new + returning
   });
 
-  it('renders an empty stack (no crash) for an all-zero bucket', () => {
+  it('renders an empty stack (no crash) for an all-zero bucket', async () => {
     render(
       <LifecycleChart
         points={[{ t: '2026-06-29', new: 0, returning: 0 }]}
         ariaLabel="User lifecycle trend"
       />,
     );
+    await openDataTables();
     expect(screen.getByRole('img', { name: 'User lifecycle trend' })).toBeInTheDocument();
     const table = screen.getByRole('table', { name: /User lifecycle trend/ });
     expect(within(table).getAllByText('0')).toHaveLength(3); // new, returning, total

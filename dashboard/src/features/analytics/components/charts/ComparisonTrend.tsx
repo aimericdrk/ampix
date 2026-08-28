@@ -24,6 +24,7 @@ import {
   gridProps,
   seriesGradientId,
 } from './chart-theme';
+import { CollapsibleTable } from '../../../../components/ui/CollapsibleTable';
 
 export interface ComparisonTrendPoint {
   [key: string]: string | number;
@@ -289,34 +290,36 @@ function ComparisonTrendTable({
   hasPrevious: boolean;
 }) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">{`${valueHeader} trend data table`}</caption>
-      <thead>
-        <tr className="border-b border-border">
-          <th scope="col" className="py-2 font-medium">
-            {xHeader}
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            {valueHeader}
-          </th>
-          {hasPrevious && (
-            <th scope="col" className="py-2 text-right font-medium">
-              Previous
+    <CollapsibleTable count={rows.length}>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">{`${valueHeader} trend data table`}</caption>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="py-2 font-medium">
+              {xHeader}
             </th>
-          )}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={`${String(row.x)}-${index}`} className="border-b border-border">
-            <td className="py-2">{formatCell(row.x)}</td>
-            <td className="py-2 text-right tabular-nums">{formatCell(row.current)}</td>
+            <th scope="col" className="py-2 text-right font-medium">
+              {valueHeader}
+            </th>
             {hasPrevious && (
-              <td className="py-2 text-right tabular-nums">{formatCell(row.previous)}</td>
+              <th scope="col" className="py-2 text-right font-medium">
+                Previous
+              </th>
             )}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${String(row.x)}-${index}`} className="border-b border-border">
+              <td className="py-2">{formatCell(row.x)}</td>
+              <td className="py-2 text-right tabular-nums">{formatCell(row.current)}</td>
+              {hasPrevious && (
+                <td className="py-2 text-right tabular-nums">{formatCell(row.previous)}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </CollapsibleTable>
   );
 }

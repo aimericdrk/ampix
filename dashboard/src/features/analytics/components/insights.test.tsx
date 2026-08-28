@@ -17,6 +17,7 @@ import { previousRange } from '../derive';
 import { decodeAnalysisState, encodeAnalysisState } from '../share-state';
 import { defaultDate } from './builder-controls';
 import type { InsightsAnalysisState } from './InsightsPage';
+import { openDataTables } from '../../../test/data-tables';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -449,7 +450,8 @@ describe('InsightsPage', () => {
         new Set([null, TEST_COHORT_ID]),
       );
 
-      await screen.findByRole('heading', { name: 'Segment summary' });
+      await screen.findByRole('button', { name: /Segment summary/ });
+      await openDataTables();
       const tables = screen.getAllByRole('table');
       const [dataTable, summaryTable] = [tables[0]!, tables[tables.length - 1]!];
 
@@ -477,6 +479,7 @@ describe('InsightsPage', () => {
       // Still just one segment selected — the single-series chart keeps rendering, no compare UI.
       await screen.findByRole('img', { name: 'Insights line chart' }, { timeout: 3000 });
       expect(screen.queryByText('Segment summary')).toBeNull();
+      await openDataTables();
       expect(screen.getAllByRole('table')).toHaveLength(1);
     });
   });
@@ -638,6 +641,7 @@ describe('InsightsPage', () => {
         screen.getByText(`${defaultDate(30)}–${defaultDate(0)} vs ${prevRange.from}–${prevRange.to}`),
       ).toBeInTheDocument();
 
+      await openDataTables();
       const table = screen.getByRole('table');
       expect(within(table).getByText('Previous')).toBeInTheDocument();
       await waitFor(() => expect(within(table).getByText('100')).toBeInTheDocument());

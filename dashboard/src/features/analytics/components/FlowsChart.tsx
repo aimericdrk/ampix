@@ -5,6 +5,7 @@ import { formatCompactNumber, formatExactNumber } from '../format';
 import { assignSeriesColors, seriesKey } from '../palette';
 import type { FlowLink, FlowNode } from '../../../lib/api/types';
 import { useChartAnimationProps } from './charts/chart-theme';
+import { CollapsibleTable } from '../../../components/ui/CollapsibleTable';
 
 /** Synthetic nodes ($other = folded tail, $end = drop-off) get a muted token, never a categorical hue. */
 function isSynthetic(event: string): boolean {
@@ -140,8 +141,7 @@ function FlowsTables({ nodes, links }: { nodes: FlowNode[]; links: FlowLink[] })
   const labelById = new Map(nodes.map((n) => [n.id, n.event]));
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h3 className="mb-2 text-sm font-medium text-text-muted">Nodes</h3>
+      <CollapsibleTable title="Nodes" count={nodes.length}>
         <table className="w-full max-w-xl border-collapse text-left text-sm">
           <caption className="sr-only">Flow nodes</caption>
           <thead>
@@ -167,10 +167,9 @@ function FlowsTables({ nodes, links }: { nodes: FlowNode[]; links: FlowLink[] })
             ))}
           </tbody>
         </table>
-      </div>
+      </CollapsibleTable>
 
-      <div>
-        <h3 className="mb-2 text-sm font-medium text-text-muted">Transitions</h3>
+      <CollapsibleTable title="Transitions" count={links.length}>
         <table className="w-full max-w-xl border-collapse text-left text-sm">
           <caption className="sr-only">Flow transitions</caption>
           <thead>
@@ -196,7 +195,7 @@ function FlowsTables({ nodes, links }: { nodes: FlowNode[]; links: FlowLink[] })
             ))}
           </tbody>
         </table>
-      </div>
+      </CollapsibleTable>
     </div>
   );
 }

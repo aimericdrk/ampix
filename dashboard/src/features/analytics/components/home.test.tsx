@@ -13,6 +13,7 @@ import {
 } from '../../../test/msw/handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { openDataTables } from '../../../test/data-tables';
 
 afterEach(() => server.events.removeAllListeners());
 
@@ -188,6 +189,7 @@ describe('HomePage', () => {
     // node when the refetched data lands.
     const findOsTable = async () => {
       const osFigure = await main.findByRole('img', { name: 'Events by OS' });
+      await openDataTables();
       return within(osFigure.parentElement as HTMLElement).getByRole('table');
     };
 

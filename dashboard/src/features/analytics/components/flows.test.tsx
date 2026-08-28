@@ -7,6 +7,7 @@ import { authStore } from '../../auth/store';
 import { TEST_PROJECT, TEST_USER, VALID_ACCESS_TOKEN } from '../../../test/msw/handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { openDataTables } from '../../../test/data-tables';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -74,6 +75,7 @@ describe('FlowsPage', () => {
     });
 
     // Nodes table carries exact per-node user counts.
+    await openDataTables();
     const nodesTable = within(screen.getByRole('table', { name: 'Flow nodes' }));
     const browseRow = nodesTable.getAllByRole('row').find((r) => within(r).queryByText('browse'));
     expect(within(browseRow as HTMLElement).getByText('540')).toBeInTheDocument();

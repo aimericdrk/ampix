@@ -9,6 +9,7 @@ import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 import { decodeAnalysisState, encodeAnalysisState } from '../share-state';
 import type { PathsAnalysisState } from './PathsPage';
+import { openDataTables } from '../../../test/data-tables';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -101,6 +102,7 @@ describe('PathsPage — user-path map', () => {
     expect(imageRequests.has('$end')).toBe(false);
 
     // Accessible transitions table carries exact per-link values.
+    await openDataTables();
     const table = within(screen.getByRole('table', { name: 'Screen-path transitions' }));
     const rows = table.getAllByRole('row').slice(1);
     const toCheckout = rows.find(

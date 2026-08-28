@@ -4,6 +4,7 @@ import type { HistogramBucket } from '../../../../lib/api/types';
 import { colorForIndex } from '../../palette';
 import { formatCurrency, formatDurationMs, formatExactNumber, formatPercent } from '../../format';
 import { ChartTooltip, axisProps, useChartAnimationProps, gridProps } from './chart-theme';
+import { CollapsibleTable } from '../../../../components/ui/CollapsibleTable';
 
 /** How a bucket's `lower`/`upper` bounds (and the summary KPIs) should be formatted (feat-09 §3.2). */
 export type HistogramUnit = 'number' | 'duration' | 'currency';
@@ -94,32 +95,34 @@ function HistogramTable({
   ariaLabel: string;
 }) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">{`${ariaLabel} data table`}</caption>
-      <thead>
-        <tr className="border-b border-border">
-          <th scope="col" className="py-2 font-medium">
-            Range
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            Count
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            %
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={`${row.range}-${index}`} className="border-b border-border">
-            <td className="py-2">{row.range}</td>
-            <td className="py-2 text-right tabular-nums">{formatExactNumber(row.count)}</td>
-            <td className="py-2 text-right tabular-nums">
-              {total > 0 ? formatPercent(row.count / total) : '—'}
-            </td>
+    <CollapsibleTable count={rows.length}>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">{`${ariaLabel} data table`}</caption>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="py-2 font-medium">
+              Range
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              Count
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              %
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${row.range}-${index}`} className="border-b border-border">
+              <td className="py-2">{row.range}</td>
+              <td className="py-2 text-right tabular-nums">{formatExactNumber(row.count)}</td>
+              <td className="py-2 text-right tabular-nums">
+                {total > 0 ? formatPercent(row.count / total) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </CollapsibleTable>
   );
 }

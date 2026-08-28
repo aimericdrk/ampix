@@ -15,6 +15,7 @@ import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 import { decodeAnalysisState, encodeAnalysisState } from '../share-state';
 import type { FunnelsAnalysisState } from './FunnelsPage';
+import { openDataTables } from '../../../test/data-tables';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -113,6 +114,7 @@ describe('FunnelsPage', () => {
 
     // The always-present data table: one row per step, scoped so the two conversion columns don't
     // clash.
+    await openDataTables();
     const table = screen.getByRole('table', { name: 'Funnel data table' });
     const rows = within(table).getAllByRole('row').slice(1);
     const appRow = rows.find((r) => within(r).queryByText('app_opened'));

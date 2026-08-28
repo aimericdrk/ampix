@@ -12,6 +12,7 @@ import {
 } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { openDataTables } from '../../../test/data-tables';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -120,6 +121,7 @@ describe('Saved reports', () => {
 
     // The stored insights definition auto-runs on load and renders the shared Insights chart.
     await screen.findByRole('img', { name: 'Insights line chart' });
+    await openDataTables();
     const table = screen.getByRole('table', { name: 'Insights data table' });
     expect(within(table).getByText('17')).toBeInTheDocument();
   });

@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { CollapsibleTable } from '../../../components/ui/CollapsibleTable';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { fieldLook } from '../../../components/ui/input';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
@@ -303,37 +304,39 @@ function FormulaTable({
   asPercent: boolean;
 }) {
   return (
-    <table className="w-full border-collapse text-left text-sm">
-      <caption className="sr-only">Formula trend data table</caption>
-      <thead>
-        <tr className="border-b border-border">
-          <th scope="col" className="py-2 font-medium">
-            Date
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            {labelA}
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            {labelB}
-          </th>
-          <th scope="col" className="py-2 text-right font-medium">
-            Formula
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.t} className="border-b border-border">
-            <td className="py-2">{row.t}</td>
-            <td className="py-2 text-right tabular-nums">{formatExactNumber(row.a)}</td>
-            <td className="py-2 text-right tabular-nums">{formatExactNumber(row.b)}</td>
-            <td className="py-2 text-right tabular-nums">
-              {formatFormulaValue(row.formula, asPercent)}
-            </td>
+    <CollapsibleTable count={rows.length}>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">Formula trend data table</caption>
+        <thead>
+          <tr className="border-b border-border">
+            <th scope="col" className="py-2 font-medium">
+              Date
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              {labelA}
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              {labelB}
+            </th>
+            <th scope="col" className="py-2 text-right font-medium">
+              Formula
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.t} className="border-b border-border">
+              <td className="py-2">{row.t}</td>
+              <td className="py-2 text-right tabular-nums">{formatExactNumber(row.a)}</td>
+              <td className="py-2 text-right tabular-nums">{formatExactNumber(row.b)}</td>
+              <td className="py-2 text-right tabular-nums">
+                {formatFormulaValue(row.formula, asPercent)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </CollapsibleTable>
   );
 }
 
@@ -1190,8 +1193,10 @@ export function InsightsPage() {
                 />
               </ChartCard>
 
-              <div>
-                <h3 className="mb-2 text-sm font-medium text-text-muted">Segment summary</h3>
+              <CollapsibleTable
+                title="Segment summary"
+                count={combinedCompare.totals.length}
+              >
                 <table className="w-full border-collapse text-left text-sm">
                   <caption className="sr-only">Per-segment totals for the current comparison</caption>
                   <thead>
@@ -1232,7 +1237,7 @@ export function InsightsPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </CollapsibleTable>
             </>
           )}
         </div>
@@ -1276,15 +1281,12 @@ export function InsightsPage() {
           </ChartCard>
 
           {formulaResult.data && formulaRows.length > 0 && (
-            <div>
-              <h3 className="mb-2 text-sm font-medium text-text-muted">Table</h3>
-              <FormulaTable
-                rows={formulaRows}
-                labelA={formulaA.name}
-                labelB={formulaB.name}
-                asPercent={formulaAsPercent}
-              />
-            </div>
+            <FormulaTable
+              rows={formulaRows}
+              labelA={formulaA.name}
+              labelB={formulaB.name}
+              asPercent={formulaAsPercent}
+            />
           )}
         </div>
       )}

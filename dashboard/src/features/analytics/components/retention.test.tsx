@@ -13,6 +13,7 @@ import {
 import { TEST_COHORT_ID } from '../../../test/msw/phase5-handlers';
 import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
+import { openDataTables } from '../../../test/data-tables';
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
@@ -128,6 +129,7 @@ describe('RetentionPage', () => {
     // The stickiness (DAU/MAU) trend, sourced from the engagement endpoint over the global range.
     expect(screen.getByRole('heading', { name: 'Stickiness (DAU/MAU)' })).toBeInTheDocument();
     expect(await screen.findByRole('img', { name: 'Stickiness trend' })).toBeInTheDocument();
+    await openDataTables();
     const stickinessTrend = within(screen.getByRole('table', { name: /Stickiness trend/ }));
     for (const point of ENGAGEMENT_FIXTURE.stickiness) {
       expect(stickinessTrend.getByText(String(point.value))).toBeInTheDocument();
@@ -153,6 +155,7 @@ describe('RetentionPage', () => {
     expect(screen.getByText('74.1%')).toBeInTheDocument();
 
     // The chart's accessible data table lists every bucket's new/returning/total.
+    await openDataTables();
     const lifecycleTable = within(screen.getByRole('table', { name: /User lifecycle trend/ }));
     for (const point of ENGAGEMENT_FIXTURE.new_vs_returning) {
       expect(lifecycleTable.getByText(String(point.new))).toBeInTheDocument();
