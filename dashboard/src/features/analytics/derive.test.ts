@@ -172,7 +172,7 @@ describe('installsByCountry', () => {
     expect(result.countryCount).toBe(2);
     expect(result.rows.map((r) => r.name)).toEqual([
       'France',
-      'United States of America',
+      'United States',
       'Unknown',
     ]);
     expect(result.rows.map((r) => r.iso3)).toEqual(['FRA', 'USA', null]);

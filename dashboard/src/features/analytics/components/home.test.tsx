@@ -305,7 +305,7 @@ describe('HomePage', () => {
     // The by-country DataTable (distinct from the map's own internal accessible table) lists the
     // resolved country names plus an Unknown row for the fixture's unresolvable breakdown value.
     const countryTable = main.getByRole('table', { name: 'Users by country' });
-    expect(within(countryTable).getByText('United States of America')).toBeInTheDocument();
+    expect(within(countryTable).getByText('United States')).toBeInTheDocument();
     expect(within(countryTable).getByText('France')).toBeInTheDocument();
     expect(within(countryTable).getByText('Unknown')).toBeInTheDocument();
 
@@ -317,6 +317,54 @@ describe('HomePage', () => {
     const [countryQueryBody] = countryQueryBodies;
     expect(countryQueryBody?.events).toEqual([{ name: '$app_open', aggregation: 'unique_users' }]);
     expect(countryQueryBody?.breakdown).toEqual({ property: 'country' });
+  });
+
+  /**
+   * Field bug: a project whose only `country` value was the everyday name "Taiwan" rendered the
+   * "no resolvable country" empty state over perfectly good data. The generated ISO-3166 table
+   * only knew it as "Taiwan, Province of China", so `toIso3` resolved nothing, every install fell
+   * into the Unknown bucket, and the map had no country left to shade.
+   */
+  it('maps a country set by its everyday name, not just by ISO code or formal ISO name', async () => {
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+        const body = (await request.json()) as InsightsQueryDefinition;
+        const isCountry = body.breakdown?.property === 'country';
+        const breakdownValues: (string | null)[] = isCountry
+          ? ['Taiwan']
+          : body.breakdown
+            ? ['ios', 'android']
+            : [null];
+        const series: InsightsSeries[] = [];
+        body.events.forEach((eventQuery, eventIndex) => {
+          breakdownValues.forEach((breakdownValue, breakdownIndex) => {
+            series.push({
+              name: eventQuery.name,
+              breakdown_value: breakdownValue,
+              data: [{ t: '2026-06-29', value: (eventIndex + 1) * 10 + breakdownIndex }],
+            });
+          });
+        });
+        return HttpResponse.json({ series });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+
+    // The map renders instead of the empty state...
+    expect(await main.findByRole('img', { name: 'Users by country' })).toBeInTheDocument();
+    expect(main.queryByText(/resolvable country/i)).not.toBeInTheDocument();
+
+    // ...the shape is shaded and labelled by its short name...
+    expect(main.getByRole('img', { name: /^Taiwan: / })).toBeInTheDocument();
+
+    // ...and the table agrees, with nothing stranded in Unknown.
+    const countryTable = main.getByRole('table', { name: 'Users by country' });
+    expect(within(countryTable).getByText('Taiwan')).toBeInTheDocument();
+    expect(within(countryTable).queryByText('Unknown')).not.toBeInTheDocument();
   });
 
   it('feat-18 §3.4/T2: shows a friendly empty-state message when no installs have a resolvable country, but still renders by-OS', async () => {

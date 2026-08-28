@@ -47,9 +47,15 @@ function useProjectedFeatures(): ProjectedFeature[] {
     for (const feature of collection.features as GeoFeature[]) {
       const d = featurePath(feature, VIEWBOX_WIDTH, VIEWBOX_HEIGHT);
       if (!d) continue;
+      const iso3 = String(feature.id);
+      // `iso3Name` first so a shape's tooltip and its row in the table below say the SAME thing:
+      // the bundled geometry carries its own formal names ("United States of America") and the
+      // table uses our short ones, and two names for one country reads as two countries. Falls
+      // back to the geometry's name for any feature whose id is not a known ISO-3 code.
+      const isoName = iso3Name(iso3);
       projected.push({
-        iso3: String(feature.id),
-        name: feature.properties?.name ?? String(feature.id),
+        iso3,
+        name: isoName === iso3 ? (feature.properties?.name ?? iso3) : isoName,
         d,
         center: featureCenter(feature, VIEWBOX_WIDTH, VIEWBOX_HEIGHT),
       });

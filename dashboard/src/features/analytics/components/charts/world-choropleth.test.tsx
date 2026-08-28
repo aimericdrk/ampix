@@ -83,7 +83,7 @@ describe('WorldChoropleth', () => {
     );
     await openDataTables();
     expect(
-      screen.getByRole('img', { name: 'United States of America: 1,234 installs' }),
+      screen.getByRole('img', { name: 'United States: 1,234 installs' }),
     ).toBeInTheDocument();
 
     const table = screen.getByRole('table');
@@ -91,7 +91,7 @@ describe('WorldChoropleth', () => {
     // header + USA + FRA
     expect(rows).toHaveLength(3);
     expect(within(table).getByText('1,234')).toBeInTheDocument();
-    expect(within(table).getByText('United States of America')).toBeInTheDocument();
+    expect(within(table).getByText('United States')).toBeInTheDocument();
   });
 
   it('renders a no-data country path that reads "no data" rather than a value', () => {
@@ -117,7 +117,7 @@ describe('WorldChoropleth', () => {
         valueLabel="installs"
       />,
     );
-    const usaPath = screen.getByRole('img', { name: /United States of America/ });
+    const usaPath = screen.getByRole('img', { name: /United States/ });
     expect(screen.queryByTestId('choropleth-tooltip')).not.toBeInTheDocument();
 
     fireEvent.mouseEnter(usaPath);
@@ -155,14 +155,14 @@ describe('WorldChoropleth', () => {
         onSelectCountry={onSelectCountry}
       />,
     );
-    fireEvent.click(screen.getByRole('img', { name: /United States of America/ }));
+    fireEvent.click(screen.getByRole('img', { name: /United States/ }));
     expect(onSelectCountry).toHaveBeenCalledWith('USA');
   });
 
   it('never calls onSelectCountry when it is not provided (no crash on click)', () => {
     render(<WorldChoropleth data={{ USA: 900 }} ariaLabel="Installations by country" />);
     expect(() =>
-      fireEvent.click(screen.getByRole('img', { name: /United States of America/ })),
+      fireEvent.click(screen.getByRole('img', { name: /United States/ })),
     ).not.toThrow();
   });
 
@@ -175,7 +175,7 @@ describe('WorldChoropleth', () => {
     );
     await openDataTables();
     const table = screen.getByRole('table');
-    expect(within(table).getByText('Taiwan, Province of China')).toBeInTheDocument();
+    expect(within(table).getByText('Taiwan')).toBeInTheDocument();
     // No matching feature was mocked for TWN, so the map itself never renders a path for it.
     expect(screen.queryByRole('img', { name: /Taiwan/ })).not.toBeInTheDocument();
   });
