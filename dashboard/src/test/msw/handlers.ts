@@ -746,6 +746,11 @@ export const SUBSCRIPTION_JOURNEY_FIXTURE: JourneyResponse = {
       lift: 9,
     },
   ],
+  products: [
+    { product_id: 'pro_annual', period_type: 'NORMAL', users: 90, share: 0.703 },
+    // A webhook that carried no product id still gets a row — hiding it would hide the gap.
+    { product_id: null, period_type: null, users: 38, share: 0.297 },
+  ],
 };
 
 /** Deterministic sample for `POST /metrics/subscriptions/journey/analyze`. */

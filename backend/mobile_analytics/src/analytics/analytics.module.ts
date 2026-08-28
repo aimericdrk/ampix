@@ -5,6 +5,8 @@ import { ProjectsModule } from '../projects/projects.module';
 import { AdvancedAnalyticsController } from './controllers/advanced-analytics.controller';
 import { AdvancedAnalyticsService } from './services/advanced-analytics.service';
 import { MistralService } from './ai/mistral.service';
+import { JourneyController } from './journey/journey.controller';
+import { JourneyService } from './journey/journey.service';
 import { AnalyticsController } from './controllers/analytics.controller';
 import { AnalyticsService } from './services/analytics.service';
 import { InsightsQueryService } from './services/insights-query.service';
@@ -16,7 +18,12 @@ import { V2AnalyticsService } from './services/v2-analytics.service';
 
 @Module({
   imports: [AuthModule, ProjectsModule, CohortsModule],
-  controllers: [AnalyticsController, AdvancedAnalyticsController, V2AnalyticsController],
+  controllers: [
+    AnalyticsController,
+    AdvancedAnalyticsController,
+    V2AnalyticsController,
+    JourneyController,
+  ],
   providers: [
     MetadataService,
     UsersService,
@@ -25,12 +32,11 @@ import { V2AnalyticsService } from './services/v2-analytics.service';
     AnalyticsService,
     AdvancedAnalyticsService,
     V2AnalyticsService,
+    JourneyService,
     MistralService,
   ],
   // Exported so the §16 saved-reports/dashboards runner can execute stored definitions through the
-  // exact same injection-safe engine (re-validating on every run). `MistralService` is exported for
-  // RevenueCatModule's journey analysis — one wrapper, one key check, one error taxonomy, rather
-  // than a second registration of the same stateless client in another module.
-  exports: [AnalyticsService, AdvancedAnalyticsService, MistralService],
+  // exact same injection-safe engine (re-validating on every run).
+  exports: [AnalyticsService, AdvancedAnalyticsService],
 })
 export class AnalyticsModule {}

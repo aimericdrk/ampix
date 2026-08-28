@@ -2,10 +2,10 @@ import 'reflect-metadata';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import type { AuthRequest } from '../../auth/auth.types';
 import { JwtAuthGuard } from '../../auth/tokens/jwt-auth.guard';
-import { AiRequestError, AiUnconfiguredError } from '../../analytics/ai/mistral.service';
-import type { MistralService } from '../../analytics/ai/mistral.service';
-import { RcJourneyController } from './rc-journey.controller';
-import type { RcJourneyService } from './rc-journey.service';
+import { AiRequestError, AiUnconfiguredError } from '../ai/mistral.service';
+import type { MistralService } from '../ai/mistral.service';
+import { JourneyController } from './journey.controller';
+import type { JourneyService } from './journey.service';
 
 const USER = { id: 'user-1', email: 'a@b.com', name: 'A' };
 const REPORT = { definition: { outcome: 'subscribe' }, cohort: { users: 100 } };
@@ -17,8 +17,8 @@ function fakeRequest(): AuthRequest {
 function makeController() {
   const journey = { getJourney: jest.fn(async () => REPORT) };
   const mistral = { analyzeJourney: jest.fn() };
-  const controller = new RcJourneyController(
-    journey as unknown as RcJourneyService,
+  const controller = new JourneyController(
+    journey as unknown as JourneyService,
     mistral as unknown as MistralService,
   );
   return { controller, journey, mistral };
@@ -32,9 +32,9 @@ const VALID_ANALYSIS = {
   caveats: ['Control group is large enough; cohort is 100 users.'],
 };
 
-describe('RcJourneyController', () => {
+describe('JourneyController', () => {
   it('is JWT-guarded at class level', () => {
-    expect(Reflect.getMetadata(GUARDS_METADATA, RcJourneyController)).toEqual([JwtAuthGuard]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, JourneyController)).toEqual([JwtAuthGuard]);
   });
 
   describe('subscriptionJourney', () => {
@@ -52,13 +52,13 @@ describe('RcJourneyController', () => {
       );
     });
 
-    it('accepts the refund outcome', async () => {
+    it.each([['renew'], ['refund']])('accepts the %s outcome', async (outcome) => {
       const { controller, journey } = makeController();
-      await controller.subscriptionJourney(fakeRequest(), 'p1', 'refund');
+      await controller.subscriptionJourney(fakeRequest(), 'p1', outcome);
       expect(journey.getJourney).toHaveBeenCalledWith(
         USER.id,
         'p1',
-        'refund',
+        outcome,
         undefined,
         undefined,
         undefined,

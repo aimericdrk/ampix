@@ -1,5 +1,10 @@
-import { ALIASES_CTE } from '../../analytics/support/identity';
-import { RC_CANCELLATION, RC_EXPIRATION, RC_INITIAL } from '../metrics/rc-metrics.constants';
+import { ALIASES_CTE } from '../support/identity';
+import {
+  RC_CANCELLATION,
+  RC_EXPIRATION,
+  RC_INITIAL,
+  RC_RENEWAL,
+} from '../../revenuecat/metrics/rc-metrics.constants';
 import type { JourneyOutcome } from './journey.types';
 
 /** The `rc-metrics.constants` property expressions read an unqualified `properties`; every scan
@@ -51,6 +56,23 @@ export interface OutcomeSpec {
 }
 
 export function outcomeSpec(outcome: JourneyOutcome): OutcomeSpec {
+  if (outcome === 'renew') {
+    return {
+      predicate: `e.event = '${RC_RENEWAL}'`,
+      events: [RC_RENEWAL],
+      originPredicate: PURCHASE_PREDICATE,
+      outcomeCriteria: `Users whose first ${RC_RENEWAL} falls in the selected range.`,
+      controlCriteria:
+        `Users who bought (${RC_INITIAL}) at any time and have never renewed. Their window is ` +
+        `anchored on their last event inside the selected range, since they have no outcome ` +
+        `event to anchor on — so both groups are measured over their most recent activity.`,
+      daysToOutcomeDefinition: `Days from the user's first ${RC_INITIAL} to their first ${RC_RENEWAL}.`,
+      // Renewal is only available to someone who already paid, so the control is other
+      // subscribers — comparing a renewer against someone who never bought would just re-measure
+      // the decision to subscribe.
+      controlRequires: PURCHASE_PREDICATE,
+    };
+  }
   if (outcome === 'refund') {
     return {
       predicate: REFUND_PREDICATE,
@@ -239,6 +261,26 @@ export function frequencySql(spec: OutcomeSpec): string {
   return `WITH ${journeyCtes(spec)}
     SELECT grp, event AS name, count() AS occurrences, uniqExact(uid) AS users
     FROM win GROUP BY grp, name`;
+}
+
+/**
+ * Which subscription the outcome actually was, straight off the RevenueCat webhook's `$product_id`
+ * and `$rc_period_type`. Pinned to `c.anchor` — the timestamp of the event that PUT the user in the
+ * cohort — so a user with several purchases is counted once, against the one being analysed.
+ */
+export function productsSql(spec: OutcomeSpec): string {
+  return `WITH ${journeyCtes(spec)}
+    SELECT ${prop('$product_id')} AS product_id,
+           ${prop('$rc_period_type')} AS period_type,
+           uniqExact(${UID}) AS users
+    FROM events AS e
+    ${ALIAS_JOIN}
+    INNER JOIN cohort_users AS c ON ${UID} = c.uid
+    WHERE e.project_id = {projectId:UUID} AND ${spec.predicate}
+      AND e.timestamp = c.anchor
+    GROUP BY product_id, period_type
+    ORDER BY users DESC, product_id ASC
+    LIMIT 25`;
 }
 
 /** The same shape as {@link frequencySql}, over screen names rather than event names. */

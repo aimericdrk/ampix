@@ -8,8 +8,9 @@
  * an unlabelled magic number — no bare ratios, no undocumented buckets, no implicit time units.
  */
 
-/** Which outcome the journey is measured against. */
-export type JourneyOutcome = 'subscribe' | 'refund';
+/** Which outcome the journey is measured against — the three RevenueCat webhook moments that
+ *  matter: they paid, they paid again, they got their money back. */
+export type JourneyOutcome = 'subscribe' | 'renew' | 'refund';
 
 /** Everything needed to interpret the report — the AI reads this before the numbers. */
 export interface JourneyDefinition {
@@ -86,6 +87,17 @@ export interface JourneyFrequencyRow {
   lift: number | null;
 }
 
+/** Which subscription the outcome was, off the webhook's own `$product_id`. */
+export interface JourneyProductRow {
+  /** RevenueCat's product identifier; `null` when the webhook carried none. */
+  product_id: string | null;
+  /** RevenueCat's `period_type` for that purchase — TRIAL, NORMAL, INTRO, …; `null` when absent. */
+  period_type: string | null;
+  users: number;
+  /** `users` ÷ cohort users. */
+  share: number;
+}
+
 export interface JourneyResponse {
   definition: JourneyDefinition;
   cohort: { users: number };
@@ -95,6 +107,8 @@ export interface JourneyResponse {
   path: JourneyPathStep[];
   frequency: JourneyFrequencyRow[];
   screens: JourneyFrequencyRow[];
+  /** Which subscription each cohort member's outcome event was for, most common first. */
+  products: JourneyProductRow[];
 }
 
 /** One thing the model claims to have found, with the numbers it rests on. */

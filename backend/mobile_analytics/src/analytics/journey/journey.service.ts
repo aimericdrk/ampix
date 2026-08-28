@@ -1,18 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { ClickHouseService, toChDateTime64 } from '../../clickhouse/clickhouse.service';
-import { parseDateOnlyUTC } from '../../analytics/support/bucket-grid';
-import { CANONICAL_JOIN_SETTINGS } from '../../analytics/support/identity';
-import { resolveDateOnlyRange } from '../../analytics/support/read-query.util';
-import { ProblemException } from '../../common/problem-details';
-import { PrismaService } from '../../prisma/prisma.service';
+import { parseDateOnlyUTC } from '../support/bucket-grid';
+import { CANONICAL_JOIN_SETTINGS } from '../support/identity';
+import { resolveDateOnlyRange } from '../support/read-query.util';
 import { ProjectsService } from '../../projects/core/projects.service';
-import { MS_PER_DAY } from '../metrics/rc-metrics.constants';
+import { MS_PER_DAY } from '../../revenuecat/metrics/rc-metrics.constants';
 import {
   EXCLUDED_EVENT_PREFIX,
   daysToOutcomeSql,
   frequencySql,
   outcomeSpec,
   pathSql,
+  productsSql,
   screensSql,
   summarySql,
   type OutcomeSpec,
@@ -21,6 +20,7 @@ import type {
   JourneyFrequencyRow,
   JourneyOutcome,
   JourneyPathStep,
+  JourneyProductRow,
   JourneyQuantiles,
   JourneyResponse,
   JourneySummaryMetric,
@@ -70,6 +70,12 @@ interface FrequencyRow {
   users: string | number;
 }
 
+interface ProductRow {
+  product_id: string;
+  period_type: string;
+  users: string | number;
+}
+
 const num = (value: string | number | null | undefined): number => Number(value ?? 0);
 
 /** Rounds to `digits` decimals so a rate reads as 2.43, not 2.4299999999999997 — the payload is
@@ -92,8 +98,15 @@ function quantiles(p25: number, p50: number, p75: number): JourneyQuantiles {
 }
 
 /**
- * `GET /metrics/subscriptions/journey` — what users do in the run-up to subscribing or refunding,
- * measured against a control cohort that did neither.
+ * `GET /metrics/subscriptions/journey` — what users do in the run-up to subscribing, renewing or
+ * being refunded, measured against a control cohort that did not.
+ *
+ * This reads the EVENT STREAM and nothing else. RevenueCat's official webhook writes
+ * `$rc_initial_purchase` / `$rc_renewal` / `$rc_cancellation` / `$rc_expiration` into `events` like
+ * any other event, so the analysis needs no `revenueCatIntegration` row, no Postgres subscription
+ * state, and no part of the MyRevenueCat clone being configured — which is exactly why it lives
+ * under analytics rather than beside the clone. A project with no RevenueCat events yet gets an
+ * empty report, not a 404: nothing has happened, which is a different thing from being unavailable.
  *
  * The comparison is the point. "Users viewed the paywall 2.4 times before subscribing" is not a
  * finding on its own; it becomes one only next to what everyone else did. So every block here is
@@ -107,9 +120,8 @@ function quantiles(p25: number, p50: number, p75: number): JourneyQuantiles {
  * load.
  */
 @Injectable()
-export class RcJourneyService {
+export class JourneyService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly clickhouse: ClickHouseService,
     private readonly projects: ProjectsService,
   ) {}
@@ -125,15 +137,6 @@ export class RcJourneyService {
   ): Promise<JourneyResponse> {
     await this.projects.assertMembership(userId, projectId);
 
-    const integration = await this.prisma.revenueCatIntegration.findUnique({ where: { projectId } });
-    if (integration === null) {
-      throw new ProblemException({
-        status: 404,
-        title: 'Not Found',
-        detail: 'RevenueCat integration not found',
-      });
-    }
-
     const { from, to } = resolveDateOnlyRange(fromRaw, toRaw);
     const windowDays = clamp(windowDaysRaw ?? DEFAULT_WINDOW_DAYS, 1, MAX_WINDOW_DAYS);
     const pathSteps = clamp(pathStepsRaw ?? DEFAULT_PATH_STEPS, 3, MAX_PATH_STEPS);
@@ -147,13 +150,15 @@ export class RcJourneyService {
       pathSteps,
     };
 
-    const [summaryRows, daysRows, pathRows, frequencyRows, screenRows] = await Promise.all([
-      this.clickhouse.query<SummaryRow>(summarySql(spec), params, CANONICAL_JOIN_SETTINGS),
-      this.clickhouse.query<DaysRow>(daysToOutcomeSql(spec), params, CANONICAL_JOIN_SETTINGS),
-      this.clickhouse.query<PathRow>(pathSql(spec), params, CANONICAL_JOIN_SETTINGS),
-      this.clickhouse.query<FrequencyRow>(frequencySql(spec), params, CANONICAL_JOIN_SETTINGS),
-      this.clickhouse.query<FrequencyRow>(screensSql(spec), params, CANONICAL_JOIN_SETTINGS),
-    ]);
+    const [summaryRows, daysRows, pathRows, frequencyRows, screenRows, productRows] =
+      await Promise.all([
+        this.clickhouse.query<SummaryRow>(summarySql(spec), params, CANONICAL_JOIN_SETTINGS),
+        this.clickhouse.query<DaysRow>(daysToOutcomeSql(spec), params, CANONICAL_JOIN_SETTINGS),
+        this.clickhouse.query<PathRow>(pathSql(spec), params, CANONICAL_JOIN_SETTINGS),
+        this.clickhouse.query<FrequencyRow>(frequencySql(spec), params, CANONICAL_JOIN_SETTINGS),
+        this.clickhouse.query<FrequencyRow>(screensSql(spec), params, CANONICAL_JOIN_SETTINGS),
+        this.clickhouse.query<ProductRow>(productsSql(spec), params, CANONICAL_JOIN_SETTINGS),
+      ]);
 
     const cohortRow = summaryRows.find((row) => row.grp === 'cohort');
     const controlRow = summaryRows.find((row) => row.grp === 'control');
@@ -178,6 +183,7 @@ export class RcJourneyService {
       path: buildPath(pathRows, cohortUsers),
       frequency: buildFrequency(frequencyRows, cohortUsers, controlUsers),
       screens: buildFrequency(screenRows, cohortUsers, controlUsers),
+      products: buildProducts(productRows, cohortUsers),
     };
   }
 }
@@ -312,4 +318,18 @@ function buildFrequency(
     })
     .sort((a, b) => b.cohort_per_user - a.cohort_per_user)
     .slice(0, FREQUENCY_LIMIT);
+}
+
+/** An absent `$product_id` becomes `null`, never the empty string: "the webhook sent no product"
+ *  and "the product is named ''" are different facts, and only one of them is real. */
+function buildProducts(rows: ProductRow[], cohortUsers: number): JourneyProductRow[] {
+  return rows.map((row) => {
+    const users = num(row.users);
+    return {
+      product_id: row.product_id === '' ? null : row.product_id,
+      period_type: row.period_type === '' ? null : row.period_type,
+      users,
+      share: cohortUsers > 0 ? round(users / cohortUsers) : 0,
+    };
+  });
 }

@@ -37,7 +37,7 @@ import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
 import { RcConversionPage } from './features/revenuecat/components/RcConversionPage';
-import { RcJourneyPage } from './features/revenuecat/components/RcJourneyPage';
+import { JourneyPage } from './features/analytics/components/JourneyPage';
 import { RcOverviewPage } from './features/revenuecat/components/RcOverviewPage';
 import { RcPlaceholderPage } from './features/revenuecat/components/RcPlaceholderPage';
 import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage';
@@ -288,6 +288,12 @@ const subscriptionsRedirectRoute = createRoute({
   },
 });
 
+const journeyRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/journey',
+  component: JourneyPage,
+});
+
 const rcOverviewRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/overview',
@@ -298,12 +304,6 @@ const rcConversionRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/conversion',
   component: RcConversionPage,
-});
-
-const rcJourneyRoute = createRoute({
-  getParentRoute: () => privateRoute,
-  path: '/projects/$projectId/rc/journey',
-  component: RcJourneyPage,
 });
 
 const rcChartsRoute = createRoute({
@@ -432,9 +432,9 @@ export const routeTree = rootRoute.addChildren([
     sessionsRoute,
     revenueRoute,
     subscriptionsRedirectRoute,
+    journeyRoute,
     rcOverviewRoute,
     rcConversionRoute,
-    rcJourneyRoute,
     rcChartsRoute,
     rcCustomersRoute,
     rcCustomerDetailRoute,

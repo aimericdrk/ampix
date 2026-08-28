@@ -1,13 +1,14 @@
 import type {
   JourneyFrequencyRow,
   JourneyPathStep,
+  JourneyProductRow,
   JourneyQuantiles,
   JourneySummaryMetric,
 } from '../../../lib/api/types';
 import { DataTable, type DataTableColumn } from '../../../components/ui/DataTable';
 import { Badge } from '../../../components/ui/badge';
 import { cn } from '../../../lib/cn';
-import { formatDurationMs, formatExactNumber, formatPercent } from '../../analytics/format';
+import { formatDurationMs, formatExactNumber, formatPercent } from '../format';
 
 /** Human copy for each metric key. The API ships a `definition` per metric — that is the precise
  *  statement, shown as the row's hint; this is just the short label for the column. */
@@ -247,6 +248,70 @@ export function FrequencyTable({
       rowKey={(row) => row.name}
       initialSort={{ key: 'cohort_per_user', dir: 'desc' }}
       exportFilename={`journey-${nameHeader.toLowerCase()}`}
+    />
+  );
+}
+
+/**
+ * Which subscription the outcome actually was — RevenueCat's own `$product_id` and `period_type`,
+ * for the event that put each user in the cohort. A webhook that carried no product id is shown as
+ * "not set" rather than dropped: an outcome with no product attached is a data-quality finding, and
+ * hiding the row would hide it.
+ */
+export function ProductsTable({ rows }: { rows: JourneyProductRow[] }) {
+  const columns: Array<DataTableColumn<JourneyProductRow>> = [
+    {
+      key: 'product_id',
+      header: 'Subscription',
+      sortable: true,
+      render: (row) =>
+        row.product_id === null ? (
+          <span className="text-text-muted">not set</span>
+        ) : (
+          <span className="font-medium">{row.product_id}</span>
+        ),
+      sortValue: (row) => row.product_id ?? '',
+    },
+    {
+      key: 'period_type',
+      header: 'Period',
+      sortable: true,
+      render: (row) =>
+        row.period_type === null ? (
+          <span className="text-text-muted">—</span>
+        ) : (
+          <Badge variant="outline">{row.period_type}</Badge>
+        ),
+      sortValue: (row) => row.period_type ?? '',
+    },
+    {
+      key: 'users',
+      header: 'Users',
+      align: 'right',
+      sortable: true,
+      render: (row) => <span className="tabular-nums">{formatExactNumber(row.users)}</span>,
+      sortValue: (row) => row.users,
+    },
+    {
+      key: 'share',
+      header: 'Share',
+      align: 'right',
+      sortable: true,
+      render: (row) => (
+        <span className="tabular-nums text-text-muted">{formatPercent(row.share)}</span>
+      ),
+      sortValue: (row) => row.share,
+    },
+  ];
+
+  return (
+    <DataTable
+      caption="Which subscription the outcome was for"
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => `${row.product_id ?? ''}|${row.period_type ?? ''}`}
+      initialSort={{ key: 'users', dir: 'desc' }}
+      exportFilename="journey-subscriptions"
     />
   );
 }

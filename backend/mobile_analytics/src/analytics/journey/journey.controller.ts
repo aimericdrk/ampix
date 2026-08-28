@@ -6,9 +6,9 @@ import {
   AiRequestError,
   AiUnconfiguredError,
   MistralService,
-} from '../../analytics/ai/mistral.service';
+} from '../ai/mistral.service';
 import { ProblemException } from '../../common/problem-details';
-import { RcJourneyService } from './rc-journey.service';
+import { JourneyService } from './journey.service';
 import type { JourneyAnalysisResponse, JourneyOutcome, JourneyResponse } from './journey.types';
 
 /** The model's reply. Validated before it can reach a response body — same rule as `/query/ask`:
@@ -32,10 +32,15 @@ function badRequest(detail: string): ProblemException {
   return new ProblemException({ status: 400, title: 'Bad Request', detail });
 }
 
+const OUTCOMES: JourneyOutcome[] = ['subscribe', 'renew', 'refund'];
+
 function parseOutcome(raw: string | undefined): JourneyOutcome {
-  if (raw === undefined || raw === 'subscribe') return 'subscribe';
-  if (raw === 'refund') return 'refund';
-  throw badRequest("outcome: must be 'subscribe' or 'refund'");
+  if (raw === undefined) return 'subscribe';
+  const match = OUTCOMES.find((outcome) => outcome === raw);
+  if (match === undefined) {
+    throw badRequest(`outcome: must be one of ${OUTCOMES.join(', ')}`);
+  }
+  return match;
 }
 
 /** Rejects a malformed value rather than silently falling back, matching `read-query.util`'s rule
@@ -50,7 +55,11 @@ function parseCount(raw: string | undefined, paramName: string): number | undefi
 }
 
 /**
- * The subscription-journey endpoints (MyRevenueCat → Journey).
+ * The subscription-journey endpoints (MyAmpix → Journey).
+ *
+ * Analytics, not the MyRevenueCat clone: the analysis reads RevenueCat's official webhook events
+ * out of the event stream, so it needs no integration row and works on a project that never set the
+ * clone up.
  *
  * `GET .../journey` is written to be fetched by a language model as much as by the dashboard: the
  * payload states its own units, cohort definitions and sample sizes, so an agent holding a bearer
@@ -60,9 +69,9 @@ function parseCount(raw: string | undefined, paramName: string): number | undefi
  */
 @Controller('api/v1/projects/:projectId')
 @UseGuards(JwtAuthGuard)
-export class RcJourneyController {
+export class JourneyController {
   constructor(
-    private readonly journey: RcJourneyService,
+    private readonly journey: JourneyService,
     private readonly mistral: MistralService,
   ) {}
 

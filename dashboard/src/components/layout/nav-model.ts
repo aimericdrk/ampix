@@ -64,6 +64,10 @@ export const TOOLS: Tool[] = [
           // Revenue reads the SDK's own `$in_app_purchase` events — NOT RevenueCat data. It works
           // with no RevenueCat account, which is why it lives here and not under MyRevenueCat.
           { label: 'Revenue', to: p('/revenue'), icon: 'revenue' },
+          // Journey reads RevenueCat's official webhook events out of the EVENT STREAM — the same
+          // reason Revenue sits here: it needs no MyRevenueCat setup, so gating it behind that tool
+          // would hide it from every project that only ever pointed the webhook at us.
+          { label: 'Journey', to: p('/journey'), icon: 'journey' },
           { label: 'Distributions', to: p('/distributions'), icon: 'distributions' },
           { label: 'Properties', to: p('/properties'), icon: 'properties' },
           { label: 'Events', to: p('/events'), icon: 'events' },
@@ -122,9 +126,6 @@ export const TOOLS: Tool[] = [
           // Correlates RC events against the SDK's event stream — a MyAmpix capability, not
           // something real RevenueCat can do. Hence its own group rather than mirroring RC's IA.
           { label: 'Conversion', to: p('/rc/conversion'), icon: 'conversion' },
-          // What users DO in the run-up to subscribing or refunding, against a control cohort —
-          // the sequence behind Conversion's totals.
-          { label: 'Journey', to: p('/rc/journey'), icon: 'journey' },
         ],
       },
     ],

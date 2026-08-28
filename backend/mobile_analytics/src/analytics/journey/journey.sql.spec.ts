@@ -3,11 +3,14 @@ import {
   frequencySql,
   outcomeSpec,
   pathSql,
+  productsSql,
   screensSql,
   summarySql,
 } from './journey.sql';
 
-const ALL_STATEMENTS = (outcome: 'subscribe' | 'refund') => {
+const OUTCOMES = [['subscribe'], ['renew'], ['refund']] as const;
+
+const ALL_STATEMENTS = (outcome: 'subscribe' | 'renew' | 'refund') => {
   const spec = outcomeSpec(outcome);
   return {
     summary: summarySql(spec),
@@ -15,11 +18,12 @@ const ALL_STATEMENTS = (outcome: 'subscribe' | 'refund') => {
     path: pathSql(spec),
     frequency: frequencySql(spec),
     screens: screensSql(spec),
+    products: productsSql(spec),
   };
 };
 
 describe('journey SQL', () => {
-  it.each([['subscribe'], ['refund']] as const)(
+  it.each(OUTCOMES)(
     'binds project and range as params in every %s statement',
     (outcome) => {
       for (const sql of Object.values(ALL_STATEMENTS(outcome))) {
@@ -37,7 +41,7 @@ describe('journey SQL', () => {
    * dropped one event from every control user and biased every comparison toward the cohort. The
    * cohort's anchor is the outcome event and must stay excluded; the control's must not.
    */
-  it.each([['subscribe'], ['refund']] as const)(
+  it.each(OUTCOMES)(
     'excludes the anchor for the %s cohort but keeps it for the control',
     (outcome) => {
       for (const sql of Object.values(ALL_STATEMENTS(outcome))) {
@@ -60,6 +64,32 @@ describe('journey SQL', () => {
     for (const sql of Object.values(ALL_STATEMENTS('subscribe'))) {
       expect(sql).toContain("e.event NOT LIKE '$rc%'");
     }
+  });
+
+  describe('renew', () => {
+    it('matches the renewal event and excludes anyone who ever renewed from the control', () => {
+      const sql = ALL_STATEMENTS('renew').summary;
+      expect(sql).toContain("e.event = '$rc_renewal'");
+      expect(sql).toContain('uid NOT IN (SELECT uid FROM ever_outcome)');
+      // Only a subscriber can renew, so the control is other subscribers.
+      expect(sql).toContain('control_required AS');
+    });
+
+    it('measures elapsed time from the purchase to the renewal', () => {
+      expect(ALL_STATEMENTS('renew').days).toContain("e.event = '$rc_initial_purchase'");
+      expect(outcomeSpec('renew').daysToOutcomeDefinition).toContain('$rc_renewal');
+    });
+  });
+
+  describe('products', () => {
+    it.each(OUTCOMES)('pins %s to the event that put the user in the cohort', (outcome) => {
+      const sql = ALL_STATEMENTS(outcome).products;
+      // Without this a user with several purchases would be counted once per purchase, against
+      // products they were not analysed on.
+      expect(sql).toContain('e.timestamp = c.anchor');
+      expect(sql).toContain("'$product_id'");
+      expect(sql).toContain("'$rc_period_type'");
+    });
   });
 
   describe('refund', () => {

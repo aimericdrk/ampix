@@ -1,6 +1,9 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, apiFetchBlob } from '../../lib/api/client';
 import type {
+  JourneyResponse,
+  JourneyOutcome,
+  JourneyAnalysisResponse,
   AskDataResponse,
   ClickHeatmapQuery,
   ClickHeatmapResponse,
@@ -161,6 +164,52 @@ export function useAskData(projectId: string) {
         method: 'POST',
         body: { question },
       }),
+  });
+}
+
+// --- Subscription journey (MyAmpix → Journey) ---
+
+/** The knobs the Journey page exposes; the server clamps both, so the UI never has to. */
+export interface JourneyParams {
+  outcome: JourneyOutcome;
+  from: string;
+  to: string;
+  windowDays: number;
+  pathSteps: number;
+}
+
+function journeyQuery({ outcome, from, to, windowDays, pathSteps }: JourneyParams): string {
+  return `outcome=${outcome}&from=${from}&to=${to}&window_days=${windowDays}&path_steps=${pathSteps}`;
+}
+
+/**
+ * MyRevenueCat → Journey: what users did in the run-up to subscribing or being refunded, against a
+ * control cohort that did neither. Ignores the global filter bar on purpose — the cohort IS the
+ * filter, and layering the app-wide filters on top would redefine "the control" on every page load.
+ */
+export function useSubscriptionJourney(projectId: string, params: JourneyParams) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'journey', params],
+    queryFn: () =>
+      apiFetch<JourneyResponse>(
+        `${base(projectId)}/metrics/subscriptions/journey?${journeyQuery(params)}`,
+      ),
+    enabled: params.from.length > 0 && params.to.length > 0,
+  });
+}
+
+/**
+ * Hands the same report to the model and returns its findings WITH the report they were drawn from.
+ * A mutation rather than a query: it spends an AI call, so it must fire only when someone asks for
+ * it, never on a re-render or a window focus.
+ */
+export function useAnalyzeSubscriptionJourney(projectId: string) {
+  return useMutation({
+    mutationFn: (params: JourneyParams) =>
+      apiFetch<JourneyAnalysisResponse>(
+        `${base(projectId)}/metrics/subscriptions/journey/analyze?${journeyQuery(params)}`,
+        { method: 'POST' },
+      ),
   });
 }
 

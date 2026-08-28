@@ -1,28 +1,30 @@
 import { useParams } from '@tanstack/react-router';
-import { Sparkles } from 'lucide-react';
+import { Footprints, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PageShell } from '../../../components/layout/PageShell';
 import { Button } from '../../../components/ui/button';
+import { EmptyState } from '../../../components/ui/empty-state';
 import { Reveal } from '../../../components/ui/reveal';
 import { SectionGrid } from '../../../components/ui/SectionGrid';
 import { Segmented } from '../../../components/ui/segmented';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import type { JourneyOutcome, JourneyResponse } from '../../../lib/api/types';
-import { ChartCard } from '../../analytics/components/charts/ChartCard';
-import { KpiTile } from '../../analytics/components/charts/KpiTile';
-import { DateRangeControl, useDateRange } from '../../analytics/date-range';
+import { ChartCard } from './charts/ChartCard';
+import { KpiTile } from './charts/KpiTile';
+import { DateRangeControl, useDateRange } from '../date-range';
 import { useProjects } from '../../projects/api';
 import {
   useAnalyzeSubscriptionJourney,
   useSubscriptionJourney,
   type JourneyParams,
 } from '../api';
-import { FrequencyTable, PathTimeline, SummaryTable } from './journey-blocks';
+import { FrequencyTable, PathTimeline, ProductsTable, SummaryTable } from './journey-blocks';
 import { JourneyAnalysisPanel, JourneyPayloadActions } from './journey-analysis';
 
 const OUTCOME_OPTIONS = [
   { value: 'subscribe', label: 'Before subscribing' },
+  { value: 'renew', label: 'Before renewing' },
   { value: 'refund', label: 'Before refunding' },
 ];
 
@@ -37,6 +39,7 @@ const WINDOW_OPTIONS = [
 /** The short name for the cohort's table column. */
 const COHORT_LABEL: Record<JourneyOutcome, string> = {
   subscribe: 'Subscribers',
+  renew: 'Renewers',
   refund: 'Refunders',
 };
 
@@ -45,12 +48,21 @@ const COHORT_LABEL: Record<JourneyOutcome, string> = {
  *  column header further down the page. */
 const COHORT_TILE_LABEL: Record<JourneyOutcome, string> = {
   subscribe: 'Subscribed in range',
+  renew: 'Renewed in range',
   refund: 'Refunded in range',
 };
 
 const OUTCOME_STEP_LABEL: Record<JourneyOutcome, string> = {
   subscribe: 'Subscribed',
+  renew: 'Renewed',
   refund: 'Refunded',
+};
+
+/** The products heading — the same fact, framed by the outcome it describes. */
+const PRODUCTS_TITLE: Record<JourneyOutcome, string> = {
+  subscribe: 'Which subscription they bought',
+  renew: 'Which subscription they renewed',
+  refund: 'Which subscription they refunded',
 };
 
 /** Below this the comparison is noise dressed as a finding, and the page says so rather than
@@ -67,8 +79,13 @@ function friendlyAnalyzeError(error: unknown): string {
 }
 
 /**
- * MyRevenueCat → Journey. What users actually do in the run-up to subscribing or being refunded,
- * measured against a control cohort that did neither.
+ * MyAmpix → Journey. What users actually do in the run-up to subscribing, renewing or being
+ * refunded, measured against a control cohort that did not.
+ *
+ * This lives under analytics, not MyRevenueCat, for the same reason Revenue does: it reads
+ * RevenueCat's official webhook events out of the EVENT STREAM, so it works on any project whose
+ * webhook points at us. The MyRevenueCat clone does not have to be set up, and gating the page
+ * behind that tool would hide it from every project that only ever connected the webhook.
  *
  * The control is the point: "subscribers viewed the paywall 2.4 times" is not a finding until you
  * know everyone else viewed it 0.3 times. So every block here is a comparison, and the page leads
@@ -79,8 +96,8 @@ function friendlyAnalyzeError(error: unknown): string {
  * agent fetching `GET .../subscriptions/journey` directly. `JourneyPayloadActions` exposes the last
  * of those without a round trip — the report is already in the browser.
  */
-export function RcJourneyPage() {
-  const { projectId } = useParams({ from: '/private/projects/$projectId/rc/journey' });
+export function JourneyPage() {
+  const { projectId } = useParams({ from: '/private/projects/$projectId/journey' });
   const { data: projectsData } = useProjects();
   const project = projectsData?.projects.find((candidate) => candidate.id === projectId);
   const { from, to } = useDateRange();
@@ -128,8 +145,8 @@ export function RcJourneyPage() {
       <PageShell
         projectId={projectId}
         title="Journey"
-        description="What users do before subscribing or refunding."
-        breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Journey' }]}
+        description="What users do before subscribing, renewing or refunding."
+        breadcrumbs={[{ label: 'Journey' }]}
       >
         {null}
       </PageShell>
@@ -142,8 +159,8 @@ export function RcJourneyPage() {
     <PageShell
       projectId={projectId}
       title="Journey"
-      description="What users do before subscribing or refunding, against everyone who did neither."
-      breadcrumbs={[{ label: 'MyRevenueCat' }, { label: 'Journey' }]}
+      description="What users do before subscribing, renewing or refunding, from RevenueCat's webhook events."
+      breadcrumbs={[{ label: 'Journey' }]}
       actions={header}
     >
       {journey.isError && (
@@ -152,7 +169,20 @@ export function RcJourneyPage() {
         </p>
       )}
 
-      {report && (
+      {report && report.cohort.users === 0 && report.control.users === 0 && (
+        <EmptyState
+          icon={Footprints}
+          title="No RevenueCat events yet"
+          description={
+            "This page reads RevenueCat's official webhook — $rc_initial_purchase, $rc_renewal, " +
+            '$rc_cancellation — straight out of your event stream. None have arrived for this ' +
+            'range yet. Point RevenueCat\u2019s webhook at this project in Project settings, or ' +
+            'widen the date range if it was connected recently.'
+          }
+        />
+      )}
+
+      {report && (report.cohort.users > 0 || report.control.users > 0) && (
         <Reveal>
           <div className="flex flex-col gap-6">
             <JourneyScope report={report} />
@@ -209,6 +239,15 @@ export function RcJourneyPage() {
                 nameHeader="Event"
                 caption="Events per user, cohort versus control"
               />
+            </ChartCard>
+
+            <ChartCard
+              title={PRODUCTS_TITLE[outcome]}
+              description="Straight off the webhook's own product id and period type, for the event that put each user in the cohort."
+              state={report.products.length > 0 ? 'ready' : 'empty'}
+              emptyText="The webhook carried no product id on these events."
+            >
+              <ProductsTable rows={report.products} />
             </ChartCard>
 
             <ChartCard

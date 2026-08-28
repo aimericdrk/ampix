@@ -1375,13 +1375,14 @@ export interface SubscriptionAttributionResponse {
 
 // --- Subscription journey (MyRevenueCat → Journey) ---
 //
-// Mirrors `backend/mobile_analytics/src/revenuecat/journey/journey.types.ts`. The payload is
+// Mirrors `backend/mobile_analytics/src/analytics/journey/journey.types.ts`. The payload is
 // deliberately self-describing — units, cohort sizes and plain-language definitions travel WITH the
 // numbers — because its other consumer is a language model, either through `/journey/analyze` or an
 // external agent fetching the endpoint directly. Keep the two files in step.
 
-/** Which outcome the journey is measured against. */
-export type JourneyOutcome = 'subscribe' | 'refund';
+/** Which outcome the journey is measured against — the three RevenueCat webhook moments that
+ *  matter: they paid, they paid again, they got their money back. */
+export type JourneyOutcome = 'subscribe' | 'renew' | 'refund';
 
 export interface JourneyDefinition {
   outcome: JourneyOutcome;
@@ -1433,6 +1434,17 @@ export interface JourneyFrequencyRow {
   lift: number | null;
 }
 
+/** Which subscription the outcome was, off the webhook's own `$product_id`. */
+export interface JourneyProductRow {
+  /** RevenueCat's product identifier; `null` when the webhook carried none. */
+  product_id: string | null;
+  /** RevenueCat's `period_type` — TRIAL, NORMAL, INTRO, …; `null` when absent. */
+  period_type: string | null;
+  users: number;
+  /** `users` ÷ cohort users. */
+  share: number;
+}
+
 /** `GET /projects/:projectId/metrics/subscriptions/journey`. */
 export interface JourneyResponse {
   definition: JourneyDefinition;
@@ -1443,6 +1455,8 @@ export interface JourneyResponse {
   path: JourneyPathStep[];
   frequency: JourneyFrequencyRow[];
   screens: JourneyFrequencyRow[];
+  /** Which subscription each cohort member's outcome event was for, most common first. */
+  products: JourneyProductRow[];
 }
 
 export interface JourneyFinding {

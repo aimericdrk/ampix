@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { renderApp } from '../../../test/render-app';
 import { server } from '../../../test/msw/server';
 import {
+  projectsHandlerWithoutRc,
   SUBSCRIPTION_JOURNEY_FIXTURE,
   TEST_PROJECT,
   TEST_USER,
@@ -12,13 +13,13 @@ import {
 } from '../../../test/msw/handlers';
 import { authStore } from '../../auth/store';
 
-const JOURNEY_URL = `/projects/${TEST_PROJECT.id}/rc/journey`;
+const JOURNEY_URL = `/projects/${TEST_PROJECT.id}/journey`;
 
 function signIn() {
   authStore.setSession(VALID_ACCESS_TOKEN, TEST_USER);
 }
 
-describe('RcJourneyPage', () => {
+describe('JourneyPage', () => {
   it('leads with both cohort sizes and states what each one is', async () => {
     signIn();
     renderApp(JOURNEY_URL);
@@ -142,6 +143,74 @@ describe('RcJourneyPage', () => {
     await userEvent.click(screen.getByRole('radio', { name: '30d' }));
     await screen.findByText('Subscribed in range');
     expect(windows).toContain('30');
+  });
+
+  it('lives under MyAmpix and renders with no MyRevenueCat integration configured', async () => {
+    // projectsHandlerWithoutRc reports integrations.revenuecat = false. The page reads the event
+    // stream, so it must render anyway — that is the whole reason it moved out of the clone.
+    server.use(projectsHandlerWithoutRc());
+    signIn();
+    renderApp(JOURNEY_URL);
+    const main = within(await screen.findByRole('main'));
+    expect(await main.findByText('Subscribed in range')).toBeInTheDocument();
+    expect(main.getByText('128')).toBeInTheDocument();
+  });
+
+  it('offers the renew outcome and asks the API for it', async () => {
+    const requested: string[] = [];
+    server.use(
+      http.get('/api/v1/projects/:projectId/metrics/subscriptions/journey', ({ request }) => {
+        const outcome = new URL(request.url).searchParams.get('outcome') ?? '';
+        requested.push(outcome);
+        return HttpResponse.json({
+          ...SUBSCRIPTION_JOURNEY_FIXTURE,
+          definition: { ...SUBSCRIPTION_JOURNEY_FIXTURE.definition, outcome },
+        });
+      }),
+    );
+    signIn();
+    renderApp(JOURNEY_URL);
+    const main = within(await screen.findByRole('main'));
+    await main.findByText('Subscribed in range');
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Before renewing' }));
+
+    expect(await main.findByText('Renewed in range')).toBeInTheDocument();
+    expect(requested).toContain('renew');
+  });
+
+  it('names which subscription the outcome was for', async () => {
+    signIn();
+    renderApp(JOURNEY_URL);
+    const main = within(await screen.findByRole('main'));
+    expect(await main.findByText('Which subscription they bought')).toBeInTheDocument();
+    const row = main.getByText('pro_annual').closest('tr')!;
+    expect(within(row).getByText('NORMAL')).toBeInTheDocument();
+    expect(within(row).getByText('70.3%')).toBeInTheDocument();
+    // A webhook with no product id is shown as "not set", not dropped.
+    expect(main.getByText('not set')).toBeInTheDocument();
+  });
+
+  it('explains itself instead of showing empty tables when no webhook events have arrived', async () => {
+    server.use(
+      http.get('/api/v1/projects/:projectId/metrics/subscriptions/journey', () =>
+        HttpResponse.json({
+          ...SUBSCRIPTION_JOURNEY_FIXTURE,
+          cohort: { users: 0 },
+          control: { users: 0 },
+          summary: [],
+          path: [],
+          frequency: [],
+          screens: [],
+          products: [],
+        }),
+      ),
+    );
+    signIn();
+    renderApp(JOURNEY_URL);
+    const main = within(await screen.findByRole('main'));
+    expect(await main.findByText('No RevenueCat events yet')).toBeInTheDocument();
+    expect(main.getByText(/\$rc_initial_purchase/)).toBeInTheDocument();
   });
 
   describe('AI analysis', () => {

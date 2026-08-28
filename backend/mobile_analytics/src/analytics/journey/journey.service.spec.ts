@@ -1,7 +1,6 @@
 import type { ClickHouseService } from '../../clickhouse/clickhouse.service';
-import type { PrismaService } from '../../prisma/prisma.service';
 import type { ProjectsService } from '../../projects/core/projects.service';
-import { RcJourneyService } from './rc-journey.service';
+import { JourneyService } from './journey.service';
 
 const PID = '0197f6a0-0000-7000-8000-0000000000aa';
 
@@ -12,15 +11,10 @@ type Fixtures = {
   path?: unknown[];
   frequency?: unknown[];
   screens?: unknown[];
+  products?: unknown[];
 };
 
-function build({
-  integration = { id: 'int-1' } as unknown,
-  fixtures = {} as Fixtures,
-}: { integration?: unknown; fixtures?: Fixtures } = {}) {
-  const prisma = {
-    revenueCatIntegration: { findUnique: jest.fn(async () => integration) },
-  } as unknown as PrismaService;
+function build({ fixtures = {} as Fixtures }: { fixtures?: Fixtures } = {}) {
   // Routed by a marker unique to each statement rather than by call order, so the assertions stay
   // valid if the Promise.all ever reorders.
   const clickhouse = {
@@ -29,16 +23,15 @@ function build({
       if (sql.includes('origins AS')) return fixtures.days ?? [];
       if (sql.includes('steps AS')) return fixtures.path ?? [];
       if (sql.includes("event = '$screen_view'")) return fixtures.screens ?? [];
+      if (sql.includes('$product_id')) return fixtures.products ?? [];
       return fixtures.frequency ?? [];
     }),
   };
   const projects = { assertMembership: jest.fn(async () => undefined) };
   return {
-    prisma,
     clickhouse,
     projects,
-    svc: new RcJourneyService(
-      prisma,
+    svc: new JourneyService(
       clickhouse as unknown as ClickHouseService,
       projects as unknown as ProjectsService,
     ),
@@ -74,37 +67,37 @@ const SUMMARY_ROWS = [
   },
 ];
 
-describe('RcJourneyService.getJourney', () => {
-  it('404s when the project has no RevenueCat integration', async () => {
-    const { svc } = build({ integration: null });
-    await expect(svc.getJourney('u1', PID, 'subscribe')).rejects.toMatchObject({
-      problem: { status: 404 },
-    });
+describe('JourneyService.getJourney', () => {
+  // The whole point of living under analytics: no RevenueCat integration row is consulted, so a
+  // project that has never configured the MyRevenueCat clone still gets a report.
+  it('reports without a RevenueCat integration, reading only the event stream', async () => {
+    const { svc, clickhouse } = build({ fixtures: { summary: SUMMARY_ROWS } });
+    const report = await svc.getJourney('u1', PID, 'subscribe');
+    expect(report.cohort.users).toBe(100);
+    expect(clickhouse.query).toHaveBeenCalled();
   });
 
-  it('asserts membership before touching Postgres or ClickHouse', async () => {
-    const { prisma, clickhouse } = build();
+  it('asserts membership before touching ClickHouse', async () => {
+    const { clickhouse } = build();
     const projects = {
       assertMembership: jest.fn(async () =>
         Promise.reject(Object.assign(new Error('x'), { problem: { status: 403 } })),
       ),
     };
-    const svc = new RcJourneyService(
-      prisma,
+    const svc = new JourneyService(
       clickhouse as unknown as ClickHouseService,
       projects as unknown as ProjectsService,
     );
     await expect(svc.getJourney('u1', PID, 'subscribe')).rejects.toMatchObject({
       problem: { status: 403 },
     });
-    expect(prisma.revenueCatIntegration.findUnique).not.toHaveBeenCalled();
     expect(clickhouse.query).not.toHaveBeenCalled();
   });
 
   it('binds every request value as a query param and interpolates none of them', async () => {
     const { svc, clickhouse } = build();
     await svc.getJourney('u1', PID, 'subscribe', '2026-07-01', '2026-07-10', 14, 12);
-    expect(clickhouse.query.mock.calls.length).toBe(5);
+    expect(clickhouse.query.mock.calls.length).toBe(6);
     for (const [sql, params] of clickhouse.query.mock.calls) {
       expect(sql).toContain('{projectId:UUID}');
       expect(sql).not.toContain(PID);
@@ -233,6 +226,48 @@ describe('RcJourneyService.getJourney', () => {
     const row = report.frequency.find((r) => r.name === 'only_converters_do_this')!;
     expect(row.control_per_user).toBe(0);
     expect(row.lift).toBeNull();
+  });
+
+  it('measures renewals against subscribers who did not renew', async () => {
+    const { svc, clickhouse } = build();
+    const report = await svc.getJourney('u1', PID, 'renew');
+    expect(report.definition.outcome).toBe('renew');
+    expect(report.definition.outcome_events).toEqual(['$rc_renewal']);
+    // Renewal is only reachable by someone who already paid, so the control is other subscribers.
+    expect(report.definition.control_criteria).toContain('$rc_initial_purchase');
+    expect(report.definition.control_criteria).toContain('never renewed');
+    // Elapsed time runs purchase -> renewal, not first-seen -> renewal.
+    const days = report.summary.find((m) => m.metric === 'days_to_outcome')!;
+    expect(days.definition).toContain('$rc_initial_purchase');
+    expect(days.definition).toContain('$rc_renewal');
+    for (const [sql] of clickhouse.query.mock.calls) {
+      expect(sql).toContain('$rc_renewal');
+    }
+  });
+
+  it('reports which subscription the outcome was, off the webhook product id', async () => {
+    const { svc } = build({
+      fixtures: {
+        summary: SUMMARY_ROWS,
+        products: [
+          { product_id: 'pro_annual', period_type: 'NORMAL', users: 70 },
+          { product_id: 'pro_monthly', period_type: 'TRIAL', users: 30 },
+        ],
+      },
+    });
+    const report = await svc.getJourney('u1', PID, 'subscribe');
+    expect(report.products).toEqual([
+      { product_id: 'pro_annual', period_type: 'NORMAL', users: 70, share: 0.7 },
+      { product_id: 'pro_monthly', period_type: 'TRIAL', users: 30, share: 0.3 },
+    ]);
+  });
+
+  it('reports a missing product id as null, not as an empty string', async () => {
+    const { svc } = build({
+      fixtures: { summary: SUMMARY_ROWS, products: [{ product_id: '', period_type: '', users: 5 }] },
+    });
+    const report = await svc.getJourney('u1', PID, 'subscribe');
+    expect(report.products[0]).toMatchObject({ product_id: null, period_type: null });
   });
 
   it('ships the definitions an AI needs to read the numbers without this file', async () => {
