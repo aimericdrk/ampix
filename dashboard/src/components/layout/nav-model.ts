@@ -122,6 +122,9 @@ export const TOOLS: Tool[] = [
           // Correlates RC events against the SDK's event stream — a MyAmpix capability, not
           // something real RevenueCat can do. Hence its own group rather than mirroring RC's IA.
           { label: 'Conversion', to: p('/rc/conversion'), icon: 'conversion' },
+          // What users DO in the run-up to subscribing or refunding, against a control cohort —
+          // the sequence behind Conversion's totals.
+          { label: 'Journey', to: p('/rc/journey'), icon: 'journey' },
         ],
       },
       {

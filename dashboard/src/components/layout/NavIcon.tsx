@@ -9,6 +9,7 @@ import {
   CircleUser,
   Clock,
   Contact,
+  Footprints,
   FileChartLine,
   Filter,
   FolderOpen,
@@ -65,6 +66,7 @@ export type IconName =
   | 'offerings'
   | 'paywalls'
   | 'conversion'
+  | 'journey'
   | 'flows';
 
 /** Lucide glyph per nav destination — kept as a lookup so the icon set stays a single source of truth. */
@@ -100,6 +102,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   offerings: Layers,
   paywalls: PanelTop,
   conversion: Target,
+  journey: Footprints,
   flows: Waypoints,
 };
 

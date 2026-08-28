@@ -37,6 +37,7 @@ import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
 import { RcConversionPage } from './features/revenuecat/components/RcConversionPage';
+import { RcJourneyPage } from './features/revenuecat/components/RcJourneyPage';
 import { RcOverviewPage } from './features/revenuecat/components/RcOverviewPage';
 import { RcPlaceholderPage } from './features/revenuecat/components/RcPlaceholderPage';
 import { RcSettingsPage } from './features/revenuecat/components/RcSettingsPage';
@@ -299,6 +300,12 @@ const rcConversionRoute = createRoute({
   component: RcConversionPage,
 });
 
+const rcJourneyRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/rc/journey',
+  component: RcJourneyPage,
+});
+
 const rcChartsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/rc/charts',
@@ -427,6 +434,7 @@ export const routeTree = rootRoute.addChildren([
     subscriptionsRedirectRoute,
     rcOverviewRoute,
     rcConversionRoute,
+    rcJourneyRoute,
     rcChartsRoute,
     rcCustomersRoute,
     rcCustomerDetailRoute,

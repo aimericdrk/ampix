@@ -28,7 +28,9 @@ import { V2AnalyticsService } from './services/v2-analytics.service';
     MistralService,
   ],
   // Exported so the §16 saved-reports/dashboards runner can execute stored definitions through the
-  // exact same injection-safe engine (re-validating on every run).
-  exports: [AnalyticsService, AdvancedAnalyticsService],
+  // exact same injection-safe engine (re-validating on every run). `MistralService` is exported for
+  // RevenueCatModule's journey analysis — one wrapper, one key check, one error taxonomy, rather
+  // than a second registration of the same stateless client in another module.
+  exports: [AnalyticsService, AdvancedAnalyticsService, MistralService],
 })
 export class AnalyticsModule {}

@@ -4,6 +4,9 @@ import { encodeFiltersParam } from '../analytics/api';
 import { PROJECTS_QUERY_KEY, useProjects } from '../projects/api';
 import type {
   InsightsFilter,
+  JourneyAnalysisResponse,
+  JourneyOutcome,
+  JourneyResponse,
   RcIntegrationStatus,
   RcJournalResponse,
   RcReplayResponse,
@@ -116,6 +119,50 @@ export function useSubscriptionAttribution(projectId: string, from: string, to: 
         `${metricsBase(projectId)}/subscriptions/attribution?from=${from}&to=${to}`,
       ),
     enabled: from.length > 0 && to.length > 0,
+  });
+}
+
+/** The knobs the Journey page exposes; the server clamps both, so the UI never has to. */
+export interface JourneyParams {
+  outcome: JourneyOutcome;
+  from: string;
+  to: string;
+  windowDays: number;
+  pathSteps: number;
+}
+
+function journeyQuery({ outcome, from, to, windowDays, pathSteps }: JourneyParams): string {
+  return `outcome=${outcome}&from=${from}&to=${to}&window_days=${windowDays}&path_steps=${pathSteps}`;
+}
+
+/**
+ * MyRevenueCat → Journey: what users did in the run-up to subscribing or being refunded, against a
+ * control cohort that did neither. Ignores the global filter bar on purpose — the cohort IS the
+ * filter, and layering the app-wide filters on top would redefine "the control" on every page load.
+ */
+export function useSubscriptionJourney(projectId: string, params: JourneyParams) {
+  return useQuery({
+    queryKey: [...rcKey(projectId), 'journey', params],
+    queryFn: () =>
+      apiFetch<JourneyResponse>(
+        `${metricsBase(projectId)}/subscriptions/journey?${journeyQuery(params)}`,
+      ),
+    enabled: params.from.length > 0 && params.to.length > 0,
+  });
+}
+
+/**
+ * Hands the same report to the model and returns its findings WITH the report they were drawn from.
+ * A mutation rather than a query: it spends an AI call, so it must fire only when someone asks for
+ * it, never on a re-render or a window focus.
+ */
+export function useAnalyzeSubscriptionJourney(projectId: string) {
+  return useMutation({
+    mutationFn: (params: JourneyParams) =>
+      apiFetch<JourneyAnalysisResponse>(
+        `${metricsBase(projectId)}/subscriptions/journey/analyze?${journeyQuery(params)}`,
+        { method: 'POST' },
+      ),
   });
 }
 

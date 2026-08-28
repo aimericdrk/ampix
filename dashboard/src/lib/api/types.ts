@@ -1372,3 +1372,92 @@ export interface SubscriptionAttributionResponse {
   time_to_convert: SubscriptionTimeToConvertBucket[];
   trial_funnel: SubscriptionTrialFunnel;
 }
+
+// --- Subscription journey (MyRevenueCat → Journey) ---
+//
+// Mirrors `backend/mobile_analytics/src/revenuecat/journey/journey.types.ts`. The payload is
+// deliberately self-describing — units, cohort sizes and plain-language definitions travel WITH the
+// numbers — because its other consumer is a language model, either through `/journey/analyze` or an
+// external agent fetching the endpoint directly. Keep the two files in step.
+
+/** Which outcome the journey is measured against. */
+export type JourneyOutcome = 'subscribe' | 'refund';
+
+export interface JourneyDefinition {
+  outcome: JourneyOutcome;
+  outcome_events: string[];
+  outcome_criteria: string;
+  control_criteria: string;
+  window_days: number;
+  path_steps: number;
+  excluded_event_prefix: string;
+  date_range: { from: string; to: string };
+  generated_at: string;
+}
+
+export interface JourneyQuantiles {
+  p25: number;
+  median: number;
+  p75: number;
+}
+
+export interface JourneySummaryMetric {
+  metric: 'steps_before' | 'sessions_before' | 'distinct_events_before' | 'days_to_outcome';
+  unit: 'events' | 'sessions' | 'event_names' | 'days';
+  definition: string;
+  cohort: JourneyQuantiles | null;
+  /** `null` for metrics with no control side — `days_to_outcome` has no control anchor. */
+  control: JourneyQuantiles | null;
+  /** cohort median ÷ control median; `null` when the ratio is undefined. */
+  lift: number | null;
+}
+
+export interface JourneyPathStep {
+  /** 1 = the step immediately before the outcome. */
+  steps_before_outcome: number;
+  event: string;
+  /** Set only for `$screen_view`. */
+  screen_name: string | null;
+  users: number;
+  /** `users` ÷ cohort users — how typical this step is. A low share means there is no common path. */
+  share: number;
+  median_seconds_to_outcome: number;
+}
+
+export interface JourneyFrequencyRow {
+  name: string;
+  cohort_per_user: number;
+  control_per_user: number;
+  cohort_user_share: number;
+  control_user_share: number;
+  lift: number | null;
+}
+
+/** `GET /projects/:projectId/metrics/subscriptions/journey`. */
+export interface JourneyResponse {
+  definition: JourneyDefinition;
+  cohort: { users: number };
+  control: { users: number };
+  summary: JourneySummaryMetric[];
+  /** Ordered oldest → newest; the last entry is `steps_before_outcome: 1`. */
+  path: JourneyPathStep[];
+  frequency: JourneyFrequencyRow[];
+  screens: JourneyFrequencyRow[];
+}
+
+export interface JourneyFinding {
+  title: string;
+  detail: string;
+  /** The figures the claim rests on, so a reader can check it against `report`. */
+  evidence: string[];
+}
+
+/** `POST /projects/:projectId/metrics/subscriptions/journey/analyze`. */
+export interface JourneyAnalysisResponse {
+  outcome: JourneyOutcome;
+  headline: string;
+  findings: JourneyFinding[];
+  caveats: string[];
+  /** The exact report the model read, so the narrative stays auditable. */
+  report: JourneyResponse;
+}

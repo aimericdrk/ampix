@@ -63,6 +63,35 @@ function buildUserMessage(question: string, context: AskContext): string {
   ].join('\n');
 }
 
+/**
+ * The journey-analysis system prompt. Where {@link SYSTEM_PROMPT} asks the model to TRANSLATE, this
+ * one asks it to READ: the user message carries an already-computed report whose every block states
+ * its own units, cohort sizes and cohort definitions, so the model needs no schema knowledge and no
+ * tool access to reason about it.
+ *
+ * The rules exist because the failure mode here is confident narration of noise: a 4-user cohort
+ * will happily produce a "3.2x lift" the model is glad to explain. Grounding each finding in cited
+ * figures, and requiring the thin-data caveat, is what keeps the output auditable against the
+ * `report` the caller also receives.
+ */
+const JOURNEY_SYSTEM_PROMPT = `You analyse a behavioural analytics report about what users did before an outcome (subscribing, or being refunded). The report compares a COHORT (users who had the outcome) against a CONTROL group (comparable users who did not). Every block in the report states its own units and definitions — read them.
+
+Reply with ONLY a JSON object of this exact shape:
+
+{
+  "headline": "<one sentence: the single most important thing in this report>",
+  "findings": [ { "title": "<short claim>", "detail": "<2-3 sentences explaining it and what to do about it>", "evidence": ["<the specific figures this rests on>"] } ],
+  "caveats": ["<where the data does not support a conclusion>"]
+}
+
+STRICT rules:
+- Ground EVERY finding in figures that appear in the report, and put those figures in "evidence". Never state a number that is not in the report, and never compute a ratio the report reports as null.
+- A difference between cohort and control is the only thing that is a finding. A number that is similar in both groups is not interesting no matter how large it is — say so instead of dressing it up.
+- If the cohort or control has fewer than 30 users, say plainly in "caveats" that the sample is too small to conclude from, and soften every finding accordingly.
+- If "path" steps have a low "share", the cohort does NOT follow one common path; report that as the finding rather than presenting the modal path as typical.
+- 3 to 5 findings, ordered most important first. Prefer fewer, better-supported findings over a long list.
+- No prose outside the JSON object, no markdown code fences.`;
+
 interface MistralChatCompletionResponse {
   choices?: Array<{ message?: { content?: unknown } }>;
 }
@@ -77,6 +106,15 @@ export class MistralService {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   async translateToInsights(question: string, context: AskContext): Promise<unknown> {
+    return this.complete(SYSTEM_PROMPT, buildUserMessage(question, context));
+  }
+
+  /**
+   * One JSON-mode chat completion. Shared by every prompt in this service so the key check, the
+   * timeout, the non-2xx handling and the "content must parse as JSON" contract are written once —
+   * a second prompt must not mean a second copy of the error taxonomy.
+   */
+  private async complete(systemPrompt: string, userMessage: string): Promise<unknown> {
     const apiKey = this.config.mistralApiKey;
     if (!apiKey) {
       throw new AiUnconfiguredError();
@@ -98,8 +136,8 @@ export class MistralService {
           model,
           response_format: { type: 'json_object' },
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: buildUserMessage(question, context) },
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
           ],
         }),
         signal: controller.signal,
@@ -131,5 +169,16 @@ export class MistralService {
     } catch (err) {
       throw new AiRequestError('Mistral API returned content that is not valid JSON', err);
     }
+  }
+
+  /**
+   * Reads an already-computed subscription-journey report and returns the model's findings as
+   * untyped JSON. Like {@link translateToInsights}, the result is NEVER trusted here — the caller
+   * validates it before it reaches a response body. The report is serialised straight into the user
+   * message: it is our own aggregate, carries no per-user rows, and is self-describing by
+   * construction, so there is nothing to summarise or redact on the way in.
+   */
+  async analyzeJourney(report: unknown): Promise<unknown> {
+    return this.complete(JOURNEY_SYSTEM_PROMPT, JSON.stringify(report));
   }
 }

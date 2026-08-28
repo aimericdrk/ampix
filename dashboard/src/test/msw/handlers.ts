@@ -60,6 +60,8 @@ import type {
   RenameOrgResponse,
   SessionsSummaryResponse,
   Setup2faResponse,
+  JourneyAnalysisResponse,
+  JourneyResponse,
   SubscriptionAttributionResponse,
   SubscriptionsSummaryResponse,
   UpdatedProjectMember,
@@ -650,6 +652,115 @@ export const SUBSCRIPTION_ATTRIBUTION_FIXTURE: SubscriptionAttributionResponse =
     { bucket: '7-14d', users: 1 },
   ],
   trial_funnel: { trials: 10, converted: 4 },
+};
+
+/**
+ * Deterministic sample for `GET /metrics/subscriptions/journey`. Shaped so the assertions can tell
+ * the blocks apart: a clear paywall lift, one event the control never does (undefined lift), and a
+ * path whose deepest step is weakly shared.
+ */
+export const SUBSCRIPTION_JOURNEY_FIXTURE: JourneyResponse = {
+  definition: {
+    outcome: 'subscribe',
+    outcome_events: ['$rc_initial_purchase'],
+    outcome_criteria: 'Users whose first $rc_initial_purchase falls in the selected range.',
+    control_criteria:
+      'Users with activity in the selected range who have never bought ($rc_initial_purchase) at any time.',
+    window_days: 7,
+    path_steps: 8,
+    excluded_event_prefix: '$rc',
+    date_range: { from: '2026-07-01', to: '2026-07-30' },
+    generated_at: '2026-07-31T00:00:00.000Z',
+  },
+  cohort: { users: 128 },
+  control: { users: 512 },
+  summary: [
+    {
+      metric: 'steps_before',
+      unit: 'events',
+      definition: 'Events recorded in the window before the anchor.',
+      cohort: { p25: 12, median: 23, p75: 41 },
+      control: { p25: 4, median: 9, p75: 15 },
+      lift: 2.556,
+    },
+    {
+      metric: 'days_to_outcome',
+      unit: 'days',
+      definition: "Days from the user's first event of any kind to their first $rc_initial_purchase.",
+      cohort: { p25: 1.5, median: 4.2, p75: 11 },
+      control: null,
+      lift: null,
+    },
+  ],
+  path: [
+    {
+      steps_before_outcome: 3,
+      event: 'browse_catalog',
+      screen_name: null,
+      users: 30,
+      share: 0.234,
+      median_seconds_to_outcome: 132,
+    },
+    {
+      steps_before_outcome: 2,
+      event: '$screen_view',
+      screen_name: '/pay',
+      users: 98,
+      share: 0.766,
+      median_seconds_to_outcome: 73,
+    },
+    {
+      steps_before_outcome: 1,
+      event: 'paywall_viewed',
+      screen_name: null,
+      users: 95,
+      share: 0.742,
+      median_seconds_to_outcome: 21,
+    },
+  ],
+  frequency: [
+    {
+      name: 'paywall_viewed',
+      cohort_per_user: 2.4,
+      control_per_user: 0.3,
+      cohort_user_share: 0.9,
+      control_user_share: 0.15,
+      lift: 8,
+    },
+    {
+      name: 'promo_code_entered',
+      cohort_per_user: 0.6,
+      control_per_user: 0,
+      cohort_user_share: 0.4,
+      control_user_share: 0,
+      lift: null,
+    },
+  ],
+  screens: [
+    {
+      name: '/pay',
+      cohort_per_user: 1.8,
+      control_per_user: 0.2,
+      cohort_user_share: 0.88,
+      control_user_share: 0.1,
+      lift: 9,
+    },
+  ],
+};
+
+/** Deterministic sample for `POST /metrics/subscriptions/journey/analyze`. */
+export const SUBSCRIPTION_JOURNEY_ANALYSIS_FIXTURE: JourneyAnalysisResponse = {
+  outcome: 'subscribe',
+  headline: 'Subscribers reach the paywall eight times as often as everyone else.',
+  findings: [
+    {
+      title: 'Paywall exposure is the separator',
+      detail: 'Subscribers see the paywall far more often than the control group does.',
+      evidence: ['paywall_viewed 2.4/user vs 0.3/user', 'lift 8x'],
+    },
+  ],
+  caveats: ['Both cohorts are large enough to compare.'],
+  report: SUBSCRIPTION_JOURNEY_FIXTURE,
 };
 
 /** Deterministic active subscription for `GET/POST .../users/:distinctId(/refresh)`. */
@@ -1740,6 +1851,24 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     return HttpResponse.json(SUBSCRIPTION_ATTRIBUTION_FIXTURE);
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/subscriptions/journey', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const outcome = new URL(request.url).searchParams.get('outcome') ?? 'subscribe';
+    return HttpResponse.json({
+      ...SUBSCRIPTION_JOURNEY_FIXTURE,
+      definition: { ...SUBSCRIPTION_JOURNEY_FIXTURE.definition, outcome },
+    });
+  }),
+
+  http.post('/api/v1/projects/:projectId/metrics/subscriptions/journey/analyze', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(SUBSCRIPTION_JOURNEY_ANALYSIS_FIXTURE);
   }),
 
   http.post('/api/v1/orgs/:orgId/projects', async ({ request, params }) => {

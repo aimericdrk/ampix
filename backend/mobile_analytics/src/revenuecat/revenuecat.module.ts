@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { AuthModule } from '../auth/auth.module';
 import { AuthzModule } from '../authz/authz.module';
 import { ProjectsModule } from '../projects/projects.module';
@@ -9,6 +10,8 @@ import { RcAdminService } from './admin/rc-admin.service';
 import { RcApiClient } from './api/rc-api.client';
 import { RcBackfillService } from './backfill/rc-backfill.service';
 import { RcIdentityService } from './identity/rc-identity.service';
+import { RcJourneyController } from './journey/rc-journey.controller';
+import { RcJourneyService } from './journey/rc-journey.service';
 import { RcAttributionService } from './metrics/rc-attribution.service';
 import { RcMetricsController } from './metrics/rc-metrics.controller';
 import { RcMetricsService } from './metrics/rc-metrics.service';
@@ -18,8 +21,8 @@ import { RcWebhookGuard } from './webhook/rc-webhook.guard';
 import { RcWebhookProcessor } from './webhook/rc-webhook.processor';
 
 @Module({
-  imports: [AuthModule, AuthzModule, ProjectsModule, CohortsModule],
-  controllers: [RcWebhookController, RcAdminController, RcMetricsController],
+  imports: [AnalyticsModule, AuthModule, AuthzModule, ProjectsModule, CohortsModule],
+  controllers: [RcWebhookController, RcAdminController, RcMetricsController, RcJourneyController],
   providers: [
     RcWebhookGuard,
     RcWebhookProcessor,
@@ -32,6 +35,7 @@ import { RcWebhookProcessor } from './webhook/rc-webhook.processor';
     RcAdminService,
     RcSummaryService,
     RcAttributionService,
+    RcJourneyService,
     RcMetricsService,
   ],
   exports: [RcWebhookProcessor, RcIdentityService],
