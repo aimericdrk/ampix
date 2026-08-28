@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { cn } from '../../../../lib/cn';
 import { Card } from '../../../../components/ui/card';
 import { Reveal } from '../../../../components/ui/reveal';
 import { StatTile as UiStatTile } from '../../../../components/ui/stat-tile';
@@ -40,7 +41,7 @@ export function StatTile({
   spark?: number[];
 }) {
   const hasSpark = !!spark && spark.length >= 2;
-  const sparkline = hasSpark ? <Sparkline values={spark as number[]} /> : undefined;
+  const sparkline = hasSpark ? <Sparkline values={spark as number[]} stretch /> : undefined;
   const arrow = delta ? (delta.direction === 'up' ? '▲' : delta.direction === 'down' ? '▼' : '→') : '';
 
   const extras = (
@@ -64,8 +65,11 @@ export function StatTile({
   }
 
   return (
-    <Reveal>
-      <Card interactive className="relative overflow-hidden p-6">
+    <Reveal className="h-full">
+      <Card
+        interactive
+        className={cn('relative flex h-full flex-col overflow-hidden p-6', sparkline && 'pb-12')}
+      >
         <span className={LABEL_CLASS}>{label}</span>
         <p className="mt-2 font-display text-3xl font-semibold tabular-nums">{value}</p>
         {extras}

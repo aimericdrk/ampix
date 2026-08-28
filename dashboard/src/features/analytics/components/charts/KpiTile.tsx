@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { cn } from '../../../../lib/cn';
 import { Card } from '../../../../components/ui/card';
 import { Reveal } from '../../../../components/ui/reveal';
 import { Skeleton } from '../../../../components/ui/Skeleton';
@@ -55,17 +56,20 @@ export function KpiTile({
   unfiltered?: boolean;
 }) {
   const hasSpark = !!spark && spark.length >= 2;
-  const sparkline = hasSpark ? <Sparkline values={spark as number[]} /> : undefined;
+  const sparkline = hasSpark ? <Sparkline values={spark as number[]} stretch /> : undefined;
 
   if (loading) {
     return (
-      <Reveal>
-        <Card interactive className="relative overflow-hidden p-6">
+      <Reveal className="h-full">
+        <Card
+          interactive
+          className={cn('relative flex h-full flex-col overflow-hidden p-6', hasSpark && 'pb-12')}
+        >
           <span className={LABEL_CLASS}>{label}</span>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <Skeleton data-testid="kpi-tile-skeleton" className="h-8 w-20" />
-            {hasSpark && <Skeleton className="h-8 w-24" />}
-          </div>
+          <Skeleton data-testid="kpi-tile-skeleton" className="mt-2 h-8 w-20" />
+          {/* Placed exactly where the real sparkline lands, so the tile doesn't reflow when the
+              data arrives. */}
+          {hasSpark && <Skeleton className="absolute inset-x-0 bottom-0 h-8 rounded-none" />}
         </Card>
       </Reveal>
     );
@@ -95,8 +99,11 @@ export function KpiTile({
   }
 
   return (
-    <Reveal>
-      <Card interactive className="relative overflow-hidden p-6">
+    <Reveal className="h-full">
+      <Card
+        interactive
+        className={cn('relative flex h-full flex-col overflow-hidden p-6', sparkline && 'pb-12')}
+      >
         <span className={LABEL_CLASS}>{label}</span>
         <p className="mt-2 font-display text-3xl font-semibold tabular-nums">
           {value}

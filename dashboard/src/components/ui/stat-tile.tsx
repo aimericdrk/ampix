@@ -29,7 +29,11 @@ export interface StatTileProps {
 }
 
 /** KPI card: label, animated value, optional delta badge (up/down/flat) and deltaLabel, optional
- * icon tile, and an optional sparkline pinned to the bottom edge as a faint backdrop. */
+ * icon tile, and an optional sparkline pinned to the bottom edge as a faint backdrop.
+ *
+ * The sparkline is absolutely positioned, so the card reserves a bottom gutter as tall as the
+ * strip plus a gap (`pb-12`) whenever one is present — without it the backdrop is drawn straight
+ * over the last line of content (the hint, or the delta row on a hintless tile). */
 export function StatTile({
   label,
   value,
@@ -43,8 +47,11 @@ export function StatTile({
   children,
 }: StatTileProps) {
   return (
-    <Reveal index={index}>
-      <Card interactive className={cn('relative overflow-hidden p-6', className)}>
+    <Reveal index={index} className="h-full">
+      <Card
+        interactive
+        className={cn('relative flex h-full flex-col overflow-hidden p-6', sparkline && 'pb-12', className)}
+      >
         {Icon ? (
           <div className="flex items-start justify-between gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-text-muted">{label}</span>
