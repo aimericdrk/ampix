@@ -27,7 +27,6 @@ describe('nav-model tools', () => {
       expect(shown).toContain('Overview');
       expect(shown).toContain('Customers');
       expect(shown).toContain('Conversion');
-      expect(shown).toContain('Integration settings');
     }
   });
 

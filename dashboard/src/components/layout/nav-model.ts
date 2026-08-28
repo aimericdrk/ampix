@@ -127,13 +127,6 @@ export const TOOLS: Tool[] = [
           { label: 'Journey', to: p('/rc/journey'), icon: 'journey' },
         ],
       },
-      {
-        // Its own route rather than a link to project settings: the active tool is derived from
-        // the pathname, so pointing this at /projects/$projectId would eject you from
-        // MyRevenueCat the moment you clicked the one item whose job is configuring it.
-        items: [{ label: 'Integration settings', to: p('/rc/settings'), icon: 'settings' }],
-        accent: 'violet',
-      },
     ],
   },
 ];
@@ -142,6 +135,10 @@ export const TOOLS: Tool[] = [
  * Project settings belongs to no tool: it configures the project itself, so it lives in the global
  * sidebar rather than a tool's section nav. Kept here so `allGroups` still hands it to the command
  * palette and the shortcut map, which stay tool-agnostic.
+ *
+ * It is also the only nav entry into MyRevenueCat's settings (`/rc/settings`): the two are scopes
+ * of one settings screen, switched from a control at the top of it, so MyRevenueCat's section nav
+ * carries no "Integration settings" item of its own.
  */
 export const PROJECT_SETTINGS: NavItem = {
   label: 'Project settings',
@@ -154,7 +151,7 @@ export interface NavOptions {
   /** Legacy real-RevenueCat-connected flag. Retained so existing callers keep type-checking, but it
    * NO LONGER hides anything: MyRevenueCat is the self-hosted clone (its pages read our own
    * `mobile_purchase` service), so the nav must never gate on a real RevenueCat connection — there
-   * is nothing external to connect to. Integration settings is just one item among the clone pages. */
+   * is nothing external to connect to. */
   rcEnabled?: boolean;
 }
 
