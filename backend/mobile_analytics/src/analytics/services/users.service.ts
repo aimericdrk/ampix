@@ -12,7 +12,11 @@ import { ProblemException } from '../../common/problem-details';
 import { ALIASES_CTE, canonicalization, RESOLVE_CANONICAL_ID_SQL } from '../support/identity';
 import { clampLimit, parseEventSourceParam, parseIsoInstantParam } from '../support/read-query.util';
 import { EVENT_SOURCE_EXPR } from '../support/property-resolver';
-import { USER_SEARCH_PROFILE_KEYS } from './analytics.shared';
+import {
+  firstProfileStringExpr,
+  USER_PHONE_PROFILE_KEYS,
+  USER_SEARCH_PROFILE_KEYS,
+} from './analytics.shared';
 
 interface LiveEventRow {
   insert_id: string;
@@ -31,6 +35,8 @@ interface UserRow {
   event_count: string | number;
   name: string;
   email: string;
+  /** Nullable in SQL (`coalesce` over the accepted spellings), so null when the profile sets none. */
+  phone: string | null;
 }
 
 interface ProfilePropertiesRow {
@@ -206,7 +212,8 @@ export class UsersService {
               max(e.timestamp) AS last_seen,
               count(DISTINCT e.insert_id) AS event_count,
               any(JSONExtractString(toJSONString(up.properties), 'name')) AS name,
-              any(JSONExtractString(toJSONString(up.properties), 'email')) AS email
+              any(JSONExtractString(toJSONString(up.properties), 'email')) AS email,
+              any(${firstProfileStringExpr(USER_PHONE_PROFILE_KEYS)}) AS phone
        FROM events AS e
        ${canon.join}
        LEFT JOIN (
@@ -229,6 +236,7 @@ export class UsersService {
       event_count: Number(row.event_count),
       name: row.name || null,
       email: row.email || null,
+      phone: row.phone || null,
     }));
 
     return { users, next_cursor: hasMore ? page[page.length - 1].distinct_id : null };

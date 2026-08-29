@@ -426,7 +426,7 @@ describe('AnalyticsService', () => {
   });
 
   describe('listUsers', () => {
-    it('checks membership and maps rows to the users-list shape, including name/email', async () => {
+    it('checks membership and maps rows to the users-list shape, including name/email/phone', async () => {
       const clickhouse = makeClickhouse([
         [
           {
@@ -436,6 +436,7 @@ describe('AnalyticsService', () => {
             event_count: '5',
             name: 'Ada Lovelace',
             email: 'ada@example.com',
+            phone: '+44 20 7946 0958',
           },
         ],
       ]);
@@ -451,12 +452,30 @@ describe('AnalyticsService', () => {
           event_count: 5,
           name: 'Ada Lovelace',
           email: 'ada@example.com',
+          phone: '+44 20 7946 0958',
         },
       ]);
       expect(result.next_cursor).toBeNull();
     });
 
-    it('maps empty-string name/email to null', async () => {
+    it('coalesces the accepted phone spellings, newest-priority first, as a nullable column', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID);
+
+      const [sql] = clickhouse.query.mock.calls[0];
+      // Apps set profile props free-form, so `phone` accepts several spellings; each is one of OUR
+      // OWN constants embedded as a literal, and an empty string counts as absent (nullIf).
+      expect(sql).toContain(
+        "any(coalesce(nullIf(JSONExtractString(toJSONString(up.properties), 'phone'), ''), " +
+          "nullIf(JSONExtractString(toJSONString(up.properties), '$phone'), ''), " +
+          "nullIf(JSONExtractString(toJSONString(up.properties), 'phone_number'), ''), " +
+          "nullIf(JSONExtractString(toJSONString(up.properties), 'phoneNumber'), ''))) AS phone",
+      );
+    });
+
+    it('maps empty-string/absent name/email/phone to null', async () => {
       const clickhouse = makeClickhouse([
         [
           {
@@ -466,6 +485,7 @@ describe('AnalyticsService', () => {
             event_count: '1',
             name: '',
             email: '',
+            phone: null,
           },
         ],
       ]);
@@ -473,7 +493,7 @@ describe('AnalyticsService', () => {
 
       const result = await service.listUsers(USER_ID, PROJECT_ID);
 
-      expect(result.users[0]).toMatchObject({ name: null, email: null });
+      expect(result.users[0]).toMatchObject({ name: null, email: null, phone: null });
     });
 
     it('binds `search` once as a plain param value — the caller text is never concatenated into the SQL', async () => {

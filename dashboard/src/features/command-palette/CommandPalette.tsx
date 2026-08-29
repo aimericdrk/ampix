@@ -10,6 +10,7 @@ import { NavIcon, type IconName } from '../../components/layout/NavIcon';
 import { cn } from '../../lib/cn';
 import type { UserListItem } from '../../lib/api/types';
 import { useCohorts, useDashboards, useReports, useUsersList } from '../analytics/api';
+import { contactFromListItem } from '../analytics/user-identity';
 import { useProjects } from '../projects/api';
 import { useRcEnabled } from '../revenuecat/api';
 import { useFavorites } from '../favorites/favorites';
@@ -270,7 +271,7 @@ export function CommandPalette({
     key: `user-${user.distinct_id}`,
     icon: 'users',
     label: user.name ?? user.distinct_id,
-    sublabel: user.name ? (user.email ?? user.distinct_id) : undefined,
+    sublabel: user.name ? contactFromListItem(user) : undefined,
     onSelect: () =>
       goTo('/projects/$projectId/users/$distinctId', { projectId, distinctId: user.distinct_id }),
   }));

@@ -277,6 +277,48 @@ describe('HomePage', () => {
     expect(within(favoritesSection).getByText(/Star a report/)).toBeInTheDocument();
   });
 
+  it('shows a starred/recent PERSON as name + age, city and contact, and degrades to the name alone', async () => {
+    localStorage.setItem(
+      `myampix:favorites:${TEST_PROJECT.id}`,
+      JSON.stringify([
+        {
+          type: 'user',
+          id: 'user-001',
+          name: 'Alex Chen',
+          detail: { age: '36', city: 'Paris', contact: 'alex.chen@example.com' },
+        },
+      ]),
+    );
+    localStorage.setItem(
+      `myampix:recents:${TEST_PROJECT.id}`,
+      JSON.stringify([
+        // No `detail` at all: an entry starred before those were captured must still render.
+        { type: 'user', id: 'user-009', name: 'user-009' },
+        // Profile with no name and no email/phone: name and contact both fall back to the distinct
+        // id, which must be shown once rather than twice.
+        { type: 'user', id: 'user-010', name: 'user-010', detail: { contact: 'user-010' } },
+      ]),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+
+    const favoritesHeading = await main.findByRole('heading', { name: 'Favorites' });
+    const favoritesSection = favoritesHeading.closest('.rounded-xl') as HTMLElement;
+    expect(within(favoritesSection).getByRole('link', { name: 'Alex Chen' })).toBeInTheDocument();
+    expect(within(favoritesSection).getByText('36')).toBeInTheDocument();
+    expect(within(favoritesSection).getByText('Paris')).toBeInTheDocument();
+    expect(within(favoritesSection).getByText('alex.chen@example.com')).toBeInTheDocument();
+
+    const recentsHeading = main.getByRole('heading', { name: 'Recently viewed' });
+    const recentsSection = recentsHeading.closest('.rounded-xl') as HTMLElement;
+    expect(within(recentsSection).getByRole('link', { name: 'user-009' })).toBeInTheDocument();
+    expect(within(recentsSection).getAllByText('user-010')).toHaveLength(1);
+  });
+
   it('feat-18 §3.4/T2: renders the Installations map, by-country table, and by-OS chart, posting the $app_open country-breakdown query', async () => {
     const countryQueryBodies: InsightsQueryDefinition[] = [];
     server.events.on('request:start', ({ request }) => {

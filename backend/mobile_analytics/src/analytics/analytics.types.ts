@@ -63,6 +63,12 @@ export interface UserListItem {
   name: string | null;
   /** From the user's `user_profiles` row (§17 canonical id); null when absent/empty. */
   email: string | null;
+  /**
+   * From the user's `user_profiles` row (§17 canonical id), coalescing the accepted spellings in
+   * `USER_PHONE_PROFILE_KEYS`; null when absent/empty. Shown under the name as the contact line's
+   * fallback when the profile has no email.
+   */
+  phone: string | null;
 }
 
 export interface UsersResponse {

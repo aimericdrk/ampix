@@ -518,6 +518,11 @@ export interface UserListItem {
   /** From the user's profile (whitelisted keys); null when not set — search also matches these. */
   name: string | null;
   email: string | null;
+  /**
+   * From the user's profile, coalescing the accepted spellings (`phone`, `$phone`, `phone_number`,
+   * `phoneNumber`); null when not set. Shown under the name when there is no email.
+   */
+  phone: string | null;
 }
 
 /** `GET /users` — `search` is a case-insensitive substring match across the canonical id, aliased

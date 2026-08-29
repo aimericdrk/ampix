@@ -82,6 +82,22 @@ describe('UsersPage', () => {
     expect(card.getByText('Unknown user')).toBeInTheDocument();
   });
 
+  it('shows the phone number under the name when the profile has no email', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users`);
+
+    // Jordan Lee has a phone but no email — the contact line is email → phone → distinct id.
+    const nameEl = await screen.findByText('Jordan Lee');
+    const card = within(nameEl.closest('li') as HTMLElement);
+    expect(card.getByText('+1 415 555 0142')).toBeInTheDocument();
+    expect(card.queryByText('user-004')).not.toBeInTheDocument();
+
+    // Alex Chen has both, and the email still wins.
+    const alexCard = within(screen.getByText('Alex Chen').closest('li') as HTMLElement);
+    expect(alexCard.getByText('alex.chen@example.com')).toBeInTheDocument();
+    expect(alexCard.queryByText('+33 6 12 34 56 78')).not.toBeInTheDocument();
+  });
+
   it("opens a user's profile with properties, seen dates, event count, and a recent-activity timeline", async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users`);

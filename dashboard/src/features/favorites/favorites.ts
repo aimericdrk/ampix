@@ -8,10 +8,29 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type FavItemType = 'report' | 'dashboard' | 'user' | 'cohort';
 
+/**
+ * The identity details Home shows beneath a starred/recently-viewed PERSON (`type: 'user'`), so the
+ * list reads as "Ada Lovelace · 36 · Paris · ada@example.com" rather than a bare distinct id.
+ *
+ * They are denormalised into storage alongside `name` — captured when the profile is opened — for
+ * the same reason `name` already is: Home renders these lists straight from localStorage and must
+ * not fan out a profile request per row. The trade-off is staleness; a visit refreshes the entry.
+ * Every field is optional because a profile may carry none of them, and because entries starred
+ * before this existed are still valid and simply render as name alone.
+ */
+export interface FavUserDetail {
+  age?: string;
+  city?: string;
+  /** Email, else phone number, else the distinct id — see `contactLine` in `user-identity.ts`. */
+  contact?: string;
+}
+
 export interface FavItem {
   type: FavItemType;
   id: string;
   name: string;
+  /** Only ever set for `type: 'user'`. */
+  detail?: FavUserDetail;
 }
 
 export interface UseFavoritesResult {
@@ -39,6 +58,23 @@ function isValidFavItem(value: unknown): value is FavItem {
   return true;
 }
 
+/**
+ * Drops anything non-string out of a stored `detail` (hand-edited storage, an older shape) so the
+ * UI only ever renders strings. A wholly invalid `detail` yields `undefined`, never a thrown error
+ * — the entry itself stays usable.
+ */
+export function sanitizeFavItem(item: FavItem): FavItem {
+  const raw: unknown = item.detail;
+  if (!raw || typeof raw !== 'object') return item.detail ? { ...item, detail: undefined } : item;
+  const source = raw as Record<string, unknown>;
+  const detail: FavUserDetail = {};
+  for (const key of ['age', 'city', 'contact'] as const) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim()) detail[key] = value;
+  }
+  return { ...item, detail: Object.keys(detail).length > 0 ? detail : undefined };
+}
+
 /** Guarded parse: an absent key, unparseable JSON, a non-array payload, or malformed entries all
  * fall back to an empty list rather than ever throwing — localStorage being unavailable/corrupt
  * (private mode, quota, hand-edited value) must never break rendering. */
@@ -48,7 +84,7 @@ function readStoredFavorites(projectId: string): FavItem[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidFavItem);
+    return parsed.filter(isValidFavItem).map(sanitizeFavItem);
   } catch {
     return [];
   }

@@ -19,6 +19,7 @@ import type {
   UserSubscription,
 } from '../../../lib/api/types';
 import { formatCurrency, formatExactNumber } from '../format';
+import { contactLine, profileAge, profileCity, profileName } from '../user-identity';
 import {
   useRunClickHeatmap,
   useRunScreenPaths,
@@ -28,6 +29,7 @@ import {
 } from '../api';
 import { FavoriteButton } from '../../favorites/FavoriteButton';
 import { useFavorites } from '../../favorites/favorites';
+import type { FavItem } from '../../favorites/favorites';
 import { useRecents } from '../../favorites/recents';
 import { useRcEnabled, useRefreshUserSubscription, useUserSubscription } from '../../revenuecat/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -341,10 +343,25 @@ export function UserProfileModal({
     return () => observer.disconnect();
   }, [timelineViewport, loadMoreSentinel, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // The person as Home's Favorites / Recently-viewed lists will show them: their profile name (the
+  // distinct id only when the profile has none) plus the age/city/contact detail those lists render.
+  // Built from `data.profile`, so it is the bare id until the profile request resolves.
+  const displayName = profileName(data?.profile) ?? distinctId;
+  const favItem: FavItem = useMemo(() => {
+    const detail = {
+      age: profileAge(data?.profile) ?? undefined,
+      city: profileCity(data?.profile) ?? undefined,
+      contact: contactLine(data?.profile, distinctId),
+    };
+    return { type: 'user', id: distinctId, name: displayName, detail };
+  }, [distinctId, displayName, data?.profile]);
+
   // Record this profile visit in Recents (feat-13 §3) as soon as it's opened — keyed on `distinctId`.
+  // Re-runs once the profile resolves so the stored entry is upgraded from the bare id to the real
+  // name and details; `record` dedupes on type+id, so this refreshes the entry rather than adding one.
   useEffect(() => {
-    recordRecent({ type: 'user', id: distinctId, name: distinctId });
-  }, [distinctId, recordRecent]);
+    recordRecent(favItem);
+  }, [favItem, recordRecent]);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -392,9 +409,9 @@ export function UserProfileModal({
           </div>
           <div className="flex flex-none items-center gap-1.5">
             <FavoriteButton
-              name={distinctId}
+              name={displayName}
               isFavorite={favorites.isFavorite('user', distinctId)}
-              onToggle={() => favorites.toggle({ type: 'user', id: distinctId, name: distinctId })}
+              onToggle={() => favorites.toggle(favItem)}
             />
             <DialogClose
               aria-label="Close"

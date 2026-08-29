@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sanitizeFavItem } from './favorites';
 import type { FavItem, FavItemType } from './favorites';
 
 /**
@@ -40,7 +41,7 @@ function readStoredRecents(projectId: string): FavItem[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidFavItem);
+    return parsed.filter(isValidFavItem).map(sanitizeFavItem);
   } catch {
     return [];
   }

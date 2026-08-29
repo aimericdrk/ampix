@@ -9,6 +9,7 @@ import { Reveal } from '../../../components/ui/reveal';
 import { ApiError } from '../../../lib/api/problem';
 import type { UserListItem } from '../../../lib/api/types';
 import { formatExactNumber } from '../format';
+import { contactFromListItem } from '../user-identity';
 import { useUsersList } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
 import { UserProfileModal } from './UserProfileModal';
@@ -161,7 +162,7 @@ export function UsersPage() {
                       {user.name ?? 'Unknown user'}
                     </div>
                     <div className="truncate font-mono text-xs text-text-muted">
-                      {user.email ?? user.distinct_id}
+                      {contactFromListItem(user)}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">

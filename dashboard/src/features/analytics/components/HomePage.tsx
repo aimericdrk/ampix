@@ -751,13 +751,16 @@ function FavItemList({
                   key={`${item.type}-${item.id}`}
                   className="flex items-center gap-2 py-2 first:pt-0 last:pb-0"
                 >
-                  <Link
-                    to={route.to}
-                    params={route.params}
-                    className="flex-1 truncate text-sm text-text hover:text-accent hover:underline"
-                  >
-                    {item.name}
-                  </Link>
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      to={route.to}
+                      params={route.params}
+                      className="block truncate text-sm text-text hover:text-accent hover:underline"
+                    >
+                      {item.name}
+                    </Link>
+                    <FavItemDetail item={item} />
+                  </div>
                   {onUnstar && (
                     <FavoriteButton name={item.name} isFavorite onToggle={() => onUnstar(item)} />
                   )}
@@ -768,6 +771,32 @@ function FavItemList({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The identity line under a starred / recently-viewed PERSON: age, city, and their contact (email,
+ * else phone number, else the distinct id), captured when their profile was last opened. Renders
+ * nothing for reports/dashboards/cohorts, or for a person whose profile carried none of it — an
+ * entry saved before these details were stored still shows correctly, as the name alone.
+ */
+function FavItemDetail({ item }: { item: FavItem }) {
+  if (item.type !== 'user') return null;
+  const parts = [item.detail?.age, item.detail?.city, item.detail?.contact].filter(
+    // A contact equal to the name means the profile had no name AND no email/phone, so both fell
+    // back to the distinct id — show it once, not as "user-009 · user-009".
+    (part): part is string => Boolean(part) && part !== item.name,
+  );
+  if (parts.length === 0) return null;
+  return (
+    <div className="truncate text-xs text-text-muted">
+      {parts.map((part, index) => (
+        <span key={`${index}-${part}`}>
+          {index > 0 && <span aria-hidden> · </span>}
+          {part}
+        </span>
+      ))}
+    </div>
   );
 }
 

@@ -201,6 +201,7 @@ export const USERS_FIXTURE: UserListItem[] = [
     event_count: 42,
     name: 'Alex Chen',
     email: 'alex.chen@example.com',
+    phone: '+33 6 12 34 56 78',
   },
   {
     distinct_id: 'user-002',
@@ -209,6 +210,7 @@ export const USERS_FIXTURE: UserListItem[] = [
     event_count: 17,
     name: 'Alex Wong',
     email: 'alex.wong@example.com',
+    phone: null,
   },
   {
     distinct_id: 'user-003',
@@ -217,6 +219,7 @@ export const USERS_FIXTURE: UserListItem[] = [
     event_count: 5,
     name: 'Priya Singh',
     email: 'priya@example.com',
+    phone: null,
   },
   {
     distinct_id: 'user-004',
@@ -224,7 +227,8 @@ export const USERS_FIXTURE: UserListItem[] = [
     last_seen: '2026-06-28T07:00:00.000Z',
     event_count: 63,
     name: 'Jordan Lee',
-    email: 'jordan@example.com',
+    email: null,
+    phone: '+1 415 555 0142',
   },
   {
     distinct_id: 'user-005',
@@ -233,6 +237,7 @@ export const USERS_FIXTURE: UserListItem[] = [
     event_count: 9,
     name: null,
     email: null,
+    phone: null,
   },
   ...Array.from({ length: 17 }, (_, i) => {
     const n = i + 6;
@@ -243,6 +248,7 @@ export const USERS_FIXTURE: UserListItem[] = [
       event_count: n,
       name: `User ${n}`,
       email: `user${n}@example.com`,
+      phone: null,
     };
   }),
 ];
@@ -265,7 +271,15 @@ export const USER_PROFILE_FIXTURE: Omit<
   UserProfileResponse,
   'distinct_id' | 'last_seen' | 'event_count'
 > = {
-  profile: { plan: 'pro', email: 'user001@example.com', country: 'FR' },
+  profile: {
+    plan: 'pro',
+    name: 'Alex Chen',
+    email: 'user001@example.com',
+    phone: '+33 6 12 34 56 78',
+    age: 36,
+    city: 'Paris',
+    country: 'FR',
+  },
   first_seen: '2026-05-01T08:00:00.000Z',
   // Newest-first. The $screen_view rows drive the screen-path chain: chronologically
   // home → catalog → catalog → cart, collapsing to home → catalog → cart. Non-screen events carry
