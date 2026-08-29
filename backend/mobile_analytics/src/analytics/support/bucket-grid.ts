@@ -13,6 +13,10 @@ export const BUCKET_EXPR: Readonly<Record<Interval, string>> = Object.freeze({
   day: 'toStartOfDay(timestamp)',
   week: 'toMonday(timestamp)',
   month: 'toStartOfMonth(timestamp)',
+  // The range's own lower bound, already bound as a param by every series query — a constant, so
+  // every row lands in one bucket and `uniqExact` dedupes across the whole range instead of per
+  // day. Not `min(timestamp)`: that is an aggregate and cannot appear in a GROUP BY key.
+  range: '{from:DateTime64}',
 });
 
 export interface Bucket {
@@ -58,6 +62,11 @@ export function buildBucketGrid(from: string, to: string, interval: Interval): B
   const fromMs = parseDateOnlyUTC(from);
   const toMs = parseDateOnlyUTC(to);
   const buckets: Bucket[] = [];
+
+  if (interval === 'range') {
+    // One bucket for the whole range, labelled with its first day.
+    return [{ ts: fromMs / 1000, t: from }];
+  }
 
   if (interval === 'hour') {
     const endExclusive = toMs + MS_PER_DAY; // `to`'s entire day is included -> hours 0..23

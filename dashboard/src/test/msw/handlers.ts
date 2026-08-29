@@ -2180,7 +2180,7 @@ export const handlers = [
     if (!body.events || body.events.length === 0 || body.events.length > 5) {
       return problem(400, 'Invalid query definition: 1-5 events required');
     }
-    const validIntervals = new Set(['hour', 'day', 'week', 'month']);
+    const validIntervals = new Set(['hour', 'day', 'week', 'month', 'range']);
     if (!validIntervals.has(body.interval)) {
       return problem(400, 'Invalid query definition: unknown interval');
     }
@@ -2190,7 +2190,12 @@ export const handlers = [
     // unbounded values in this fixture) — except `country` (feat-18 §3.4), which fans out into
     // three raw SDK-style values (two resolvable, one not) so Home's Installations section has
     // something realistic to fold through `toIso3`/aggregate into an "Unknown" bucket.
-    const buckets = ['2026-06-29', '2026-06-30', '2026-07-01'];
+    // `range` means ONE bucket for the whole span — the mock has to honour that, or a caller that
+    // regressed to summing a daily series would still look correct here.
+    const buckets =
+      body.interval === 'range'
+        ? [body.date_range.from]
+        : ['2026-06-29', '2026-06-30', '2026-07-01'];
     const breakdownValues: (string | null)[] =
       body.breakdown?.property === 'country'
         ? ['US', 'FR', 'Wakanda']

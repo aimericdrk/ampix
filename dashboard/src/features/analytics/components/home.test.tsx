@@ -320,6 +320,42 @@ describe('HomePage', () => {
   });
 
   /**
+   * Field bug: a project with ONE user showed "2" against Unknown on the map. The country
+   * breakdown ran at day granularity and the client summed the series, but a distinct-user count
+   * is not additive — the same person opening the app on two days was counted once per day. The
+   * query now asks for a single whole-range bucket so the database dedupes.
+   */
+  it('counts a user once across the range, not once per day they were active', async () => {
+    const countryIntervals: string[] = [];
+    server.use(
+      http.post('/api/v1/projects/:projectId/query/insights', async ({ request }) => {
+        const body = (await request.json()) as InsightsQueryDefinition;
+        if (body.breakdown?.property !== 'country') return HttpResponse.json({ series: [] });
+        countryIntervals.push(body.interval);
+        // One bucket back, because one bucket was asked for: the single user, deduped.
+        return HttpResponse.json({
+          series: [
+            { name: '$app_open', breakdown_value: 'FR', data: [{ t: '2026-06-29', value: 1 }] },
+          ],
+        });
+      }),
+    );
+
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/home`);
+    await screen.findByRole('heading', { name: 'Home' });
+    const main = within(screen.getByRole('main'));
+
+    const countryTable = await main.findByRole('table', { name: 'Users by country' });
+    const franceRow = within(countryTable).getByText('France').closest('tr')!;
+    expect(within(franceRow).getByText('1')).toBeInTheDocument();
+
+    // The country breakdown must never be requested per-day, or the client-side sum reinflates it.
+    expect(countryIntervals.length).toBeGreaterThan(0);
+    expect(new Set(countryIntervals)).toEqual(new Set(['range']));
+  });
+
+  /**
    * Field bug: a project whose only `country` value was the everyday name "Taiwan" rendered the
    * "no resolvable country" empty state over perfectly good data. The generated ISO-3166 table
    * only knew it as "Taiwan, Province of China", so `toIso3` resolved nothing, every install fell

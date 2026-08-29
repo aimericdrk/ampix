@@ -4,8 +4,17 @@ import { z } from 'zod';
 export const AGGREGATIONS = ['total', 'unique_users'] as const;
 export type Aggregation = (typeof AGGREGATIONS)[number];
 
-/** contracts §14: bucket function -> `toStartOf*`/`toMonday`(timestamp). */
-export const INTERVALS = ['hour', 'day', 'week', 'month'] as const;
+/**
+ * contracts §14: bucket function -> `toStartOf*`/`toMonday`(timestamp).
+ *
+ * `range` is the odd one out and deliberately so: it buckets the WHOLE date range into a single
+ * point. A `unique_users` count is not additive — summing per-day distinct users counts one person
+ * once per day they showed up — so any caller that wants "distinct users over this range, broken
+ * down by X" must ask for one bucket and let ClickHouse do the dedupe, rather than adding up a
+ * time series afterwards. It is not offered in the dashboard's interval picker (a one-point line
+ * chart is meaningless); it exists for the breakdown callers that collapse time anyway.
+ */
+export const INTERVALS = ['hour', 'day', 'week', 'month', 'range'] as const;
 export type Interval = (typeof INTERVALS)[number];
 
 export const FILTER_OPS = ['eq', 'neq', 'contains', 'gt', 'lt', 'is_set', 'is_not_set'] as const;

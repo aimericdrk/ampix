@@ -134,12 +134,16 @@ export function HomePage() {
   // universal `$app_open` event. We deliberately do NOT use `$first_open`: it fires at SDK init,
   // before app code can call `registerSuperProperties({'country': …})`, so it never carries a
   // country. `$app_open` fires every launch and carries the PERSISTED super property, so this
-  // populates from any events sent after the app set its country. `unique_users` counts distinct
-  // users per country (a device that opens the app many times counts once).
+  // populates from any events sent after the app set its country.
+  //
+  // `interval: 'range'` — one bucket for the whole range — is load-bearing, not a detail. These
+  // three views all collapse time immediately (`sumSeries` / `breakdownBars`), and a distinct-user
+  // count cannot be summed: with daily buckets, one person who opened the app on two days was
+  // counted twice, so a project with a single user reported two.
   const installsBaseDef: InsightsQueryDefinition = {
     events: [{ name: '$app_open', aggregation: 'unique_users' }],
     date_range: { from, to },
-    interval: 'day',
+    interval: 'range',
     filters: mergeGlobalFilters([], globalFilters),
   };
   const installsCountryDef: InsightsQueryDefinition = {
@@ -159,6 +163,11 @@ export function HomePage() {
   const utmInsights = useInsightsQuery(projectId, utmDef, hasEventNames);
   const installsCountry = useInsightsQuery(projectId, installsCountryDef, hasRange);
   const installsOs = useInsightsQuery(projectId, installsOsDef, hasRange);
+  // Headline distinct users, asked WITHOUT a breakdown. Adding up the per-country rows would not
+  // answer it: a user whose `country` changed mid-range (or who sent events before the app set it
+  // at all) legitimately appears under more than one value, so the rows can total more than the
+  // number of people. This query counts each person once, whatever they were tagged with.
+  const installsTotal = useInsightsQuery(projectId, installsBaseDef, hasRange);
 
   const reports = useReports(projectId);
   const dashboards = useDashboards(projectId);
@@ -295,6 +304,9 @@ export function HomePage() {
   // value landed in the Unknown bucket) — the by-OS chart still renders independently below.
   const installsData = installsByCountry(installsCountry.data);
   const installsOsBars = installsOs.data ? breakdownBars(installsOs.data) : [];
+  // One bucket (`interval: 'range'`), so this sum is a single already-deduped number rather than a
+  // running total over days.
+  const distinctUsers = installsTotal.data ? sumSeries(installsTotal.data.series) : 0;
   const installsCountryEmpty =
     !installsCountry.isPending && !installsCountry.isError && installsData.countryCount === 0;
   const topInstallsCountry = installsData.countryCount > 0 ? installsData.rows[0] : undefined;
@@ -421,9 +433,9 @@ export function HomePage() {
             <SectionGrid>
               <KpiTile
                 label="Total users"
-                value={installsData.total}
-                hint="Distinct users (by country), selected range"
-                loading={installsCountry.isPending}
+                value={distinctUsers}
+                hint="Distinct users in the selected range"
+                loading={installsTotal.isPending}
               />
               <KpiTile
                 label="Countries"
@@ -445,7 +457,7 @@ export function HomePage() {
           <Reveal index={3}>
             <ChartCard
               title="Users by country"
-              description="Distinct users by resolved country (from the app's `country` super property), selected range."
+              description="Distinct users by resolved country (from the app's `country` super property), selected range. A user who sent events before the app set a country — or whose country changed — is counted under each value they sent, so the rows can total more than Total users."
               state={chartState(installsCountry.isPending, installsCountry.isError, installsCountryEmpty)}
               emptyText="No users with a country yet — set a `country` super property in your app: `MyAmpix.instance.registerSuperProperties({'country': 'US'})`. It attaches to events sent afterward (the map reads `$app_open`)."
             >

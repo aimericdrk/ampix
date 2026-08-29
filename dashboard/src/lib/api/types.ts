@@ -390,8 +390,16 @@ export interface InsightsDateRange {
   to: string;
 }
 
-export type InsightsInterval = 'hour' | 'day' | 'week' | 'month';
+/**
+ * `range` buckets the whole date range into a single point. It exists because a `unique_users`
+ * count is NOT additive — summing per-day distinct users counts one person once per day they
+ * showed up — so a caller that wants "distinct users over this range, broken down by X" has to ask
+ * for one bucket and let the database dedupe. Deliberately absent from {@link INSIGHTS_INTERVALS}:
+ * it is not a granularity anyone should pick for a chart, only a shape for collapsed breakdowns.
+ */
+export type InsightsInterval = 'hour' | 'day' | 'week' | 'month' | 'range';
 
+/** The granularities offered in the UI's interval picker — `range` is not one of them. */
 export const INSIGHTS_INTERVALS: InsightsInterval[] = ['hour', 'day', 'week', 'month'];
 
 export type InsightsFilterOp = 'eq' | 'neq' | 'contains' | 'gt' | 'lt' | 'is_set' | 'is_not_set';

@@ -1,4 +1,4 @@
-import { buildBucketGrid, parseDateOnlyUTC } from './bucket-grid';
+import { BUCKET_EXPR, buildBucketGrid, parseDateOnlyUTC } from './bucket-grid';
 
 describe('parseDateOnlyUTC', () => {
   it('parses a YYYY-MM-DD string as UTC midnight', () => {
@@ -58,6 +58,40 @@ describe('buildBucketGrid', () => {
     const buckets = buildBucketGrid('2026-01-01', '2026-12-31', 'day');
     for (let i = 1; i < buckets.length; i++) {
       expect(buckets[i].ts).toBeGreaterThan(buckets[i - 1].ts);
+    }
+  });
+});
+
+describe('buildBucketGrid: range', () => {
+  /**
+   * Field bug this exists for: the home map asked for `unique_users` broken down by country at
+   * DAY granularity and then summed the series. Distinct-user counts are not additive, so one
+   * person who opened the app on two days was reported as two users. `range` collapses the whole
+   * span into one bucket so the database dedupes once.
+   */
+  it('collapses any span into exactly one bucket labelled with the first day', () => {
+    expect(buildBucketGrid('2026-08-01', '2026-08-29', 'range')).toEqual([
+      { ts: Date.UTC(2026, 7, 1) / 1000, t: '2026-08-01' },
+    ]);
+  });
+
+  it('still yields one bucket for a single-day range', () => {
+    expect(buildBucketGrid('2026-08-29', '2026-08-29', 'range')).toEqual([
+      { ts: Date.UTC(2026, 7, 29) / 1000, t: '2026-08-29' },
+    ]);
+  });
+
+  it('yields one bucket across a year, where day would yield 365', () => {
+    expect(buildBucketGrid('2026-01-01', '2026-12-31', 'range')).toHaveLength(1);
+    expect(buildBucketGrid('2026-01-01', '2026-12-31', 'day')).toHaveLength(365);
+  });
+
+  it('buckets on a bound constant, not on the row timestamp', () => {
+    // A `toStartOf*(timestamp)` expression would put each row in its own bucket again; the range
+    // bucket has to be a constant, and it must be one the caller already binds.
+    expect(BUCKET_EXPR.range).toBe('{from:DateTime64}');
+    for (const interval of ['hour', 'day', 'week', 'month'] as const) {
+      expect(BUCKET_EXPR[interval]).toContain('timestamp');
     }
   });
 });
