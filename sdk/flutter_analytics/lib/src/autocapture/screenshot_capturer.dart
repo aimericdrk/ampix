@@ -31,24 +31,30 @@ class CapturedScreenshot {
     required this.height,
     this.contentHeight,
     this.viewportHeight,
+    this.contentTop,
   });
 
   final Uint8List bytes;
   final int width;
   final int height;
 
-  /// Logical height of the scrollable content this image covers, when the
-  /// screen was taller than one viewport and the capture stitched it. Null on
-  /// a screen that fits, where the image simply IS the whole screen.
-  ///
-  /// A heatmap needs this to normalize a tap's `$content_y`: without it the
-  /// image's own pixel height says how tall the picture is, not how tall the
-  /// page was.
+  /// Total logical height this stitched image covers, when the screen was
+  /// taller than one viewport: top chrome + captured scrollable content +
+  /// (when the capture reached the page's bottom) bottom chrome. This is the
+  /// denominator every tap is normalized against on the backend. Null on a
+  /// screen that fits, where the image simply IS the whole screen.
   final double? contentHeight;
 
-  /// Logical height of one viewport — how much of [contentHeight] the user saw
-  /// at a time. Null for the same reason as [contentHeight].
+  /// Logical height of one viewport — how much the user saw at a time. Null
+  /// for the same reason as [contentHeight].
   final double? viewportHeight;
+
+  /// Where CONTENT space begins inside the image: the logical height of the
+  /// fixed chrome above the scrollable (status bar, app bar with the exit
+  /// button…), included once at the top of the stitch. A tap's `$content_y`
+  /// is measured from the scrollable's top, so its row in this image is
+  /// `contentTop + $content_y`. Null with [contentHeight].
+  final double? contentTop;
 
   /// True when this image covers more than one viewport of a scrollable page.
   bool get isFullPage => contentHeight != null;
@@ -283,32 +289,47 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
       final maxExtent = position.maxScrollExtent;
       if (viewportHeight <= 0 || maxExtent <= 0) return null;
 
-      // The render is the WHOLE screen; the stitch's coordinate system is the
-      // scrollable's CONTENT. Compositing full frames put the status-bar band
-      // above the viewport at the top of the image, repeated the fixed chrome
-      // once per frame, and clipped the last frame mid-chrome at the canvas
-      // edge. Crop every frame to the scrollable's own viewport rect instead:
-      // the reference image for a scrolling page is the page content, in
-      // exactly the space a tap's $content_y is measured in. Fixed chrome
-      // (app bars, floating nav bars) is deliberately not part of it.
+      // The render is the WHOLE screen; the scrolled content only occupies the
+      // scrollable's viewport band. Naive full-frame compositing repeated the
+      // fixed chrome once per frame; pure viewport-cropping (the previous fix)
+      // amputated the chrome entirely — no app bar, no exit button, no navbar
+      // anywhere in the image. The stitch now reads like a phone's own "long
+      // screenshot": the FIRST frame keeps everything from the top of the
+      // screen down to the viewport's bottom (top chrome appears once), middle
+      // frames contribute only their viewport band, and — when the capture
+      // actually reached the page's bottom — the LAST frame extends to the
+      // bottom of the screen (bottom chrome appears once). `contentTop` tells
+      // the backend where content space begins inside the image, keeping tap
+      // placement exact.
       final scrollBox = scrollable.context.findRenderObject();
       if (scrollBox is! RenderBox || !scrollBox.hasSize) return null;
       // Throws when [boundary] isn't an ancestor of the scrollable (possible
       // under the largest-boundary fallback) — caught below, falling back to
       // the single-frame capture.
-      final cropTopLeft = scrollBox.localToGlobal(
+      final viewportTopLeft = scrollBox.localToGlobal(
         Offset.zero,
         ancestor: boundary,
       );
-      final cropWidth = scrollBox.size.width;
-      final cropHeight = scrollBox.size.height;
-      if (cropWidth <= 0 || cropHeight <= 0) return null;
+      final boundaryWidth = boundary.size.width;
+      final boundaryHeight = boundary.size.height;
+      final viewportBoxHeight = scrollBox.size.height;
+      if (boundaryWidth <= 0 || viewportBoxHeight <= 0) return null;
+
+      // Full boundary width — chrome spans it, and it keeps the backend's
+      // `$pos_x / screen_width` mapping exact (a viewport-width crop skewed x
+      // by the scrollable's horizontal inset).
+      final chromeTop = viewportTopLeft.dy.clamp(0.0, boundaryHeight);
+      final viewportBottomY = (chromeTop + viewportBoxHeight).clamp(
+        0.0,
+        boundaryHeight,
+      );
+      final chromeBottom = boundaryHeight - viewportBottomY;
 
       // Width, not longest side: a stitched page IS long, and the single-frame
       // rule ([kMaxScreenshotEdge] on the longest side) would crush a
       // 6-viewport capture to 640px tall and destroy its width with it.
-      final pixelRatio = cropWidth > kMaxScreenshotEdge
-          ? kMaxScreenshotEdge / cropWidth
+      final pixelRatio = boundaryWidth > kMaxScreenshotEdge
+          ? kMaxScreenshotEdge / boundaryWidth
           : 1.0;
 
       // Stop at the frame budget rather than at the bottom when a page is very
@@ -324,32 +345,56 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
       }
 
       final capturedExtent = frames.last;
-      final contentHeight = capturedExtent + viewportHeight;
-      final canvasWidth = (cropWidth * pixelRatio).round();
-      final canvasHeight = (contentHeight * pixelRatio).round();
+      // Bottom chrome is only appended when the capture reached the page's
+      // real bottom — gluing a navbar under a mid-content truncation would
+      // fake a page end that does not exist.
+      final reachedBottom = capturedExtent >= maxExtent;
+      // Total logical height the image covers: top chrome + captured content
+      // + (when complete) bottom chrome. This is what gets uploaded as
+      // `content_height` — the denominator every tap is normalized against.
+      final captureHeight =
+          chromeTop +
+          capturedExtent +
+          viewportHeight +
+          (reachedBottom ? chromeBottom : 0.0);
+      final canvasWidth = (boundaryWidth * pixelRatio).round();
+      final canvasHeight = (captureHeight * pixelRatio).round();
       if (canvasWidth <= 0 || canvasHeight <= 0) return null;
 
       final canvas = img.Image(width: canvasWidth, height: canvasHeight);
-      for (final offset in frames) {
+      for (var i = 0; i < frames.length; i++) {
+        final offset = frames[i];
         position.jumpTo(offset);
         // Let the jump paint (and any scroll-triggered animation settle) before
         // reading pixels, or the frame is the PREVIOUS offset's content.
         await _awaitUiSettled();
         final frame = await _renderFrame(boundary, pixelRatio);
         if (frame == null) return null;
-        // Viewport-only slice of the full-screen frame (privacy masks were
-        // applied by _renderFrame while the frame was still in screen space).
+        // Frame slice in screen space (privacy masks were applied by
+        // _renderFrame while the frame was still in screen space): the first
+        // frame starts at the top of the screen, the last (on a completed
+        // capture) runs to its bottom, everything else is the viewport band.
+        final isFirst = i == 0;
+        final isLast = i == frames.length - 1;
+        final srcTop = isFirst ? 0.0 : chromeTop;
+        final srcBottom = (isLast && reachedBottom)
+            ? boundaryHeight
+            : viewportBottomY;
+        final dstTop = isFirst ? 0.0 : chromeTop + offset;
         final cropped = img.copyCrop(
           frame,
-          x: (cropTopLeft.dx * pixelRatio).round().clamp(0, frame.width - 1),
-          y: (cropTopLeft.dy * pixelRatio).round().clamp(0, frame.height - 1),
-          width: (cropWidth * pixelRatio).round().clamp(1, frame.width),
-          height: (cropHeight * pixelRatio).round().clamp(1, frame.height),
+          x: 0,
+          y: (srcTop * pixelRatio).round().clamp(0, frame.height - 1),
+          width: frame.width,
+          height: ((srcBottom - srcTop) * pixelRatio).round().clamp(
+            1,
+            frame.height,
+          ),
         );
         img.compositeImage(
           canvas,
           cropped,
-          dstY: (offset * pixelRatio).round(),
+          dstY: (dstTop * pixelRatio).round(),
         );
       }
 
@@ -358,8 +403,9 @@ class RepaintBoundaryScreenshotCapturer implements ScreenshotCapturer {
         bytes: jpeg,
         width: canvas.width,
         height: canvas.height,
-        contentHeight: contentHeight,
+        contentHeight: captureHeight,
         viewportHeight: viewportHeight,
+        contentTop: chromeTop,
       );
     } on Object {
       return null;

@@ -42,12 +42,14 @@ CapturedScreenshot shot(
   int height = 640,
   double? contentHeight,
   double? viewportHeight,
+  double? contentTop,
 }) => CapturedScreenshot(
   bytes: Uint8List.fromList(bytes),
   width: width,
   height: height,
   contentHeight: contentHeight,
   viewportHeight: viewportHeight,
+  contentTop: contentTop,
 );
 
 /// Minimal `multipart/form-data` parser: text fields → values, file parts →
@@ -146,6 +148,7 @@ void main() {
       // viewport coordinates. Sending 0 here would claim a page of no height.
       expect(parsed.fields.containsKey('content_height'), isFalse);
       expect(parsed.fields.containsKey('viewport_height'), isFalse);
+      expect(parsed.fields.containsKey('content_top'), isFalse);
     });
 
     test('a stitched full-page capture reports what the image covers', () async {
@@ -157,6 +160,7 @@ void main() {
           height: 2110,
           contentHeight: 2110,
           viewportHeight: 844,
+          contentTop: 90,
         ),
       );
       await build(capturer: capturer, client: recordingClient()).onScreenView(
@@ -166,6 +170,7 @@ void main() {
       final parsed = parseMultipart(requests.single);
       expect(parsed.fields['content_height'], '2110.0');
       expect(parsed.fields['viewport_height'], '844.0');
+      expect(parsed.fields['content_top'], '90.0');
       // The image's own pixel height says how tall the PICTURE is; content_height says how tall
       // the PAGE was. They coincide here only because the fixture chose them to.
       expect(parsed.fields['height'], '2110');

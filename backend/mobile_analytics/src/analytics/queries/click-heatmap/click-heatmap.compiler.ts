@@ -57,8 +57,13 @@ const VERTICAL_FRACTION_EXPR = `if(${CONTENT_HEIGHT_EXPR} > 0, ${CONTENT_Y_EXPR}
  * divides by the capture's height and drops the taps beyond it.
  */
 export interface CaptureGeometry {
+  /** Total logical height the stitched image covers: top chrome + captured content (+ bottom
+   *  chrome when the capture reached the page's end). The denominator for every tap. */
   contentHeight: number;
   viewportHeight: number;
+  /** Where content space starts inside the image — the fixed chrome the first frame keeps above
+   *  the scrollable. 0 for chrome-less captures (including every pre-`content_top` row). */
+  contentTop: number;
 }
 
 export interface CompiledHeatmapQuery {
@@ -99,19 +104,22 @@ export function compileClickHeatmapQuery(
   };
 
   // With a stored full-page capture, y is measured against THAT image's geometry (see
-  // CaptureGeometry). Content-space taps divide by the capture's height; viewport-only taps
-  // (older SDKs, fixed chrome) are placed at their scroll-0 position — `$pos_y` scaled into the
-  // page's first viewport — the only defensible reading of a tap whose scroll offset was never
-  // recorded, and exact for the taps that actually happened unscrolled. Without a full-page
-  // capture the image IS one viewport and the original expression already matches it.
+  // CaptureGeometry). A content-space tap sits at image row `contentTop + $content_y` — the first
+  // frame keeps the fixed chrome above the scrollable, so content space starts below it.
+  // Viewport-only taps (older SDKs, taps on the chrome itself) are placed at their scroll-0
+  // position, which with the chrome-inclusive stitch is simply `$pos_y` from the image's top —
+  // the image's first fold IS the screen. Exact for taps that happened unscrolled (chrome taps
+  // always are), the only defensible reading for the rest. Without a full-page capture the image
+  // IS one viewport and the original expression already matches it.
   let verticalFractionExpr = VERTICAL_FRACTION_EXPR;
   if (capture && capture.contentHeight > 0 && capture.viewportHeight > 0) {
     params.imageContentHeight = capture.contentHeight;
     params.imageViewportHeight = capture.viewportHeight;
+    params.imageContentTop = capture.contentTop;
     verticalFractionExpr =
       `if(${CONTENT_HEIGHT_EXPR} > 0, ` +
-      `${CONTENT_Y_EXPR} / {imageContentHeight:Float64}, ` +
-      `(${POS_Y_EXPR} / screen_height) * ({imageViewportHeight:Float64} / {imageContentHeight:Float64}))`;
+      `({imageContentTop:Float64} + ${CONTENT_Y_EXPR}) / {imageContentHeight:Float64}, ` +
+      `${POS_Y_EXPR} / {imageContentHeight:Float64})`;
   }
 
   const whereClauses = [
@@ -131,9 +139,11 @@ export function compileClickHeatmapQuery(
   if (capture && capture.contentHeight > 0 && capture.viewportHeight > 0) {
     // A content-space tap below the captured extent is OUTSIDE the image (the SDK stitches at
     // most kMaxStitchedViewports): drop it rather than clamp it into the bottom row, where it
-    // would paint a false hot band on content it never touched.
+    // would paint a false hot band on content it never touched. The bound is exact on a
+    // truncated capture (no bottom chrome is appended there) and merely permissive on a
+    // complete one, where no real tap can exceed it anyway.
     whereClauses.push(
-      `(${CONTENT_HEIGHT_EXPR} <= 0 OR ${CONTENT_Y_EXPR} <= {imageContentHeight:Float64})`,
+      `(${CONTENT_HEIGHT_EXPR} <= 0 OR ({imageContentTop:Float64} + ${CONTENT_Y_EXPR}) <= {imageContentHeight:Float64})`,
     );
   }
 

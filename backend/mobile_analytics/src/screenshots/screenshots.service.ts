@@ -16,6 +16,8 @@ export interface StoreScreenshotInput {
   /** Set only for a stitched full-page capture; see ScreenCapture.contentHeight. */
   contentHeight?: number;
   viewportHeight?: number;
+  /** Set only for a stitched full-page capture; see ScreenCapture.contentTop. 0 is valid. */
+  contentTop?: number;
   imageHash: string;
   contentType: string;
   image: Buffer;
@@ -40,6 +42,8 @@ export interface ScreenListItem {
   content_height: number | null;
   /** Logical height of one viewport within that page; null for the same reason. */
   viewport_height: number | null;
+  /** Where content space starts inside the image (top chrome height); null reads as 0. */
+  content_top: number | null;
 }
 
 /** The JPEG stream + content type served by `GET /screens/:screenName/image`. */
@@ -181,6 +185,7 @@ export class ScreenshotsService implements OnModuleInit {
         height: input.height,
         contentHeight: input.contentHeight ?? null,
         viewportHeight: input.viewportHeight ?? null,
+        contentTop: input.contentTop ?? null,
         imageHash: input.imageHash,
       },
       update: {
@@ -193,6 +198,7 @@ export class ScreenshotsService implements OnModuleInit {
         // longer exists.
         contentHeight: input.contentHeight ?? null,
         viewportHeight: input.viewportHeight ?? null,
+        contentTop: input.contentTop ?? null,
         imageHash: input.imageHash,
       },
     });
@@ -247,6 +253,7 @@ export class ScreenshotsService implements OnModuleInit {
         appVersion: true,
         contentHeight: true,
         viewportHeight: true,
+        contentTop: true,
       },
       orderBy: { capturedAt: 'desc' },
     });
@@ -268,6 +275,7 @@ export class ScreenshotsService implements OnModuleInit {
           latest_app_version: row.appVersion,
           content_height: row.contentHeight,
           viewport_height: row.viewportHeight,
+          content_top: row.contentTop,
         });
       }
     }

@@ -289,6 +289,11 @@ model ScreenCapture {
   /// Logical height of one viewport — how much of `contentHeight` was visible at a time. NULL for
   /// the same reason.
   viewportHeight Float?  @map("viewport_height")
+  /// Where CONTENT space starts inside a stitched image: the logical height of the fixed chrome
+  /// (status bar, app bar) the first frame keeps above the scrollable. The heatmap places a tap's
+  /// `$content_y` at row `content_top + $content_y`. NULL reads as 0 — exact for every capture
+  /// taken before the chrome was included, which had none.
+  contentTop     Float?  @map("content_top")
   appVersion  String   @map("app_version")
   imageHash   String   @map("image_hash")
   capturedAt  DateTime @default(now()) @map("captured_at")

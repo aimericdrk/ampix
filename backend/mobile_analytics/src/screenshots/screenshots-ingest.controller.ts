@@ -41,6 +41,8 @@ interface ScreenshotFields {
   /** Full-page captures only — see ScreenCapture.contentHeight. Absent on a single-viewport shot. */
   content_height?: string;
   viewport_height?: string;
+  /** Full-page captures only — see ScreenCapture.contentTop. 0 is a valid value (no top chrome). */
+  content_top?: string;
   image_hash?: string;
 }
 
@@ -59,6 +61,16 @@ function toOptionalPositiveFloat(value: string | undefined): number | undefined 
   if (value === undefined) return undefined;
   const n = Number.parseFloat(value);
   return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * Like [toOptionalPositiveFloat] but 0 is VALID: `content_top` of 0 means "the scrollable starts
+ * at the very top of the screen — there is no chrome above it", a real and common layout.
+ */
+function toOptionalNonNegativeFloat(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
 /**
@@ -97,6 +109,7 @@ export class ScreenshotsIngestController {
       height: toNonNegativeInt(body.height),
       contentHeight: toOptionalPositiveFloat(body.content_height),
       viewportHeight: toOptionalPositiveFloat(body.viewport_height),
+      contentTop: toOptionalNonNegativeFloat(body.content_top),
       imageHash: (body.image_hash ?? '').trim(),
       contentType: file.mimetype,
       image: file.buffer,

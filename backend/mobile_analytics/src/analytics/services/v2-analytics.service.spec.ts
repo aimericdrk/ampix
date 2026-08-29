@@ -11,7 +11,9 @@ const PROJECT = '018f6b2e-0000-7000-8000-0000000000a1';
  *  reference image's geometry (null = no capture / not a full-page one). */
 function makeService(
   queryImpl: (sql: string) => unknown[],
-  latestCapture: { contentHeight: number | null; viewportHeight: number | null } | null = null,
+  latestCapture:
+    | { contentHeight: number | null; viewportHeight: number | null; contentTop?: number | null }
+    | null = null,
 ) {
   const query = jest.fn(
     async (sql: string, _params?: Record<string, unknown>) => queryImpl(sql),
@@ -81,6 +83,8 @@ describe('V2AnalyticsService', () => {
       const params = query.mock.calls[0][1] as Record<string, unknown>;
       expect(params.imageContentHeight).toBe(4800);
       expect(params.imageViewportHeight).toBe(800);
+      // contentTop was absent from the mock row (a pre-chrome capture): 0, not undefined.
+      expect(params.imageContentTop).toBe(0);
     });
 
     it('a single-viewport capture (null geometry) keeps the original normalization', async () => {

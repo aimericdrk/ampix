@@ -124,31 +124,33 @@ describe('compileClickHeatmapQuery (contracts §19)', () => {
    * button several sections down rendered over a section near the top).
    */
   describe('full-page capture geometry', () => {
-    const CAPTURE = { contentHeight: 4800, viewportHeight: 800 };
+    const CAPTURE = { contentHeight: 4800, viewportHeight: 800, contentTop: 90 };
 
     it("normalizes content taps against the capture's height, not the tap's own", () => {
       const { sql, params } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID, CAPTURE);
 
       expect(sql).toContain(
-        "JSONExtractFloat(toJSONString(properties), '$content_y') / {imageContentHeight:Float64}",
+        "({imageContentTop:Float64} + JSONExtractFloat(toJSONString(properties), '$content_y')) / {imageContentHeight:Float64}",
       );
       expect(params.imageContentHeight).toBe(4800);
       expect(params.imageViewportHeight).toBe(800);
+      expect(params.imageContentTop).toBe(90);
     });
 
     it('drops content taps below the captured extent instead of clamping them into the bottom row', () => {
       const { sql } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID, CAPTURE);
 
       expect(sql).toContain(
-        "JSONExtractFloat(toJSONString(properties), '$content_y') <= {imageContentHeight:Float64}",
+        "({imageContentTop:Float64} + JSONExtractFloat(toJSONString(properties), '$content_y')) <= {imageContentHeight:Float64}",
       );
     });
 
-    it('places viewport-only taps at their scroll-0 position within the page', () => {
+    it('places viewport-only taps at their scroll-0 position — $pos_y from the '
+        + "image's top, since the chrome-inclusive first fold IS the screen", () => {
       const { sql } = compileClickHeatmapQuery(baseQuery(), PROJECT_ID, CAPTURE);
 
       expect(sql).toContain(
-        "'$pos_y') / screen_height) * ({imageViewportHeight:Float64} / {imageContentHeight:Float64})",
+        "JSONExtractFloat(toJSONString(properties), '$pos_y') / {imageContentHeight:Float64})",
       );
     });
 
@@ -160,6 +162,7 @@ describe('compileClickHeatmapQuery (contracts §19)', () => {
       );
       expect(params.imageContentHeight).toBeUndefined();
       expect(params.imageViewportHeight).toBeUndefined();
+      expect(params.imageContentTop).toBeUndefined();
     });
   });
 

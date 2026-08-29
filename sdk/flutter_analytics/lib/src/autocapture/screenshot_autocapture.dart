@@ -183,11 +183,17 @@ class ScreenshotAutocapture {
       // sending 0 or "null" here would claim a page of no height instead.
       final contentHeight = shot.contentHeight;
       final viewportHeight = shot.viewportHeight;
+      final contentTop = shot.contentTop;
       if (contentHeight != null) {
         request.fields['content_height'] = '$contentHeight';
       }
       if (viewportHeight != null) {
         request.fields['viewport_height'] = '$viewportHeight';
+      }
+      // Where content space starts inside the stitch (the top chrome included
+      // once above it) — the backend offsets every $content_y by this.
+      if (contentTop != null) {
+        request.fields['content_top'] = '$contentTop';
       }
       final response = await _client.send(request);
       // The backend answers 202 whether it stored or skipped a dup.

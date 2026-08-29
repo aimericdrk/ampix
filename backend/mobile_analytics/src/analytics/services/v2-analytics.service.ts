@@ -109,13 +109,16 @@ export class V2AnalyticsService {
     const latestCapture = await this.prisma.screenCapture.findFirst({
       where: { projectId, screenName: query.screen_name },
       orderBy: { capturedAt: 'desc' },
-      select: { contentHeight: true, viewportHeight: true },
+      select: { contentHeight: true, viewportHeight: true, contentTop: true },
     });
     const capture =
       latestCapture?.contentHeight && latestCapture.viewportHeight
         ? {
             contentHeight: latestCapture.contentHeight,
             viewportHeight: latestCapture.viewportHeight,
+            // NULL = captured before the chrome-inclusive stitch, which had
+            // no chrome — 0 is exact for those rows, not a guess.
+            contentTop: latestCapture.contentTop ?? 0,
           }
         : undefined;
     const compiled = compileClickHeatmapQuery(query, projectId, capture);
