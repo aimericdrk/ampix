@@ -369,7 +369,6 @@ class MyAmpix {
 
   void track(String event, {Map<String, Object?>? properties}) {
     _guard('track', () => _pipeline.track(event, properties));
-    _maybeCaptureScreenshot(event, properties);
   }
 
   /// Manually records a screen view for navigation the `MyAmpixObserver`
@@ -379,13 +378,12 @@ class MyAmpix {
   /// one screen.
   ///
   /// Emits the reserved `$screen_view` (with `$screen_name`, and
-  /// `$previous_screen` when the screen actually changed), updates the shared
-  /// current-screen name (`MyAmpixObserver.currentScreenName`) so autocaptured
-  /// `$tap` / `$rage_tap` are stamped with the right screen, and — in a debug
-  /// build with `autocaptureScreenshots` on — captures that screen's reference
-  /// screenshot (§18). It routes through the same public [track] path as the
-  /// observer, so the pipeline/guard/screenshot wiring is reused (no duplicate
-  /// trigger). An empty [screenName] is a no-op. Never throws.
+  /// `$previous_screen` when the screen actually changed) and updates the
+  /// shared current-screen name (`MyAmpixObserver.currentScreenName`) so
+  /// autocaptured `$tap` / `$rage_tap` — and a [captureScreenshotNow] pressed
+  /// here — are stamped with the right screen. It routes through the same
+  /// public [track] path as the observer. An empty [screenName] is a no-op.
+  /// Never throws.
   ///
   /// Use STABLE names per layout: give each real screen / tab its own name and
   /// group dynamic detail screens under one (e.g. `product_detail`), using
@@ -405,31 +403,41 @@ class MyAmpix {
     }
   }
 
-  /// Fires automatic screenshot capture on a `$screen_view` when enabled
-  /// (shared-contracts §18). Fire-and-forget and fully guarded inside
-  /// [ScreenshotAutocapture.onScreenView]; runs OUTSIDE the `_guard` chain so
-  /// a slow capture/upload never blocks later track/identify calls. A no-op
-  /// unless screenshot autocapture is wired (`config.autocaptureScreenshots`)
-  /// and the caller is opted in.
-  void _maybeCaptureScreenshot(
-    String event,
-    Map<String, Object?>? properties,
-  ) {
-    final capture = _screenshotAutocapture;
-    if (capture == null) return;
-    if (event != r'$screen_view') return;
-    if (_optOut.isOptedOut) return;
-    final screenName = properties?[r'$screen_name'];
-    if (screenName is! String || screenName.isEmpty) return;
-    unawaited(capture.onScreenView(screenName));
+  /// Whether the manual reference-capture UX is live: debug build,
+  /// `autocaptureScreenshots: true`, init complete. `MyAmpixTracker` reads
+  /// this to decide whether to show its capture button — always false in a
+  /// release build, so end users never see it.
+  bool get manualScreenshotAvailable =>
+      _initialized && _screenshotAutocapture != null;
+
+  /// Captures + uploads the CURRENT screen's reference screenshot right now
+  /// (shared-contracts §18) — the tracker's capture button calls this. The
+  /// capture always runs and replaces whatever the backend holds for
+  /// `(screen, app_version)` (upsert): pressing the button IS the retake.
+  /// Runs OUTSIDE the `_guard` chain so a slow upload never blocks later
+  /// track/identify calls. A no-op when capture isn't wired (release builds /
+  /// `autocaptureScreenshots: false`), the user opted out, or no screen name
+  /// is known yet. Never throws.
+  Future<void> captureScreenshotNow() async {
+    try {
+      final capture = _screenshotAutocapture;
+      if (capture == null) return;
+      if (_optOut.isOptedOut) return;
+      final screenName = MyAmpixObserver.currentScreenName;
+      if (screenName == null || screenName.isEmpty) {
+        _logger.log('captureScreenshotNow skipped: no current screen name.');
+        return;
+      }
+      await capture.captureNow(screenName);
+    } on Object catch (error, stackTrace) {
+      _logger.log('captureScreenshotNow failed', error, stackTrace);
+    }
   }
 
-  /// RETAKE reference screenshots (§18): clears the persisted "already
-  /// captured" markers so the next `$screen_view` of each screen re-captures
-  /// and re-uploads its image (the backend upserts, replacing the old one).
-  /// Use after fixing a display bug or deleting an outdated capture in the
-  /// dashboard. A no-op when reference screenshot capture is off (release
-  /// builds / `autocaptureScreenshots: false`). Never throws.
+  /// Clears the persisted "already captured" markers (§18). Vestigial since
+  /// capture went manual — [captureScreenshotNow] ignores the markers and
+  /// always re-captures — but kept for host apps that still call it; clearing
+  /// the markers is harmless. Never throws.
   Future<void> retakeScreenshots() async {
     try {
       await _screenshotAutocapture?.reset();

@@ -327,6 +327,29 @@ void main() {
       expect(capturer.captureCount, 0);
       expect(requests, isEmpty);
     });
+
+    test('captureNow (the manual button) ignores the once-per-version marker '
+        'and re-captures on every call', () async {
+      final client = recordingClient();
+      final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
+      final auto = build(capturer: capturer, client: client);
+
+      await auto.captureNow('Home');
+      await auto.captureNow('Home');
+
+      // Pressing the button IS the retake: both calls captured + uploaded
+      // (the backend upserts on (project, screen, app_version)).
+      expect(capturer.captureCount, 2);
+      expect(requests, hasLength(2));
+    });
+
+    test('captureNow with an empty screen name is ignored', () async {
+      final client = recordingClient();
+      final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
+      await build(capturer: capturer, client: client).captureNow('');
+      expect(capturer.captureCount, 0);
+      expect(requests, isEmpty);
+    });
   });
 
   // Diagnosability (shared-contracts §20): the capture/upload path must be
@@ -543,17 +566,16 @@ void main() {
     List<http.Request> screenshotRequests() =>
         requests.where((r) => r.url.path == '/ingest/screenshots').toList();
 
-    test(r'autocaptureScreenshots: true captures + uploads once on a '
-        r'$screen_view routed through track()', () async {
+    test('captureScreenshotNow captures + uploads the CURRENT screen — and '
+        'every press re-captures (pressing the button IS the retake)', () async {
       final capturer = FakeScreenshotCapturer(
         result: shot([1, 2, 3], width: 320, height: 640),
       );
       await initSdk(autocaptureScreenshots: true, capturer: capturer);
+      expect(MyAmpix.instance.manualScreenshotAvailable, isTrue);
 
-      MyAmpix.instance.track(r'$screen_view', properties: {
-        r'$screen_name': 'Home',
-      });
-      await pumpEventQueue();
+      MyAmpix.instance.trackScreen('Home'); // sets the current screen name
+      await MyAmpix.instance.captureScreenshotNow();
 
       final shots = screenshotRequests();
       expect(shots, hasLength(1));
@@ -564,23 +586,36 @@ void main() {
       expect(parsed.fields['height'], '640');
       expect(capturer.captureCount, 1);
 
-      // Second identical view → persisted-skip, no re-upload.
+      // A second press captures again — no once-per-version skip for the
+      // manual path; the backend upserts.
+      await MyAmpix.instance.captureScreenshotNow();
+      expect(screenshotRequests(), hasLength(2));
+      expect(capturer.captureCount, 2);
+    });
+
+    test(r'a $screen_view alone no longer captures — the button owns capture',
+        () async {
+      final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
+      await initSdk(autocaptureScreenshots: true, capturer: capturer);
+
       MyAmpix.instance.track(r'$screen_view', properties: {
         r'$screen_name': 'Home',
       });
+      MyAmpix.instance.trackScreen('catalog');
       await pumpEventQueue();
-      expect(screenshotRequests(), hasLength(1));
-      expect(capturer.captureCount, 1);
+
+      expect(screenshotRequests(), isEmpty);
+      expect(capturer.captureCount, 0);
     });
 
-    test('autocaptureScreenshots: false never captures or uploads', () async {
+    test('autocaptureScreenshots: false — captureScreenshotNow is a no-op and '
+        'the button is unavailable', () async {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
       await initSdk(autocaptureScreenshots: false, capturer: capturer);
 
-      MyAmpix.instance.track(r'$screen_view', properties: {
-        r'$screen_name': 'Home',
-      });
-      await pumpEventQueue();
+      expect(MyAmpix.instance.manualScreenshotAvailable, isFalse);
+      MyAmpix.instance.trackScreen('Home');
+      await MyAmpix.instance.captureScreenshotNow();
 
       expect(screenshotRequests(), isEmpty);
       expect(capturer.captureCount, 0);
@@ -590,45 +625,27 @@ void main() {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
       await initSdk(autocaptureScreenshots: true, capturer: capturer);
 
+      MyAmpix.instance.trackScreen('Home');
       MyAmpix.instance.optOutTracking();
       await pumpEventQueue(); // let opt-out take effect
 
-      MyAmpix.instance.track(r'$screen_view', properties: {
-        r'$screen_name': 'Home',
-      });
-      await pumpEventQueue();
+      await MyAmpix.instance.captureScreenshotNow();
 
       expect(screenshotRequests(), isEmpty);
       expect(capturer.captureCount, 0);
     });
 
-    test(r'a non-$screen_view event never triggers a capture', () async {
+    test('captureScreenshotNow without a current screen name is a no-op',
+        () async {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
       await initSdk(autocaptureScreenshots: true, capturer: capturer);
 
-      MyAmpix.instance.track('checkout_completed', properties: {'value': 9.99});
-      await pumpEventQueue();
+      // No route push / trackScreen happened yet — nothing to attribute the
+      // capture to, so nothing is captured.
+      await MyAmpix.instance.captureScreenshotNow();
 
       expect(screenshotRequests(), isEmpty);
       expect(capturer.captureCount, 0);
-    });
-
-    test('trackScreen (non-route navigation) triggers a capture for the named '
-        'screen', () async {
-      final capturer = FakeScreenshotCapturer(
-        result: shot([1, 2, 3], width: 320, height: 640),
-      );
-      await initSdk(autocaptureScreenshots: true, capturer: capturer);
-
-      // Bottom-nav tab switch: no Navigator push, so the observer can't see it
-      // — trackScreen routes through track() and captures the reference shot.
-      MyAmpix.instance.trackScreen('catalog');
-      await pumpEventQueue();
-
-      final shots = screenshotRequests();
-      expect(shots, hasLength(1));
-      expect(parseMultipart(shots.single).fields['screen_name'], 'catalog');
-      expect(capturer.captureCount, 1);
     });
   });
 }

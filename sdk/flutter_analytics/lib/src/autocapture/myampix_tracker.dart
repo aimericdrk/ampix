@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
@@ -368,21 +369,96 @@ class _MyAmpixTrackerState extends State<MyAmpixTracker> {
     return text;
   }
 
+  /// True while a manual capture kicked off from [_onCapturePressed] is in
+  /// flight — the button hides itself for the duration.
+  bool _capturing = false;
+
+  /// The capture button's tap: hide the button, let the hide-frame paint,
+  /// capture, then bring the button back. The button lives OUTSIDE the
+  /// captured [RepaintBoundary] so it could never appear in the shot anyway —
+  /// hiding it is the visible "shutter" feedback and a second guarantee.
+  Future<void> _onCapturePressed() async {
+    if (_capturing) return;
+    setState(() => _capturing = true);
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      await MyAmpix.instance.captureScreenshotNow();
+    } on Object catch (_) {
+      // captureScreenshotNow never throws (design §13); belt for anything else.
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Wrap the app subtree in a keyed `RepaintBoundary` so the screenshot
     // capturer (shared-contracts §18) renders the WHOLE screen from a stable,
     // SDK-controlled boundary instead of the first/partial one a tree walk
     // would find — the same subtree we already observe for taps.
-    return RepaintBoundary(
-      key: myampixScreenshotBoundaryKey,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: _onPointerDown,
-        onPointerUp: _onPointerUp,
-        onPointerCancel: _onPointerCancel,
-        child: widget.child,
-      ),
+    //
+    // The Stack is ALWAYS present (passthrough fit, explicit direction) so
+    // toggling the capture button never changes the child's ancestor chain —
+    // reparenting the app subtree would throw away its state (the Navigator's,
+    // most catastrophically). The button sits outside both the boundary
+    // (never in a capture) and the Listener (its taps never emit $tap).
+    return Stack(
+      fit: StackFit.passthrough,
+      textDirection: TextDirection.ltr,
+      children: [
+        RepaintBoundary(
+          key: myampixScreenshotBoundaryKey,
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _onPointerDown,
+            onPointerUp: _onPointerUp,
+            onPointerCancel: _onPointerCancel,
+            child: widget.child,
+          ),
+        ),
+        // Manual reference-capture button (§18): debug builds with
+        // autocaptureScreenshots on, only. Availability is re-read every
+        // build; in the recommended wiring MyAmpix.init completes before
+        // runApp, so the first build already sees it.
+        if (!_capturing && MyAmpix.instance.manualScreenshotAvailable)
+          Positioned(
+            right: 16,
+            // High enough to clear bottom navigation bars and FABs.
+            bottom: 100,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Semantics(
+                label: 'myampix_capture_button',
+                button: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _onCapturePressed,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC1B1B1F),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0x66FFFFFF)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x55000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.photo_camera_outlined,
+                      color: Color(0xFFFFFFFF),
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

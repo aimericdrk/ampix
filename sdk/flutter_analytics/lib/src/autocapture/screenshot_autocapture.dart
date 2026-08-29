@@ -72,12 +72,32 @@ class ScreenshotAutocapture {
   /// Handles a `$screen_view`: capture + upload the screen unless it has
   /// already been captured for the current `app_version`. Fully guarded —
   /// never throws.
-  Future<void> onScreenView(String screenName) async {
+  ///
+  /// NOTE: since the manual capture button (`MyAmpix.captureScreenshotNow`)
+  /// became the debug capture UX, the facade no longer calls this on
+  /// `$screen_view` — it is kept as the engine an automatic mode would use.
+  Future<void> onScreenView(String screenName) =>
+      _capture(screenName, skipIfCaptured: true, settle: true);
+
+  /// Manual capture (the tracker's capture button): captures + uploads RIGHT
+  /// NOW, ignoring the once-per-version marker — pressing the button is the
+  /// developer saying "replace whatever you have" (the backend upserts). No
+  /// settle delay either: the developer tapped when the screen looked right,
+  /// and the production capturer still waits for in-flight frames itself.
+  /// Fully guarded — never throws.
+  Future<void> captureNow(String screenName) =>
+      _capture(screenName, skipIfCaptured: false, settle: false);
+
+  Future<void> _capture(
+    String screenName, {
+    required bool skipIfCaptured,
+    required bool settle,
+  }) async {
     if (screenName.isEmpty) return;
     try {
       final appVersion = await _appVersion();
       final captured = await _loadCaptured(appVersion);
-      if (captured.contains(screenName)) {
+      if (skipIfCaptured && captured.contains(screenName)) {
         // persisted once-per-version — visible under `logLevel: debug`.
         _logger.log(
           'screenshot skipped (already captured this app_version): $screenName',
@@ -91,7 +111,7 @@ class ScreenshotAutocapture {
       try {
         // Let the navigation transition settle so we don't capture a
         // half-animated / off-centre frame (production ~400ms; 0 in tests).
-        if (_settleDelay > Duration.zero) {
+        if (settle && _settleDelay > Duration.zero) {
           await Future<void>.delayed(_settleDelay);
         }
         final shot = await _capturer.capture();
