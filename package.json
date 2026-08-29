@@ -27,6 +27,7 @@
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:reset": "docker compose -f infra/docker-compose.yml down -v",
+    "ship": "bash scripts/k8s/ship.sh",
     "k8s:lint": "bash scripts/k8s/lint.sh",
     "k8s:local": "bash scripts/k8s/local.sh"
   },

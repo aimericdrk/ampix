@@ -141,6 +141,21 @@ pushes open/resolve events to a Slack/Discord-style webhook.
 
 ## 8. Upgrade / rollback
 
+Ship whatever is on `origin` — one command, run on the VPS itself:
+
+```bash
+scripts/k8s/ship.sh                    # or: pnpm ship
+```
+
+It chains `git pull --ff-only` → `build-local-images.sh sha-<HEAD>` → `deploy.sh` → smoke tests, and
+stops at the first failure. Because this deploy builds its images on the host (`image.owner: local`),
+nothing waits on the GHCR **Images** workflow. Useful flags: `--no-pull` (deploy the checkout as-is),
+`--tag <name>`, `--rebuild`, `--prune [N]` (drop all but the newest N image tags), `--skip-tests`.
+A tracked-file change tags the build `sha-<HEAD>-dirty` so the cluster never claims to run a commit
+it isn't running. `scripts/k8s/ship.sh --help` lists everything.
+
+The individual steps still work by hand, and a deploy of an image tag already built is just:
+
 ```bash
 scripts/k8s/deploy.sh sha-<new>        # migrations first; on failure Helm rolls back automatically
 helm -n myampix history myampix
