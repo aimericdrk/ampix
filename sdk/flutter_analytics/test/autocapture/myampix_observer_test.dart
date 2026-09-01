@@ -214,11 +214,9 @@ void main() {
         // attribution/*_test.dart) that injects a stream instead.
         autocapturePurchases: false,
         autocaptureAttribution: false,
-        // Disable screenshot autocapture too: this suite emits real
-        // `$screen_view`s under a live frame, and the default capturer would
-        // render/upload it. screenshot_autocapture_test.dart injects a fake
-        // capturer to exercise §18 instead.
-        autocaptureScreenshots: false,
+        // Screenshot capture stays dormant here: it only arms when
+        // retakeScreenshots() is called, which this suite never does.
+        // screenshot_autocapture_test.dart injects a fake capturer for §18.
       ),
       overrides: SdkOverrides(
         clock: clock,

@@ -400,29 +400,29 @@ captures in **debug builds** (`kDebugMode`) and only when you opt in. Each scree
 per `(screen_name, app_version)`**, uploaded to become the project's _admin reference image_ that
 powers the dashboard's user-path map + click heatmaps. A release build never captures or uploads.
 
-Full path: **SDK flag + `MyAmpixTracker` + named routes → `POST /ingest/screenshots` → Postgres
-metadata + Firebase bytes → dashboard Screens view / retake.**
+Full path: **`retakeScreenshots()` + `MyAmpixTracker` + named routes → `POST /ingest/screenshots` →
+Postgres metadata + Firebase bytes → dashboard Screens view / retake.**
 
 ### 1. SDK side (`sdk/flutter_analytics`)
 
-**Enable the flag.** `autocaptureScreenshots` defaults to `false` (`lib/src/config.dart`). Turn it
-on in a debug build:
+**Activate capture.** There is no config flag: calling
+`MyAmpix.instance.retakeScreenshots()` after `MyAmpix.init` is the one and only switch.
 
 ```dart
 await MyAmpix.init(
   '<SDK_INGEST_TOKEN>',                     // same mam_ token used for POST /ingest/events
   config: const MyAmpixConfig(
     serverUrl: 'http://localhost:8088',      // mobile_analytics :8088
-    autocaptureScreenshots: true,            // off by default
-    screenshotSettleDelay: Duration(seconds: 2), // default 1s; raise for slow transitions
+    screenshotSettleDelay: Duration(seconds: 2), // default 2s; raise for slow transitions
     debug: true,                             // optional: see skip/upload logs
   ),
 );
+MyAmpix.instance.retakeScreenshots();        // activates screenshot capture
 ```
 
-Even with the flag `true`, wiring only happens when `kDebugMode` is true (`lib/src/myampix.dart`):
-`wantScreenshots = config.autocaptureScreenshots && (kDebugMode || <test seam>)`. A release build
-silently skips capture — the intended safety property (bounded storage, no PII from the wild).
+Even after `retakeScreenshots()`, the capture wiring only exists when `kDebugMode` is true
+(`lib/src/myampix.dart`): `wantScreenshots = kDebugMode || <test seam>`. A release build silently
+skips capture — the intended safety property (bounded storage, no PII from the wild).
 
 **Wrap the app in `MyAmpixTracker`.** Capture renders a root `RepaintBoundary`; `MyAmpixTracker`
 installs a keyed full-screen boundary (`myampixScreenshotBoundaryKey`) around your subtree
@@ -539,7 +539,7 @@ React Query hooks (`src/features/analytics/api.ts`): `useScreens` (catalog), `us
      export SCREENSHOT_MAX_KB=512   # optional
      ```
      Confirm the boot log line `✓ Firebase Storage reachable: gs://<bucket>`.
-3. **Build the Flutter app in DEBUG** with `autocaptureScreenshots: true`, `serverUrl` at the backend, and the SDK ingest token (release builds never capture — intentional).
+3. **Build the Flutter app in DEBUG**, call `MyAmpix.instance.retakeScreenshots()` after init (the one activation switch — no config flag), with `serverUrl` at the backend and the SDK ingest token (release builds never capture — intentional).
 4. **Wire the SDK:** `runApp(MyAmpixTracker(child: MyApp()))`, add `MyAmpixObserver()` to `navigatorObservers`, give every route `RouteSettings(name: ...)`, call `trackScreen('<stable_name>')` for tabs/`IndexedStack`/`PageView`, wrap PII in `MyAmpixPrivacy`.
 5. **Walk the app once.** Each `(screen_name, app_version)` uploads exactly once (`202`). Enable `debug` to see `screenshot uploaded: <name> (status 202)` / skip logs.
 6. **View in the dashboard.** Open the project's analytics Screens surface (:5173).
@@ -832,7 +832,7 @@ await MyAmpix.init(
 
 - **Token:** `pnpm dev` seeds `mam_a5857ba6d091bf8f6c96d7f84f0b35db`; mint more via the API (§1.7) or Prisma Studio (`Organization → Project → SdkToken`). `MyAmpix.init` is idempotent and never throws (failed init = silent no-op).
 - **Android emulator:** use `http://10.0.2.2:8088`, not `localhost`.
-- **Autocapture toggles** (`MyAmpixConfig`, independently toggleable): `autocaptureScreens` (default `true`), `autocaptureTaps` (`true`), `autocapturePurchases` (`true`), `autocaptureAttribution` (`true`), `autocaptureScreenshots` (`false`, **debug-build only** — see §3). Screens/taps also require wiring the observers once:
+- **Autocapture toggles** (`MyAmpixConfig`, independently toggleable): `autocaptureScreens` (default `true`), `autocaptureTaps` (`true`), `autocapturePurchases` (`true`), `autocaptureAttribution` (`true`). Reference screenshots have no config flag: activate them by calling `MyAmpix.instance.retakeScreenshots()` (**debug-build only** — see §3). Screens/taps also require wiring the observers once:
 
 ```dart
 MaterialApp(

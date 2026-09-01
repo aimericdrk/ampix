@@ -18,9 +18,10 @@ import 'screenshot_capturer.dart';
 ///
 /// Never-throw (design §13): any capture/encode/upload failure is dropped
 /// silently and does NOT mark the pair captured, so it retries next launch.
-/// Gated at construction on `config.autocaptureScreenshots` and driven by the
-/// injected [ScreenshotCapturer] + `http.Client` so it never touches real
-/// rendering or the network in widget tests.
+/// Built only in debug builds, dormant until `MyAmpix.retakeScreenshots()`
+/// arms capture, and driven by the injected [ScreenshotCapturer] +
+/// `http.Client` so it never touches real rendering or the network in widget
+/// tests.
 class ScreenshotAutocapture {
   ScreenshotAutocapture({
     required ScreenshotCapturer capturer,

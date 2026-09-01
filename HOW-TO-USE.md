@@ -50,9 +50,10 @@ Future<void> main() async {
       autocaptureTaps: true,                       // default true — $tap / $rage_tap via MyAmpixTracker
       autocapturePurchases: true,                  // default true — native $in_app_purchase (StoreKit / Play Billing)
       autocaptureAttribution: true,                // default true — deep-link UTM + Android install referrer
-      autocaptureScreenshots: false,               // default FALSE — dev/reference tool, debug-only (see §14)
     ),
   );
+  // Reference screenshots (dev/reference tool, debug-only — see §14) have no
+  // config flag: activate them with MyAmpix.instance.retakeScreenshots();
 
   runApp(const MyApp());
 }
@@ -207,9 +208,9 @@ MaterialApp(
 
 **Attribution** (`autocaptureAttribution`) — the Android install referrer is captured automatically; for deep links, call `MyAmpix.instance.trackDeepLink(uri)` from your link handler. UTM params are persisted (first- and last-touch) and attached to every event; a `$campaign_touch` is emitted on each new touch.
 
-**Screenshots** (`autocaptureScreenshots`, default **false**) — a **developer/reference tool, not a per-user feature.** It is off by default and only ever runs in **debug builds** — a release/production build never captures or uploads, so your end users never send screenshots (bounded storage, no PII collected in the wild). These reference images power the dashboard's user-path map and click heatmaps.
+**Screenshots** — a **developer/reference tool, not a per-user feature.** There is no config flag: capture stays dormant until you call `MyAmpix.instance.retakeScreenshots()` (the one activation switch), and it only ever runs in **debug builds** — a release/production build never captures or uploads, so your end users never send screenshots (bounded storage, no PII collected in the wild). These reference images power the dashboard's user-path map and click heatmaps.
 
-**How to populate them:** in a DEBUG build, set `autocaptureScreenshots: true`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition: at least `screenshotSettleDelay` (a `Duration`, default **~1s**) AND until the UI stops animating. Bump `screenshotSettleDelay` if your transitions are longer/heavier and captures still look mid-animation.
+**How to populate them:** in a DEBUG build, call `MyAmpix.instance.retakeScreenshots()` after `MyAmpix.init`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition: at least `screenshotSettleDelay` (a `Duration`, default **~2s**) AND until the UI stops animating. Bump `screenshotSettleDelay` if your transitions are longer/heavier and captures still look mid-animation.
 
 For correctly-framed full-screen captures, wrap your app in `MyAmpixTracker` via `MaterialApp.builder` (the screen-view/tap wiring above already does this): the SDK captures the dedicated `RepaintBoundary` the tracker provides — the whole screen — rather than guessing a boundary from the render tree. Without the tracker mounted it falls back to the largest boundary on screen.
 

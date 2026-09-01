@@ -61,30 +61,33 @@ void main() {
   });
 
   Future<void> initSdk({
-    required bool autocaptureScreenshots,
+    required bool armScreenshots,
     ScreenshotCapturer? capturer,
-  }) => MyAmpix.init(
-    token,
-    config: MyAmpixConfig(
-      serverUrl: 'http://localhost:8080',
-      autocaptureScreenshots: autocaptureScreenshots,
-      autocapturePurchases: false,
-      autocaptureAttribution: false,
-    ),
-    overrides: SdkOverrides(
-      clock: clock,
-      httpClient: MockClient((request) async {
-        requests.add(request);
-        return http.Response('{"stored": true}', 202);
-      }),
-      database: database,
-      keyValueStore: InMemoryKeyValueStore(),
-      contextDataSource: FakeContextDataSource(),
-      random: FixedRandom(0.5),
-      screenshotCapturer: capturer,
-      screenshotSettleDelay: Duration.zero,
-    ),
-  );
+  }) async {
+    await MyAmpix.init(
+      token,
+      config: const MyAmpixConfig(
+        serverUrl: 'http://localhost:8080',
+        autocapturePurchases: false,
+        autocaptureAttribution: false,
+      ),
+      overrides: SdkOverrides(
+        clock: clock,
+        httpClient: MockClient((request) async {
+          requests.add(request);
+          return http.Response('{"stored": true}', 202);
+        }),
+        database: database,
+        keyValueStore: InMemoryKeyValueStore(),
+        contextDataSource: FakeContextDataSource(),
+        random: FixedRandom(0.5),
+        screenshotCapturer: capturer,
+        screenshotSettleDelay: Duration.zero,
+      ),
+    );
+    // The one activation switch: no config flag anymore.
+    if (armScreenshots) await MyAmpix.instance.retakeScreenshots();
+  }
 
   Finder button() => find.bySemanticsLabel('myampix_capture_button');
 
@@ -97,7 +100,7 @@ void main() {
   testWidgets('shown when capture is wired; tapping it captures the current '
       'screen and it reappears afterwards', (tester) async {
     final capturer = _GatedCapturer();
-    await initSdk(autocaptureScreenshots: true, capturer: capturer);
+    await initSdk(armScreenshots: true, capturer: capturer);
     MyAmpix.instance.trackScreen('Home');
 
     await tester.pumpWidget(app());
@@ -124,7 +127,7 @@ void main() {
   testWidgets('hides while the capture is in flight and reappears when it '
       'finishes', (tester) async {
     final capturer = _GatedCapturer()..gate = Completer<void>();
-    await initSdk(autocaptureScreenshots: true, capturer: capturer);
+    await initSdk(armScreenshots: true, capturer: capturer);
     MyAmpix.instance.trackScreen('Home');
 
     await tester.pumpWidget(app());
@@ -144,8 +147,8 @@ void main() {
     await MyAmpix.shutdownForTesting();
   });
 
-  testWidgets('absent when reference capture is not wired', (tester) async {
-    await initSdk(autocaptureScreenshots: false, capturer: _GatedCapturer());
+  testWidgets('absent until retakeScreenshots() arms capture', (tester) async {
+    await initSdk(armScreenshots: false, capturer: _GatedCapturer());
 
     await tester.pumpWidget(app());
 

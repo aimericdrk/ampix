@@ -545,28 +545,31 @@ void main() {
     });
 
     Future<void> initSdk({
-      required bool autocaptureScreenshots,
+      required bool armScreenshots,
       ScreenshotCapturer? capturer,
-    }) => MyAmpix.init(
-      token,
-      config: MyAmpixConfig(
-        serverUrl: 'http://localhost:8080',
-        autocaptureScreenshots: autocaptureScreenshots,
-        // Keep the real purchase/attribution channels out of this suite.
-        autocapturePurchases: false,
-        autocaptureAttribution: false,
-      ),
-      overrides: SdkOverrides(
-        clock: clock,
-        httpClient: client(),
-        database: database,
-        keyValueStore: keyValueStore,
-        contextDataSource: FakeContextDataSource(),
-        random: FixedRandom(0.5),
-        screenshotCapturer: capturer,
-        screenshotSettleDelay: Duration.zero,
-      ),
-    );
+    }) async {
+      await MyAmpix.init(
+        token,
+        config: const MyAmpixConfig(
+          serverUrl: 'http://localhost:8080',
+          // Keep the real purchase/attribution channels out of this suite.
+          autocapturePurchases: false,
+          autocaptureAttribution: false,
+        ),
+        overrides: SdkOverrides(
+          clock: clock,
+          httpClient: client(),
+          database: database,
+          keyValueStore: keyValueStore,
+          contextDataSource: FakeContextDataSource(),
+          random: FixedRandom(0.5),
+          screenshotCapturer: capturer,
+          screenshotSettleDelay: Duration.zero,
+        ),
+      );
+      // The one activation switch: no config flag anymore.
+      if (armScreenshots) await MyAmpix.instance.retakeScreenshots();
+    }
 
     List<http.Request> screenshotRequests() =>
         requests.where((r) => r.url.path == '/ingest/screenshots').toList();
@@ -576,7 +579,7 @@ void main() {
       final capturer = FakeScreenshotCapturer(
         result: shot([1, 2, 3], width: 320, height: 640),
       );
-      await initSdk(autocaptureScreenshots: true, capturer: capturer);
+      await initSdk(armScreenshots: true, capturer: capturer);
       expect(MyAmpix.instance.manualScreenshotAvailable, isTrue);
 
       MyAmpix.instance.trackScreen('Home'); // sets the current screen name
@@ -601,7 +604,7 @@ void main() {
     test(r'a $screen_view alone no longer captures — the button owns capture',
         () async {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
-      await initSdk(autocaptureScreenshots: true, capturer: capturer);
+      await initSdk(armScreenshots: true, capturer: capturer);
 
       MyAmpix.instance.track(r'$screen_view', properties: {
         r'$screen_name': 'Home',
@@ -613,10 +616,10 @@ void main() {
       expect(capturer.captureCount, 0);
     });
 
-    test('autocaptureScreenshots: false — captureScreenshotNow is a no-op and '
-        'the button is unavailable', () async {
+    test('retakeScreenshots() never called — captureScreenshotNow is a no-op '
+        'and the button is unavailable', () async {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
-      await initSdk(autocaptureScreenshots: false, capturer: capturer);
+      await initSdk(armScreenshots: false, capturer: capturer);
 
       expect(MyAmpix.instance.manualScreenshotAvailable, isFalse);
       MyAmpix.instance.trackScreen('Home');
@@ -628,7 +631,7 @@ void main() {
 
     test('an opted-out user is never screenshotted', () async {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
-      await initSdk(autocaptureScreenshots: true, capturer: capturer);
+      await initSdk(armScreenshots: true, capturer: capturer);
 
       MyAmpix.instance.trackScreen('Home');
       MyAmpix.instance.optOutTracking();
@@ -643,7 +646,7 @@ void main() {
     test('captureScreenshotNow without a current screen name is a no-op',
         () async {
       final capturer = FakeScreenshotCapturer(result: shot([1, 2, 3]));
-      await initSdk(autocaptureScreenshots: true, capturer: capturer);
+      await initSdk(armScreenshots: true, capturer: capturer);
 
       // No route push / trackScreen happened yet — nothing to attribute the
       // capture to, so nothing is captured.

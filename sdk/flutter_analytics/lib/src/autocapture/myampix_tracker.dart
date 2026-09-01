@@ -416,10 +416,11 @@ class _MyAmpixTrackerState extends State<MyAmpixTracker> {
             child: widget.child,
           ),
         ),
-        // Manual reference-capture button (§18): debug builds with
-        // autocaptureScreenshots on, only. Availability is re-read every
-        // build; in the recommended wiring MyAmpix.init completes before
-        // runApp, so the first build already sees it.
+        // Manual reference-capture button (§18): debug builds only, and only
+        // after MyAmpix.instance.retakeScreenshots() armed capture.
+        // Availability is re-read every build; in the recommended wiring
+        // MyAmpix.init completes before runApp, so the first build already
+        // sees it.
         if (!_capturing && MyAmpix.instance.manualScreenshotAvailable)
           Positioned(
             right: 16,

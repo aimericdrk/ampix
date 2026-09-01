@@ -21,7 +21,6 @@ class MyAmpixConfig {
     this.autocaptureTaps = true,
     this.autocapturePurchases = true,
     this.autocaptureAttribution = true,
-    this.autocaptureScreenshots = false,
     this.screenshotSettleDelay = const Duration(seconds: 2),
   }) : assert(
          flushAt > 0 && flushAt <= 100,
@@ -109,25 +108,6 @@ class MyAmpixConfig {
   /// `MyAmpix.init()` from touching a platform channel in their widget
   /// tests. Independently toggleable from the other autocapture flags.
   final bool autocaptureAttribution;
-
-  /// Enables **reference** screenshot capture (shared-contracts §18) — a
-  /// developer tool, **NOT** a per-user feature. It is off by default AND only
-  /// ever runs in **debug builds** (`kDebugMode`): a release/production build
-  /// never captures or uploads, so end users never send screenshots (bounded
-  /// storage, no PII collected in the wild). The intended workflow: set this
-  /// `true` in a DEBUG build, walk through your app once — each screen is
-  /// captured once per `(screen_name, app_version)` and uploaded to
-  /// `POST /ingest/screenshots` to become the ADMIN's reference image for that
-  /// screen (used by the dashboard's user-path map + click heatmaps). Capture
-  /// waits for the navigation transition to settle first (so it isn't grabbed
-  /// mid-animation), renders the current frame via a root `RepaintBoundary`,
-  /// downscales it (≤ 640px longest side, JPEG q≈70), blacks out any
-  /// `MyAmpixPrivacy` regions, then uploads. To replace a bad/outdated
-  /// capture, delete it in the dashboard and/or call
-  /// `MyAmpix.instance.retakeScreenshots()` and re-navigate. Meaningful screen
-  /// names require NAMED routes (`RouteSettings(name: ...)`) — otherwise the
-  /// screen falls back to the route's runtime type.
-  final bool autocaptureScreenshots;
 
   /// How long a reference screenshot capture (shared-contracts §18) waits after
   /// a `$screen_view` before grabbing the frame, so slow / animated screen

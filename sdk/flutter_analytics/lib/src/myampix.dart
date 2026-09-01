@@ -78,9 +78,9 @@ class SdkOverrides {
 
   /// Test-only seam replacing the real `RepaintBoundary`-backed screenshot
   /// capturer so the capture→hash→throttle→upload mapping (§18) can be driven
-  /// with canned JPEG bytes instead of rendering a real frame. Only consulted
-  /// when `config.autocaptureScreenshots` is true. Not part of the frozen §8
-  /// surface.
+  /// with canned JPEG bytes instead of rendering a real frame. Passing it also
+  /// forces the screenshot wiring on outside debug builds. Not part of the
+  /// frozen §8 surface.
   final ScreenshotCapturer? screenshotCapturer;
 
   /// Test-only seam overriding the delay the screenshot autocapture waits for
@@ -107,7 +107,12 @@ class MyAmpix {
   bool _autocaptureTaps = true;
   bool _autocapturePurchases = true;
   bool _autocaptureAttribution = true;
-  bool _autocaptureScreenshots = true;
+
+  /// Whether reference screenshot capture (§18) has been activated. There is
+  /// no config flag: [retakeScreenshots] is the one and only switch, so a
+  /// plain `MyAmpix.init()` never shows the capture button or captures
+  /// anything until the host explicitly opts in by calling it.
+  bool _screenshotsArmed = false;
 
   late final AnalyticsDatabase _database;
   late final AttributionStore _attribution;
@@ -166,7 +171,6 @@ class MyAmpix {
     _autocaptureTaps = config.autocaptureTaps;
     _autocapturePurchases = config.autocapturePurchases;
     _autocaptureAttribution = config.autocaptureAttribution;
-    _autocaptureScreenshots = config.autocaptureScreenshots;
     final clock = overrides?.clock ?? const SystemClock();
     final idFactory = overrides?.idFactory ?? (() => const Uuid().v7());
     final keyValueStore =
@@ -284,8 +288,7 @@ class MyAmpix {
       '| serverUrl=${config.serverUrl} '
       '| flushAt=${config.flushAt} flushInterval=${config.flushInterval.inSeconds}s '
       '| autocapture{screens:$_autocaptureScreens, taps:$_autocaptureTaps, '
-      'purchases:$_autocapturePurchases, attribution:$_autocaptureAttribution, '
-      'screenshots:$_autocaptureScreenshots} '
+      'purchases:$_autocapturePurchases, attribution:$_autocaptureAttribution} '
       '| distinctId=${_identity.distinctId} '
       '| superProperties=${_superProperties.current}',
     );
@@ -330,23 +333,19 @@ class MyAmpix {
       _attributionAutocapture!.start();
     }
 
-    // Automatic screenshot capture (shared-contracts §18). Gated on
-    // `config.autocaptureScreenshots` (default true) for the SAME fake-async
-    // reason as the purchase/attribution blocks: the default capturer renders
-    // a real `RepaintBoundary` frame, so leaving it wired would make a plain
-    // `MyAmpix.init()` try to render/upload under `testWidgets`. When enabled
-    // we build it from the injected capturer (or the real
-    // `RepaintBoundary` one) and reuse the same http client the uploader uses.
-    // Triggered lazily from `track()` on `$screen_view`; captures each screen
-    // at most once per `app_version` (persisted in the keyValueStore).
-    // Reference screenshots are a DEBUG-ONLY developer tool (§18): gated on
-    // `kDebugMode` so a release/production build never captures or uploads —
-    // only the developer's debug build populates the admin's reference images,
-    // and only when they opt in. A test seam (`overrides?.screenshotCapturer`)
-    // still forces the wiring on for the dedicated screenshot tests.
-    final wantScreenshots =
-        config.autocaptureScreenshots &&
-        (kDebugMode || overrides?.screenshotCapturer != null);
+    // Reference screenshot capture (shared-contracts §18): a DEBUG-ONLY
+    // developer tool, gated on `kDebugMode` so a release/production build
+    // never captures or uploads — only the developer's debug build populates
+    // the admin's reference images. There is NO config flag: the wiring is
+    // built unconditionally in debug builds, but stays dormant
+    // (`_screenshotsArmed` false) until the host calls [retakeScreenshots] —
+    // the one activation switch. Construction alone never renders or touches
+    // the network, so a plain `MyAmpix.init()` stays safe under `testWidgets`
+    // fake-async. We build it from the injected capturer (or the real
+    // `RepaintBoundary` one) and reuse the same http client the uploader
+    // uses. A test seam (`overrides?.screenshotCapturer`) forces the wiring
+    // on for the dedicated screenshot tests.
+    final wantScreenshots = kDebugMode || overrides?.screenshotCapturer != null;
     if (wantScreenshots) {
       _screenshotAutocapture = ScreenshotAutocapture(
         capturer:
@@ -403,25 +402,25 @@ class MyAmpix {
     }
   }
 
-  /// Whether the manual reference-capture UX is live: debug build,
-  /// `autocaptureScreenshots: true`, init complete. `MyAmpixTracker` reads
-  /// this to decide whether to show its capture button — always false in a
-  /// release build, so end users never see it.
+  /// Whether the manual reference-capture UX is live: debug build, init
+  /// complete, and [retakeScreenshots] called (the one activation switch).
+  /// `MyAmpixTracker` reads this to decide whether to show its capture
+  /// button — always false in a release build, so end users never see it.
   bool get manualScreenshotAvailable =>
-      _initialized && _screenshotAutocapture != null;
+      _initialized && _screenshotsArmed && _screenshotAutocapture != null;
 
   /// Captures + uploads the CURRENT screen's reference screenshot right now
   /// (shared-contracts §18) — the tracker's capture button calls this. The
   /// capture always runs and replaces whatever the backend holds for
   /// `(screen, app_version)` (upsert): pressing the button IS the retake.
   /// Runs OUTSIDE the `_guard` chain so a slow upload never blocks later
-  /// track/identify calls. A no-op when capture isn't wired (release builds /
-  /// `autocaptureScreenshots: false`), the user opted out, or no screen name
-  /// is known yet. Never throws.
+  /// track/identify calls. A no-op when capture isn't live (release builds,
+  /// or [retakeScreenshots] never called), the user opted out, or no screen
+  /// name is known yet. Never throws.
   Future<void> captureScreenshotNow() async {
     try {
       final capture = _screenshotAutocapture;
-      if (capture == null) return;
+      if (capture == null || !_screenshotsArmed) return;
       if (_optOut.isOptedOut) return;
       final screenName = MyAmpixObserver.currentScreenName;
       if (screenName == null || screenName.isEmpty) {
@@ -434,12 +433,18 @@ class MyAmpix {
     }
   }
 
-  /// Clears the persisted "already captured" markers (§18). Vestigial since
-  /// capture went manual — [captureScreenshotNow] ignores the markers and
-  /// always re-captures — but kept for host apps that still call it; clearing
-  /// the markers is harmless. Never throws.
+  /// ACTIVATES reference screenshot capture (shared-contracts §18) — the one
+  /// and only switch: there is no config flag, so calling this after
+  /// `MyAmpix.init` is all a host app needs to do. In a DEBUG build it makes
+  /// [manualScreenshotAvailable] true (the tracker's capture button appears)
+  /// and un-gates [captureScreenshotNow]; a release/production build stays a
+  /// no-op — the capture wiring is never built there, so end users never see
+  /// the button or send screenshots. Also clears the persisted "already
+  /// captured" markers, so a retake replaces whatever the backend holds
+  /// (upsert). Never throws.
   Future<void> retakeScreenshots() async {
     try {
+      _screenshotsArmed = true;
       await _screenshotAutocapture?.reset();
     } on Object catch (error, stackTrace) {
       _logger.log('retakeScreenshots failed', error, stackTrace);
@@ -504,12 +509,6 @@ class MyAmpix {
   /// is always available regardless of this flag.
   bool get autocaptureAttributionEnabled =>
       _initialized && _autocaptureAttribution;
-
-  /// Whether automatic screenshot capture is enabled
-  /// (`config.autocaptureScreenshots`, shared-contracts §18). Not part of the
-  /// frozen §8 method surface, but a public property of the facade class.
-  bool get autocaptureScreenshotsEnabled =>
-      _initialized && _autocaptureScreenshots;
 
   /// The current distinct id, or null before [init] completes its identity load.
   /// Pass this to other SDKs (e.g. RevenueCat's `Purchases.logIn`) to share identity.
