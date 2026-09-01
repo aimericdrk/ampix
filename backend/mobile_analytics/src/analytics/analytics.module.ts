@@ -5,6 +5,7 @@ import { CohortsModule } from '../cohorts/cohorts.module';
 import { ErasureModule } from '../erasure/erasure.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { AttributionService } from './queries/attribution/attribution.service';
+import { ExperimentsService } from './queries/experiments/experiments.service';
 import { UserAdminService } from './services/user-admin.service';
 import { AdvancedAnalyticsController } from './controllers/advanced-analytics.controller';
 import { AdvancedAnalyticsService } from './services/advanced-analytics.service';
@@ -38,6 +39,7 @@ import { V2AnalyticsService } from './services/v2-analytics.service';
     MetadataService,
     UserAdminService,
     AttributionService,
+    ExperimentsService,
     UsersService,
     SummariesService,
     InsightsQueryService,

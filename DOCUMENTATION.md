@@ -254,6 +254,7 @@ Source modules (`backend/mobile_analytics/src/`):
 - `screenshots/` — reference-screenshot upload/serve for the user-path map + heatmaps (bytes to Firebase Storage, metadata in Postgres). A capture of a screen taller than the viewport is a stitched full-page image; `content_height`/`viewport_height` record what it covers (§6.1.3).
 - `erasure/` — `DELETE /ingest/users/:distinctId`, the server-to-server end-user erasure endpoint (§6.1.2). The dashboard's own admin-gated "delete this user" runs through the very same service (§6.1.5).
 - `analytics/queries/attribution/` — `GET /metrics/attribution`, where the accounts created in a window came from (§6.1.6).
+- `analytics/queries/experiments/` — `POST /query/experiment`, the A/B-test readout with per-variant significance (§6.1.7).
 - `analytics/` also serves the profile timeline's paging: `GET /users/:distinctId/events` returns one
   page of a user's events newest-first, cursored by the composite `{before, before_id}` the previous
   page returned (a bare timestamp would skip rows tied on the boundary millisecond, which batched
@@ -428,6 +429,64 @@ with no installs in the window: those signups came from installs made *before* i
 The Flutter SDK's attribution store keeps first-touch values permanently and last-touch values per
 touch — see `sdk/flutter_analytics/lib/src/attribution/`.
 
+#### 6.1.7 A/B tests
+
+`POST /api/v1/projects/:projectId/query/experiment` is the A/B readout. It is its own endpoint
+rather than a funnel with a breakdown for one reason: a breakdown can put two conversion rates next
+to each other, but it cannot tell you whether the gap between them is a result or noise, and that
+judgement is the entire reason to run a test.
+
+An experiment is three things the engine cannot guess, so the request names them:
+
+| Field | Meaning |
+| ----- | ------- |
+| `variant_property` + `variant_target` | Which property carries the variant label, and whether it rides on the event (`event`) or on the user profile (`profile`). There is no magic property name — the dashboard offers a picker fed by `GET /meta/properties`, so a test already running with your own naming works unchanged. |
+| `exposure_event` (+ `exposure_filters`) | The event that means "this user entered the test". Everyone who fired it in range with a non-empty variant is a participant. |
+| `goal_event` (+ `goal_filters`) | What counts as a conversion, within `conversion_window_days` of that user's own exposure. |
+
+`control_variant` is optional; omitted, the largest arm is the baseline. `cohort_id` restricts who
+counts as a participant.
+
+Three details in the compiled query are worth knowing, because they are the difference between a
+number and a correct number:
+
+- A user is attributed to the variant of their **first** exposure (`argMin`). A mid-test
+  reassignment must not move someone between arms retroactively, taking their recorded conversion
+  with them.
+- The conversion window is **per user**, measured from their own exposure. A shared absolute window
+  would credit conversions that happened before the user ever saw the test.
+- The goal scan runs **past** the end of the date range by the conversion window, so a user exposed
+  on the final day still gets their full window. Without it, every experiment's most recent arm
+  looks artificially bad purely because the query stopped watching.
+
+The response gives each arm its conversion rate, the uplift against the control (relative and in
+percentage points), a two-tailed p-value from a pooled z-test, a 95% confidence interval on the
+difference (**unpooled** — pooling assumes the null hypothesis, which is right for the test
+statistic and wrong for estimating the size of a real difference), and a `significant` flag at
+p < 0.05. Arms below 30 participants are flagged `underpowered` and the response's
+`has_enough_data` goes false: the numbers are still returned, but a p-value computed on twelve
+people is not a result whatever it says. The arithmetic lives in
+`analytics/queries/experiments/experiment-stats.ts` — pure, and exhaustively unit-tested.
+
+`experiment` is also a saved-report kind, so a result can be pinned to a dashboard tile and re-run
+over the tile's date range like any other report.
+
+##### Doing it with cohorts and saved reports instead
+
+You do not have to use the Experiments page. The pieces were already there, and for a test where
+you only want the raw rates the older route is fine:
+
+1. **One cohort per arm** — Cohorts → New, a single `property` condition `experiment_variant = A`
+   (or `profile` if you write the assignment onto the user profile). Repeat for `B`.
+2. **A funnel per arm** — Funnels, steps `paywall_viewed → subscription_started`, with the arm's
+   `cohort_id` set. Save each as a report and pin both to one dashboard for a side-by-side view.
+3. **Or one funnel, broken down** — a single funnel with `breakdown: { property:
+   'experiment_variant' }` gives every arm in one chart without any cohorts at all.
+
+What this route cannot give you is significance: you get two conversion rates and have to judge for
+yourself whether the difference is real. That is exactly the gap `/query/experiment` fills, which is
+why the dedicated page exists alongside these.
+
 ### 6.2 mobile_purchase (the MyRevenueCat backend / billing authority)
 
 Source modules (`backend/mobile_purchase/src/`):
@@ -503,7 +562,7 @@ page that talks to both: *SDK tokens* reads `mobile_analytics`, *Server keys (pu
 `mobile_purchase` — see §6.1.2 and §6.2.1.
 
 **Navigation** is split into two tool groups: **MyAmplitude** (analytics — Home, insights,
-funnels, retention, user paths, heatmaps, cohorts, attribution, dashboards) and **MyRevenueCat** (billing —
+funnels, retention, user paths, heatmaps, experiments, cohorts, attribution, dashboards) and **MyRevenueCat** (billing —
 Overview, Conversion, Customers, Products, Offerings, Entitlements, Settings). The MyRevenueCat
 pages read `mobile_purchase` directly and are always visible (no "connect RevenueCat" gate); the
 only load gate is the project list resolving.

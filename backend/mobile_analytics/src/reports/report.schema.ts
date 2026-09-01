@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseOrThrow } from '../auth/schemas/auth.schemas';
+import { experimentQuerySchema } from '../analytics/queries/experiments/experiment.schema';
 import { flowsQuerySchema } from '../analytics/queries/flows/flows.schema';
 import { funnelsQuerySchema } from '../analytics/queries/funnels/funnels.schema';
 import {
@@ -16,7 +17,7 @@ import { retentionQuerySchema } from '../analytics/queries/retention/retention.s
  * never trusted blindly.
  */
 
-export const REPORT_KINDS = ['insights', 'funnel', 'retention', 'flows'] as const;
+export const REPORT_KINDS = ['insights', 'funnel', 'retention', 'flows', 'experiment'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 export const reportKindSchema = z.enum(REPORT_KINDS);
 
@@ -29,6 +30,7 @@ const DEFINITION_SCHEMA_BY_KIND = {
   funnel: funnelsQuerySchema,
   retention: retentionQuerySchema,
   flows: flowsQuerySchema,
+  experiment: experimentQuerySchema,
 } as const;
 
 /**

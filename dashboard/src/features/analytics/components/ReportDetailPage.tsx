@@ -18,6 +18,7 @@ const KIND_LABELS: Record<ReportKind, string> = {
   funnel: 'Funnel',
   retention: 'Retention',
   flows: 'Flows',
+  experiment: 'Experiment',
 };
 
 export function ReportDetailPage() {

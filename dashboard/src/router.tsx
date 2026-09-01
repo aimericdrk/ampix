@@ -34,6 +34,7 @@ import { PropertyExplorerPage } from './features/analytics/components/PropertyEx
 import { EventCatalogPage } from './features/analytics/components/EventCatalogPage';
 import { UsersPage } from './features/analytics/components/UsersPage';
 import { AttributionPage } from './features/analytics/components/AttributionPage';
+import { ExperimentsPage } from './features/analytics/components/ExperimentsPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
@@ -367,6 +368,14 @@ const rcSettingsRoute = createRoute({
   component: RcSettingsPage,
 });
 
+// --- A/B tests: per-variant conversion plus significance ---
+
+const experimentsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/experiments',
+  component: ExperimentsPage,
+});
+
 // --- Distribution histograms (feat-09) ---
 
 const distributionsRoute = createRoute({
@@ -438,6 +447,7 @@ export const routeTree = rootRoute.addChildren([
     usersRoute,
     userProfileRoute,
     attributionRoute,
+    experimentsRoute,
     sessionsRoute,
     revenueRoute,
     subscriptionsRedirectRoute,

@@ -23,6 +23,8 @@ import { AnalyticsService } from '../services/analytics.service';
 import { UserAdminService } from '../services/user-admin.service';
 import { AttributionService } from '../queries/attribution/attribution.service';
 import type { AttributionResponse } from '../queries/attribution/attribution.types';
+import { ExperimentsService } from '../queries/experiments/experiments.service';
+import type { ExperimentResponse } from '../queries/experiments/experiment.types';
 import type {
   AskResponse,
   EventsMetaResponse,
@@ -59,6 +61,7 @@ export class AnalyticsController {
     private readonly mistral: MistralService,
     private readonly userAdmin: UserAdminService,
     private readonly attribution: AttributionService,
+    private readonly experiments: ExperimentsService,
   ) {}
 
   @Post('query/insights')
@@ -227,6 +230,17 @@ export class AnalyticsController {
     @Query('to') to?: string,
   ): Promise<AttributionResponse> {
     return this.attribution.getAttribution(req.user!.id, projectId, from, to);
+  }
+
+  /** The A/B-test readout: per-variant conversion plus significance. See ExperimentsService. */
+  @Post('query/experiment')
+  @HttpCode(200) // a query, not a resource creation
+  async experiment(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ): Promise<ExperimentResponse> {
+    return this.experiments.runExperimentQuery(req.user!.id, projectId, body);
   }
 
   @Get('sessions/summary')

@@ -7,6 +7,7 @@ import type {
   AskDataResponse,
   AttributionResponse,
   EraseUserResult,
+  ExperimentResponse,
   HiddenUserListItem,
   ListHiddenUsersResponse,
   AuthResponse,
@@ -246,6 +247,41 @@ export const ATTRIBUTION_FIXTURE: AttributionResponse = {
       utm_medium: null,
       utm_campaign: null,
       install_referrer: null,
+    },
+  ],
+};
+
+/** `POST /query/experiment` — a control and a significantly better treatment. */
+export const EXPERIMENT_FIXTURE: ExperimentResponse = {
+  control_variant: 'control',
+  total_exposed: 4000,
+  total_converted: 500,
+  has_enough_data: true,
+  variants: [
+    {
+      variant: 'control',
+      exposed: 2000,
+      converted: 200,
+      conversion_rate: 0.1,
+      is_control: true,
+      underpowered: false,
+      comparison: null,
+    },
+    {
+      variant: 'treatment',
+      exposed: 2000,
+      converted: 300,
+      conversion_rate: 0.15,
+      is_control: false,
+      underpowered: false,
+      comparison: {
+        relative_uplift: 0.5,
+        absolute_uplift: 0.05,
+        p_value: 0.0000012,
+        z_score: 4.79,
+        confidence_interval: { low: 0.0295, high: 0.0705 },
+        significant: true,
+      },
     },
   ],
 };
@@ -2512,6 +2548,16 @@ export const handlers = [
     if (!token || !ACCEPTED_TOKENS.has(token))
       return problem(401, 'Access token invalid or expired');
     return HttpResponse.json(ATTRIBUTION_FIXTURE);
+  }),
+
+  http.post('/api/v1/projects/:projectId/query/experiment', async ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const body = (await request.json()) as { variant_property?: string };
+    // Mirrors the server's validation surface closely enough for the page's error path.
+    if (!body.variant_property) return problem(400, 'variant_property is required');
+    return HttpResponse.json(EXPERIMENT_FIXTURE);
   }),
 
   http.get('/api/v1/projects/:projectId/users', ({ request }) => {

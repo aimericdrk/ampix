@@ -32,13 +32,16 @@ enum IngestSource {
 }
 
 /**
- * §16 — the four analysis kinds a saved report / dashboard tile can hold.
+ * §16 — the analysis kinds a saved report / dashboard tile can hold. `experiment` is the A/B-test
+ * readout (per-variant conversion + significance); it joined the original four later, which is why
+ * it sits last in the enum.
  */
 enum ReportKind {
   insights
   funnel
   retention
   flows
+  experiment
 }
 
 model Organization {

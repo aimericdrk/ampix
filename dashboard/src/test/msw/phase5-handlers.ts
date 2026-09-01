@@ -11,6 +11,7 @@ import type {
   DashboardDataResponse,
   DashboardSummary,
   DashboardTile,
+  ExperimentResponse,
   FlowsResponse,
   FunnelResponse,
   InsightsResponse,
@@ -92,6 +93,40 @@ const FLOWS_RESULT: FlowsResponse = {
   ],
 };
 
+const EXPERIMENT_RESULT: ExperimentResponse = {
+  control_variant: 'control',
+  total_exposed: 4000,
+  total_converted: 500,
+  has_enough_data: true,
+  variants: [
+    {
+      variant: 'control',
+      exposed: 2000,
+      converted: 200,
+      conversion_rate: 0.1,
+      is_control: true,
+      underpowered: false,
+      comparison: null,
+    },
+    {
+      variant: 'treatment',
+      exposed: 2000,
+      converted: 300,
+      conversion_rate: 0.15,
+      is_control: false,
+      underpowered: false,
+      comparison: {
+        relative_uplift: 0.5,
+        absolute_uplift: 0.05,
+        p_value: 0.0000012,
+        z_score: 4.79,
+        confidence_interval: { low: 0.0295, high: 0.0705 },
+        significant: true,
+      },
+    },
+  ],
+};
+
 function resultForKind(kind: ReportKind): AnalysisResult {
   switch (kind) {
     case 'insights':
@@ -102,6 +137,8 @@ function resultForKind(kind: ReportKind): AnalysisResult {
       return RETENTION_RESULT;
     case 'flows':
       return FLOWS_RESULT;
+    case 'experiment':
+      return EXPERIMENT_RESULT;
   }
 }
 
@@ -141,6 +178,17 @@ function defaultDefinitionForKind(kind: ReportKind): AnalysisDefinition {
         steps: 2,
         max_nodes_per_step: 5,
         unit: 'session',
+      };
+    case 'experiment':
+      return {
+        variant_property: 'experiment_variant',
+        variant_target: 'event',
+        exposure_event: 'paywall_viewed',
+        exposure_filters: [],
+        goal_event: 'checkout_completed',
+        goal_filters: [],
+        date_range,
+        conversion_window_days: 7,
       };
   }
 }

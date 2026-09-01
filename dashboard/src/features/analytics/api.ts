@@ -24,6 +24,8 @@ import type {
   DashboardTile,
   EngagementResponse,
   EraseUserResult,
+  ExperimentQueryDefinition,
+  ExperimentResponse,
   FlowsQueryDefinition,
   FlowsResponse,
   FunnelQueryDefinition,
@@ -526,6 +528,22 @@ export function useAttribution(projectId: string, from: string, to: string) {
       apiFetch<AttributionResponse>(
         `${base(projectId)}/metrics/attribution?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       ),
+  });
+}
+
+// --- Experiments (A/B tests) ---
+
+/**
+ * `POST /query/experiment`. A mutation, matching the other builder pages: the analyst assembles a
+ * definition and presses Run, rather than the page firing a query on every keystroke.
+ */
+export function useRunExperiment(projectId: string) {
+  return useMutation({
+    mutationFn: (query: ExperimentQueryDefinition) =>
+      apiFetch<ExperimentResponse>(`${base(projectId)}/query/experiment`, {
+        method: 'POST',
+        body: query,
+      }),
   });
 }
 

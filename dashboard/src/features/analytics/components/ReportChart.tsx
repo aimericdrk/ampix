@@ -1,5 +1,6 @@
 import type {
   AnalysisResult,
+  ExperimentResponse,
   FlowsResponse,
   FunnelResponse,
   InsightsResponse,
@@ -7,6 +8,7 @@ import type {
   RetentionInterval,
   RetentionResponse,
 } from '../../../lib/api/types';
+import { ExperimentResults } from './ExperimentResults';
 import { FlowsChart } from './FlowsChart';
 import { FunnelChart } from './FunnelChart';
 import { InsightsChart } from './InsightsChart';
@@ -23,6 +25,8 @@ export function analysisResultIsEmpty(kind: ReportKind, result: AnalysisResult):
       return (result as RetentionResponse).cohorts.length === 0;
     case 'flows':
       return (result as FlowsResponse).nodes.length === 0;
+    case 'experiment':
+      return (result as ExperimentResponse).variants.length === 0;
   }
 }
 
@@ -68,5 +72,7 @@ export function ReportChart({
       const r = result as FlowsResponse;
       return <FlowsChart nodes={r.nodes} links={r.links} />;
     }
+    case 'experiment':
+      return <ExperimentResults result={result as ExperimentResponse} />;
   }
 }

@@ -1,5 +1,6 @@
 import type { AdvancedAnalyticsService } from '../analytics/services/advanced-analytics.service';
 import type { AnalyticsService } from '../analytics/services/analytics.service';
+import type { ExperimentsService } from '../analytics/queries/experiments/experiments.service';
 import { AnalysisRunnerService } from './analysis-runner.service';
 
 const USER = 'user-1';
@@ -17,11 +18,15 @@ function make() {
     runRetentionQuery: jest.fn().mockResolvedValue({ cohorts: [] }),
     runFlowQuery: jest.fn().mockResolvedValue({ nodes: [], links: [] }),
   };
+  const experiments = {
+    runExperimentQuery: jest.fn().mockResolvedValue({ variants: [] }),
+  };
   const service = new AnalysisRunnerService(
     analytics as unknown as AnalyticsService,
     advanced as unknown as AdvancedAnalyticsService,
+    experiments as unknown as ExperimentsService,
   );
-  return { service, analytics, advanced };
+  return { service, analytics, advanced, experiments };
 }
 
 describe('AnalysisRunnerService (contracts §16)', () => {

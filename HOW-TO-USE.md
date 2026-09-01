@@ -134,6 +134,32 @@ MyAmpix.instance.registerSuperProperties({
 
 Merged into every `track()` call from then on. Per-call `properties` win over super properties on key collision; `reset()` clears super properties.
 
+### 8.1 Feeding the dashboard's Experiments page
+
+A super property is the simplest way to record an A/B assignment, because it rides on every event
+from then on — including the one you'll name as the test's exposure event:
+
+```dart
+// Once, as soon as your own assignment logic has decided which arm this user is in.
+MyAmpix.instance.registerSuperProperties({'ab_test_group': 'B'});
+```
+
+The dashboard's **Experiments** page asks for the property name, so there is nothing magic about
+`ab_test_group` — pick it from the property list and it works with whatever you already send. Two
+things do matter:
+
+- **Assign before the exposure event fires.** A user is attributed to the variant on their FIRST
+  exposure, so an assignment written afterwards leaves them in no arm at all.
+- **Log exposure for BOTH arms.** If the control never fires the exposure event, its arm is empty
+  and there is nothing to compare against. Emit it wherever the decision is applied, not only on
+  the branch that shows the new thing.
+
+If your assignment is a per-user fact you write once, put it on the profile
+(`MyAmpix.instance.people.set({'ab_test_group': 'B'})`) and switch the page's *Variant is recorded*
+control to **On the user profile** instead. Note that `reset()` clears super properties — so on a
+logout/login the assignment must be re-registered, which is another reason a long-running test may
+prefer the profile.
+
 ## 9. Sessions
 
 Fully automatic — nothing to call. The SDK maintains a `session_id` and emits the reserved lifecycle events (`$first_open`, `$app_open`, `$app_background`, `$session_start`, `$session_end` with `$duration_ms`) on its own. A session rotates once the app has spent more than `sessionTimeout` (default 30 minutes) in the background.

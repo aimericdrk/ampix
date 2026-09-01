@@ -68,6 +68,10 @@ export const TOOLS: Tool[] = [
           // reason Revenue sits here: it needs no MyRevenueCat setup, so gating it behind that tool
           // would hide it from every project that only ever pointed the webhook at us.
           { label: 'Journey', to: p('/journey'), icon: 'journey' },
+          // Experiments reads whatever property your app already stamps the variant on — no SDK
+          // change, and no fixed property name — which is why it sits with the other analyses
+          // rather than behind a setup step.
+          { label: 'Experiments', to: p('/experiments'), icon: 'experiments' },
           { label: 'Distributions', to: p('/distributions'), icon: 'distributions' },
           { label: 'Properties', to: p('/properties'), icon: 'properties' },
           { label: 'Events', to: p('/events'), icon: 'events' },

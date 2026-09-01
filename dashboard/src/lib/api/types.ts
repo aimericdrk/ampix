@@ -1101,9 +1101,77 @@ export interface AttributionResponse {
   accounts: AttributedAccount[];
 }
 
-export type ReportKind = 'insights' | 'funnel' | 'retention' | 'flows';
+// --- Experiments (A/B tests) ---
 
-export const REPORT_KINDS: ReportKind[] = ['insights', 'funnel', 'retention', 'flows'];
+/** Where the variant label is read from: the exposure event's properties, or the user profile. */
+export type VariantTarget = 'event' | 'profile';
+
+/** `POST /query/experiment` body. */
+export interface ExperimentQueryDefinition {
+  /** The property holding the variant label — picked in the UI from `/meta/properties`. */
+  variant_property: string;
+  variant_target: VariantTarget;
+  /** The event that marks a user entering the test. */
+  exposure_event: string;
+  exposure_filters: InsightsFilter[];
+  /** The event that counts as a conversion. */
+  goal_event: string;
+  goal_filters: InsightsFilter[];
+  date_range: InsightsDateRange;
+  /** How long after exposure a conversion still counts, in days. */
+  conversion_window_days: number;
+  /** The baseline arm; omitted means "the largest arm". */
+  control_variant?: string;
+  cohort_id?: string;
+}
+
+/** One variant compared against the control — the statistics, not just the rates. */
+export interface VariantComparison {
+  /** (variantRate − controlRate) / controlRate. Null when the control never converted. */
+  relative_uplift: number | null;
+  /** variantRate − controlRate, in proportion points. */
+  absolute_uplift: number;
+  /** Two-tailed p-value. Null when either arm is empty — "cannot tell", not "no difference". */
+  p_value: number | null;
+  z_score: number | null;
+  /** 95% confidence interval on `absolute_uplift`. Null when either arm is empty. */
+  confidence_interval: { low: number; high: number } | null;
+  significant: boolean;
+}
+
+/** One arm of the test. */
+export interface ExperimentVariantResult {
+  variant: string;
+  exposed: number;
+  converted: number;
+  conversion_rate: number;
+  is_control: boolean;
+  /** Too few users for the normal approximation to be trustworthy — reported, not withheld. */
+  underpowered: boolean;
+  /** Null on the control arm itself. */
+  comparison: VariantComparison | null;
+}
+
+/** `POST /query/experiment` response. */
+export interface ExperimentResponse {
+  control_variant: string | null;
+  total_exposed: number;
+  total_converted: number;
+  /** Arms ordered by exposure, largest first. */
+  variants: ExperimentVariantResult[];
+  /** True only when EVERY arm cleared the minimum sample size. */
+  has_enough_data: boolean;
+}
+
+export type ReportKind = 'insights' | 'funnel' | 'retention' | 'flows' | 'experiment';
+
+export const REPORT_KINDS: ReportKind[] = [
+  'insights',
+  'funnel',
+  'retention',
+  'flows',
+  'experiment',
+];
 
 /** A report as listed by `GET /reports` — no `definition`. */
 export interface SavedReportSummary {
@@ -1134,21 +1202,24 @@ export type SavedReport =
   | (SavedReportBase & { kind: 'insights'; definition: InsightsQueryDefinition })
   | (SavedReportBase & { kind: 'funnel'; definition: FunnelQueryDefinition })
   | (SavedReportBase & { kind: 'retention'; definition: RetentionQueryDefinition })
-  | (SavedReportBase & { kind: 'flows'; definition: FlowsQueryDefinition });
+  | (SavedReportBase & { kind: 'flows'; definition: FlowsQueryDefinition })
+  | (SavedReportBase & { kind: 'experiment'; definition: ExperimentQueryDefinition });
 
-/** Any of the four §14/§15 query definitions — a report/tile `definition` or `inline_definition`. */
+/** Any query definition a report/tile can hold — its `definition` or `inline_definition`. */
 export type AnalysisDefinition =
   | InsightsQueryDefinition
   | FunnelQueryDefinition
   | RetentionQueryDefinition
-  | FlowsQueryDefinition;
+  | FlowsQueryDefinition
+  | ExperimentQueryDefinition;
 
 /** `POST /reports` — a discriminated union so `definition` matches `kind`. */
 export type CreateReportRequest =
   | { name: string; kind: 'insights'; definition: InsightsQueryDefinition }
   | { name: string; kind: 'funnel'; definition: FunnelQueryDefinition }
   | { name: string; kind: 'retention'; definition: RetentionQueryDefinition }
-  | { name: string; kind: 'flows'; definition: FlowsQueryDefinition };
+  | { name: string; kind: 'flows'; definition: FlowsQueryDefinition }
+  | { name: string; kind: 'experiment'; definition: ExperimentQueryDefinition };
 
 export interface UpdateReportRequest {
   name?: string;
@@ -1162,7 +1233,12 @@ export interface RunReportRequest {
 }
 
 /** The normal response shape of whichever analysis the report's `kind` names. */
-export type AnalysisResult = InsightsResponse | FunnelResponse | RetentionResponse | FlowsResponse;
+export type AnalysisResult =
+  | InsightsResponse
+  | FunnelResponse
+  | RetentionResponse
+  | FlowsResponse
+  | ExperimentResponse;
 
 /** A dashboard as listed by `GET /dashboards`. */
 export interface DashboardSummary {

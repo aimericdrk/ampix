@@ -20,6 +20,7 @@ const KIND_LABELS: Record<ReportKind, string> = {
   funnel: 'Funnels',
   retention: 'Retention',
   flows: 'Flows',
+  experiment: 'Experiment',
 };
 
 /** Max Reveal stagger index for a grid of tiles — later tiles all fire together at the cap. */

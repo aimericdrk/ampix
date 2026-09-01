@@ -12,6 +12,7 @@ import {
   Footprints,
   FileChartLine,
   Filter,
+  FlaskConical,
   FolderOpen,
   GitBranch,
   Grid3x3,
@@ -43,6 +44,7 @@ export type IconName =
   | 'paths'
   | 'heatmap'
   | 'revenue'
+  | 'experiments'
   | 'attribution'
   | 'distributions'
   | 'properties'
@@ -80,6 +82,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   paths: GitBranch,
   heatmap: Grid3x3,
   revenue: CircleDollarSign,
+  experiments: FlaskConical,
   attribution: Signpost,
   distributions: ChartBar,
   properties: Tags,

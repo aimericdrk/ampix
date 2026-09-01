@@ -7,10 +7,17 @@ import type {
   InsightsResponse,
   RetentionResponse,
 } from '../analytics/analytics.types';
+import { ExperimentsService } from '../analytics/queries/experiments/experiments.service';
+import type { ExperimentResponse } from '../analytics/queries/experiments/experiment.types';
 import type { ReportKind, RunReportOverride } from './report.schema';
 
-/** Any of the four §14/§15 analysis response shapes. */
-export type AnalysisResult = InsightsResponse | FunnelResponse | RetentionResponse | FlowResponse;
+/** Any of the analysis response shapes a saved report / dashboard tile can hold. */
+export type AnalysisResult =
+  | InsightsResponse
+  | FunnelResponse
+  | RetentionResponse
+  | FlowResponse
+  | ExperimentResponse;
 
 /**
  * Executes a stored/inline analysis definition through the EXISTING injection-safe engine
@@ -23,12 +30,14 @@ export class AnalysisRunnerService {
   constructor(
     private readonly analytics: AnalyticsService,
     private readonly advanced: AdvancedAnalyticsService,
+    private readonly experiments: ExperimentsService,
   ) {}
 
   /**
    * Merges the optional `{ date_range?, cohort_id? }` override over `definition`, then dispatches to
    * the engine method for `kind`. `flows` has no `cohort_id` field, so an override cohort_id is
-   * harmlessly stripped by the flows schema.
+   * harmlessly stripped by the flows schema. `experiment` accepts both, so a dashboard's date
+   * picker re-runs the test over the chosen window like every other tile.
    */
   async run(
     userId: string,
@@ -47,6 +56,8 @@ export class AnalysisRunnerService {
         return this.advanced.runRetentionQuery(userId, projectId, merged);
       case 'flows':
         return this.advanced.runFlowQuery(userId, projectId, merged);
+      case 'experiment':
+        return this.experiments.runExperimentQuery(userId, projectId, merged);
     }
   }
 
