@@ -50,7 +50,9 @@ import { V2AnalyticsService } from './services/v2-analytics.service';
     MistralService,
   ],
   // Exported so the §16 saved-reports/dashboards runner can execute stored definitions through the
-  // exact same injection-safe engine (re-validating on every run).
-  exports: [AnalyticsService, AdvancedAnalyticsService],
+  // exact same injection-safe engine (re-validating on every run). ExperimentsService belongs here
+  // for exactly that reason — AnalysisRunnerService injects it to run a saved `experiment` report,
+  // and a provider that is not exported is invisible to the importing module.
+  exports: [AnalyticsService, AdvancedAnalyticsService, ExperimentsService],
 })
 export class AnalyticsModule {}

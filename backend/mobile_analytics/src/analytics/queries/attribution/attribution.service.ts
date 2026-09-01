@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ClickHouseService, fromChDateTime64, toChDateTime64 } from '../../../clickhouse/clickhouse.service';
 import { ProjectsService } from '../../../projects/core/projects.service';
 import { parseDateOnlyUTC } from '../../support/bucket-grid';
 import { canonicalization } from '../../support/identity';
 import { resolveDateOnlyRange } from '../../support/read-query.util';
 import type { HiddenUserSource } from '../../services/analytics.shared';
+import { UserAdminService } from '../../services/user-admin.service';
 import type {
   AttributedAccount,
   AttributionBreakdownRow,
@@ -91,7 +92,12 @@ export class AttributionService {
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly projects: ProjectsService,
-    private readonly hidden: HiddenUserSource,
+    /**
+     * Typed as the narrow {@link HiddenUserSource} interface so this read path never reaches the
+     * hide/erase write surface — which is exactly why it needs an explicit `@Inject` token: an
+     * interface is erased at runtime, leaving Nest nothing to resolve. Same wiring as UsersService.
+     */
+    @Inject(UserAdminService) private readonly hidden: HiddenUserSource,
   ) {}
 
   async getAttribution(
