@@ -22,6 +22,7 @@ import type {
   DashboardDataResponse,
   DashboardTile,
   EngagementResponse,
+  EraseUserResult,
   FlowsQueryDefinition,
   FlowsResponse,
   FunnelQueryDefinition,
@@ -33,6 +34,7 @@ import type {
   InsightsResponse,
   ListCohortsResponse,
   ListDashboardsResponse,
+  ListHiddenUsersResponse,
   ListReportsResponse,
   ListTemplatesResponse,
   ListUsersResponse,
@@ -442,6 +444,74 @@ export function useUserEvents(projectId: string, distinctId: string) {
     },
     initialPageParam: null as UserEventsResponse['next_before'],
     getNextPageParam: (lastPage) => lastPage.next_before ?? undefined,
+  });
+}
+
+// --- Removing a user: hide (reversible) and erase (irreversible) ---
+
+/**
+ * Every `['analytics', projectId]` query at once. Erasing or hiding a user changes what the users
+ * list, the live feed, the attribution readout and every profile show, so the honest invalidation
+ * is the whole project scope rather than a hand-maintained list that would silently go stale the
+ * next time a page is added.
+ */
+function invalidateProjectAnalytics(queryClient: ReturnType<typeof useQueryClient>, projectId: string) {
+  void queryClient.invalidateQueries({ queryKey: ['analytics', projectId] });
+}
+
+const hiddenUsersKey = (projectId: string) =>
+  ['analytics', projectId, 'hidden-users'] as const;
+
+/** `GET /users/hidden` — who has been hidden from the audience surfaces, by whom, and when. */
+export function useHiddenUsers(projectId: string) {
+  return useQuery({
+    queryKey: hiddenUsersKey(projectId),
+    queryFn: () => apiFetch<ListHiddenUsersResponse>(`${base(projectId)}/users/hidden`),
+  });
+}
+
+/**
+ * `POST /users/:distinctId/hide` (admin+) — the REVERSIBLE half of removing a user. They drop out
+ * of the users list, the live feed and the attribution readout; their events stay on disk and keep
+ * counting in every chart.
+ */
+export function useHideUser(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (distinctId: string) =>
+      apiFetch<{ distinct_id: string }>(
+        `${base(projectId)}/users/${encodeURIComponent(distinctId)}/hide`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => invalidateProjectAnalytics(queryClient, projectId),
+  });
+}
+
+/** `DELETE /users/:distinctId/hide` (admin+) — put a hidden user back on the audience surfaces. */
+export function useUnhideUser(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (distinctId: string) =>
+      apiFetch<void>(`${base(projectId)}/users/${encodeURIComponent(distinctId)}/hide`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => invalidateProjectAnalytics(queryClient, projectId),
+  });
+}
+
+/**
+ * `DELETE /users/:distinctId` (admin+) — the IRREVERSIBLE half. Runs the same erasure the GDPR
+ * ingest endpoint does: every event, profile row and identity mapping, plus the RevenueCat mirrors,
+ * for this user and every id linked to them. Resolves with what was actually removed.
+ */
+export function useEraseUser(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (distinctId: string) =>
+      apiFetch<EraseUserResult>(`${base(projectId)}/users/${encodeURIComponent(distinctId)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => invalidateProjectAnalytics(queryClient, projectId),
   });
 }
 

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -13,12 +14,17 @@ import { z } from 'zod';
 import { parseOrThrow } from '../../auth/schemas/auth.schemas';
 import type { AuthRequest } from '../../auth/auth.types';
 import { JwtAuthGuard } from '../../auth/tokens/jwt-auth.guard';
+import { ProjectRoles } from '../../authz/project-roles.decorator';
+import { ProjectRolesGuard } from '../../authz/project-roles.guard';
 import { ProblemException } from '../../common/problem-details';
+import type { ErasureResult } from '../../erasure/erasure.service';
 import { AiRequestError, AiUnconfiguredError, MistralService } from '../ai/mistral.service';
 import { AnalyticsService } from '../services/analytics.service';
+import { UserAdminService } from '../services/user-admin.service';
 import type {
   AskResponse,
   EventsMetaResponse,
+  HiddenUsersResponse,
   InsightsResponse,
   LiveEventsResponse,
   PropertiesMetaResponse,
@@ -49,6 +55,7 @@ export class AnalyticsController {
   constructor(
     private readonly analytics: AnalyticsService,
     private readonly mistral: MistralService,
+    private readonly userAdmin: UserAdminService,
   ) {}
 
   @Post('query/insights')
@@ -111,6 +118,19 @@ export class AnalyticsController {
     return this.analytics.listUsers(req.user!.id, projectId, search, limit, cursor);
   }
 
+  /**
+   * Declared BEFORE `users/:distinctId` on purpose: Nest matches routes in declaration order, so a
+   * later position would let the `:distinctId` param route swallow `/users/hidden` and answer it
+   * with the profile of a user literally named "hidden".
+   */
+  @Get('users/hidden')
+  async hiddenUsers(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<HiddenUsersResponse> {
+    return this.userAdmin.listHiddenUsers(req.user!.id, projectId);
+  }
+
   @Get('users/:distinctId')
   async userProfile(
     @Req() req: AuthRequest,
@@ -133,6 +153,62 @@ export class AnalyticsController {
     @Query('before_id') beforeId?: string,
   ): Promise<UserEventsResponse> {
     return this.analytics.getUserEvents(req.user!.id, projectId, distinctId, before, beforeId);
+  }
+
+  /**
+   * Hide a user from the audience surfaces (§17 soft remove) — REVERSIBLE, and the safe half of the
+   * dashboard's delete action. Their events stay on disk and keep counting in every chart; they
+   * simply stop appearing in the Users list, the live feed and the attribution readout.
+   *
+   * admin+ like the other destructive-adjacent project mutations (token revocation, data purge):
+   * hiding is reversible, but a user vanishing from the audience list without explanation is
+   * confusing enough that it should not be every analyst's to do.
+   */
+  @Post('users/:distinctId/hide')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
+  @HttpCode(200)
+  async hideUser(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Param('distinctId') distinctId: string,
+  ): Promise<{ distinct_id: string }> {
+    return this.userAdmin.hideUser(req.user!.id, projectId, distinctId);
+  }
+
+  /** Un-hide: put a hidden user back into the audience surfaces. Idempotent. */
+  @Delete('users/:distinctId/hide')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
+  @HttpCode(204)
+  async unhideUser(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Param('distinctId') distinctId: string,
+  ): Promise<void> {
+    await this.userAdmin.unhideUser(req.user!.id, projectId, distinctId);
+  }
+
+  /**
+   * Erase a user — IRREVERSIBLE. The dashboard-authenticated twin of the server-token GDPR route
+   * (`DELETE /ingest/users/:distinctId`), running the exact same ErasureService so the two can
+   * never drift: every event, profile row and identity mapping in ClickHouse plus the RevenueCat
+   * mirrors in Postgres, for this user and every id linked to them.
+   *
+   * Returns what was actually removed (`ids`, plus the Postgres row counts) rather than a bare 204,
+   * so the confirmation the operator sees is the server's account of the deletion, not the client's
+   * assumption about it.
+   */
+  @Delete('users/:distinctId')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
+  @HttpCode(200)
+  async eraseUser(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Param('distinctId') distinctId: string,
+  ): Promise<ErasureResult> {
+    return this.userAdmin.eraseUser(req.user!.id, projectId, distinctId);
   }
 
   @Get('sessions/summary')

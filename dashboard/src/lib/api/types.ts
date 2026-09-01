@@ -525,6 +525,30 @@ export interface UserListItem {
   phone: string | null;
 }
 
+/** One entry of `GET /users/hidden` — a user removed from the audience surfaces, reversibly. */
+export interface HiddenUserListItem {
+  /** The CANONICAL id (§17) that was hidden — resolved at hide time, not the id that was clicked. */
+  distinct_id: string;
+  hidden_at: string;
+  /** The dashboard user who hid them; null when that account has since been deleted. */
+  hidden_by: string | null;
+}
+
+export interface ListHiddenUsersResponse {
+  users: HiddenUserListItem[];
+}
+
+/**
+ * `DELETE /users/:distinctId` — what the irreversible erase actually removed. Rendered back to the
+ * operator so the confirmation is the server's account of the deletion, not the client's assumption.
+ */
+export interface EraseUserResult {
+  /** Every id erased: the requested one plus every linked anon/canonical id (§17). */
+  ids: string[];
+  subscriptionStates: number;
+  revenueCatWebhookEvents: number;
+}
+
 /** `GET /users` — `search` is a case-insensitive substring match across the canonical id, aliased
  *  anon_ids, and whitelisted profile props (name/email/username); `next_cursor` is the last `distinct_id`. */
 export interface ListUsersResponse {
@@ -573,6 +597,9 @@ export interface UserProfileResponse {
    * `distinct_ids` for identity-correct per-user results.
    */
   distinct_ids: string[];
+  /** True when this user is hidden from the audience surfaces — the profile still resolves so the
+   *  "un-hide" action stays reachable once they have dropped out of every list linking here. */
+  hidden: boolean;
 }
 
 /** `GET /users/:distinctId/events` — the timeline's pages after the first, newest-first. */

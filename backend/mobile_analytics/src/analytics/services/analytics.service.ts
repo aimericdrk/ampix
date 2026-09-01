@@ -18,6 +18,7 @@ import { InsightsQueryService } from './insights-query.service';
 import { MetadataService } from './metadata.service';
 import { SummariesService } from './summaries.service';
 import { UsersService } from './users.service';
+import { NO_HIDDEN_USERS } from './analytics.shared';
 
 /**
  * Facade over `InsightsQueryService`, `MetadataService`, `UsersService`, and `SummariesService`
@@ -37,7 +38,9 @@ export class AnalyticsService {
     private readonly projects: ProjectsService,
     private readonly cohorts: CohortsService,
     private readonly metadata: MetadataService = new MetadataService(clickhouse, projects),
-    private readonly users: UsersService = new UsersService(clickhouse, projects),
+    // The default is only ever used by tests that construct this facade by hand; in the app Nest
+    // injects the real UsersService provider (with the real hidden-user source) for this param.
+    private readonly users: UsersService = new UsersService(clickhouse, projects, NO_HIDDEN_USERS),
     private readonly summaries: SummariesService = new SummariesService(clickhouse, projects),
     private readonly insights: InsightsQueryService = new InsightsQueryService(
       clickhouse,

@@ -1,17 +1,32 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Activity, CalendarPlus, Clock, Inbox, Search, type LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  CalendarPlus,
+  Clock,
+  EyeOff,
+  Inbox,
+  Search,
+  Trash2,
+  Undo2,
+  type LucideIcon,
+} from 'lucide-react';
 import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
+import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
+import { CollapsibleSection } from '../../../components/ui/CollapsibleSection';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { IconButton } from '../../../components/ui/icon-button';
 import { Input } from '../../../components/ui/input';
 import { Reveal } from '../../../components/ui/reveal';
+import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
 import type { UserListItem } from '../../../lib/api/types';
 import { formatExactNumber } from '../format';
 import { contactFromListItem } from '../user-identity';
-import { useUsersList } from '../api';
+import { useHiddenUsers, useUnhideUser, useUsersList } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
+import { RemoveUserDialog } from './RemoveUserDialog';
 import { UserProfileModal } from './UserProfileModal';
 
 /** Monogram for the avatar — initials from the name, falling back to the distinct id. */
@@ -63,10 +78,29 @@ export function UsersPage() {
   // The user whose profile modal is open, or null when closed. Seeded from the URL so a deep-link
   // lands with the modal already open over the list.
   const [openDistinctId, setOpenDistinctId] = useState<string | null>(routeDistinctId ?? null);
+  // The user the remove dialog is asking about, or null when it is closed. Held as the whole row
+  // (not just the id) so the dialog can name the person rather than echo an opaque id back at them.
+  const [removing, setRemoving] = useState<UserListItem | null>(null);
   const { data, isPending, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useUsersList(projectId, search);
+  const hiddenUsers = useHiddenUsers(projectId);
+  const unhideUser = useUnhideUser(projectId);
+  const { toast } = useToast();
 
   const users = data?.pages.flatMap((page) => page.users) ?? [];
+  const hidden = hiddenUsers.data?.users ?? [];
+
+  const handleUnhide = (distinctId: string) => {
+    unhideUser.mutate(distinctId, {
+      onSuccess: () => toast({ title: 'User restored to the list' }),
+      onError: (unhideError) =>
+        toast({
+          title:
+            unhideError instanceof ApiError ? unhideError.problem.title : 'Failed to un-hide user',
+          variant: 'error',
+        }),
+    });
+  };
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -146,11 +180,16 @@ export function UsersPage() {
         <Reveal index={1} className="flex flex-col gap-3">
           <ul aria-label="Users" className="flex flex-col gap-3">
             {users.map((user) => (
-              <li key={user.distinct_id}>
+              <li
+                key={user.distinct_id}
+                className="flex items-center gap-2 rounded-xl border border-border bg-surface pr-3 transition-colors focus-within:border-accent hover:border-accent"
+              >
+                {/* The row's own click target. A separate sibling — not a wrapper — so the remove
+                    control below is a real button and not one nested inside another. */}
                 <button
                   type="button"
                   onClick={() => openProfile(user)}
-                  className="flex w-full flex-wrap items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-4 rounded-xl p-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
                   <Avatar size="lg">
                     <AvatarFallback className="text-sm font-semibold">
@@ -179,6 +218,14 @@ export function UsersPage() {
                     <UserStat icon={Clock} label="Last seen" value={formatDate(user.last_seen)} />
                   </div>
                 </button>
+                <IconButton
+                  aria-label={`Remove ${user.name ?? user.distinct_id}`}
+                  title="Remove this user"
+                  onClick={() => setRemoving(user)}
+                  className="hover:bg-danger-soft hover:text-danger"
+                >
+                  <Trash2 aria-hidden />
+                </IconButton>
               </li>
             ))}
           </ul>
@@ -197,11 +244,68 @@ export function UsersPage() {
         </Reveal>
       )}
 
+      {hidden.length > 0 && (
+        <Reveal index={2}>
+          <CollapsibleSection title={`Hidden users (${hidden.length})`} defaultOpen={false}>
+            <p className="mb-3 text-sm text-text-muted">
+              Removed from this list but not deleted — their events are kept and still count in
+              every chart.
+            </p>
+            <ul aria-label="Hidden users" className="flex flex-col gap-2">
+              {hidden.map((entry) => (
+                <li
+                  key={entry.distinct_id}
+                  className="flex flex-wrap items-center gap-3 rounded-lg border border-border px-3 py-2"
+                >
+                  <EyeOff className="size-4 shrink-0 text-text-muted" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                    {entry.distinct_id}
+                  </span>
+                  <Badge variant="outline">
+                    {entry.hidden_by ? `Hidden by ${entry.hidden_by}` : 'Hidden'} ·{' '}
+                    {formatDate(entry.hidden_at)}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={unhideUser.isPending}
+                    onClick={() => handleUnhide(entry.distinct_id)}
+                  >
+                    <Undo2 className="size-3.5" aria-hidden />
+                    Un-hide
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleSection>
+        </Reveal>
+      )}
+
       {openDistinctId && (
         <UserProfileModal
           projectId={projectId}
           distinctId={openDistinctId}
           onClose={closeProfile}
+        />
+      )}
+
+      {removing && (
+        <RemoveUserDialog
+          projectId={projectId}
+          distinctId={removing.distinct_id}
+          displayName={removing.name ?? removing.email ?? removing.distinct_id}
+          open
+          onOpenChange={(next) => {
+            if (!next) setRemoving(null);
+          }}
+          onRemoved={() => {
+            // The removed user may be the one whose profile is open behind the dialog; that modal
+            // would otherwise sit there showing a person who is no longer in the list.
+            if (openDistinctId === removing.distinct_id) closeProfile();
+            setRemoving(null);
+          }}
         />
       )}
     </PageShell>

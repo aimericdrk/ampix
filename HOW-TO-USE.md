@@ -167,6 +167,18 @@ erasing end-user data**. Keep it on your backend; a token with this capability m
 inside an app. If you also use MyRevenueCat, subscriber data has its own equivalent — a *Server key*
 on the same settings page, used with `DELETE /v1/subscribers/<app_user_id>`.
 
+**By hand, from the dashboard.** For one-off removals — a test account, a staff device, a support
+request — the Users list and the user profile both have a remove control. It offers two things,
+deliberately, because they are not the same:
+
+- **Hide** — reversible. They leave the Users list, Live and Attribution; every event is kept, so
+  your charts, funnels and retention are unchanged. This is what you want for a test account.
+- **Delete permanently** — the same erasure as the endpoint above, across every id linked to that
+  person. It changes your historical charts and cannot be undone, so it asks you to type `DELETE`.
+
+Both need the **admin** role on the project. Hidden users are listed, with an un-hide, in a section
+at the bottom of the Users page.
+
 ## 11. Reliability
 
 Every call writes to a local (drift/SQLite) queue before any network I/O happens (write-before-send), so events survive app kills and offline periods. A background uploader drains the queue in gzip-compressed batches (size = `flushAt`, default 20) to `/ingest/events` and `/ingest/profiles`, triggered either by queue size or by the `flushInterval` timer (default 10s). Failures back off exponentially with jitter (base 2s, capped at `maxRetryDelay`, default 5 minutes), tracked independently per queue (events vs. profiles). A batch rejected with 4xx (other than 429) is dropped for good — it can never succeed as-is; 429/5xx are retried. The SDK never throws into the host app: `init` failures disable it silently, and every public method is wrapped in a guard that catches and logs (only if `debug: true`) instead of propagating.

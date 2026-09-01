@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ClickHouseService, fromChDateTime64 } from '../../clickhouse/clickhouse.service';
 import { ProjectsService } from '../../projects/core/projects.service';
 import type {
@@ -12,10 +12,12 @@ import { ProblemException } from '../../common/problem-details';
 import { ALIASES_CTE, canonicalization, RESOLVE_CANONICAL_ID_SQL } from '../support/identity';
 import { clampLimit, parseEventSourceParam, parseIsoInstantParam } from '../support/read-query.util';
 import { EVENT_SOURCE_EXPR } from '../support/property-resolver';
+import { UserAdminService } from './user-admin.service';
 import {
   firstProfileStringExpr,
   USER_PHONE_PROFILE_KEYS,
   USER_SEARCH_PROFILE_KEYS,
+  type HiddenUserSource,
 } from './analytics.shared';
 
 interface LiveEventRow {
@@ -95,7 +97,26 @@ export class UsersService {
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly projects: ProjectsService,
+    /**
+     * The hidden-user set (§17 "remove this user", soft mode). Typed as the narrow
+     * {@link HiddenUserSource} interface so the audience READ path never reaches the hide/erase
+     * write surface and a test can pass a literal — which is exactly why it needs an explicit
+     * `@Inject` token: an interface has no runtime type for Nest to resolve.
+     */
+    @Inject(UserAdminService) private readonly hidden: HiddenUserSource,
   ) {}
+
+  /**
+   * `AND <idExpr> NOT IN {hiddenIds:Array(String)}`, or '' when nothing is hidden. Binding an empty
+   * array would still work, but emitting no clause at all keeps the common case's SQL byte-for-byte
+   * what it was before hiding existed. `idExpr` is always one of OUR OWN constants (a canonical-id
+   * expression or a bare column), never caller input; the ids bind as a param.
+   */
+  private static hiddenClause(idExpr: string, hiddenIds: string[], params: Record<string, unknown>): string {
+    if (hiddenIds.length === 0) return '';
+    params.hiddenIds = hiddenIds;
+    return `AND ${idExpr} NOT IN {hiddenIds:Array(String)}\n         `;
+  }
 
   /**
    * GET /events/live — newest-first raw event feed. `limit` is clamped (never rejected);
@@ -114,6 +135,7 @@ export class UsersService {
     const limit = clampLimit(limitRaw);
     const before = parseIsoInstantParam(beforeRaw, 'before');
     const source = parseEventSourceParam(sourceRaw);
+    const hiddenIds = await this.hidden.hiddenIds(projectId);
 
     const params: Record<string, unknown> = { projectId, limit };
     let beforeClause = '';
@@ -128,12 +150,19 @@ export class UsersService {
       sourceClause = `AND ${EVENT_SOURCE_EXPR} = {source:String}\n         `;
     }
 
+    // A hidden user's rows leave the feed too — the point of hiding is that the person stops
+    // appearing in the audience surfaces, and the live feed is the most visible of them. Matched on
+    // the RAW `distinct_id` (no canonicalization join here): the hidden set holds canonical ids, so
+    // a hidden user's post-identify rows are caught. Their pre-identify anon rows are not, which is
+    // the same identity limitation the feed already had — it never canonicalized.
+    const hiddenClause = UsersService.hiddenClause('distinct_id', hiddenIds, params);
+
     const rows = await this.clickhouse.query<LiveEventRow>(
       `SELECT insert_id, event, distinct_id, timestamp, os, app_version,
               ${EVENT_SOURCE_EXPR} AS source
        FROM events
        WHERE project_id = {projectId:UUID}
-         ${beforeClause}${sourceClause}ORDER BY timestamp DESC
+         ${beforeClause}${sourceClause}${hiddenClause}ORDER BY timestamp DESC
        LIMIT {limit:UInt64}`,
       params,
     );
@@ -182,9 +211,17 @@ export class UsersService {
     await this.projects.assertMembership(userId, projectId);
     const limit = clampLimit(limitRaw);
     const canon = canonicalization();
+    const hiddenIds = await this.hidden.hiddenIds(projectId);
 
     const params: Record<string, unknown> = { projectId, limit: limit + 1 };
     const whereClauses = ['e.project_id = {projectId:UUID}'];
+    // Hidden users drop out of the list entirely (§17 soft remove). Compared against the CANONICAL
+    // id, matching what `hidden_users.distinct_id` stores, so an anon id of a hidden user is hidden
+    // with them rather than resurfacing as a separate row.
+    if (hiddenIds.length > 0) {
+      params.hiddenIds = hiddenIds;
+      whereClauses.push(`${canon.uid} NOT IN {hiddenIds:Array(String)}`);
+    }
     if (searchRaw) {
       params.search = searchRaw;
       const searchExprs = [
@@ -273,6 +310,10 @@ export class UsersService {
     // Step 2: profile (canonical id) + merged events (canonical `uid`).
     const canon = canonicalization();
     const idParams = { projectId, canonicalId };
+    // Started here, awaited after the ClickHouse batch: it is a Postgres read, so overlapping it
+    // costs nothing, and keeping it OUT of the Promise.all below preserves that array as the exact
+    // fixed sequence of `clickhouse.query` calls the spec asserts on.
+    const hiddenIdsPromise = this.hidden.hiddenIds(projectId);
     const [profileRows, aggRows, recentRows, aliasRows] = await Promise.all([
       this.clickhouse.query<ProfilePropertiesRow>(
         `SELECT properties
@@ -322,6 +363,7 @@ export class UsersService {
         idParams,
       ),
     ]);
+    const hiddenIds = await hiddenIdsPromise;
 
     const eventCount = Number(aggRows[0]?.event_count ?? 0);
     // `min`/`max` over zero matching rows still return a (meaningless, epoch-default) row rather
@@ -339,6 +381,7 @@ export class UsersService {
       event_count: eventCount,
       recent_events: recentRows.map(toRecentEvent),
       distinct_ids: distinctIds,
+      hidden: hiddenIds.includes(canonicalId),
     };
   }
 

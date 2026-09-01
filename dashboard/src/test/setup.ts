@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { authStore } from '../features/auth/store';
 import { currentOrgStore } from '../features/orgs/store';
-import { resetAuthState, resetOrgsState } from './msw/handlers';
+import { resetAuthState, resetOrgsState, resetUsersAdminState } from './msw/handlers';
 import { resetPhase5State } from './msw/phase5-handlers';
 import { server } from './msw/server';
 
@@ -70,6 +70,7 @@ afterEach(() => {
   server.resetHandlers();
   resetAuthState();
   resetOrgsState();
+  resetUsersAdminState();
   resetPhase5State();
   authStore.reset();
   currentOrgStore.reset();

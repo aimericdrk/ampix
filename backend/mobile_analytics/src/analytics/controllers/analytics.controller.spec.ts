@@ -3,6 +3,7 @@ import { AiRequestError, AiUnconfiguredError } from '../ai/mistral.service';
 import type { MistralService } from '../ai/mistral.service';
 import { AnalyticsController } from './analytics.controller';
 import type { AnalyticsService } from '../services/analytics.service';
+import type { UserAdminService } from '../services/user-admin.service';
 
 const USER = { id: 'user-1', email: 'a@b.com', name: 'A' };
 
@@ -25,11 +26,18 @@ function makeController() {
   const mistral = {
     translateToInsights: jest.fn(),
   };
+  const userAdmin = {
+    listHiddenUsers: jest.fn(),
+    hideUser: jest.fn(),
+    unhideUser: jest.fn(),
+    eraseUser: jest.fn(),
+  };
   const controller = new AnalyticsController(
     analytics as unknown as AnalyticsService,
     mistral as unknown as MistralService,
+    userAdmin as unknown as UserAdminService,
   );
-  return { controller, analytics, mistral };
+  return { controller, analytics, mistral, userAdmin };
 }
 
 describe('AnalyticsController', () => {

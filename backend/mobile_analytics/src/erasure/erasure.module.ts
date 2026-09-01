@@ -14,5 +14,8 @@ import { ErasureService } from './erasure.service';
   imports: [IngestModule],
   controllers: [ErasureController],
   providers: [ErasureService, ErasureCapabilityGuard],
+  // Exported so the dashboard's admin-gated `DELETE /users/:distinctId` (AnalyticsModule) erases
+  // through this exact service rather than a second implementation that could fall behind it.
+  exports: [ErasureService],
 })
 export class ErasureModule {}

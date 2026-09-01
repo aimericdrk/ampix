@@ -66,3 +66,16 @@ export function zeroFill(
   }
   return buckets.map((bucket) => ({ t: bucket.t, value: byTs.get(bucket.ts) ?? 0 }));
 }
+
+/**
+ * The one thing the audience READ path needs from the hide/erase write surface: which canonical
+ * ids this project has hidden (§17 soft remove). Declared as a narrow interface rather than
+ * importing `UserAdminService` so `UsersService` stays independent of the erase machinery — and so
+ * a test can hand it a literal `{ hiddenIds: async () => [] }`. Satisfied by `UserAdminService`.
+ */
+export interface HiddenUserSource {
+  hiddenIds(projectId: string): Promise<string[]>;
+}
+
+/** The read path's stand-in when nothing has been hidden — also the default for manual wiring. */
+export const NO_HIDDEN_USERS: HiddenUserSource = { hiddenIds: async () => [] };

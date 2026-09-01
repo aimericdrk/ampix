@@ -5,6 +5,9 @@ import type {
   AcceptInvitationResponse,
   AddProjectMemberRequest,
   AskDataResponse,
+  EraseUserResult,
+  HiddenUserListItem,
+  ListHiddenUsersResponse,
   AuthResponse,
   AuthUser,
   CreatedProject,
@@ -186,6 +189,20 @@ export const LIVE_EVENTS_FIXTURE: LiveEvent[] = Array.from({ length: 30 }, (_, i
 });
 
 /**
+ * §17 soft remove — mutable across a test so hiding a user actually removes them from the list.
+ * Reset between tests by `resetUsersAdminState()`, called from the shared setup.
+ */
+export const hiddenUsersState: HiddenUserListItem[] = [];
+
+/** The ids erased in this test, so the users list stops serving them like the real backend. */
+export const erasedUsersState = new Set<string>();
+
+export function resetUsersAdminState(): void {
+  hiddenUsersState.length = 0;
+  erasedUsersState.clear();
+}
+
+/**
  * Deterministic fixture for GET /users, GET /users/:distinctId — ordered by distinct_id. 22 users
  * (> the UI's 20-per-page request) so tests exercise real "load more" pagination via
  * `next_cursor`. `user-001` carries the detailed values GET /users/:distinctId (below) responds
@@ -271,6 +288,8 @@ export const USER_PROFILE_FIXTURE: Omit<
   UserProfileResponse,
   'distinct_id' | 'last_seen' | 'event_count'
 > = {
+  // §17 soft remove: the fixture user is visible, which is what every existing test assumes.
+  hidden: false,
   profile: {
     plan: 'pro',
     name: 'Alex Chen',
@@ -2385,6 +2404,61 @@ export const handlers = [
     return HttpResponse.json(response);
   }),
 
+  /**
+   * §17 soft remove. In-memory and mutable so a test can hide a user and then assert they leave the
+   * list — `resetHiddenUsers()` (called from the shared test setup) puts it back.
+   *
+   * Declared BEFORE `/users/:distinctId` for the same reason the real controller does: the param
+   * route would otherwise answer `/users/hidden` with the profile of a user named "hidden".
+   */
+  http.get('/api/v1/projects/:projectId/users/hidden', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: ListHiddenUsersResponse = { users: [...hiddenUsersState] };
+    return HttpResponse.json(response);
+  }),
+
+  http.post('/api/v1/projects/:projectId/users/:distinctId/hide', ({ request, params }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const distinctId = params.distinctId as string;
+    if (!hiddenUsersState.some((entry) => entry.distinct_id === distinctId)) {
+      hiddenUsersState.push({
+        distinct_id: distinctId,
+        hidden_at: '2026-08-01T10:00:00.000Z',
+        hidden_by: 'Test Admin',
+      });
+    }
+    return HttpResponse.json({ distinct_id: distinctId });
+  }),
+
+  http.delete('/api/v1/projects/:projectId/users/:distinctId/hide', ({ request, params }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const distinctId = params.distinctId as string;
+    const index = hiddenUsersState.findIndex((entry) => entry.distinct_id === distinctId);
+    if (index >= 0) hiddenUsersState.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  /** The irreversible erase. Reports the id set it removed, exactly as the real endpoint does. */
+  http.delete('/api/v1/projects/:projectId/users/:distinctId', ({ request, params }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const distinctId = params.distinctId as string;
+    erasedUsersState.add(distinctId);
+    const response: EraseUserResult = {
+      ids: [distinctId, `anon-${distinctId}`],
+      subscriptionStates: 1,
+      revenueCatWebhookEvents: 2,
+    };
+    return HttpResponse.json(response);
+  }),
+
   http.get('/api/v1/projects/:projectId/users', ({ request }) => {
     const token = bearerToken(request);
     if (!token || !ACCEPTED_TOKENS.has(token))
@@ -2402,6 +2476,12 @@ export const handlers = [
         u.distinct_id.toLowerCase().includes(needle) ||
         (u.name?.toLowerCase().includes(needle) ?? false) ||
         (u.email?.toLowerCase().includes(needle) ?? false),
+    );
+    // Same rule as the server: a hidden (or erased) user is gone from the audience list.
+    pool = pool.filter(
+      (u) =>
+        !hiddenUsersState.some((entry) => entry.distinct_id === u.distinct_id) &&
+        !erasedUsersState.has(u.distinct_id),
     );
     if (cursor) {
       const cursorIndex = pool.findIndex((u) => u.distinct_id === cursor);
@@ -2425,6 +2505,7 @@ export const handlers = [
       last_seen: user.last_seen,
       event_count: user.event_count,
       ...USER_PROFILE_FIXTURE,
+      hidden: hiddenUsersState.some((entry) => entry.distinct_id === distinctId),
     };
     return HttpResponse.json(response);
   }),

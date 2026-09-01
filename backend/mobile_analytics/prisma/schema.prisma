@@ -68,6 +68,7 @@ model User {
   dashboards         Dashboard[]
   projectMemberships ProjectMembership[]
   createdProjects    Project[]               @relation("ProjectCreatedBy")
+  hiddenUsers        HiddenUser[]            @relation("HiddenUserBy")
 
   @@map("users")
 }
@@ -115,6 +116,7 @@ model Project {
   revenuecatIntegration RevenueCatIntegration?
   subscriptionStates    SubscriptionState[]
   revenuecatWebhookEvents RevenueCatWebhookEvent[]
+  hiddenUsers             HiddenUser[]
 
   @@map("projects")
 }
@@ -363,4 +365,32 @@ model RevenueCatWebhookEvent {
   @@unique([projectId, rcEventId])
   @@index([projectId, status])
   @@map("revenuecat_webhook_events")
+}
+
+/**
+ * A user hidden from the audience surfaces (Users list, user profile, live feed) WITHOUT erasing
+ * their events — the reversible half of the dashboard's "remove this user" action; the other half
+ * is ErasureService's irreversible wipe.
+ *
+ * Postgres rather than ClickHouse on purpose: the set is tiny and hand-curated, it needs the
+ * `hidden_by`/`hidden_at` audit fields and an un-hide, and ClickHouse here has no migration path
+ * (infra/clickhouse/init.sql only runs on first container init). The read path binds the ids as a
+ * `{hiddenIds:Array(String)}` param.
+ *
+ * `distinctId` is the CANONICAL id (contracts §17) resolved at hide time, so hiding a user by one
+ * of their anon ids hides the whole merged identity.
+ */
+model HiddenUser {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  projectId  String   @map("project_id") @db.Uuid
+  distinctId String   @map("distinct_id")
+  hiddenById String?  @map("hidden_by") @db.Uuid
+  hiddenAt   DateTime @default(now()) @map("hidden_at")
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  hiddenBy User?   @relation("HiddenUserBy", fields: [hiddenById], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, distinctId])
+  @@index([projectId])
+  @@map("hidden_users")
 }

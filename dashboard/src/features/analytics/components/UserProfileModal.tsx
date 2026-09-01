@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
+import { IconButton } from '../../../components/ui/icon-button';
 import { useEffect } from 'react';
 import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
 import { Badge } from '../../../components/ui/badge';
@@ -24,16 +25,29 @@ import {
   useRunClickHeatmap,
   useRunScreenPaths,
   useScreens,
+  useUnhideUser,
   useUserEvents,
   useUserProfile,
 } from '../api';
+import { RemoveUserDialog } from './RemoveUserDialog';
 import { FavoriteButton } from '../../favorites/FavoriteButton';
 import { useFavorites } from '../../favorites/favorites';
 import type { FavItem } from '../../favorites/favorites';
 import { useRecents } from '../../favorites/recents';
 import { useRcEnabled, useRefreshUserSubscription, useUserSubscription } from '../../revenuecat/api';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Fingerprint, Maximize2, RotateCw, Route, Waypoints, X } from 'lucide-react';
+import {
+  ChevronDown,
+  EyeOff,
+  Fingerprint,
+  Maximize2,
+  RotateCw,
+  Route,
+  Trash2,
+  Undo2,
+  Waypoints,
+  X,
+} from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { defaultDate } from './builder-controls';
 import { HeatmapCanvas, HeatmapLegend, squareHeatmapGrid } from './HeatmapCanvas';
@@ -244,6 +258,11 @@ export function UserProfileModal({
   onClose: () => void;
 }) {
   const { data, isPending, isError, error } = useUserProfile(projectId, distinctId);
+  // Removing the user this modal is about: `hide` (reversible) or `erase` (irreversible). Both
+  // close the modal on success — leaving it open over a person who is no longer on the list, or no
+  // longer in the project at all, would be showing stale data as if it were current.
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const unhideUser = useUnhideUser(projectId);
   const screenPath = useMemo(
     () => (data ? deriveScreenPath(data.recent_events) : []),
     [data],
@@ -413,6 +432,15 @@ export function UserProfileModal({
               isFavorite={favorites.isFavorite('user', distinctId)}
               onToggle={() => favorites.toggle(favItem)}
             />
+            <IconButton
+              aria-label={`Remove ${displayName}`}
+              title="Remove this user"
+              size="sm"
+              onClick={() => setRemoveOpen(true)}
+              className="hover:bg-danger-soft hover:text-danger"
+            >
+              <Trash2 aria-hidden />
+            </IconButton>
             <DialogClose
               aria-label="Close"
               className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-chart-surface hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
@@ -434,6 +462,32 @@ export function UserProfileModal({
 
         {/* Scrollable body. */}
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {/* A hidden user's profile still resolves on purpose — 404ing it would leave no way back
+              to "un-hide" once they had dropped out of every list that links here. */}
+          {data?.hidden && (
+            <p
+              role="status"
+              className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm"
+            >
+              <EyeOff className="size-4 shrink-0 text-text-muted" aria-hidden />
+              <span className="flex-1">
+                This user is hidden from the Users list, Live and Attribution. Their events are kept
+                and still count in every chart.
+              </span>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="gap-1.5"
+                disabled={unhideUser.isPending}
+                onClick={() => unhideUser.mutate(distinctId)}
+              >
+                <Undo2 className="size-3.5" aria-hidden />
+                {unhideUser.isPending ? 'Un-hiding…' : 'Un-hide'}
+              </Button>
+            </p>
+          )}
+
           {isPending && <p role="status">Loading user profile…</p>}
           {isError && (
             <p role="alert" className="text-danger">
@@ -748,6 +802,19 @@ export function UserProfileModal({
           )}
         </div>
       </DialogContent>
+
+      {removeOpen && (
+        <RemoveUserDialog
+          projectId={projectId}
+          distinctId={distinctId}
+          displayName={displayName}
+          open
+          onOpenChange={setRemoveOpen}
+          // Both modes make this profile stale: hidden users leave the list this modal sits over,
+          // and an erased one no longer exists at all.
+          onRemoved={onClose}
+        />
+      )}
     </Dialog>
   );
 }

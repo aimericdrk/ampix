@@ -76,6 +76,19 @@ export interface UsersResponse {
   next_cursor: string | null;
 }
 
+/** One entry of `GET /users/hidden` — a user removed from the audience surfaces, reversibly. */
+export interface HiddenUserListItem {
+  /** The CANONICAL id (§17) that was hidden — resolved at hide time, not the id that was clicked. */
+  distinct_id: string;
+  hidden_at: string;
+  /** The dashboard user who hid them; null when that account has since been deleted. */
+  hidden_by: string | null;
+}
+
+export interface HiddenUsersResponse {
+  users: HiddenUserListItem[];
+}
+
 /** Device/app context captured with an event (the §5 context columns), surfaced per recent event. */
 export interface RecentEventContext {
   os: string;
@@ -121,6 +134,12 @@ export interface UserProfileResponse {
    * `distinct_ids` for identity-correct per-user results.
    */
   distinct_ids: string[];
+  /**
+   * True when this user is hidden from the audience surfaces (§17 soft remove). The profile itself
+   * still resolves — 404ing it would leave no way back to the "un-hide" action once the user has
+   * dropped out of every list that links here.
+   */
+  hidden: boolean;
 }
 
 /**

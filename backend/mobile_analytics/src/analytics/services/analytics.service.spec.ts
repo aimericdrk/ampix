@@ -685,6 +685,8 @@ describe('AnalyticsService', () => {
         distinct_id: DISTINCT_ID,
         profile: { plan: 'pro' },
         first_seen: '2026-06-01T09:00:00.000Z',
+        // §17 soft remove: this facade is constructed with NO_HIDDEN_USERS, so nothing is hidden.
+        hidden: false,
         last_seen: '2026-06-02T09:00:00.000Z',
         event_count: 3,
         recent_events: [

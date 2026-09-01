@@ -252,7 +252,7 @@ Source modules (`backend/mobile_analytics/src/`):
 - `auth/` — email/password login, JWT access/refresh tokens, TOTP 2FA. Sessions + rate limiting use Redis.
 - `orgs/`, `projects/`, `invitations/`, `authz/` — organizations, projects, membership, and per-project roles (owner/admin/member).
 - `screenshots/` — reference-screenshot upload/serve for the user-path map + heatmaps (bytes to Firebase Storage, metadata in Postgres). A capture of a screen taller than the viewport is a stitched full-page image; `content_height`/`viewport_height` record what it covers (§6.1.3).
-- `erasure/` — `DELETE /ingest/users/:distinctId`, the server-to-server end-user erasure endpoint (§6.1.2).
+- `erasure/` — `DELETE /ingest/users/:distinctId`, the server-to-server end-user erasure endpoint (§6.1.2). The dashboard's own admin-gated "delete this user" runs through the very same service (§6.1.5).
 - `analytics/` also serves the profile timeline's paging: `GET /users/:distinctId/events` returns one
   page of a user's events newest-first, cursored by the composite `{before, before_id}` the previous
   page returned (a bare timestamp would skip rows tied on the boundary millisecond, which batched
@@ -375,6 +375,31 @@ never references `screen_width`/`screen_height`/`$pos_x`/`$pos_y` — that absen
 Unlabelled taps are ranked, not dropped: a screen whose taps mostly hit no identifiable widget is
 itself the finding. `truncated` says when `limit` cut the list, so `total` can't be misread as the
 screen's total.
+
+#### 6.1.5 Removing a user from the dashboard
+
+The GDPR endpoint above is server-to-server. The dashboard has its own, admin-gated pair of routes,
+because "delete this user" turns out to mean two genuinely different things and guessing which one
+an operator meant is not acceptable for an irreversible action. The Users list and the user profile
+both open the same dialog, which offers both and cancels out of neither by default.
+
+| Action | Route | Reversible? | What it does |
+| ------ | ----- | ----------- | ------------ |
+| **Hide** | `POST /api/v1/projects/:projectId/users/:distinctId/hide` | Yes — `DELETE` the same path to un-hide | Writes a `hidden_users` row. The user leaves the Users list, the live feed and the Attribution readout. **Every event is kept**, so insights, funnels, retention and revenue are unchanged. |
+| **Delete permanently** | `DELETE /api/v1/projects/:projectId/users/:distinctId` | **No** | Runs `ErasureService` — the same code as `DELETE /ingest/users/:distinctId`. Events, profile, identity mappings and the RevenueCat mirrors, for this user and every id linked to them. Historical charts change. |
+
+Both require the **admin** project role (`ProjectRolesGuard` + `@ProjectRoles('admin')`), matching
+token revocation and the project data purge. The destructive one additionally makes you type
+`DELETE` in the dialog — a second button is not a guard against a fast double-click.
+
+Both resolve the requested id to its **canonical** id first (§17 identity), so acting on one of a
+user's anonymous ids acts on the whole merged person rather than half of them.
+
+Hiding is meant for the handful of test accounts and staff devices that clutter an audience list;
+`GET /users/hidden` lists who is hidden, by whom and when, and a project may hold at most 1000 such
+rows (a 409 past that, never a silent truncation). A hidden user's profile still resolves, carrying
+`hidden: true` — 404ing it would leave no way back to the un-hide action once they had dropped out
+of every list that links there.
 
 ### 6.2 mobile_purchase (the MyRevenueCat backend / billing authority)
 
