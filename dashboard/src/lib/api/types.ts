@@ -1055,6 +1055,52 @@ export interface CohortPreviewResponse {
 }
 
 /** The four saved-report kinds; a report's `definition` is the matching §14/§15 query definition. */
+// --- Attribution: where the accounts created in a window came from ---
+
+/** One row of an attribution breakdown — a first-touch source, campaign, medium or referrer. */
+export interface AttributionBreakdownRow {
+  /** The dimension value; null means the SDK captured none ("Direct / unknown"). */
+  value: string | null;
+  /** Users whose FIRST-EVER event landed in the window — everyone who opened the app. */
+  installs: number;
+  /** Users whose first `$identify` landed in the window — anonymous installs that became accounts. */
+  signups: number;
+  /** `signups / installs`; null when this source had no installs in the window, which is different
+   *  from 0% — those signups came from installs made BEFORE the window. */
+  signup_rate: number | null;
+}
+
+/** The attribution of one account, as captured on that user's first-ever event. */
+export interface AttributedAccount {
+  distinct_id: string;
+  first_seen: string;
+  /** First `$identify`; null for a user who has never signed up. */
+  signed_up_at: string | null;
+  name: string | null;
+  email: string | null;
+  /** First-touch attribution — the SDK never overwrites these after the first touch. */
+  first_utm_source: string | null;
+  first_utm_campaign: string | null;
+  /** Last-touch attribution seen on that same first event. */
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  install_referrer: string | null;
+}
+
+/** `GET /metrics/attribution`. */
+export interface AttributionResponse {
+  total_installs: number;
+  total_signups: number;
+  signup_rate: number | null;
+  by_source: AttributionBreakdownRow[];
+  by_campaign: AttributionBreakdownRow[];
+  by_medium: AttributionBreakdownRow[];
+  by_referrer: AttributionBreakdownRow[];
+  /** The most recent accounts created in the window, newest first. */
+  accounts: AttributedAccount[];
+}
+
 export type ReportKind = 'insights' | 'funnel' | 'retention' | 'flows';
 
 export const REPORT_KINDS: ReportKind[] = ['insights', 'funnel', 'retention', 'flows'];

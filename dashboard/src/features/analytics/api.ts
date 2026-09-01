@@ -11,6 +11,7 @@ import type {
   ScreenPathsResponse,
   ScreensResponse,
   ApplyTemplateResponse,
+  AttributionResponse,
   Cohort,
   CohortDefinition,
   CohortPreviewResponse,
@@ -512,6 +513,19 @@ export function useEraseUser(projectId: string) {
         method: 'DELETE',
       }),
     onSuccess: () => invalidateProjectAnalytics(queryClient, projectId),
+  });
+}
+
+// --- Attribution: where the accounts created in a window came from ---
+
+/** `GET /metrics/attribution` — installs and identified signups per first-touch source. */
+export function useAttribution(projectId: string, from: string, to: string) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'attribution', from, to],
+    queryFn: () =>
+      apiFetch<AttributionResponse>(
+        `${base(projectId)}/metrics/attribution?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      ),
   });
 }
 

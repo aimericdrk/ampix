@@ -33,6 +33,7 @@ import { DistributionsPage } from './features/analytics/components/Distributions
 import { PropertyExplorerPage } from './features/analytics/components/PropertyExplorerPage';
 import { EventCatalogPage } from './features/analytics/components/EventCatalogPage';
 import { UsersPage } from './features/analytics/components/UsersPage';
+import { AttributionPage } from './features/analytics/components/AttributionPage';
 import { OrgSettingsPage } from './features/orgs/components/OrgSettingsPage';
 import { ProjectDetailPage } from './features/projects/components/ProjectDetailPage';
 import { ProjectsPage } from './features/projects/components/ProjectsPage';
@@ -264,6 +265,13 @@ const userProfileRoute = createRoute({
   component: UsersPage,
 });
 
+// Where the accounts created in a range came from — installs and sign-ups per first-touch campaign.
+const attributionRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: '/projects/$projectId/attribution',
+  component: AttributionPage,
+});
+
 const sessionsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: '/projects/$projectId/sessions',
@@ -429,6 +437,7 @@ export const routeTree = rootRoute.addChildren([
     liveEventsRoute,
     usersRoute,
     userProfileRoute,
+    attributionRoute,
     sessionsRoute,
     revenueRoute,
     subscriptionsRedirectRoute,

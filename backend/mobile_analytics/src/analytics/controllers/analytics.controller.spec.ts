@@ -4,6 +4,7 @@ import type { MistralService } from '../ai/mistral.service';
 import { AnalyticsController } from './analytics.controller';
 import type { AnalyticsService } from '../services/analytics.service';
 import type { UserAdminService } from '../services/user-admin.service';
+import type { AttributionService } from '../queries/attribution/attribution.service';
 
 const USER = { id: 'user-1', email: 'a@b.com', name: 'A' };
 
@@ -32,12 +33,14 @@ function makeController() {
     unhideUser: jest.fn(),
     eraseUser: jest.fn(),
   };
+  const attribution = { getAttribution: jest.fn() };
   const controller = new AnalyticsController(
     analytics as unknown as AnalyticsService,
     mistral as unknown as MistralService,
     userAdmin as unknown as UserAdminService,
+    attribution as unknown as AttributionService,
   );
-  return { controller, analytics, mistral, userAdmin };
+  return { controller, analytics, mistral, userAdmin, attribution };
 }
 
 describe('AnalyticsController', () => {

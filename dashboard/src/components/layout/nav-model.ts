@@ -79,6 +79,7 @@ export const TOOLS: Tool[] = [
         items: [
           { label: 'Cohorts', to: p('/cohorts'), icon: 'cohorts' },
           { label: 'Users', to: p('/users'), icon: 'users' },
+          { label: 'Attribution', to: p('/attribution'), icon: 'attribution' },
           { label: 'Sessions', to: p('/sessions'), icon: 'sessions' },
           { label: 'Live', to: p('/live'), icon: 'live' },
         ],

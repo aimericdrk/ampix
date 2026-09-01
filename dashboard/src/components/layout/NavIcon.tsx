@@ -24,6 +24,7 @@ import {
   Radio,
   Repeat,
   Settings,
+  Signpost,
   Sparkles,
   Tags,
   Target,
@@ -42,6 +43,7 @@ export type IconName =
   | 'paths'
   | 'heatmap'
   | 'revenue'
+  | 'attribution'
   | 'distributions'
   | 'properties'
   | 'events'
@@ -78,6 +80,7 @@ const ICONS: Record<IconName, LucideIcon> = {
   paths: GitBranch,
   heatmap: Grid3x3,
   revenue: CircleDollarSign,
+  attribution: Signpost,
   distributions: ChartBar,
   properties: Tags,
   events: Zap,

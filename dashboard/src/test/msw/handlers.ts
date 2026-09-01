@@ -5,6 +5,7 @@ import type {
   AcceptInvitationResponse,
   AddProjectMemberRequest,
   AskDataResponse,
+  AttributionResponse,
   EraseUserResult,
   HiddenUserListItem,
   ListHiddenUsersResponse,
@@ -201,6 +202,53 @@ export function resetUsersAdminState(): void {
   hiddenUsersState.length = 0;
   erasedUsersState.clear();
 }
+
+/** `GET /metrics/attribution` — one clearly-winning source, one unattributed bucket. */
+export const ATTRIBUTION_FIXTURE: AttributionResponse = {
+  total_installs: 1000,
+  total_signups: 250,
+  signup_rate: 0.25,
+  by_source: [
+    { value: 'google-play', installs: 600, signups: 180, signup_rate: 0.3 },
+    { value: 'app-store', installs: 300, signups: 60, signup_rate: 0.2 },
+    // The SDK captured no campaign at all for these — rendered as "Direct / unknown".
+    { value: null, installs: 100, signups: 10, signup_rate: 0.1 },
+  ],
+  by_campaign: [{ value: 'launch', installs: 600, signups: 180, signup_rate: 0.3 }],
+  by_medium: [{ value: 'organic', installs: 900, signups: 240, signup_rate: 0.2667 }],
+  by_referrer: [
+    { value: 'utm_source=google-play', installs: 600, signups: 180, signup_rate: 0.3 },
+  ],
+  accounts: [
+    {
+      distinct_id: 'user-001',
+      first_seen: '2026-06-02T09:00:00.000Z',
+      signed_up_at: '2026-06-03T11:30:00.000Z',
+      name: 'Alex Chen',
+      email: 'user001@example.com',
+      first_utm_source: 'google-play',
+      first_utm_campaign: 'launch',
+      utm_source: 'google-play',
+      utm_medium: 'organic',
+      utm_campaign: 'launch',
+      install_referrer: 'utm_source=google-play',
+    },
+    {
+      // An install that never became an account — the population the page exists to separate out.
+      distinct_id: 'user-002',
+      first_seen: '2026-06-04T09:00:00.000Z',
+      signed_up_at: null,
+      name: null,
+      email: null,
+      first_utm_source: null,
+      first_utm_campaign: null,
+      utm_source: null,
+      utm_medium: null,
+      utm_campaign: null,
+      install_referrer: null,
+    },
+  ],
+};
 
 /**
  * Deterministic fixture for GET /users, GET /users/:distinctId — ordered by distinct_id. 22 users
@@ -2457,6 +2505,13 @@ export const handlers = [
       revenueCatWebhookEvents: 2,
     };
     return HttpResponse.json(response);
+  }),
+
+  http.get('/api/v1/projects/:projectId/metrics/attribution', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    return HttpResponse.json(ATTRIBUTION_FIXTURE);
   }),
 
   http.get('/api/v1/projects/:projectId/users', ({ request }) => {

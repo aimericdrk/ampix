@@ -253,6 +253,7 @@ Source modules (`backend/mobile_analytics/src/`):
 - `orgs/`, `projects/`, `invitations/`, `authz/` — organizations, projects, membership, and per-project roles (owner/admin/member).
 - `screenshots/` — reference-screenshot upload/serve for the user-path map + heatmaps (bytes to Firebase Storage, metadata in Postgres). A capture of a screen taller than the viewport is a stitched full-page image; `content_height`/`viewport_height` record what it covers (§6.1.3).
 - `erasure/` — `DELETE /ingest/users/:distinctId`, the server-to-server end-user erasure endpoint (§6.1.2). The dashboard's own admin-gated "delete this user" runs through the very same service (§6.1.5).
+- `analytics/queries/attribution/` — `GET /metrics/attribution`, where the accounts created in a window came from (§6.1.6).
 - `analytics/` also serves the profile timeline's paging: `GET /users/:distinctId/events` returns one
   page of a user's events newest-first, cursored by the composite `{before, before_id}` the previous
   page returned (a bare timestamp would skip rows tied on the boundary millisecond, which batched
@@ -401,6 +402,32 @@ rows (a 409 past that, never a silent truncation). A hidden user's profile still
 `hidden: true` — 404ing it would leave no way back to the un-hide action once they had dropped out
 of every list that links there.
 
+#### 6.1.6 Attribution — where accounts come from
+
+`GET /api/v1/projects/:projectId/metrics/attribution?from=&to=` answers "where did the accounts
+created this month come from", and reports **two populations side by side** because in a mobile app
+they are not the same people:
+
+- **installs** — users whose first-ever event landed in the window. Everyone who opened the app,
+  including those who never signed up.
+- **signups** — users whose first `$identify` landed in the window: an anonymous install becoming an
+  account.
+
+The gap between them, per campaign, is the number worth acting on. A source driving a thousand
+curious installs and forty accounts is a different problem from one driving eighty installs and
+sixty accounts, and a single "new users" figure hides that completely.
+
+Attribution is **first-touch** throughout (`argMin` over each user's own timestamps): a person is
+credited to the campaign that brought their anonymous install in, not to whatever they had in hand
+on the day they eventually logged in. Breakdowns are returned for `first_utm_source`,
+`first_utm_campaign`, `utm_medium` and `install_referrer` — all columns the Flutter SDK already
+captures, so nothing new has to be instrumented. `signup_rate` is `null`, never `0`, for a source
+with no installs in the window: those signups came from installs made *before* it, and calling that
+0% would rank a working source as the worst one on the page.
+
+The Flutter SDK's attribution store keeps first-touch values permanently and last-touch values per
+touch — see `sdk/flutter_analytics/lib/src/attribution/`.
+
 ### 6.2 mobile_purchase (the MyRevenueCat backend / billing authority)
 
 Source modules (`backend/mobile_purchase/src/`):
@@ -476,7 +503,7 @@ page that talks to both: *SDK tokens* reads `mobile_analytics`, *Server keys (pu
 `mobile_purchase` — see §6.1.2 and §6.2.1.
 
 **Navigation** is split into two tool groups: **MyAmplitude** (analytics — Home, insights,
-funnels, retention, user paths, heatmaps, cohorts, dashboards) and **MyRevenueCat** (billing —
+funnels, retention, user paths, heatmaps, cohorts, attribution, dashboards) and **MyRevenueCat** (billing —
 Overview, Conversion, Customers, Products, Offerings, Entitlements, Settings). The MyRevenueCat
 pages read `mobile_purchase` directly and are always visible (no "connect RevenueCat" gate); the
 only load gate is the project list resolving.

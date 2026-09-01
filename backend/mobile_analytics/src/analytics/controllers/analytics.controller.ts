@@ -21,6 +21,8 @@ import type { ErasureResult } from '../../erasure/erasure.service';
 import { AiRequestError, AiUnconfiguredError, MistralService } from '../ai/mistral.service';
 import { AnalyticsService } from '../services/analytics.service';
 import { UserAdminService } from '../services/user-admin.service';
+import { AttributionService } from '../queries/attribution/attribution.service';
+import type { AttributionResponse } from '../queries/attribution/attribution.types';
 import type {
   AskResponse,
   EventsMetaResponse,
@@ -56,6 +58,7 @@ export class AnalyticsController {
     private readonly analytics: AnalyticsService,
     private readonly mistral: MistralService,
     private readonly userAdmin: UserAdminService,
+    private readonly attribution: AttributionService,
   ) {}
 
   @Post('query/insights')
@@ -209,6 +212,21 @@ export class AnalyticsController {
     @Param('distinctId') distinctId: string,
   ): Promise<ErasureResult> {
     return this.userAdmin.eraseUser(req.user!.id, projectId, distinctId);
+  }
+
+  /**
+   * Where the accounts created in a window came from — installs and identified signups side by
+   * side per first-touch source/campaign/medium/referrer, plus the accounts themselves. A read, so
+   * viewer+ with membership enforced in the service, like the rest of this controller.
+   */
+  @Get('metrics/attribution')
+  async attributionMetrics(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ): Promise<AttributionResponse> {
+    return this.attribution.getAttribution(req.user!.id, projectId, from, to);
   }
 
   @Get('sessions/summary')

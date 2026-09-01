@@ -220,6 +220,13 @@ MaterialApp(
 
 **Attribution** (`autocaptureAttribution`) — the Android install referrer is captured automatically; for deep links, call `MyAmpix.instance.trackDeepLink(uri)` from your link handler. UTM params are persisted (first- and last-touch) and attached to every event; a `$campaign_touch` is emitted on each new touch.
 
+These are exactly what the dashboard's **Attribution** page reads. It credits each account to its
+FIRST touch (`first_utm_source` / `first_utm_campaign`, which the SDK writes once and never
+overwrites), so a user is attributed to the campaign that brought them in rather than to whatever
+they last clicked. Nothing extra needs instrumenting — but the page can only show campaigns your
+links actually carry, so make sure your ad and deep-link URLs include `utm_source` /
+`utm_campaign`; traffic without them is reported honestly as *Direct / unknown*.
+
 **Screenshots** — a **developer/reference tool, not a per-user feature.** There is no config flag: capture stays dormant until you call `MyAmpix.instance.retakeScreenshots()` (the one activation switch), and it only ever runs in **debug builds** — a release/production build never captures or uploads, so your end users never send screenshots (bounded storage, no PII collected in the wild). These reference images power the dashboard's user-path map and click heatmaps.
 
 **How to populate them:** in a DEBUG build, call `MyAmpix.instance.retakeScreenshots()` after `MyAmpix.init`, then walk through your app once — each screen is captured once per `(screen, app_version)` and uploaded to your backend (Firebase Storage) as the admin's reference image. Capture waits for the navigation animation to settle so it isn't grabbed mid-transition: at least `screenshotSettleDelay` (a `Duration`, default **~2s**) AND until the UI stops animating. Bump `screenshotSettleDelay` if your transitions are longer/heavier and captures still look mid-animation.
