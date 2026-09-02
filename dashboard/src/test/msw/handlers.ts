@@ -7,6 +7,8 @@ import type {
   AskDataResponse,
   AttributionResponse,
   DeletedEventResult,
+  ListUserPropertiesResponse,
+  ListUserPropertyValuesResponse,
   EraseUserResult,
   ExperimentResponse,
   HiddenUserListItem,
@@ -387,19 +389,23 @@ export const USER_PROFILE_FIXTURE: Omit<
     email: 'user001@example.com',
     phone: '+33 6 12 34 56 78',
     age: 36,
+    gender: 'female',
     city: 'Paris',
     country: 'FR',
   },
   first_seen: '2026-05-01T08:00:00.000Z',
   // Newest-first. The $screen_view rows drive the screen-path chain: chronologically
   // home → catalog → catalog → cart, collapsing to home → catalog → cart. Non-screen events carry
-  // a null screen_name. evt-108/evt-107 are the RevenueCat timeline rows (Task 20's tests).
+  // a null screen_name. evt-108/evt-107 are the RevenueCat timeline rows (Task 20's tests) and are
+  // `source: 'server'` — a webhook writes them, not the device — which is what keeps them out of
+  // the timeline's session arithmetic.
   recent_events: [
     {
       insert_id: 'evt-108',
       event: '$rc_renewal',
       timestamp: '2026-07-01T10:05:00.000Z',
       session_id: 'sess-2',
+      source: 'server',
       screen_name: null,
       properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -409,6 +415,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       event: 'checkout_completed',
       timestamp: '2026-07-01T10:00:00.000Z',
       session_id: 'sess-2',
+      source: 'client',
       screen_name: null,
       properties: { country: 'FR', $price: 42.5, currency: 'EUR', order_id: 'ord-9' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -418,6 +425,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       event: '$rc_initial_purchase',
       timestamp: '2026-07-01T09:59:00.000Z',
       session_id: 'sess-2',
+      source: 'server',
       screen_name: null,
       properties: { product_id: 'pro_monthly', price: 9.99, currency: 'USD' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -427,6 +435,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       event: '$screen_view',
       timestamp: '2026-07-01T09:58:00.000Z',
       session_id: 'sess-1',
+      source: 'client',
       screen_name: 'cart',
       properties: { country: 'FR', $screen_name: 'cart' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -436,6 +445,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       event: '$screen_view',
       timestamp: '2026-07-01T09:56:00.000Z',
       session_id: 'sess-1',
+      source: 'client',
       screen_name: 'catalog',
       properties: { country: 'FR', $screen_name: 'catalog' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -445,6 +455,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       event: '$screen_view',
       timestamp: '2026-07-01T09:54:00.000Z',
       session_id: 'sess-1',
+      source: 'client',
       screen_name: 'catalog',
       properties: { country: 'FR', $screen_name: 'catalog' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -454,6 +465,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       event: '$screen_view',
       timestamp: '2026-07-01T09:52:00.000Z',
       session_id: 'sess-1',
+      source: 'client',
       screen_name: 'home',
       properties: { country: 'FR', $screen_name: 'home' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -463,6 +475,7 @@ export const USER_PROFILE_FIXTURE: Omit<
       event: 'app_opened',
       timestamp: '2026-07-01T09:50:00.000Z',
       session_id: 'sess-1',
+      source: 'client',
       screen_name: null,
       properties: { country: 'FR' },
       context: DEVICE_CONTEXT_FIXTURE,
@@ -2611,6 +2624,22 @@ export const handlers = [
         !hiddenUsersState.some((entry) => entry.distinct_id === u.distinct_id) &&
         !erasedUsersState.has(u.distinct_id),
     );
+    // The audience filters. The fixture's only profile data is `user-001`'s (USER_PROFILE_FIXTURE),
+    // so "identified" is that row and "anonymous" is everyone else — enough to prove the page
+    // sends what it means and renders what comes back.
+    const identity = url.searchParams.get('identity');
+    if (identity === 'identified') pool = pool.filter((u) => u.distinct_id === 'user-001');
+    if (identity === 'anonymous') pool = pool.filter((u) => u.distinct_id !== 'user-001');
+    const rawFilters = url.searchParams.get('filters');
+    if (rawFilters) {
+      const parsed = JSON.parse(rawFilters) as Array<{ property: string; op: string; value?: string }>;
+      for (const filter of parsed) {
+        const held = USER_PROFILE_FIXTURE.profile as Record<string, unknown>;
+        const matches = (u: (typeof USERS_FIXTURE)[number]) =>
+          u.distinct_id === 'user-001' && String(held[filter.property] ?? '') === String(filter.value ?? '');
+        pool = filter.op === 'eq' ? pool.filter(matches) : pool;
+      }
+    }
     if (cursor) {
       const cursorIndex = pool.findIndex((u) => u.distinct_id === cursor);
       pool = cursorIndex >= 0 ? pool.slice(cursorIndex + 1) : pool;
@@ -2618,6 +2647,33 @@ export const handlers = [
     const page = pool.slice(0, limit);
     const next_cursor = pool.length > limit ? (page.at(-1)?.distinct_id ?? null) : null;
     const response: ListUsersResponse = { users: page, next_cursor };
+    return HttpResponse.json(response);
+  }),
+
+  /** Declared before `/users/:distinctId`, like the real controller's discovery routes. */
+  http.get('/api/v1/projects/:projectId/users/properties', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const response: ListUserPropertiesResponse = {
+      properties: Object.keys(USER_PROFILE_FIXTURE.profile).map((property) => ({
+        property,
+        users: 1,
+      })),
+    };
+    return HttpResponse.json(response);
+  }),
+
+  http.get('/api/v1/projects/:projectId/users/property-values', ({ request }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const property = new URL(request.url).searchParams.get('property') ?? '';
+    if (property === '') return problem(400, 'property is required (1-255 characters)');
+    const held = (USER_PROFILE_FIXTURE.profile as Record<string, unknown>)[property];
+    const response: ListUserPropertyValuesResponse = {
+      values: held === undefined || held === null ? [] : [String(held)],
+    };
     return HttpResponse.json(response);
   }),
 

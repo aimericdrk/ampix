@@ -23,6 +23,10 @@ import type {
   DashboardDataResponse,
   DashboardTile,
   DeletedEventResult,
+  ListUserPropertiesResponse,
+  ListUserPropertyValuesResponse,
+  UserFilter,
+  UserIdentityFilter,
   EngagementResponse,
   EraseUserResult,
   ExperimentQueryDefinition,
@@ -405,17 +409,52 @@ export function useLiveEvents(projectId: string, source?: EventSource) {
 
 const USERS_PAGE_SIZE = 20;
 
-export function useUsersList(projectId: string, search: string) {
+/**
+ * The audience list. `filters` are profile-property conditions (age, gender, city — whatever the
+ * app has set) and `identity` splits the people we hold properties for from the ids we hold
+ * nothing about; both travel in the query key, so changing either refetches from page 1 rather
+ * than appending onto rows selected under the previous filter.
+ */
+export function useUsersList(
+  projectId: string,
+  search: string,
+  filters: UserFilter[] = [],
+  identity: UserIdentityFilter = 'all',
+) {
   return useInfiniteQuery({
-    queryKey: ['analytics', projectId, 'users', search],
+    queryKey: ['analytics', projectId, 'users', search, filters, identity],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) => {
-      const cursor = pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : '';
-      return apiFetch<ListUsersResponse>(
-        `${base(projectId)}/users?search=${encodeURIComponent(search)}&limit=${USERS_PAGE_SIZE}${cursor}`,
-      );
+      const params = new URLSearchParams({ search, limit: String(USERS_PAGE_SIZE) });
+      if (pageParam) params.set('cursor', pageParam);
+      if (filters.length > 0) params.set('filters', JSON.stringify(filters));
+      if (identity !== 'all') params.set('identity', identity);
+      return apiFetch<ListUsersResponse>(`${base(projectId)}/users?${params.toString()}`);
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  });
+}
+
+/** `GET /users/properties` — what the audience filter bar offers to filter on. */
+export function useUserProperties(projectId: string) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'user-properties'],
+    queryFn: () => apiFetch<ListUserPropertiesResponse>(`${base(projectId)}/users/properties`),
+  });
+}
+
+/**
+ * `GET /users/property-values` — the values one profile property actually takes, so the filter's
+ * value box can suggest them. Disabled until a property is picked; nothing to ask for before then.
+ */
+export function useUserPropertyValues(projectId: string, property: string) {
+  return useQuery({
+    queryKey: ['analytics', projectId, 'user-property-values', property],
+    enabled: property !== '',
+    queryFn: () =>
+      apiFetch<ListUserPropertyValuesResponse>(
+        `${base(projectId)}/users/property-values?property=${encodeURIComponent(property)}`,
+      ),
   });
 }
 

@@ -549,6 +549,32 @@ export interface EraseUserResult {
   revenueCatWebhookEvents: number;
 }
 
+/** `GET /users/properties` — the profile keys this project holds, most common first. */
+export interface ListUserPropertiesResponse {
+  properties: Array<{ property: string; users: number }>;
+}
+
+/** `GET /users/property-values?property=` — the distinct values that profile property takes. */
+export interface ListUserPropertyValuesResponse {
+  values: string[];
+}
+
+/**
+ * One audience filter: a profile property, an operator, and (unless the op is `is_set` /
+ * `is_not_set`) the value to compare against. Sent to `GET /users` as JSON in `filters`.
+ */
+export interface UserFilter {
+  property: string;
+  op: InsightsFilterOp;
+  value?: string;
+}
+
+/**
+ * `GET /users?identity=` — everyone, only the people we hold profile properties for, or only the
+ * ids we hold nothing about (the rows that show as a bare id with no name).
+ */
+export type UserIdentityFilter = 'all' | 'identified' | 'anonymous';
+
 /**
  * `DELETE /users/:distinctId/events/:insertId` — the single timeline row that was removed, echoed
  * back as the server stored it.
@@ -588,6 +614,12 @@ export interface UserEventContext {
 export interface UserRecentEvent {
   insert_id: string;
   event: string;
+  /**
+   * `client` (a device running the SDK) or `server` (one of your backends, or a RevenueCat
+   * webhook). The timeline badges the server rows and leaves them out of its session arithmetic —
+   * they have no device and no session behind them.
+   */
+  source: EventSource;
   timestamp: string;
   /** The SDK session this event belongs to; a change between events means the app was reopened. */
   session_id: string;

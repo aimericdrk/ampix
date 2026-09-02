@@ -112,26 +112,47 @@ function formatGap(ms: number): string {
 const LONG_PAUSE_MS = 30 * 60 * 1000;
 
 /**
- * Why the timeline should break between `events[index - 1]` (newer) and `events[index]` (older),
- * or null for no break. `events` is newest-first, so the gap runs from the older row up to the
- * newer one.
+ * Where the timeline breaks, keyed by the index of the OLDER event of each pair (the row the
+ * marker is drawn above). `events` is newest-first, so a break sits between `events[i]` and the
+ * nearest newer event above it.
  *
- * `session` is the stronger signal: the SDK rotates the session id when the app comes back from
- * the background, so it is a real quit-and-return even if the clock gap is short. It is read off
- * the id rather than off `$app_open`, so it still shows for users whose lifecycle autocapture
- * never fired. An empty session id (server-side events, or events from before the SDK carried
- * one) is "unknown" and never a boundary — inventing a reopen out of missing data is worse than
+ * SERVER events are skipped entirely — they neither create a break nor interrupt the pair either
+ * side of them. A backend-written row (a like received, a message, a RevenueCat webhook) has no
+ * device and no session behind it: it carries the nil session id and it lands whenever the server
+ * felt like writing it, typically ahead of the client that is about to report the same moment.
+ * Counting those rows produced a "left the app / came back" marker between two events of one
+ * uninterrupted sitting, which is the opposite of what the marker is for.
+ *
+ * `session` is the stronger signal among the client rows: the SDK rotates the session id when the
+ * app comes back from the background, so it is a real quit-and-return even if the clock gap is
+ * short. It is read off the id rather than off `$app_open`, so it still shows for users whose
+ * lifecycle autocapture never fired. An empty session id (events from before the SDK carried one)
+ * is "unknown" and never a boundary — inventing a reopen out of missing data is worse than
  * showing none.
  */
-function timelineBreakBefore(
-  events: UserRecentEvent[],
-  index: number,
-): { kind: 'session' | 'pause'; awayMs: number; resumedAt: string } | null {
-  if (index === 0) return null;
-  const older = events[index];
-  const newer = events[index - 1];
-  if (!older || !newer) return null;
+interface TimelineBreak {
+  kind: 'session' | 'pause';
+  awayMs: number;
+  resumedAt: string;
+}
 
+function sessionBreaks(events: UserRecentEvent[]): Map<number, TimelineBreak> {
+  const breaks = new Map<number, TimelineBreak>();
+  // The newest client event seen so far while walking newest→oldest; -1 until the first one.
+  let newerClientIndex = -1;
+  events.forEach((event, index) => {
+    if (event.source === 'server') return;
+    if (newerClientIndex !== -1) {
+      const gap = breakBetween(events[newerClientIndex]!, event);
+      if (gap) breaks.set(index, gap);
+    }
+    newerClientIndex = index;
+  });
+  return breaks;
+}
+
+/** The break between one client event and the client event immediately before it, or null. */
+function breakBetween(newer: UserRecentEvent, older: UserRecentEvent): TimelineBreak | null {
   const awayMs = new Date(newer.timestamp).getTime() - new Date(older.timestamp).getTime();
   const knownSessions = Boolean(older.session_id) && Boolean(newer.session_id);
   if (knownSessions && older.session_id !== newer.session_id) {
@@ -321,6 +342,9 @@ export function UserProfileModal({
   );
   const selectedEvent = events.find((e) => e.insert_id === selectedId) ?? events[0];
   const firstSubIndex = useMemo(() => firstSubscribedIndex(events), [events]);
+  // Computed once per page of events rather than per row: the break for a row depends on the
+  // nearest CLIENT event above it, which a per-row `events[index - 1]` look-back cannot see.
+  const breaks = useMemo(() => sessionBreaks(events), [events]);
 
   // Country: prefer the profile row (set via people.set); otherwise fall back to the most recent
   // event carrying a `country` super property (registerSuperProperties rides on events, not the
@@ -676,8 +700,9 @@ export function UserProfileModal({
                           {events.map((event, index) => {
                             const isSelected = event.insert_id === selectedEvent?.insert_id;
                             const isRcEvent = isSubscriptionEvent(event.event);
+                            const isServerEvent = event.source === 'server';
                             const lifecycleLabel = LIFECYCLE_LABELS[event.event];
-                            const timelineBreak = timelineBreakBefore(events, index);
+                            const timelineBreak = breaks.get(index);
                             return (
                               <Fragment key={event.insert_id}>
                                 {index === firstSubIndex && (
@@ -719,11 +744,12 @@ export function UserProfileModal({
                                     aria-hidden
                                     className={cn(
                                       'absolute -left-[1.3125rem] top-2.5 h-2.5 w-2.5 rounded-full border-2 border-surface',
-                                      isSelected
-                                        ? 'bg-accent ring-2 ring-accent/30'
-                                        : isRcEvent
-                                          ? 'bg-accent ring-2 ring-accent/20'
-                                          : 'bg-accent',
+                                      // Server rows read as a different kind of thing at a glance,
+                                      // before the badge is even read: they are not this person
+                                      // using the app, they are your backend writing about them.
+                                      isServerEvent ? 'bg-info' : 'bg-accent',
+                                      isSelected && 'ring-2 ring-accent/30',
+                                      !isSelected && isRcEvent && 'ring-2 ring-accent/20',
                                     )}
                                   />
                                   <button
@@ -754,6 +780,9 @@ export function UserProfileModal({
                                         <Badge variant="outline">{event.screen_name}</Badge>
                                       )}
                                       {isRcEvent && <Badge variant="accent">subscription</Badge>}
+                                      {/* Same label and variant the live feed uses, so one word
+                                          means the same thing on both screens. */}
+                                      {isServerEvent && <Badge variant="info">server</Badge>}
                                     </div>
                                     <div className="text-xs text-text-muted">
                                       {new Date(event.timestamp).toLocaleString()}
@@ -1001,6 +1030,7 @@ function EventDetail({
             entries={[
               ['insert_id', event.insert_id],
               ['event', event.event],
+              ['source', event.source],
               ['timestamp', new Date(event.timestamp).toLocaleString()],
               ...(event.screen_name ? [['screen_name', event.screen_name] as [string, unknown]] : []),
             ]}

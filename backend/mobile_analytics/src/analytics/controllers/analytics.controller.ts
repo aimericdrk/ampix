@@ -37,6 +37,8 @@ import type {
   RevenueSummaryResponse,
   SessionsSummaryResponse,
   UserEventsResponse,
+  UserPropertiesResponse,
+  UserPropertyValuesResponse,
   UserProfileResponse,
   UsersResponse,
 } from '../analytics.types';
@@ -114,6 +116,12 @@ export class AnalyticsController {
     return this.analytics.getLiveEvents(req.user!.id, projectId, limit, before, source);
   }
 
+  /**
+   * The audience list. Beyond `search`, it narrows by profile properties (`filters`, a JSON array
+   * of `{property, op, value}` evaluated against `user_profiles`) and by `identity` —
+   * `identified` = we hold at least one profile property for them, `anonymous` = its complement,
+   * which is what an operator means by "the ones showing as a bare id".
+   */
   @Get('users')
   async users(
     @Req() req: AuthRequest,
@@ -121,8 +129,40 @@ export class AnalyticsController {
     @Query('search') search?: string,
     @Query('limit') limit?: string,
     @Query('cursor') cursor?: string,
+    @Query('filters') filters?: string,
+    @Query('identity') identity?: string,
   ): Promise<UsersResponse> {
-    return this.analytics.listUsers(req.user!.id, projectId, search, limit, cursor);
+    return this.analytics.listUsers(
+      req.user!.id,
+      projectId,
+      search,
+      limit,
+      cursor,
+      filters,
+      identity,
+    );
+  }
+
+  /**
+   * Declared BEFORE `users/:distinctId` for the same reason `users/hidden` is: Nest matches in
+   * declaration order, and the param route would otherwise answer these with the profile of a user
+   * literally named "properties".
+   */
+  @Get('users/properties')
+  async userProperties(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+  ): Promise<UserPropertiesResponse> {
+    return this.analytics.listUserProperties(req.user!.id, projectId);
+  }
+
+  @Get('users/property-values')
+  async userPropertyValues(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Query('property') property?: string,
+  ): Promise<UserPropertyValuesResponse> {
+    return this.analytics.listUserPropertyValues(req.user!.id, projectId, property);
   }
 
   /**

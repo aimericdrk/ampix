@@ -21,12 +21,13 @@ import { Input } from '../../../components/ui/input';
 import { Reveal } from '../../../components/ui/reveal';
 import { useToast } from '../../../components/ui/toast';
 import { ApiError } from '../../../lib/api/problem';
-import type { UserListItem } from '../../../lib/api/types';
+import type { UserFilter, UserIdentityFilter, UserListItem } from '../../../lib/api/types';
 import { formatExactNumber } from '../format';
 import { contactFromListItem } from '../user-identity';
 import { useHiddenUsers, useUnhideUser, useUsersList } from '../api';
 import { PageShell } from '../../../components/layout/PageShell';
 import { RemoveUserDialog } from './RemoveUserDialog';
+import { UserFilterBar } from './UserFilterBar';
 import { UserProfileModal } from './UserProfileModal';
 
 /** Monogram for the avatar — initials from the name, falling back to the distinct id. */
@@ -75,6 +76,10 @@ export function UsersPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  // The audience narrowing: who to show (profile data or not) and the profile-property conditions.
+  // Only COMPLETE filter rows reach here — see UserFilterBar.
+  const [identity, setIdentity] = useState<UserIdentityFilter>('all');
+  const [filters, setFilters] = useState<UserFilter[]>([]);
   // The user whose profile modal is open, or null when closed. Seeded from the URL so a deep-link
   // lands with the modal already open over the list.
   const [openDistinctId, setOpenDistinctId] = useState<string | null>(routeDistinctId ?? null);
@@ -82,7 +87,7 @@ export function UsersPage() {
   // (not just the id) so the dialog can name the person rather than echo an opaque id back at them.
   const [removing, setRemoving] = useState<UserListItem | null>(null);
   const { data, isPending, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useUsersList(projectId, search);
+    useUsersList(projectId, search, filters, identity);
   const hiddenUsers = useHiddenUsers(projectId);
   const unhideUser = useUnhideUser(projectId);
   const { toast } = useToast();
@@ -157,13 +162,22 @@ export function UsersPage() {
         </form>
       </Reveal>
 
+      <Reveal index={1}>
+        <UserFilterBar
+          projectId={projectId}
+          identity={identity}
+          onIdentityChange={setIdentity}
+          onFiltersChange={setFilters}
+        />
+      </Reveal>
+
       {isPending && (
-        <Reveal index={1}>
+        <Reveal index={2}>
           <p role="status">Loading users…</p>
         </Reveal>
       )}
       {isError && (
-        <Reveal index={1}>
+        <Reveal index={2}>
           <p role="alert" className="text-danger">
             {error instanceof ApiError ? error.problem.title : 'Failed to load users'}
           </p>
@@ -171,13 +185,20 @@ export function UsersPage() {
       )}
 
       {!isPending && !isError && users.length === 0 && (
-        <Reveal index={1}>
-          <EmptyState icon={Inbox} title="No users found." />
+        <Reveal index={2}>
+          <EmptyState
+            icon={Inbox}
+            title={
+              filters.length > 0 || identity !== 'all'
+                ? 'No users match these filters.'
+                : 'No users found.'
+            }
+          />
         </Reveal>
       )}
 
       {users.length > 0 && (
-        <Reveal index={1} className="flex flex-col gap-3">
+        <Reveal index={2} className="flex flex-col gap-3">
           <ul aria-label="Users" className="flex flex-col gap-3">
             {users.map((user) => (
               <li

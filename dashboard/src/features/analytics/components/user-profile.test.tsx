@@ -259,11 +259,13 @@ describe('UserProfilePage', () => {
       await screen.findByRole('button', { name: 'Activity timeline' })
     ).closest('.rounded-xl')! as HTMLElement;
 
-    // The fixture's two sessions split at 09:58 → 09:59, so exactly one break is shown, and it
-    // reports the gap between the last event of one visit and the first of the next.
+    // The fixture's two sessions split between the CLIENT rows at 09:58 (sess-1) and 10:00
+    // (sess-2), so exactly one break is shown. The 09:59 RevenueCat row sits between them but is
+    // server-written — it has no device behind it, so it neither creates the break nor shortens
+    // the gap the reader is shown.
     const breaks = within(timeline).getAllByText(/App closed/);
     expect(breaks).toHaveLength(1);
-    expect(breaks[0]).toHaveTextContent('1m 00s');
+    expect(breaks[0]).toHaveTextContent('2m 00s');
     expect(breaks[0]).toHaveTextContent('reopened');
   });
 
@@ -417,6 +419,73 @@ describe('UserProfilePage', () => {
 
     await screen.findByRole('heading', { name: 'user-001' });
     await waitFor(() => expect(screen.queryByText('Subscription')).not.toBeInTheDocument());
+  });
+});
+
+describe('Client vs server events in the timeline', () => {
+  it('badges the backend-written rows and leaves the device rows unmarked', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+
+    // The fixture's two RevenueCat rows are the server-written ones.
+    const serverBadges = within(timeline).getAllByText('server');
+    expect(serverBadges).toHaveLength(
+      USER_PROFILE_FIXTURE.recent_events.filter((e) => e.source === 'server').length,
+    );
+    const clientRow = within(timeline).getByText('checkout_completed').closest('li')!;
+    expect(within(clientRow as HTMLElement).queryByText('server')).not.toBeInTheDocument();
+  });
+
+  it('never breaks the timeline around a server event, however late it lands', async () => {
+    // The case that made this necessary: a backend writes "like received" for a user the moment it
+    // happens, while the device reports the same sitting later. Counting that row split one visit
+    // into two and produced a stream of fake "App closed" markers.
+    const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    const rows = [
+      { insert_id: 'c2', event: 'tapped', timestamp: '2026-07-01T10:02:00.000Z', session_id: 'one', source: 'client', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 's1', event: 'like_received', timestamp: '2026-07-01T10:01:00.000Z', session_id: '', source: 'server', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 'c1', event: 'opened', timestamp: '2026-07-01T10:00:00.000Z', session_id: 'one', source: 'client', screen_name: null, properties: {}, context: ctx },
+    ];
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json({ events: rows, next_before: null }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    await within(timeline).findByText('like_received');
+    // One unbroken sitting: the two client rows share a session and are two minutes apart.
+    expect(within(timeline).queryByText(/App closed|Paused/)).not.toBeInTheDocument();
+  });
+
+  it('still breaks between client rows that a server row happens to sit between', async () => {
+    const ctx = USER_PROFILE_FIXTURE.recent_events[0]!.context;
+    const rows = [
+      { insert_id: 'c2', event: 'tapped', timestamp: '2026-07-01T12:00:00.000Z', session_id: 'two', source: 'client', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 's1', event: 'like_received', timestamp: '2026-07-01T11:30:00.000Z', session_id: '', source: 'server', screen_name: null, properties: {}, context: ctx },
+      { insert_id: 'c1', event: 'opened', timestamp: '2026-07-01T10:00:00.000Z', session_id: 'one', source: 'client', screen_name: null, properties: {}, context: ctx },
+    ];
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json({ events: rows, next_before: null }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    // The gap the reader is shown is the real one, device to device: 10:00 → 12:00.
+    expect(await within(timeline).findByText(/App closed/)).toHaveTextContent('2h 00m');
   });
 });
 

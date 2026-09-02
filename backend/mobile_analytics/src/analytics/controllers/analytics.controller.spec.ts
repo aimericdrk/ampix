@@ -192,7 +192,15 @@ describe('AnalyticsController', () => {
 
       const result = await controller.users(fakeRequest(), 'p1', 'alice', '20', 'u5');
 
-      expect(analytics.listUsers).toHaveBeenCalledWith(USER.id, 'p1', 'alice', '20', 'u5');
+      expect(analytics.listUsers).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        'alice',
+        '20',
+        'u5',
+        undefined,
+        undefined,
+      );
       expect(result).toEqual(response);
     });
   });

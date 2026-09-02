@@ -12,6 +12,8 @@ import type {
   SessionsSummaryResponse,
   UserEventsResponse,
   UserProfileResponse,
+  UserPropertiesResponse,
+  UserPropertyValuesResponse,
   UsersResponse,
 } from '../analytics.types';
 import { InsightsQueryService } from './insights-query.service';
@@ -95,8 +97,30 @@ export class AnalyticsService {
     searchRaw?: string,
     limitRaw?: string,
     cursorRaw?: string,
+    filtersRaw?: string,
+    identityRaw?: string,
   ): Promise<UsersResponse> {
-    return this.users.listUsers(userId, projectId, searchRaw, limitRaw, cursorRaw);
+    return this.users.listUsers(
+      userId,
+      projectId,
+      searchRaw,
+      limitRaw,
+      cursorRaw,
+      filtersRaw,
+      identityRaw,
+    );
+  }
+
+  async listUserProperties(userId: string, projectId: string): Promise<UserPropertiesResponse> {
+    return this.users.listUserProperties(userId, projectId);
+  }
+
+  async listUserPropertyValues(
+    userId: string,
+    projectId: string,
+    propertyRaw?: string,
+  ): Promise<UserPropertyValuesResponse> {
+    return this.users.listUserPropertyValues(userId, projectId, propertyRaw);
   }
 
   async getUserProfile(

@@ -199,6 +199,58 @@ describe('AnalyticsService', () => {
       expect(result).toEqual({ events: ['checkout_completed', 'product_viewed'] });
     });
 
+    it('narrows by a profile property, binding both the key and the value', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(
+        USER_ID,
+        PROJECT_ID,
+        undefined,
+        undefined,
+        undefined,
+        '[{"property":"gender","op":"eq","value":"female"}]',
+      );
+
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('{userFilterKey0:String}');
+      expect(sql).toContain('FROM user_profiles FINAL');
+      expect(params).toMatchObject({ userFilterKey0: 'gender', userFilterVal0: 'female' });
+      // The filter follows the merged person, not whichever id holds the profile row.
+      expect(sql).toContain('coalesce(aliases.canonical_id, e.distinct_id) IN (');
+    });
+
+    it('splits identified from anonymous on whether ANY profile property is held', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID, undefined, undefined, undefined, undefined, 'anonymous');
+
+      const [sql] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('coalesce(aliases.canonical_id, e.distinct_id) NOT IN (');
+      expect(sql).toContain('JSONExtractKeys');
+    });
+
+    it('adds no identity clause at all for the default "all"', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await service.listUsers(USER_ID, PROJECT_ID);
+
+      const [sql] = clickhouse.query.mock.calls[0];
+      expect(sql).not.toContain('JSONExtractKeys');
+    });
+
+    it('rejects a malformed filter with a 400 before touching ClickHouse', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await expect(
+        service.listUsers(USER_ID, PROJECT_ID, undefined, undefined, undefined, '{not json'),
+      ).rejects.toMatchObject({ problem: { status: 400 } });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+
     it('propagates a membership rejection without querying ClickHouse', async () => {
       const clickhouse = makeClickhouse();
       const projects = makeProjects(() =>
@@ -611,6 +663,51 @@ describe('AnalyticsService', () => {
     });
   });
 
+  describe('listUserProperties / listUserPropertyValues', () => {
+    it('lists the profile keys the project holds, most common first, dropping empties', async () => {
+      const clickhouse = makeClickhouse([
+        [
+          { property: 'gender', users: '120' },
+          { property: 'age', users: '80' },
+          { property: '', users: '3' },
+        ],
+      ]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.listUserProperties(USER_ID, PROJECT_ID);
+
+      expect(result.properties).toEqual([
+        { property: 'gender', users: 120 },
+        { property: 'age', users: 80 },
+      ]);
+      const [sql] = clickhouse.query.mock.calls[0];
+      expect(sql).toContain('FROM user_profiles FINAL');
+    });
+
+    it('reads a property\'s values as RAW json, so a numeric one is not read as empty', async () => {
+      const clickhouse = makeClickhouse([[{ value: '36' }, { value: '42' }]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      const result = await service.listUserPropertyValues(USER_ID, PROJECT_ID, 'age');
+
+      expect(result.values).toEqual(['36', '42']);
+      const [sql, params] = clickhouse.query.mock.calls[0];
+      // JSONExtractString would read `age: 36` as '' — the values list would silently be empty.
+      expect(sql).toContain('JSONExtractRaw');
+      expect(params).toMatchObject({ property: 'age' });
+    });
+
+    it('400s a missing property rather than scanning every profile', async () => {
+      const clickhouse = makeClickhouse([[]]);
+      const service = makeService(clickhouse, makeProjects());
+
+      await expect(service.listUserPropertyValues(USER_ID, PROJECT_ID, '  ')).rejects.toMatchObject({
+        problem: { status: 400 },
+      });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getUserProfile', () => {
     const DISTINCT_ID = 'u1';
 
@@ -645,6 +742,7 @@ describe('AnalyticsService', () => {
             network: 'wifi',
             sdk_version: '0.1.2',
             ip: '203.0.113.7',
+            source: 'client',
           },
           {
             insert_id: 'i1',
@@ -711,6 +809,7 @@ describe('AnalyticsService', () => {
               sdk_version: '0.1.2',
               ip: '203.0.113.7',
             },
+            source: 'client',
           },
           {
             insert_id: 'i1',
@@ -736,6 +835,9 @@ describe('AnalyticsService', () => {
               // the dashboard would render as a blank "IP address" row instead of omitting it.
               ip: '',
             },
+            // The fixture row carries no `source` at all; anything the resolver did not call
+            // 'server' is a device, so it reads back as 'client' rather than as undefined.
+            source: 'client',
           },
         ],
         // §17 identity set: the canonical id plus its aliased anon_id.

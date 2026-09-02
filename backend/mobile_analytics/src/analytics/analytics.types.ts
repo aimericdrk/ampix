@@ -76,6 +76,19 @@ export interface UsersResponse {
   next_cursor: string | null;
 }
 
+/**
+ * `GET /users/properties` — the profile property keys this project holds, with how many people
+ * carry each, most common first. Feeds the audience filter bar's property picker.
+ */
+export interface UserPropertiesResponse {
+  properties: Array<{ property: string; users: number }>;
+}
+
+/** `GET /users/property-values?property=` — the distinct values that property takes. */
+export interface UserPropertyValuesResponse {
+  values: string[];
+}
+
 /** One entry of `GET /users/hidden` — a user removed from the audience surfaces, reversibly. */
 export interface HiddenUserListItem {
   /** The CANONICAL id (§17) that was hidden — resolved at hide time, not the id that was clicked. */
@@ -124,6 +137,12 @@ export interface RecentEventContext {
 export interface RecentEvent {
   insert_id: string;
   event: string;
+  /**
+   * 'client' (a device running the SDK) or 'server' (one of your backends, or a RevenueCat
+   * webhook) — see EVENT_SOURCE_EXPR. A server-written row has no device and no session behind it,
+   * which is why the timeline both marks it and excludes it from its session arithmetic.
+   */
+  source: string;
   timestamp: string;
   /**
    * The SDK's session id. Consecutive events sharing one are a single visit to the app; a change

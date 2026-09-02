@@ -584,6 +584,24 @@ backends expose `/api/v1/projects/:id/…` and can't share an origin). Project *
 page that talks to both: *SDK tokens* reads `mobile_analytics`, *Server keys (purchases)* reads
 `mobile_purchase` — see §6.1.2 and §6.2.1.
 
+**The Users page** narrows the audience two ways, side by side above the list. **Show** splits the
+people the project holds profile properties for from the ids it holds nothing about — the rows that
+read as a bare id, which is what "anonymous" means on this screen (a backend-written user id with
+no `people.set` behind it is anonymous here, however real the person is). **Add filter** then
+narrows by any profile property the project actually has — `age`, `gender`, `city`, a plan —
+offered from the data (`GET /users/properties`) rather than from a hardcoded list, with the values
+that property really takes suggested in the box (`GET /users/property-values`). Both travel to
+`GET /users` as `identity=` and `filters=` (a JSON array of `{property, op, value}`), are evaluated
+against the CANONICAL id so a filter follows a merged person, and bind every property name and
+value as a ClickHouse param (`analytics/support/user-filters.ts`).
+
+**A user's activity timeline** marks each row `client` or `server` — a badge and a different dot
+colour — and, more consequentially, computes its "App closed / Paused" markers from the CLIENT rows
+only. A backend-written row has no device and no session behind it: it carries the nil session id
+and it lands whenever the server chose to write it, usually ahead of the device reporting the same
+moment. Counting those rows split one uninterrupted sitting into several and produced a stream of
+"they left and came back" markers that never happened.
+
 **Navigation** is split into two tool groups: **MyAmplitude** (analytics — Home, insights,
 funnels, retention, user paths, heatmaps, experiments, cohorts, attribution, dashboards) and **MyRevenueCat** (billing —
 Overview, Conversion, Customers, Products, Offerings, Entitlements, Settings). The MyRevenueCat

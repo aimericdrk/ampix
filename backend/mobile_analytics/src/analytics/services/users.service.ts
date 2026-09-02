@@ -5,6 +5,8 @@ import type {
   LiveEventsResponse,
   RecentEvent,
   UserEventsResponse,
+  UserPropertiesResponse,
+  UserPropertyValuesResponse,
   UserProfileResponse,
   UsersResponse,
 } from '../analytics.types';
@@ -12,6 +14,12 @@ import { ProblemException } from '../../common/problem-details';
 import { ALIASES_CTE, canonicalization, RESOLVE_CANONICAL_ID_SQL } from '../support/identity';
 import { clampLimit, parseEventSourceParam, parseIsoInstantParam } from '../support/read-query.util';
 import { EVENT_SOURCE_EXPR } from '../support/property-resolver';
+import {
+  compileUserFilters,
+  compileUserIdentityFilter,
+  parseUserFilters,
+  parseUserIdentityFilter,
+} from '../support/user-filters';
 import { UserAdminService } from './user-admin.service';
 import {
   firstProfileStringExpr,
@@ -69,6 +77,7 @@ interface RecentEventRow {
   network: string;
   sdk_version: string;
   ip: string;
+  source: string;
 }
 
 /**
@@ -84,7 +93,13 @@ const RECENT_EVENT_COLUMNS = `e.insert_id AS insert_id, e.event AS event, e.time
                 e.app_build AS app_build, e.device_model AS device_model,
                 e.device_manufacturer AS device_manufacturer, e.locale AS locale,
                 e.timezone AS timezone, e.network AS network, e.sdk_version AS sdk_version,
-                e.ip AS ip`;
+                e.ip AS ip,
+                ${EVENT_SOURCE_EXPR} AS source`;
+
+/** Ceilings for the audience filter bar's two discovery lists — the property picker is a menu, not
+ *  a data export, and both read a table whose row count is the project's user count. */
+const MAX_USER_PROPERTIES = 200;
+const MAX_USER_PROPERTY_VALUES = 200;
 
 /** How many timeline rows one page holds — the first page and every `load more` after it. */
 const USER_EVENTS_PAGE_SIZE = 50;
@@ -209,9 +224,15 @@ export class UsersService {
     searchRaw?: string,
     limitRaw?: string,
     cursorRaw?: string,
+    filtersRaw?: string,
+    identityRaw?: string,
   ): Promise<UsersResponse> {
     await this.projects.assertMembership(userId, projectId);
     const limit = clampLimit(limitRaw);
+    // Both are validated BEFORE the membership-checked query runs, so a malformed filter is a 400
+    // about the filter rather than a ClickHouse error about a query the caller never wrote.
+    const filters = parseUserFilters(filtersRaw);
+    const identity = parseUserIdentityFilter(identityRaw);
     const canon = canonicalization();
     const hiddenIds = await this.hidden.hiddenIds(projectId);
 
@@ -243,6 +264,12 @@ export class UsersService {
       params.cursor = cursorRaw;
       whereClauses.push(`${canon.uid} > {cursor:String}`);
     }
+    // Profile filters and the identity switch are evaluated against the CANONICAL id, so a filter
+    // matches the merged person rather than whichever of their ids the profile row happens to be
+    // keyed on. Every property name and value binds as a param (see user-filters.ts).
+    whereClauses.push(...compileUserFilters(filters, canon.uid, params));
+    const identityClause = compileUserIdentityFilter(identity, canon.uid);
+    if (identityClause !== '') whereClauses.push(identityClause);
 
     const rows = await this.clickhouse.query<UserRow>(
       `WITH ${canon.cte}
@@ -279,6 +306,67 @@ export class UsersService {
     }));
 
     return { users, next_cursor: hasMore ? page[page.length - 1].distinct_id : null };
+  }
+
+  /**
+   * GET /users/properties — the profile property keys this project actually holds, most common
+   * first, so the audience filter bar offers what an app has really set (`age`, `gender`, `city`,
+   * a plan, whatever `people.set` was called with) instead of a hardcoded guess.
+   *
+   * Read straight off `user_profiles`, not from events: these are the person's properties, and the
+   * filters they feed run against the same table. A viewer-level read, like the other meta lists.
+   */
+  async listUserProperties(userId: string, projectId: string): Promise<UserPropertiesResponse> {
+    await this.projects.assertMembership(userId, projectId);
+    const rows = await this.clickhouse.query<{ property: string; users: string }>(
+      `SELECT arrayJoin(JSONExtractKeys(toJSONString(properties))) AS property,
+              count() AS users
+       FROM user_profiles FINAL
+       WHERE project_id = {projectId:UUID}
+       GROUP BY property
+       ORDER BY users DESC, property ASC
+       LIMIT ${MAX_USER_PROPERTIES}`,
+      { projectId },
+    );
+    return {
+      properties: rows
+        .filter((row) => row.property !== '')
+        .map((row) => ({ property: row.property, users: Number(row.users) })),
+    };
+  }
+
+  /**
+   * GET /users/property-values?property= — the distinct values one profile property takes, so the
+   * filter bar can offer "female / male / …" rather than making an operator guess the spelling.
+   *
+   * `JSONExtractRaw` + a quote trim rather than `JSONExtractString`, because a profile property is
+   * as often a number (`age: 36`) as a string, and `JSONExtractString` reads a number as ''. The
+   * property name binds as a param; only the limit is our own constant.
+   */
+  async listUserPropertyValues(
+    userId: string,
+    projectId: string,
+    propertyRaw?: string,
+  ): Promise<UserPropertyValuesResponse> {
+    await this.projects.assertMembership(userId, projectId);
+    const property = (propertyRaw ?? '').trim();
+    if (property === '' || property.length > 255) {
+      throw new ProblemException({
+        status: 400,
+        title: 'Bad Request',
+        detail: 'property is required (1-255 characters)',
+      });
+    }
+    const rows = await this.clickhouse.query<{ value: string }>(
+      `SELECT DISTINCT trim(BOTH '"' FROM JSONExtractRaw(toJSONString(properties), {property:String})) AS value
+       FROM user_profiles FINAL
+       WHERE project_id = {projectId:UUID}
+         AND value != ''
+       ORDER BY value ASC
+       LIMIT ${MAX_USER_PROPERTY_VALUES}`,
+      { projectId, property },
+    );
+    return { values: rows.map((row) => row.value) };
   }
 
   /**
@@ -469,6 +557,9 @@ function toRecentEvent(row: RecentEventRow): RecentEvent {
   return {
     insert_id: row.insert_id,
     event: row.event,
+    // Anything the resolver did not classify as 'server' is a device: the timeline uses this to
+    // badge backend-written rows and to keep them OUT of the session/pause arithmetic.
+    source: row.source === 'server' ? 'server' : 'client',
     timestamp: fromChDateTime64(row.timestamp),
     session_id: sessionId === NIL_SESSION_ID ? '' : sessionId,
     screen_name: row.screen_name || null,

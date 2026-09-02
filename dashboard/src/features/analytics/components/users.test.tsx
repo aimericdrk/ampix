@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { authStore } from '../../auth/store';
 import {
   TEST_PROJECT,
@@ -9,6 +9,7 @@ import {
   USERS_FIXTURE,
   VALID_ACCESS_TOKEN,
 } from '../../../test/msw/handlers';
+import { server } from '../../../test/msw/server';
 import { renderApp } from '../../../test/render-app';
 
 function signIn() {
@@ -117,5 +118,86 @@ describe('UsersPage', () => {
     for (const name of eventNames) {
       expect(within(dialog).getAllByText(name).length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('Audience filters', () => {
+  /** Every `GET /users` URL the page requests, recorded without replacing the handler. */
+  function recordUsersRequests(): URL[] {
+    const seen: URL[] = [];
+    server.events.on('request:start', ({ request }) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/users')) seen.push(url);
+    });
+    return seen;
+  }
+
+  afterEach(() => server.events.removeAllListeners());
+
+  it('narrows to the people with no profile data when "anonymous" is chosen', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users`);
+    const list = await screen.findByRole('list', { name: 'Users' });
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(20));
+
+    await userEvent.selectOptions(screen.getByLabelText('Show'), 'anonymous');
+
+    // `user-001` is the only fixture user with profile data, so they are the one row that leaves.
+    await waitFor(() => expect(screen.queryByText('Alex Chen')).not.toBeInTheDocument());
+    expect(
+      within(screen.getByRole('list', { name: 'Users' })).getAllByRole('listitem').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('sends a profile-property filter once the row is complete, and not before', async () => {
+    const seen = recordUsersRequests();
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users`);
+    await screen.findByRole('list', { name: 'Users' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add filter' }));
+    // A row with no value yet must not narrow anything — otherwise the list would empty itself
+    // between picking a property and finishing the word.
+    expect(seen.every((url) => url.searchParams.get('filters') === null)).toBe(true);
+
+    await userEvent.selectOptions(screen.getByLabelText('Filter 1 property'), 'gender');
+    await userEvent.type(screen.getByLabelText('Filter 1 value'), 'female');
+    await userEvent.tab();
+
+    await waitFor(() => {
+      const last = seen[seen.length - 1]!;
+      expect(JSON.parse(last.searchParams.get('filters') ?? '[]')).toEqual([
+        { property: 'gender', op: 'eq', value: 'female' },
+      ]);
+    });
+  });
+
+  it('drops the filter again when the row is removed', async () => {
+    const seen = recordUsersRequests();
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users`);
+    await screen.findByRole('list', { name: 'Users' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add filter' }));
+    await userEvent.selectOptions(screen.getByLabelText('Filter 1 property'), 'gender');
+    await userEvent.type(screen.getByLabelText('Filter 1 value'), 'female');
+    await userEvent.tab();
+    await waitFor(() => expect(seen[seen.length - 1]!.searchParams.get('filters')).not.toBeNull());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove filter 1' }));
+
+    await waitFor(() => expect(seen[seen.length - 1]!.searchParams.get('filters')).toBeNull());
+  });
+
+  it('offers the profile properties the project actually holds', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users`);
+    await screen.findByRole('list', { name: 'Users' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add filter' }));
+    const property = screen.getByLabelText('Filter 1 property') as HTMLSelectElement;
+    const offered = Array.from(property.options).map((option) => option.value);
+    // Straight from the data, not a hardcoded list: whatever people.set has written.
+    expect(offered).toEqual(expect.arrayContaining(['gender', 'age', 'city']));
   });
 });
