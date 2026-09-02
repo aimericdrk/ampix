@@ -178,7 +178,9 @@ While opted out, `track()`/`people.*`/`timeEvent()` are no-ops.
 
 The SDK never sends an IP. The backend records the address each batch was **received from** on the
 event itself, and the dashboard shows it as **IP address** in a user's *Device properties* and in
-each event's detail panel. It is personal data under the GDPR, so treat it like the rest: it lives
+each event's detail panel. Only events sent with a **client** token carry one — a server token's
+connection is your own backend, not a device, so those rows store nothing rather than stamping your
+server's address onto every user it writes about. It is personal data under the GDPR, so treat it like the rest: it lives
 only on the event row, which means erasing a user (below) or deleting a single event removes it too.
 An opted-out user sends nothing at all, so there is no address to record.
 

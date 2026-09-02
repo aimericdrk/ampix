@@ -289,9 +289,11 @@ everything sent after the change.
 - **RevenueCat webhooks** are recorded as `server`: they arrive machine-to-machine, with no device
   and no ingest token involved.
 
-**The address an event came from.** Every ingested event also carries an `ip` column, taken from the
-connection the batch arrived on — never from the payload, for the same reason `source` is not: what
-an app says about itself is forgeable. The value is the LAST `X-Forwarded-For` hop (the one our own
+**The address an event came from.** Every event ingested with a **client** token also carries an `ip`
+column, taken from the connection the batch arrived on — never from the payload, for the same reason
+`source` is not: what an app says about itself is forgeable. Server-token events store `''`: that
+connection is one of your own backends, so its egress address would land on every user that backend
+writes about, under a heading ("Device properties") that claims it is the user's device. The value is the LAST `X-Forwarded-For` hop (the one our own
 edge appended; anything a client prepends sits earlier and is ignored), falling back to `X-Real-IP`
 and then the socket address, and `''` when none of those is usable. It shows up in the dashboard as
 **IP address** under a user's *Device properties* and in each event's detail panel; a row without one

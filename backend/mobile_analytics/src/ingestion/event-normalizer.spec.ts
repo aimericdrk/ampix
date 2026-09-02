@@ -179,6 +179,13 @@ describe('EventNormalizer.normalizeBatch', () => {
     expect(rows[0].properties).not.toHaveProperty('ip');
   });
 
+  it('keeps NO address for a server token — that connection is a backend, not a device', () => {
+    // Storing it would stamp one backend's egress IP onto every user it writes about, and show it
+    // in the dashboard under "Device properties" as though it were the user's own device.
+    const { rows } = normalizer.normalizeBatch(PROJECT_ID, [makeEvent()], 'server', IP, NOW);
+    expect(rows[0].ip).toBe('');
+  });
+
   it('clamps stale client timestamps to now-7d in the emitted row', () => {
     const { rows } = normalizer.normalizeBatch(
       PROJECT_ID,

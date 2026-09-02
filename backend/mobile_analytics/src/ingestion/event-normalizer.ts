@@ -37,6 +37,12 @@ export class EventNormalizer {
    * comes from the authenticated token (see SdkTokenGuard) and `ip` from the connection (see
    * clientIp), so neither is ever read off the event or its context — a client can no more claim
    * an address than it can claim to be a server.
+   *
+   * The two interact: `ip` is kept only for a CLIENT token, because only a client token is a
+   * device. A server token's connection is one of your own backends (or RevenueCat's), so storing
+   * its address would put the same egress IP on every user that backend writes about — and it
+   * would sit in the dashboard under "Device properties", where it reads as the user's device.
+   * Server-token rows therefore carry '' here, exactly as the RevenueCat webhook writer does.
    */
   normalizeBatch(
     projectId: string,
@@ -77,7 +83,8 @@ export class EventNormalizer {
       timestamp: toChDateTime64(clampTimestamp(event.timestamp, nowMs)),
       server_timestamp: toChDateTime64(nowMs),
       source,
-      ip,
+      // Only a client token is a device — see normalizeBatch.
+      ip: source === 'client' ? ip : '',
       properties: event.properties ?? {},
       app_version: str(ctx.app_version),
       app_build: str(ctx.app_build),
