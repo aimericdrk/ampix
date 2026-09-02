@@ -65,9 +65,18 @@ kubectl get pods -A
 # cert-manager (Let's Encrypt)
 helm repo add jetstack https://charts.jetstack.io && helm repo update
 helm upgrade --install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set crds.enabled=true --wait
-# Traefik: redirect HTTP→HTTPS cluster-wide (k3s re-applies this file on restart).
-# The key path is ports.web.HTTP.redirections.entryPoint — the older `ports.web.redirectTo.port`
-# form is silently IGNORED by the traefik 40.x chart k3s 1.36 ships, leaving port 80 serving plaintext.
+# Traefik: redirect HTTP→HTTPS cluster-wide, and preserve the client's source address
+# (k3s re-applies this file on restart).
+#
+# The redirect key path is ports.web.HTTP.redirections.entryPoint — the older
+# `ports.web.redirectTo.port` form is silently IGNORED by the traefik 40.x chart k3s 1.36 ships,
+# leaving port 80 serving plaintext.
+#
+# externalTrafficPolicy: Local is what makes `events.ip` real. Under the default `Cluster` policy
+# k3s ServiceLB (klipper) masquerades the source before Traefik sees it, so every request arrives
+# from the node's cni0 gateway (10.42.0.1) and every event records that one useless constant.
+# `Local`'s usual caveat — traffic to a node with no local endpoint is dropped — cannot apply on a
+# single-node cluster, where the only node is always the one running Traefik.
 sudo tee /var/lib/rancher/k3s/server/manifests/traefik-config.yaml >/dev/null <<'EOF'
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
@@ -84,6 +93,9 @@ spec:
               to: websecure
               scheme: https
               permanent: true
+    service:
+      spec:
+        externalTrafficPolicy: Local
 EOF
 kubectl -n kube-system rollout status deploy/traefik --timeout=120s
 ```
