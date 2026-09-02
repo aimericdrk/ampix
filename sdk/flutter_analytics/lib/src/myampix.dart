@@ -305,6 +305,7 @@ class MyAmpix {
     // `autocapturePurchasesEnabled` (defense in depth).
     if (config.autocapturePurchases) {
       _purchaseAutocapture = PurchaseAutocapture(
+        store: keyValueStore,
         purchaseStream: overrides?.purchaseStream,
       );
       _purchaseAutocapture!.start();
@@ -550,16 +551,24 @@ class MyAmpix {
     () => _pipeline.track(r'$identify', {r'$alias': aliasId}),
   );
 
+  /// Logout. Clears super properties, the RC link and any timed events, and
+  /// drops the identified user back to anonymous.
+  ///
+  /// Resetting an ALREADY-anonymous install keeps the existing anonymous id
+  /// rather than minting another one — see [IdentityManager.reset]. Super
+  /// properties, the RC link and timed events are cleared either way: those
+  /// are state the host registered explicitly, and it asked for them to go.
   void reset() => _guard('reset', () async {
-    await _identity.reset();
+    final reidentified = await _identity.reset();
     await _superProperties.clear();
     await _rcLink?.clear();
     _timedEvents.clear();
-    // Debug-only: reset wipes identity + super properties (so any registered `country` is GONE
-    // after this) and issues a fresh anonymous id.
+    // Debug-only: reset wipes super properties (so any registered `country` is GONE after this).
+    // `reidentified=false` means the SDK was already anonymous, so the existing anonymous id is
+    // kept — the reset had no identity to drop.
     _logger.log(
-      'reset → fresh anonymous distinctId "${_identity.distinctId}", '
-      'super properties cleared',
+      'reset → anonymous distinctId "${_identity.distinctId}" '
+      '(reidentified=$reidentified), super properties cleared',
     );
   });
 

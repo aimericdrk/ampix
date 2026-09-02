@@ -5,7 +5,7 @@ import UIKit
 /// MyAmpix native store-purchase autocapture (iOS half).
 ///
 /// Registers an `SKPaymentTransactionObserver` on the shared, process-wide
-/// `SKPaymentQueue` and forwards `.purchased`/`.restored` transactions to
+/// `SKPaymentQueue` and forwards `.purchased` transactions to
 /// Dart over the `myampix_analytics/purchases` `EventChannel`. Consumed by
 /// `lib/src/autocapture/purchase_autocapture.dart`, which re-emits them
 /// through the Dart facade as the reserved `$in_app_purchase` event.
@@ -30,10 +30,10 @@ public class MyampixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransacti
 
   private var eventSink: FlutterEventSink?
 
-  /// Transactions observed before Dart attaches a stream listener (e.g. a
-  /// restored transaction replayed at cold start, before `runApp`
-  /// completes) are buffered here and flushed as soon as `onListen` runs,
-  /// so nothing is silently dropped.
+  /// Transactions observed before Dart attaches a stream listener (the queue
+  /// replays them at cold start, before `runApp` completes) are buffered here
+  /// and flushed as soon as `onListen` runs, so nothing is silently dropped.
+  /// The replay is why Dart de-dupes: this buffer is faithful, not filtered.
   private var pendingPayloads: [[String: Any?]] = []
 
   /// Best-effort product price/currency cache, keyed by productIdentifier.
@@ -94,10 +94,22 @@ public class MyampixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransacti
 
   // MARK: - SKPaymentTransactionObserver
 
+  /// Only `.purchased` is forwarded. `.restored` is deliberately NOT: it is
+  /// what `restoreCompletedTransactions()` replays after a login or a
+  /// reinstall, and for an auto-renewable subscription that replay is the
+  /// product's ENTIRE billing history at once. Those are not sales — the
+  /// money was already reported when each renewal originally came through as
+  /// `.purchased` — so counting them would inflate revenue by however many
+  /// periods the subscriber has been paying.
+  ///
+  /// This is only half the guard. StoreKit also re-delivers `.purchased`
+  /// transactions to every newly attached observer, so a plain cold start
+  /// replays them too; the Dart side (`PurchaseAutocapture`) holds the
+  /// persisted seen-transaction set that makes each one emit exactly once.
   public func paymentQueue(_ queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
     for transaction in transactions {
       switch transaction.transactionState {
-      case .purchased, .restored:
+      case .purchased:
         forward(transaction)
         maybeFetchProduct(for: transaction.payment.productIdentifier)
       default:
@@ -108,6 +120,11 @@ public class MyampixAnalyticsPlugin: NSObject, FlutterPlugin, SKPaymentTransacti
 
   private func forward(_ transaction: SKPaymentTransaction) {
     let productId = transaction.payment.productIdentifier
+    // `transactionIdentifier` is per-transaction, so each subscription
+    // renewal keeps its own id and reports its own revenue — unlike
+    // `original.transactionIdentifier`, which every renewal of a
+    // subscription shares and which is therefore only a last-resort
+    // fallback, never the primary key.
     let transactionId = transaction.transactionIdentifier ?? transaction.original?.transactionIdentifier
     guard !productId.isEmpty, let transactionId = transactionId, !transactionId.isEmpty else {
       // Never forward a payload the Dart side cannot map onto the §4

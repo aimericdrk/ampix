@@ -46,12 +46,15 @@ void main() {
   group('PurchaseAutocapture (direct, injected stream/track)', () {
     late StreamController<dynamic> controller;
     late List<_Emitted> emitted;
+    late InMemoryKeyValueStore keyValueStore;
     late PurchaseAutocapture autocapture;
 
     setUp(() {
       controller = StreamController<dynamic>.broadcast();
       emitted = [];
+      keyValueStore = InMemoryKeyValueStore();
       autocapture = PurchaseAutocapture(
+        store: keyValueStore,
         purchaseStream: controller.stream,
         track: (event, properties) => emitted.add(_Emitted(event, properties)),
       );
@@ -150,6 +153,125 @@ void main() {
 
       expect(emitted, isEmpty);
     });
+
+    test(
+      'the same transaction replayed by the store emits once, not twice — '
+      'a cold-start SKPaymentQueue replay must not invent revenue',
+      () async {
+        controller.add(_nativePayload());
+        await pumpEventQueue();
+        expect(emitted, hasLength(1));
+
+        // Byte-identical replay, exactly as StoreKit re-delivers it to a
+        // freshly attached observer on the next launch.
+        controller.add(_nativePayload());
+        await pumpEventQueue();
+
+        expect(emitted, hasLength(1));
+      },
+    );
+
+    test(
+      'de-dupe survives a process restart: a new instance over the same '
+      'store drops what the previous one already reported',
+      () async {
+        controller.add(_nativePayload());
+        await pumpEventQueue();
+        expect(emitted, hasLength(1));
+        await autocapture.stop();
+
+        // Same persisted store, brand-new instance + stream = a relaunch.
+        // An in-memory-only set would forget here, which is exactly the bug.
+        final relaunchController = StreamController<dynamic>.broadcast();
+        addTearDown(relaunchController.close);
+        final relaunched = PurchaseAutocapture(
+          store: keyValueStore,
+          purchaseStream: relaunchController.stream,
+          track: (event, properties) =>
+              emitted.add(_Emitted(event, properties)),
+        )..start();
+        addTearDown(relaunched.stop);
+
+        relaunchController.add(_nativePayload());
+        await pumpEventQueue();
+
+        expect(emitted, hasLength(1));
+      },
+    );
+
+    test(
+      'a replay burst that lands before the persisted set has loaded is '
+      'still de-duped, not waved through',
+      () async {
+        // The native halves flush their buffer the instant Dart subscribes,
+        // so the burst can beat the SharedPreferences read. Nothing is
+        // awaited between start() and these adds on purpose.
+        final burstController = StreamController<dynamic>.broadcast();
+        addTearDown(burstController.close);
+        final burst = <_Emitted>[];
+        final capture = PurchaseAutocapture(
+          store: InMemoryKeyValueStore(),
+          purchaseStream: burstController.stream,
+          track: (event, properties) => burst.add(_Emitted(event, properties)),
+        )..start();
+        addTearDown(capture.stop);
+
+        burstController
+          ..add(_nativePayload())
+          ..add(_nativePayload())
+          ..add(_nativePayload());
+        await pumpEventQueue();
+
+        expect(burst, hasLength(1));
+      },
+    );
+
+    test(
+      'distinct subscription renewals each emit: de-dupe keys on the '
+      'per-transaction id, never the shared original one',
+      () async {
+        controller
+          ..add(_nativePayload(transactionId: '2000001110381064'))
+          ..add(_nativePayload(transactionId: '2000001126111059'))
+          ..add(_nativePayload(transactionId: '2000001124047310'));
+        await pumpEventQueue();
+
+        expect(emitted, hasLength(3));
+        expect(
+          emitted.map((e) => e.properties[r'$transaction_id']),
+          ['2000001110381064', '2000001126111059', '2000001124047310'],
+        );
+      },
+    );
+
+    test(
+      'one Play Billing transaction spanning two products emits one event '
+      'per product — the de-dupe key carries the product id',
+      () async {
+        controller
+          ..add(
+            _nativePayload(
+              productId: 'sku_a',
+              transactionId: 'GPA.1111',
+              store: 'play_store',
+            ),
+          )
+          ..add(
+            _nativePayload(
+              productId: 'sku_b',
+              transactionId: 'GPA.1111',
+              store: 'play_store',
+            ),
+          );
+        await pumpEventQueue();
+
+        expect(emitted, hasLength(2));
+        expect(emitted.map((e) => e.properties[r'$product_id']), [
+          'sku_a',
+          'sku_b',
+        ]);
+      },
+    );
 
     test('start() is idempotent and stop() is safe to call twice', () async {
       autocapture.start(); // second call must be a no-op (no double-listen)
@@ -281,6 +403,23 @@ void main() {
         expect(native.properties[r'$purchase_source'], 'native');
         expect(manual.properties.containsKey(r'$purchase_source'), isFalse);
         expect(manual.properties['value'], 9.99);
+      },
+    );
+
+    test(
+      r'a replayed transaction reaches the queue once through the real '
+      r'facade, however many times the store re-announces it',
+      () async {
+        await initSdk(autocapturePurchases: true);
+        purchaseController.add(_nativePayload());
+        await pumpEventQueue();
+        purchaseController
+          ..add(_nativePayload())
+          ..add(_nativePayload());
+        await pumpEventQueue();
+
+        final events = await queuedEvents();
+        expect(events.where((e) => e.event == r'$in_app_purchase'), hasLength(1));
       },
     );
 
