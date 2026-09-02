@@ -39,6 +39,11 @@ export interface EventRow {
    * only on rows written before the column existed.
    */
   source: string;
+  /**
+   * The address the batch was received from, read off the connection at ingest (see clientIp) —
+   * like `source`, never from the payload. '' when it could not be determined.
+   */
+  ip: string;
 }
 
 /** One row of analytics.user_profiles (shared contracts §5). */
@@ -173,6 +178,34 @@ export class ClickHouseService implements EventSink, OnApplicationShutdown {
         query_params: { projectId, ids },
       });
     }
+  }
+
+  /**
+   * Lightweight-deletes ONE event row (contracts §17 "delete this event"): the operator picked a
+   * single row out of a user's timeline, so the predicate is the table's full primary key —
+   * `ORDER BY (project_id, event, timestamp, insert_id)` — rather than `insert_id` alone. That is
+   * what makes it cheap: `PARTITION BY toYYYYMM(timestamp)` prunes to the one month the event
+   * lives in, and the key prefix locates the granule, instead of masking a scan of every row the
+   * project has ever written. The caller reads the row back first (see UserAdminService), so every
+   * component here is the stored row's own value, and each one binds as a param.
+   */
+  async deleteEvent(
+    projectId: string,
+    key: { event: string; timestamp: string; insertId: string },
+  ): Promise<void> {
+    await this.client.command({
+      query: `DELETE FROM events
+              WHERE project_id = {projectId:UUID}
+                AND event = {event:String}
+                AND timestamp = {timestamp:DateTime64(3)}
+                AND insert_id = {insertId:UUID}`,
+      query_params: {
+        projectId,
+        event: key.event,
+        timestamp: key.timestamp,
+        insertId: key.insertId,
+      },
+    });
   }
 
   async ping(): Promise<boolean> {

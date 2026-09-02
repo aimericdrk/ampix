@@ -33,14 +33,16 @@ export interface NormalizedBatch {
 @Injectable()
 export class EventNormalizer {
   /**
-   * `source` comes from the authenticated token (see SdkTokenGuard), not from the batch: it is a
-   * parameter here, and never read off the event or its context, so a client cannot claim to be a
-   * server by sending the field itself.
+   * `source` and `ip` are both server-derived and both parameters for the same reason: `source`
+   * comes from the authenticated token (see SdkTokenGuard) and `ip` from the connection (see
+   * clientIp), so neither is ever read off the event or its context — a client can no more claim
+   * an address than it can claim to be a server.
    */
   normalizeBatch(
     projectId: string,
     items: unknown[],
     source: EventSource,
+    ip: string,
     nowMs: number = Date.now(),
   ): NormalizedBatch {
     const rows: EventRow[] = [];
@@ -51,7 +53,7 @@ export class EventNormalizer {
         rejected.push({ index, reason: formatZodReason(parsed.error) });
         return;
       }
-      rows.push(this.toRow(projectId, parsed.data, source, nowMs));
+      rows.push(this.toRow(projectId, parsed.data, source, ip, nowMs));
     });
     return { rows, rejected };
   }
@@ -60,6 +62,7 @@ export class EventNormalizer {
     projectId: string,
     event: IngestEvent,
     source: EventSource,
+    ip: string,
     nowMs: number,
   ): EventRow {
     const ctx = event.context ?? {};
@@ -74,6 +77,7 @@ export class EventNormalizer {
       timestamp: toChDateTime64(clampTimestamp(event.timestamp, nowMs)),
       server_timestamp: toChDateTime64(nowMs),
       source,
+      ip,
       properties: event.properties ?? {},
       app_version: str(ctx.app_version),
       app_build: str(ctx.app_build),

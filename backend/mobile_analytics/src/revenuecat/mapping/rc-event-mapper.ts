@@ -75,6 +75,9 @@ export function toEventRow(
     session_id: NIL_UUID,
     timestamp: toChDateTime64(ev.event_timestamp_ms),
     server_timestamp: toChDateTime64(nowMs),
+    // A webhook is RevenueCat's server calling ours; the address it came from is theirs, not the
+    // end user's, so recording it as the user's IP would be a lie.
+    ip: '',
     properties,
     app_version: '',
     app_build: '',

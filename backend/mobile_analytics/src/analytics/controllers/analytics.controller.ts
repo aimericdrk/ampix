@@ -27,6 +27,7 @@ import { ExperimentsService } from '../queries/experiments/experiments.service';
 import type { ExperimentResponse } from '../queries/experiments/experiment.types';
 import type {
   AskResponse,
+  DeletedEventResponse,
   EventsMetaResponse,
   HiddenUsersResponse,
   InsightsResponse,
@@ -159,6 +160,28 @@ export class AnalyticsController {
     @Query('before_id') beforeId?: string,
   ): Promise<UserEventsResponse> {
     return this.analytics.getUserEvents(req.user!.id, projectId, distinctId, before, beforeId);
+  }
+
+  /**
+   * Delete ONE event out of a user's history — the smallest destructive action on this surface, and
+   * the one an operator reaches for after a test purchase or a debug-build event lands in real
+   * data. Irreversible like the erase, and it does move the numbers: the row leaves `events`, so
+   * every insight, funnel and revenue figure computed from it changes.
+   *
+   * admin+ for the same reason the erase is: it silently rewrites history for everyone else
+   * looking at the project.
+   */
+  @Delete('users/:distinctId/events/:insertId')
+  @UseGuards(ProjectRolesGuard)
+  @ProjectRoles('admin')
+  @HttpCode(200)
+  async deleteUserEvent(
+    @Req() req: AuthRequest,
+    @Param('projectId') projectId: string,
+    @Param('distinctId') distinctId: string,
+    @Param('insertId') insertId: string,
+  ): Promise<DeletedEventResponse> {
+    return this.userAdmin.deleteUserEvent(req.user!.id, projectId, distinctId, insertId);
   }
 
   /**

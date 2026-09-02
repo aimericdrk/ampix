@@ -12,6 +12,7 @@ function make(options: { canonicalId?: string } = {}) {
     query: jest
       .fn()
       .mockResolvedValue(options.canonicalId ? [{ canonical_id: options.canonicalId }] : []),
+    deleteEvent: jest.fn().mockResolvedValue(undefined),
   };
   const prisma = {
     hiddenUser: {
@@ -152,6 +153,81 @@ describe('UserAdminService', () => {
         problem: { status: 400 },
       });
       expect(erasure.erase).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteUserEvent', () => {
+    const INSERT_ID = '018f6b2e-0000-7000-8000-0000000000ff';
+
+    /** Canonical-id resolution first, then the ownership lookup — in the order the service asks. */
+    function makeWithEvent(
+      row: { event: string; timestamp: string } | undefined,
+      options: { canonicalId?: string } = {},
+    ) {
+      const made = make(options);
+      made.clickhouse.query
+        .mockResolvedValueOnce(options.canonicalId ? [{ canonical_id: options.canonicalId }] : [])
+        .mockResolvedValueOnce(row ? [row] : []);
+      return made;
+    }
+
+    it('deletes the row by its FULL primary key, read back from the table', async () => {
+      const { service, clickhouse } = makeWithEvent({
+        event: 'checkout_completed',
+        timestamp: '2026-08-01 10:00:00.000',
+      });
+      const result = await service.deleteUserEvent(USER, PROJECT, 'u1', INSERT_ID);
+      // The stored event/timestamp are what prune the partition and locate the granule; sending
+      // the client's idea of them would delete the wrong row (or none).
+      expect(clickhouse.deleteEvent).toHaveBeenCalledWith(PROJECT, {
+        event: 'checkout_completed',
+        timestamp: '2026-08-01 10:00:00.000',
+        insertId: INSERT_ID,
+      });
+      expect(result).toEqual({
+        insert_id: INSERT_ID,
+        event: 'checkout_completed',
+        timestamp: '2026-08-01T10:00:00.000Z',
+      });
+    });
+
+    it('looks the event up under the CANONICAL id, so an anon-id row is still theirs', async () => {
+      const { service, clickhouse } = makeWithEvent(
+        { event: '$screen_view', timestamp: '2026-08-01 10:00:00.000' },
+        { canonicalId: 'u1' },
+      );
+      await service.deleteUserEvent(USER, PROJECT, 'anon-u1', INSERT_ID);
+      expect(clickhouse.query.mock.calls[1][1]).toMatchObject({
+        projectId: PROJECT,
+        canonicalId: 'u1',
+        insertId: INSERT_ID,
+      });
+    });
+
+    it('404s an event that is not this user\'s, deleting nothing', async () => {
+      const { service, clickhouse } = makeWithEvent(undefined);
+      await expect(
+        service.deleteUserEvent(USER, PROJECT, 'u1', INSERT_ID),
+      ).rejects.toMatchObject({ problem: { status: 404 } });
+      expect(clickhouse.deleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-UUID event id with a 400 before touching ClickHouse', async () => {
+      const { service, clickhouse } = make();
+      await expect(service.deleteUserEvent(USER, PROJECT, 'u1', 'not-a-uuid')).rejects.toMatchObject(
+        { problem: { status: 400 } },
+      );
+      expect(clickhouse.query).not.toHaveBeenCalled();
+      expect(clickhouse.deleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('asserts membership before anything else', async () => {
+      const { service, projects } = makeWithEvent({
+        event: 'tap',
+        timestamp: '2026-08-01 10:00:00.000',
+      });
+      await service.deleteUserEvent(USER, PROJECT, 'u1', INSERT_ID);
+      expect(projects.assertMembership).toHaveBeenCalledWith(USER, PROJECT);
     });
   });
 

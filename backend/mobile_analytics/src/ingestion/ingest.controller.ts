@@ -11,6 +11,7 @@ import {
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { ClickHouseService } from '../clickhouse/clickhouse.service';
 import { ProblemException } from '../common/problem-details';
+import { clientIp } from './client-ip';
 import { EventNormalizer, formatZodReason } from './event-normalizer';
 import { ProfileWriter } from './profile-writer';
 import { SdkTokenGuard } from './sdk-token.guard';
@@ -32,7 +33,14 @@ export class IngestController {
   async ingestEvents(@Body() body: unknown, @Req() req: IngestRequest): Promise<IngestResponse> {
     const items = this.parseEnvelope(body, ingestEventsRequestSchema, 'events');
     const auth = req.ingestAuth!;
-    const { rows, rejected } = this.normalizer.normalizeBatch(auth.projectId, items, auth.source);
+    // Both server-derived: the token says who is writing, the connection says from where. Neither
+    // is taken from the batch, so neither can be forged by the app sending it.
+    const { rows, rejected } = this.normalizer.normalizeBatch(
+      auth.projectId,
+      items,
+      auth.source,
+      clientIp(req),
+    );
     await this.clickhouse.insertEvents(rows);
     return { accepted: rows.length, rejected };
   }

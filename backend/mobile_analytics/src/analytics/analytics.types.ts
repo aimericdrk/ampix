@@ -89,6 +89,18 @@ export interface HiddenUsersResponse {
   users: HiddenUserListItem[];
 }
 
+/**
+ * `DELETE /users/:distinctId/events/:insertId` — the one event that was removed, echoed back as the
+ * server stored it (not as the client believed it to be), so the confirmation an operator sees is
+ * the server's account of what it deleted.
+ */
+export interface DeletedEventResponse {
+  insert_id: string;
+  event: string;
+  /** The deleted row's `timestamp`, as an ISO-8601 instant like every other API timestamp. */
+  timestamp: string;
+}
+
 /** Device/app context captured with an event (the §5 context columns), surfaced per recent event. */
 export interface RecentEventContext {
   os: string;
@@ -101,6 +113,11 @@ export interface RecentEventContext {
   timezone: string;
   network: string;
   sdk_version: string;
+  /**
+   * The address the event was received from, captured server-side at ingest. '' when it is not
+   * known — nothing was forwarded, or the row predates the column.
+   */
+  ip: string;
 }
 
 /** GET /users/:distinctId response (contracts §14). */

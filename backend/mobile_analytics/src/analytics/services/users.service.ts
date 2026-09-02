@@ -68,6 +68,7 @@ interface RecentEventRow {
   timezone: string;
   network: string;
   sdk_version: string;
+  ip: string;
 }
 
 /**
@@ -82,7 +83,8 @@ const RECENT_EVENT_COLUMNS = `e.insert_id AS insert_id, e.event AS event, e.time
                 e.os AS os, e.os_version AS os_version, e.app_version AS app_version,
                 e.app_build AS app_build, e.device_model AS device_model,
                 e.device_manufacturer AS device_manufacturer, e.locale AS locale,
-                e.timezone AS timezone, e.network AS network, e.sdk_version AS sdk_version`;
+                e.timezone AS timezone, e.network AS network, e.sdk_version AS sdk_version,
+                e.ip AS ip`;
 
 /** How many timeline rows one page holds — the first page and every `load more` after it. */
 const USER_EVENTS_PAGE_SIZE = 50;
@@ -482,6 +484,7 @@ function toRecentEvent(row: RecentEventRow): RecentEvent {
       timezone: row.timezone ?? '',
       network: row.network ?? '',
       sdk_version: row.sdk_version ?? '',
+      ip: row.ip ?? '',
     },
   };
 }

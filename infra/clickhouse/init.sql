@@ -32,7 +32,13 @@ CREATE TABLE IF NOT EXISTS analytics.events (
   -- DEFAULT '' (not 'client') on purpose: pre-column rows read as '' and the read side maps
   -- '' to server/client via the legacy sdk_version = 'revenuecat-webhook' stamp (EVENT_SOURCE_EXPR
   -- in the analytics property resolver), so history stays correct without a mutation.
-  source LowCardinality(String) DEFAULT ''
+  source LowCardinality(String) DEFAULT '',
+  -- The address the batch was received FROM, read off the connection at ingest (never off the
+  -- payload — a client cannot claim an IP). '' when it could not be determined, and on every row
+  -- written before this column existed. Plain String, not IPv4/IPv6: it must be able to hold ''
+  -- and whatever a proxy actually put in the header without failing the insert. This is personal
+  -- data — it lives only here, on the event row, so the §17 user erase already removes it.
+  ip String DEFAULT '' CODEC(ZSTD(3))
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toYYYYMM(timestamp)
@@ -42,6 +48,7 @@ ORDER BY (project_id, event, timestamp, insert_id);
 -- start, but is safe to re-run manually / is replayed by the test helpers). Keep each ALTER
 -- idempotent via IF NOT EXISTS, exactly like the CREATEs above.
 ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS source LowCardinality(String) DEFAULT '';
+ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS ip String DEFAULT '' CODEC(ZSTD(3));
 
 CREATE TABLE IF NOT EXISTS analytics.user_profiles (
   project_id UUID, distinct_id String,

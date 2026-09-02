@@ -6,6 +6,7 @@ import type { ClickHeatmapQuery, ScreenPathsQuery } from '../../../lib/api/types
 import { authStore } from '../../auth/store';
 import {
   CLICK_HEATMAP_FIXTURE,
+  deletedEventIdsState,
   projectsHandlerWithoutRc,
   SCREEN_PATHS_FIXTURE,
   TEST_PROJECT,
@@ -416,5 +417,126 @@ describe('UserProfilePage', () => {
 
     await screen.findByRole('heading', { name: 'user-001' });
     await waitFor(() => expect(screen.queryByText('Subscription')).not.toBeInTheDocument());
+  });
+});
+
+describe('The IP address in device properties', () => {
+  it('shows the address the events were received from, in the profile and in the event detail', async () => {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const deviceCard = (
+      await screen.findByRole('heading', { name: 'Device properties' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    expect(within(deviceCard).getByText('IP address')).toBeInTheDocument();
+    expect(within(deviceCard).getByText('203.0.113.7')).toBeInTheDocument();
+
+    // The same field, per event, in the detail panel's Device & context section.
+    const detail = within(await screen.findByTestId('event-detail'));
+    expect(detail.getByText('IP address')).toBeInTheDocument();
+  });
+
+  it('omits the row entirely when the address was never captured', async () => {
+    // Server-token rows (a RevenueCat webhook) and rows written before the column existed carry
+    // '' — showing an empty "IP address" row would read as "we know it, and it is nothing".
+    server.use(
+      http.get('/api/v1/projects/:projectId/users/:distinctId/events', () =>
+        HttpResponse.json({
+          events: USER_PROFILE_FIXTURE.recent_events.map((event) => ({
+            ...event,
+            context: { ...event.context, ip: '' },
+          })),
+          next_before: null,
+        }),
+      ),
+    );
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+
+    const deviceCard = (
+      await screen.findByRole('heading', { name: 'Device properties' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    await waitFor(() => expect(within(deviceCard).getByText('OS')).toBeInTheDocument());
+    expect(within(deviceCard).queryByText('IP address')).not.toBeInTheDocument();
+  });
+});
+
+describe('Deleting one event from a user\'s history', () => {
+  /** Opens the profile, clicks a timeline row, and returns that row's detail panel. */
+  async function selectEvent(name: string) {
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/users/user-001`);
+    const timeline = (
+      await screen.findByRole('button', { name: 'Activity timeline' })
+    ).closest('.rounded-xl')! as HTMLElement;
+    await userEvent.click(within(timeline).getByText(name));
+    return { timeline, detail: within(await screen.findByTestId('event-detail')) };
+  }
+
+  it('offers a delete on the selected event, and states what deleting it costs', async () => {
+    const { detail } = await selectEvent('checkout_completed');
+    await userEvent.click(detail.getByRole('button', { name: 'Delete this checkout_completed event' }));
+
+    // The confirm sits in the panel that shows WHICH event this is — that context is the guard.
+    const confirm = within(detail.getByRole('group', { name: 'Delete this event?' }));
+    expect(confirm.getByText(/cannot be undone/i)).toBeInTheDocument();
+    expect(confirm.getByRole('button', { name: 'Delete event' })).toBeInTheDocument();
+    expect(confirm.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+  });
+
+  it('deletes nothing until the confirm is clicked', async () => {
+    const { timeline, detail } = await selectEvent('checkout_completed');
+    await userEvent.click(detail.getByRole('button', { name: 'Delete this checkout_completed event' }));
+    await userEvent.click(
+      within(detail.getByRole('group', { name: 'Delete this event?' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    );
+
+    expect(deletedEventIdsState.size).toBe(0);
+    expect(within(timeline).getByText('checkout_completed')).toBeInTheDocument();
+  });
+
+  it('removes the event from the timeline once the server confirms it', async () => {
+    const { timeline, detail } = await selectEvent('checkout_completed');
+    await userEvent.click(detail.getByRole('button', { name: 'Delete this checkout_completed event' }));
+    await userEvent.click(
+      within(detail.getByRole('group', { name: 'Delete this event?' })).getByRole('button', {
+        name: 'Delete event',
+      }),
+    );
+
+    // findAllBy: Radix Toast renders the text twice — once visibly, once in its aria-live region.
+    expect(await screen.findAllByText('Event deleted')).not.toHaveLength(0);
+    expect([...deletedEventIdsState]).toEqual(['evt-106']);
+    await waitFor(() =>
+      expect(within(timeline).queryByText('checkout_completed')).not.toBeInTheDocument(),
+    );
+    // The pinned selection went with it; the panel falls back to the newest remaining event.
+    // (the name shows twice in the panel — as the header chip and as the `event` property)
+    expect(
+      within(screen.getByTestId('event-detail')).getAllByText('$rc_renewal'),
+    ).not.toHaveLength(0);
+  });
+
+  it('keeps the event and surfaces the reason when the server refuses', async () => {
+    server.use(
+      http.delete('/api/v1/projects/:projectId/users/:distinctId/events/:insertId', () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Forbidden', detail: 'Requires the admin role', status: 403 },
+          { status: 403, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      ),
+    );
+    const { timeline, detail } = await selectEvent('checkout_completed');
+    await userEvent.click(detail.getByRole('button', { name: 'Delete this checkout_completed event' }));
+    await userEvent.click(
+      within(detail.getByRole('group', { name: 'Delete this event?' })).getByRole('button', {
+        name: 'Delete event',
+      }),
+    );
+
+    expect(await screen.findAllByText('Forbidden')).not.toHaveLength(0);
+    expect(within(timeline).getByText('checkout_completed')).toBeInTheDocument();
   });
 });

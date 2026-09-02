@@ -33,6 +33,7 @@ function makeController() {
     hideUser: jest.fn(),
     unhideUser: jest.fn(),
     eraseUser: jest.fn(),
+    deleteUserEvent: jest.fn(),
   };
   const attribution = { getAttribution: jest.fn() };
   const experiments = { runExperimentQuery: jest.fn() };
@@ -212,6 +213,33 @@ describe('AnalyticsController', () => {
       const result = await controller.userProfile(fakeRequest(), 'p1', 'u1');
 
       expect(analytics.getUserProfile).toHaveBeenCalledWith(USER.id, 'p1', 'u1');
+      expect(result).toEqual(response);
+    });
+  });
+
+  describe('deleteUserEvent', () => {
+    it('delegates to the user-admin service with the caller, project, user and event ids', async () => {
+      const { controller, userAdmin } = makeController();
+      const response = {
+        insert_id: '018f6b2e-0000-7000-8000-0000000000ff',
+        event: 'checkout_completed',
+        timestamp: '2026-08-01T10:00:00.000Z',
+      };
+      userAdmin.deleteUserEvent.mockResolvedValue(response);
+
+      const result = await controller.deleteUserEvent(
+        fakeRequest(),
+        'p1',
+        'u1',
+        '018f6b2e-0000-7000-8000-0000000000ff',
+      );
+
+      expect(userAdmin.deleteUserEvent).toHaveBeenCalledWith(
+        USER.id,
+        'p1',
+        'u1',
+        '018f6b2e-0000-7000-8000-0000000000ff',
+      );
       expect(result).toEqual(response);
     });
   });

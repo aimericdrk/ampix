@@ -22,6 +22,7 @@ import type {
 import { formatCurrency, formatExactNumber } from '../format';
 import { contactLine, profileAge, profileCity, profileName } from '../user-identity';
 import {
+  useDeleteUserEvent,
   useRunClickHeatmap,
   useRunScreenPaths,
   useScreens,
@@ -184,6 +185,9 @@ const DEVICE_FIELDS: ReadonlyArray<readonly [keyof UserEventContext, string]> = 
   ['timezone', 'Timezone'],
   ['network', 'Network'],
   ['sdk_version', 'SDK version'],
+  // Captured server-side from the connection, so it is present for SDK traffic and empty for rows
+  // written by a server token (a webhook's address is not the user's) or from before it was stored.
+  ['ip', 'IP address'],
 ];
 
 /**
@@ -789,7 +793,18 @@ export function UserProfileModal({
               {/* RIGHT — pretty, full detail for the selected (default: latest) event. */}
               <div className="lg:sticky lg:top-0">
                 {selectedEvent ? (
-                  <EventDetail event={selectedEvent} />
+                  <EventDetail
+                    // Keyed on the event: picking a different row starts its detail panel (and any
+                    // half-open delete confirm) fresh, so a confirm can never carry over to a row
+                    // the operator did not open it on.
+                    key={selectedEvent.insert_id}
+                    event={selectedEvent}
+                    projectId={projectId}
+                    distinctId={distinctId}
+                    // The pinned row is gone; falling back to "follow the latest" is the only
+                    // selection still guaranteed to exist once the timeline refetches.
+                    onDeleted={() => setSelectedId(null)}
+                  />
                 ) : (
                   <Card>
                     <CardContent>
@@ -874,24 +889,109 @@ function SubscriptionCard({
   );
 }
 
-/** The right-hand panel: every field of one event, grouped and pretty-printed. */
-function EventDetail({ event }: { event: UserRecentEvent }) {
+/**
+ * The right-hand panel: every field of one event, grouped and pretty-printed — and the one place a
+ * single event can be deleted, because it is the only surface that shows exactly WHICH event is
+ * about to go (its properties, its device, its timestamp) before the operator commits.
+ */
+function EventDetail({
+  event,
+  projectId,
+  distinctId,
+  onDeleted,
+}: {
+  event: UserRecentEvent;
+  projectId: string;
+  distinctId: string;
+  /** Fired once the server confirms the delete, so the timeline can drop its pinned selection. */
+  onDeleted: () => void;
+}) {
   const contextEntries = DEVICE_FIELDS.filter(([key]) => event.context[key]).map(
     ([key, label]) => [label, event.context[key]] as [string, unknown],
   );
   const propertyEntries = Object.entries(event.properties);
+  const { toast } = useToast();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const deleteEvent = useDeleteUserEvent(projectId, distinctId);
+
+  const handleDelete = () => {
+    deleteEvent.mutate(event.insert_id, {
+      onSuccess: (deleted) => {
+        toast({
+          title: 'Event deleted',
+          description: `${deleted.event} · ${new Date(deleted.timestamp).toLocaleString()}`,
+        });
+        setConfirmOpen(false);
+        onDeleted();
+      },
+      onError: (error) =>
+        toast({
+          title: error instanceof ApiError ? error.problem.title : 'Failed to delete event',
+          description: error instanceof ApiError ? error.problem.detail : undefined,
+          variant: 'error',
+        }),
+    });
+  };
 
   return (
     <Card data-testid="event-detail">
       <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-accent/15 px-2 py-0.5 text-sm font-semibold text-accent">
-            {event.event}
-          </span>
-          {event.screen_name && <Badge variant="outline">{event.screen_name}</Badge>}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-accent/15 px-2 py-0.5 text-sm font-semibold text-accent">
+              {event.event}
+            </span>
+            {event.screen_name && <Badge variant="outline">{event.screen_name}</Badge>}
+          </div>
+          <IconButton
+            aria-label={`Delete this ${event.event} event`}
+            title="Delete this event"
+            size="sm"
+            className="-mr-1 hover:bg-danger-soft hover:text-danger"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 aria-hidden />
+          </IconButton>
         </div>
         <p className="mt-1 text-xs text-text-muted">{new Date(event.timestamp).toLocaleString()}</p>
       </CardHeader>
+
+      {/* The confirm lives INSIDE this panel rather than in a dialog on top of the profile modal:
+          the panel already shows exactly which event is about to go — its properties, its device,
+          its timestamp — and that context is the whole guard against deleting the wrong row. */}
+      {confirmOpen && (
+        <div
+          role="group"
+          aria-label="Delete this event?"
+          className="mx-6 mb-4 rounded-xl border border-danger/40 bg-danger-soft/40 p-4"
+        >
+          <p className="text-sm font-semibold text-danger">Delete this event?</p>
+          <p className="mt-1 text-sm text-text-muted">
+            It leaves this user's history for good, and stops counting in your insights, funnels,
+            retention and revenue. This cannot be undone.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              disabled={deleteEvent.isPending}
+              onClick={handleDelete}
+            >
+              {deleteEvent.isPending ? 'Deleting…' : 'Delete event'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={deleteEvent.isPending}
+              onClick={() => setConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       <CardContent className="flex flex-col gap-5">
         <section>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">

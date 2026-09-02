@@ -644,6 +644,7 @@ describe('AnalyticsService', () => {
             timezone: 'Europe/Paris',
             network: 'wifi',
             sdk_version: '0.1.2',
+            ip: '203.0.113.7',
           },
           {
             insert_id: 'i1',
@@ -708,6 +709,7 @@ describe('AnalyticsService', () => {
               timezone: 'Europe/Paris',
               network: 'wifi',
               sdk_version: '0.1.2',
+              ip: '203.0.113.7',
             },
           },
           {
@@ -730,6 +732,9 @@ describe('AnalyticsService', () => {
               timezone: '',
               network: '',
               sdk_version: '',
+              // A row from before the column existed reads back as '' — never undefined, which
+              // the dashboard would render as a blank "IP address" row instead of omitting it.
+              ip: '',
             },
           },
         ],

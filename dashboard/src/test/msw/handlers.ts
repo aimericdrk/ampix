@@ -6,6 +6,7 @@ import type {
   AddProjectMemberRequest,
   AskDataResponse,
   AttributionResponse,
+  DeletedEventResult,
   EraseUserResult,
   ExperimentResponse,
   HiddenUserListItem,
@@ -199,9 +200,14 @@ export const hiddenUsersState: HiddenUserListItem[] = [];
 /** The ids erased in this test, so the users list stops serving them like the real backend. */
 export const erasedUsersState = new Set<string>();
 
+/** The `insert_id`s deleted one-by-one out of a user's timeline, so the events endpoint stops
+ *  serving them exactly as the real one does once the row leaves ClickHouse. */
+export const deletedEventIdsState = new Set<string>();
+
 export function resetUsersAdminState(): void {
   hiddenUsersState.length = 0;
   erasedUsersState.clear();
+  deletedEventIdsState.clear();
 }
 
 /** `GET /metrics/attribution` — one clearly-winning source, one unattributed bucket. */
@@ -366,6 +372,7 @@ const DEVICE_CONTEXT_FIXTURE = {
   timezone: 'Europe/Paris',
   network: 'wifi',
   sdk_version: '0.1.2',
+  ip: '203.0.113.7',
 };
 
 export const USER_PROFILE_FIXTURE: Omit<
@@ -2528,6 +2535,26 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  /**
+   * Deleting ONE event out of a user's history. Declared before `/users/:distinctId` alongside the
+   * other user-admin routes; it answers with the row it removed, like the real endpoint.
+   */
+  http.delete('/api/v1/projects/:projectId/users/:distinctId/events/:insertId', ({ request, params }) => {
+    const token = bearerToken(request);
+    if (!token || !ACCEPTED_TOKENS.has(token))
+      return problem(401, 'Access token invalid or expired');
+    const insertId = params.insertId as string;
+    const event = USER_PROFILE_FIXTURE.recent_events.find((e) => e.insert_id === insertId);
+    if (!event || deletedEventIdsState.has(insertId)) return problem(404, 'No such event for this user');
+    deletedEventIdsState.add(insertId);
+    const response: DeletedEventResult = {
+      insert_id: insertId,
+      event: event.event,
+      timestamp: event.timestamp,
+    };
+    return HttpResponse.json(response);
+  }),
+
   /** The irreversible erase. Reports the id set it removed, exactly as the real endpoint does. */
   http.delete('/api/v1/projects/:projectId/users/:distinctId', ({ request, params }) => {
     const token = bearerToken(request);
@@ -2626,7 +2653,9 @@ export const handlers = [
       return problem(400, 'before_id is required alongside before');
     }
     const response: UserEventsResponse = {
-      events: USER_PROFILE_FIXTURE.recent_events,
+      events: USER_PROFILE_FIXTURE.recent_events.filter(
+        (event) => !deletedEventIdsState.has(event.insert_id),
+      ),
       next_before: null,
     };
     return HttpResponse.json(response);

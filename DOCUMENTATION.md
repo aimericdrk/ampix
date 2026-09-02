@@ -289,6 +289,16 @@ everything sent after the change.
 - **RevenueCat webhooks** are recorded as `server`: they arrive machine-to-machine, with no device
   and no ingest token involved.
 
+**The address an event came from.** Every ingested event also carries an `ip` column, taken from the
+connection the batch arrived on — never from the payload, for the same reason `source` is not: what
+an app says about itself is forgeable. The value is the LAST `X-Forwarded-For` hop (the one our own
+edge appended; anything a client prepends sits earlier and is ignored), falling back to `X-Real-IP`
+and then the socket address, and `''` when none of those is usable. It shows up in the dashboard as
+**IP address** under a user's *Device properties* and in each event's detail panel; a row without one
+(a RevenueCat webhook, or anything written before the column existed) simply omits the field. This is
+personal data: it lives only on the event row, so the erasure below — and the single-event delete in
+§6.1.5 — already removes it.
+
 #### 6.1.2 End-user erasure (account deletion / GDPR)
 
 `DELETE /ingest/users/:distinctId` removes everything the project holds about one end user — events,
@@ -389,13 +399,24 @@ both open the same dialog, which offers both and cancels out of neither by defau
 | ------ | ----- | ----------- | ------------ |
 | **Hide** | `POST /api/v1/projects/:projectId/users/:distinctId/hide` | Yes — `DELETE` the same path to un-hide | Writes a `hidden_users` row. The user leaves the Users list, the live feed and the Attribution readout. **Every event is kept**, so insights, funnels, retention and revenue are unchanged. |
 | **Delete permanently** | `DELETE /api/v1/projects/:projectId/users/:distinctId` | **No** | Runs `ErasureService` — the same code as `DELETE /ingest/users/:distinctId`. Events, profile, identity mappings and the RevenueCat mirrors, for this user and every id linked to them. Historical charts change. |
+| **Delete one event** | `DELETE /api/v1/projects/:projectId/users/:distinctId/events/:insertId` | **No** | Drops a single row out of that user's timeline — the test purchase, the debug-build event. The rest of the user is untouched; the charts that counted that event change. |
 
-Both require the **admin** project role (`ProjectRolesGuard` + `@ProjectRoles('admin')`), matching
-token revocation and the project data purge. The destructive one additionally makes you type
-`DELETE` in the dialog — a second button is not a guard against a fast double-click.
+All three require the **admin** project role (`ProjectRolesGuard` + `@ProjectRoles('admin')`),
+matching token revocation and the project data purge. Erasing a whole user additionally makes you
+type `DELETE` in the dialog — a second button is not a guard against a fast double-click. Deleting
+one event is a plain confirm: the blast radius is one row, and the detail panel it is launched from
+already shows exactly which.
 
-Both resolve the requested id to its **canonical** id first (§17 identity), so acting on one of a
-user's anonymous ids acts on the whole merged person rather than half of them.
+All three resolve the requested id to its **canonical** id first (§17 identity), so acting on one of
+a user's anonymous ids acts on the whole merged person rather than half of them.
+
+The single-event delete reads the row back before removing it. That lookup is the ownership check
+(the event must belong to this user's identity set — anything else is a 404, never a silent
+success), and its stored `event`/`timestamp` complete the table's primary key
+`(project_id, event, timestamp, insert_id)`, so the `DELETE` prunes to one month partition instead
+of masking a scan of every event the project ever wrote. A deleted `$identify` event keeps its
+`identity_mappings` row: that mapping is what merges the person's anonymous and identified history,
+and dropping it would split their profile in two as a side effect.
 
 Hiding is meant for the handful of test accounts and staff devices that clutter an audience list;
 `GET /users/hidden` lists who is hidden, by whom and when, and a project may hold at most 1000 such

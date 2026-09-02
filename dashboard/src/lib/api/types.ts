@@ -549,6 +549,16 @@ export interface EraseUserResult {
   revenueCatWebhookEvents: number;
 }
 
+/**
+ * `DELETE /users/:distinctId/events/:insertId` — the single timeline row that was removed, echoed
+ * back as the server stored it.
+ */
+export interface DeletedEventResult {
+  insert_id: string;
+  event: string;
+  timestamp: string;
+}
+
 /** `GET /users` — `search` is a case-insensitive substring match across the canonical id, aliased
  *  anon_ids, and whitelisted profile props (name/email/username); `next_cursor` is the last `distinct_id`. */
 export interface ListUsersResponse {
@@ -568,6 +578,11 @@ export interface UserEventContext {
   timezone: string;
   network: string;
   sdk_version: string;
+  /**
+   * The address the event was received from, captured server-side at ingest (never sent by the
+   * app). '' when it is not known — nothing was forwarded, or the row predates the column.
+   */
+  ip: string;
 }
 
 export interface UserRecentEvent {

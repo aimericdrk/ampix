@@ -8,6 +8,8 @@ import {
 
 const PROJECT_ID = '018f6b2e-0000-7000-8000-000000000001';
 const NOW = Date.UTC(2026, 6, 2, 12, 0, 0, 0); // 2026-07-02T12:00:00.000Z
+/** The connection address the controller passes in — server-derived, never from the batch. */
+const IP = '203.0.113.7';
 
 function makeEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -61,7 +63,7 @@ describe('EventNormalizer.normalizeBatch', () => {
   const normalizer = new EventNormalizer();
 
   it('maps a valid event to a ClickHouse row with authoritative server_timestamp', () => {
-    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [makeEvent()], 'client', NOW);
+    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [makeEvent()], 'client', IP, NOW);
     expect(rejected).toEqual([]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -87,6 +89,7 @@ describe('EventNormalizer.normalizeBatch', () => {
       PROJECT_ID,
       [makeEvent({ source: 'robot' })],
       'client',
+      IP,
       NOW,
     );
     expect(rejected).toEqual([]);
@@ -98,6 +101,7 @@ describe('EventNormalizer.normalizeBatch', () => {
       PROJECT_ID,
       [makeEvent({ properties: undefined, context: undefined })],
       'client',
+      IP,
       NOW,
     );
     expect(rows[0].properties).toEqual({});
@@ -108,7 +112,7 @@ describe('EventNormalizer.normalizeBatch', () => {
 
   it('rejects an item missing insert_id with the contract reason style', () => {
     const { insert_id, ...bad } = makeEvent();
-    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [bad], 'client', NOW);
+    const { rows, rejected } = normalizer.normalizeBatch(PROJECT_ID, [bad], 'client', IP, NOW);
     expect(rows).toEqual([]);
     expect(rejected).toEqual([{ index: 0, reason: 'missing insert_id' }]);
   });
@@ -118,6 +122,7 @@ describe('EventNormalizer.normalizeBatch', () => {
       PROJECT_ID,
       [makeEvent({ insert_id: 'nope' })],
       'client',
+      IP,
       NOW,
     );
     expect(rejected[0].reason).toMatch(/^insert_id/);
@@ -130,6 +135,7 @@ describe('EventNormalizer.normalizeBatch', () => {
       PROJECT_ID,
       [good1, { event: 'orphan' }, good2],
       'client',
+      IP,
       NOW,
     );
     expect(rows).toHaveLength(2);
@@ -141,6 +147,7 @@ describe('EventNormalizer.normalizeBatch', () => {
       PROJECT_ID,
       [makeEvent(), makeEvent({ insert_id: randomUUID() })],
       'server',
+      IP,
       NOW,
     );
     expect(rows.map((row) => row.source)).toEqual(['server', 'server']);
@@ -151,6 +158,7 @@ describe('EventNormalizer.normalizeBatch', () => {
       PROJECT_ID,
       [makeEvent({ source: 'server', context: { source: 'server' } })],
       'client',
+      IP,
       NOW,
     );
     expect(rows[0].source).toBe('client');
@@ -158,11 +166,25 @@ describe('EventNormalizer.normalizeBatch', () => {
     expect(rows[0].properties).not.toHaveProperty('source');
   });
 
+  it('stamps the connection address onto every row, and takes none from the payload', () => {
+    const { rows } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [makeEvent({ context: { ip: '10.0.0.1' } }), makeEvent({ insert_id: randomUUID() })],
+      'client',
+      IP,
+      NOW,
+    );
+    expect(rows.map((row) => row.ip)).toEqual([IP, IP]);
+    // An `ip` the app put in its context is an unknown key: dropped, never stored as a property.
+    expect(rows[0].properties).not.toHaveProperty('ip');
+  });
+
   it('clamps stale client timestamps to now-7d in the emitted row', () => {
     const { rows } = normalizer.normalizeBatch(
       PROJECT_ID,
       [makeEvent({ timestamp: 1 })],
       'client',
+      IP,
       NOW,
     );
     expect(rows[0].timestamp).toBe('2026-06-25 12:00:00.000');

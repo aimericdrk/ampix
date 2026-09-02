@@ -174,6 +174,14 @@ MyAmpix.instance.flush();          // force an immediate upload attempt of whate
 
 While opted out, `track()`/`people.*`/`timeEvent()` are no-ops.
 
+### The IP address
+
+The SDK never sends an IP. The backend records the address each batch was **received from** on the
+event itself, and the dashboard shows it as **IP address** in a user's *Device properties* and in
+each event's detail panel. It is personal data under the GDPR, so treat it like the rest: it lives
+only on the event row, which means erasing a user (below) or deleting a single event removes it too.
+An opted-out user sends nothing at all, so there is no address to record.
+
 ### Deleting a user's data
 
 When a user deletes their account, erase what MyAmpix holds about them. This is a **server-to-server
@@ -204,6 +212,12 @@ deliberately, because they are not the same:
 
 Both need the **admin** role on the project. Hidden users are listed, with an un-hide, in a section
 at the bottom of the Users page.
+
+**One event, not a whole person.** Open a user's profile, click the event in the activity timeline,
+and the detail panel on the right has a delete control for exactly that row — for the test purchase
+you fired yourself, or an event a debug build sent into real data. It asks you to confirm, then the
+event is gone from that user's history and stops counting in your insights, funnels, retention and
+revenue. Admin role, and it cannot be undone.
 
 ## 11. Reliability
 

@@ -22,6 +22,7 @@ import type {
   Dashboard,
   DashboardDataResponse,
   DashboardTile,
+  DeletedEventResult,
   EngagementResponse,
   EraseUserResult,
   ExperimentQueryDefinition,
@@ -514,6 +515,24 @@ export function useEraseUser(projectId: string) {
       apiFetch<EraseUserResult>(`${base(projectId)}/users/${encodeURIComponent(distinctId)}`, {
         method: 'DELETE',
       }),
+    onSuccess: () => invalidateProjectAnalytics(queryClient, projectId),
+  });
+}
+
+/**
+ * `DELETE /users/:distinctId/events/:insertId` (admin+) — drop ONE event out of a user's timeline.
+ * Irreversible, and it moves the numbers: the row leaves ClickHouse, so every chart computed from
+ * it changes. The whole project scope is invalidated for that reason — the same honesty the
+ * hide/erase mutations apply, since a stale insight is exactly what a half-invalidation leaves.
+ */
+export function useDeleteUserEvent(projectId: string, distinctId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (insertId: string) =>
+      apiFetch<DeletedEventResult>(
+        `${base(projectId)}/users/${encodeURIComponent(distinctId)}/events/${encodeURIComponent(insertId)}`,
+        { method: 'DELETE' },
+      ),
     onSuccess: () => invalidateProjectAnalytics(queryClient, projectId),
   });
 }

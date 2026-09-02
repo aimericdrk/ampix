@@ -59,6 +59,7 @@ function makeEventRow(overrides: Partial<EventRow> = {}): EventRow {
     first_utm_campaign: 'launch',
     install_referrer: '',
     source: 'client',
+    ip: '203.0.113.7',
     ...overrides,
   };
 }
