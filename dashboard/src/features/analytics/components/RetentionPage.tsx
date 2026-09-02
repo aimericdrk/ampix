@@ -384,7 +384,7 @@ export function RetentionPage() {
     <PageShell
       projectId={projectId}
       title="Retention"
-      description="Measure how many users come back over time after a first action."
+      description="Measure how many users come back over time after a first action. Counts what people did on their device — events written by your backend are excluded, since a backend writing about someone is not them coming back."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Retention' }]}
       dateRangeControl={<DateRangeControl />}
       actions={<CopyLinkButton />}

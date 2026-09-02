@@ -16,36 +16,103 @@ import { ChartCard } from './charts/ChartCard';
 import { KpiTile } from './charts/KpiTile';
 import { useEventDescriptions, type UseEventDescriptionsResult } from '../event-descriptions';
 
+/**
+ * Who emitted an event name, over its whole all-time history. `mixed` is a real and meaningful
+ * state — the same name written both by the SDK and by a backend — not a fallback, so it gets its
+ * own label rather than being collapsed into a majority winner. `none` means there is no volume to
+ * classify: the name came from `meta/events` alone, with no all-time row behind it.
+ */
+type CatalogSource = 'client' | 'server' | 'mixed' | 'none';
+
 interface CatalogEvent {
   name: string;
   count: number;
+  clientCount: number;
+  serverCount: number;
+  source: CatalogSource;
   isAuto: boolean;
+}
+
+function classifySource(clientCount: number, serverCount: number): CatalogSource {
+  if (clientCount > 0 && serverCount > 0) return 'mixed';
+  if (clientCount > 0) return 'client';
+  if (serverCount > 0) return 'server';
+  return 'none';
 }
 
 /**
  * Joins `meta/events` (names seen in the last 30 days) with `events/summary`'s `by_event`
- * (all-time counts) by name — a UNION of both sources (feat-15 §4): an event tracked only in the
- * last 30 days but with no all-time row shows `0`, and an older event absent from `meta/events`
- * but present in the all-time summary still gets listed.
+ * (all-time counts + the client/server split) by name — a UNION of both sources (feat-15 §4): an
+ * event tracked only in the last 30 days but with no all-time row shows `0` (and so has no source
+ * to report), and an older event absent from `meta/events` but present in the all-time summary
+ * still gets listed.
  */
 function buildCatalog(
   metaEvents: MetaEventsResponse | undefined,
   summary: EventSummaryResponse | undefined,
 ): CatalogEvent[] {
-  const countByName = new Map(summary?.by_event.map((row) => [row.event, row.count]) ?? []);
+  const rowByName = new Map(summary?.by_event.map((row) => [row.event, row]) ?? []);
   const names = new Set<string>(metaEvents?.events ?? []);
   for (const row of summary?.by_event ?? []) names.add(row.event);
 
-  return Array.from(names).map((name) => ({
-    name,
-    count: countByName.get(name) ?? 0,
-    isAuto: name.startsWith('$'),
-  }));
+  return Array.from(names).map((name) => {
+    const row = rowByName.get(name);
+    const clientCount = row?.client_count ?? 0;
+    const serverCount = row?.server_count ?? 0;
+    return {
+      name,
+      count: row?.count ?? 0,
+      clientCount,
+      serverCount,
+      source: classifySource(clientCount, serverCount),
+      isAuto: name.startsWith('$'),
+    };
+  });
 }
 
 /** The "$ auto" / "manual" pill. */
 function EventKindBadge({ isAuto }: { isAuto: boolean }) {
   return <Badge variant={isAuto ? 'accent' : 'outline'}>{isAuto ? '$ auto' : 'manual'}</Badge>;
+}
+
+const SOURCE_BADGE: Record<
+  Exclude<CatalogSource, 'none'>,
+  { label: string; variant: 'info' | 'success' | 'warning' }
+> = {
+  client: { label: 'client', variant: 'info' },
+  server: { label: 'server', variant: 'success' },
+  // `mixed` is styled as a warning on purpose: one name arriving from both the SDK and a backend
+  // is usually a naming collision or double instrumentation, and is worth noticing.
+  mixed: { label: 'mixed', variant: 'warning' },
+};
+
+/**
+ * The client/server pill, with the exact split spelled out underneath when an event has volume on
+ * both sides — the badge alone would hide which side dominates.
+ */
+function EventSourceCell({ event }: { event: CatalogEvent }) {
+  if (event.source === 'none') {
+    return (
+      <span
+        className="text-text-muted"
+        title="No events recorded yet, so there is no source to report"
+      >
+        —
+      </span>
+    );
+  }
+
+  const { label, variant } = SOURCE_BADGE[event.source];
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Badge variant={variant}>{label}</Badge>
+      {event.source === 'mixed' && (
+        <span className="text-xs text-text-muted">
+          {event.clientCount.toLocaleString()} client · {event.serverCount.toLocaleString()} server
+        </span>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -115,6 +182,8 @@ export function EventCatalogPage() {
   const autoCount = events.filter((event) => event.isAuto).length;
   const manualCount = distinctCount - autoCount;
   const totalVolume = events.reduce((sum, event) => sum + event.count, 0);
+  const clientVolume = events.reduce((sum, event) => sum + event.clientCount, 0);
+  const serverVolume = events.reduce((sum, event) => sum + event.serverCount, 0);
 
   const columns: Array<DataTableColumn<CatalogEvent>> = [
     {
@@ -127,6 +196,15 @@ export function EventCatalogPage() {
           <EventKindBadge isAuto={row.isAuto} />
         </div>
       ),
+    },
+    {
+      key: 'source',
+      header: 'Source',
+      sortable: true,
+      render: (row) => <EventSourceCell event={row} />,
+      // Sorting/CSV read the label, not the enum, so `none` lands last under an asc sort and the
+      // export column matches what the badge says.
+      sortValue: (row) => (row.source === 'none' ? '—' : SOURCE_BADGE[row.source].label),
     },
     {
       key: 'count',
@@ -162,7 +240,7 @@ export function EventCatalogPage() {
     <PageShell
       projectId={projectId}
       title="Events"
-      description="Every event this project tracks — its volume, whether it's autocaptured or manual, and a shared description of what it means."
+      description="Every event this project tracks — its volume, whether it came from the SDK or a backend, whether it's autocaptured or manual, and a shared description of what it means."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Events' }]}
     >
       {isPending && (
@@ -191,6 +269,8 @@ export function EventCatalogPage() {
             <KpiTile label="Autocaptured" value={autoCount} />
             <KpiTile label="Manual" value={manualCount} />
             <KpiTile label="Total volume" value={totalVolume} />
+            <KpiTile label="From client" value={clientVolume} />
+            <KpiTile label="From server" value={serverVolume} />
           </SectionGrid>
 
           <div className="max-w-sm">

@@ -80,4 +80,19 @@ describe('compileEngagement (contracts §19)', () => {
       expect(newReturningQuery.params.filterVal0).toBe(attack);
     });
   });
+
+  it('counts DEVICE events only — a backend write cannot make someone active', () => {
+    const { newReturningQuery, rangeActiveQuery } = compileEngagement(
+      PROJECT_ID,
+      '2026-06-01',
+      '2026-06-30',
+      'day',
+    );
+    // Measured on a real project: 15,484 "daily active users" against 3 devices, because a backend
+    // emitting one event per recipient marked every recipient active.
+    expect(rangeActiveQuery.sql).toContain("= 'client'");
+    // Both the in-bucket activity scan AND the all-time first-seen scan: otherwise a user's "new"
+    // bucket would be the day a backend first mentioned them, not the day their device appeared.
+    expect(newReturningQuery.sql.match(/= 'client'/g) ?? []).toHaveLength(2);
+  });
 });

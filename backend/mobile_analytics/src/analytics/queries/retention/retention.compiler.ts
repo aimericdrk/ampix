@@ -5,6 +5,7 @@ import {
   compileFilterClauses,
 } from '../../support/filter-compiler';
 import type { RetentionInterval, RetentionQuery } from './retention.schema';
+import { CLIENT_EVENTS_ONLY } from '../../support/property-resolver';
 
 /**
  * Structural keywords selected by the validated `interval` enum (contracts §15) — OUR OWN frozen
@@ -46,6 +47,7 @@ function bornSubquery(
 ): string {
   const clauses = [
     'project_id = {projectId:UUID}',
+    CLIENT_EVENTS_ONLY,
     'event = {bornEvent:String}',
     'timestamp >= {from:DateTime64}',
     'timestamp < {toExclusive:DateTime64}',
@@ -63,6 +65,13 @@ function bornSubquery(
 }
 
 /**
+ * DEVICE EVENTS ONLY (see CLIENT_EVENTS_ONLY), on both sides. "Came back" is a claim about a
+ * person returning to the app; a backend writing about them in week 3 is not them coming back, and
+ * counting it would report retention for people who never opened the app again. The born side is
+ * filtered for the same reason: a cohort of "people a backend mentioned this week" is not a cohort
+ * of people who did anything. A retention chart built on a backend-written event therefore reads
+ * empty rather than flattering — which is the honest answer, and the UI says so.
+ *
  * Compiles a validated {@link RetentionQuery} into two fully-parameterized ClickHouse queries
  * (contracts §15). Pure. `return_event` defaults to `born_event`. The born filters (offset 0) and
  * the return filters (offset = born-filter count) share the grid SQL string, so their param names
@@ -108,6 +117,7 @@ export function compileRetentionQuery(
   };
   const returnClauses = [
     'project_id = {projectId:UUID}',
+    CLIENT_EVENTS_ONLY,
     'event = {returnEvent:String}',
     'timestamp < {toExclusive:DateTime64}',
     ...compileFilterClauses(returnEvent.filters, gridParams, bornFilterCount),

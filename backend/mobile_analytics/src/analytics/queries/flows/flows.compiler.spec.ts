@@ -137,4 +137,12 @@ describe('buildFlowGraph (contracts §15)', () => {
     expect(nodeValue(nodes, '0:home')).toBe(1);
     expect(nodeValue(nodes, '1:browse')).toBe(1);
   });
+
+  it('walks DEVICE events only — a backend write is not a step the user took', () => {
+    const { sql } = compileFlowQuery(baseQuery(), PROJECT_ID);
+    // Otherwise a server row appears as a node between two screens the user really did visit; on a
+    // backend-heavy project that is most of the diagram.
+    expect(sql).toContain("= 'client'");
+    expect(sql).toContain("sdk_version = 'revenuecat-webhook'");
+  });
 });

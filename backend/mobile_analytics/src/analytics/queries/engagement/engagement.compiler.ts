@@ -5,6 +5,7 @@ import type { EngagementMetric } from '../../analytics.types';
 import type { EngagementInterval } from './engagement.schema';
 import { compileFilterClauses } from '../../support/filter-compiler';
 import { canonicalization } from '../../support/identity';
+import { CLIENT_EVENTS_ONLY } from '../../support/property-resolver';
 import type { InsightsFilter } from '../insights/insights-query.schema';
 
 /**
@@ -15,6 +16,13 @@ import type { InsightsFilter } from '../insights/insights-query.schema';
  * OWN frozen `toStartOf*` bucket-function constant (selected by the validated interval enum, never
  * interpolated from raw input). `uid` comes from the shared injection-safe {@link canonicalization}
  * helper.
+ *
+ * DEVICE EVENTS ONLY (see CLIENT_EVENTS_ONLY). "Active" here is a claim about a person opening the
+ * app, so a backend writing about someone cannot make them active — nor new, nor returning. On a
+ * project whose backend emits an event per recipient this was the whole number: 15,484 "daily
+ * active users" against 3 devices. The all-time `per_user` first-seen scan is filtered too, so a
+ * user's "new" bucket is the day their DEVICE first appeared, not the day a backend first mentioned
+ * them.
  *
  * Stickiness note: MAU is taken as the distinct canonical users active over the WHOLE queried range
  * (a common "monthly active over the selected period" simplification), and stickiness per bucket is
@@ -89,7 +97,7 @@ export function compileEngagement(
     '      min(e.timestamp) AS first_ts',
     '    FROM events AS e',
     `    ${canon.join}`,
-    '    WHERE e.project_id = {projectId:UUID}',
+    `    WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY}`,
     '    GROUP BY uid',
     '  )',
     'SELECT',
@@ -104,7 +112,7 @@ export function compileEngagement(
     `      ${canon.uid} AS uid`,
     '    FROM events AS e',
     `    ${canon.join}`,
-    '    WHERE e.project_id = {projectId:UUID}',
+    `    WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY}`,
     '      AND e.timestamp >= {from:DateTime64}',
     '      AND e.timestamp < {toExclusive:DateTime64}',
     ...filterClauses.map((clause) => `      AND ${clause}`),
@@ -121,7 +129,7 @@ export function compileEngagement(
     `SELECT uniqExact(${canon.uid}) AS mau`,
     'FROM events AS e',
     `${canon.join}`,
-    'WHERE e.project_id = {projectId:UUID}',
+    `WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY}`,
     '  AND e.timestamp >= {from:DateTime64}',
     '  AND e.timestamp < {toExclusive:DateTime64}',
     ...filterClauses.map((clause) => `  AND ${clause}`),

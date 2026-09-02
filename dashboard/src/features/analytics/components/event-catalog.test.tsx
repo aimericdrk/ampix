@@ -21,7 +21,8 @@ function signIn() {
  * A richer local fixture than the shared `META_EVENTS_FIXTURE`/`EVENT_SUMMARY_FIXTURE` pair — it
  * adds a `$`-prefixed autocaptured event (only in `meta/events`, no all-time row) and an event
  * seen only in the all-time summary (older than the 30-day `meta/events` window), so the union
- * join and the auto/manual badge both have real cases to exercise.
+ * join and the auto/manual badge both have real cases to exercise. The three summary rows also
+ * cover all three client/server splits (client-only, mixed, server-only).
  */
 function useCatalogFixtures() {
   server.use(
@@ -33,9 +34,11 @@ function useCatalogFixtures() {
         project_id: params.projectId as string,
         total: 84,
         by_event: [
-          { event: 'checkout_completed', count: 32 },
-          { event: 'product_viewed', count: 20 },
-          { event: 'legacy_signup', count: 8 },
+          // A client-only event, an event written from both sides, and a server-only event —
+          // one row per source badge the table can render.
+          { event: 'checkout_completed', count: 32, client_count: 32, server_count: 0 },
+          { event: 'product_viewed', count: 20, client_count: 14, server_count: 6 },
+          { event: 'legacy_signup', count: 8, client_count: 0, server_count: 8 },
         ],
       }),
     ),
@@ -83,6 +86,46 @@ describe('EventCatalogPage', () => {
     expect(within(kpiValue('Autocaptured')).getByText('1')).toBeInTheDocument();
     expect(within(kpiValue('Manual')).getByText('5')).toBeInTheDocument();
     expect(within(kpiValue('Total volume')).getByText('60')).toBeInTheDocument();
+  });
+
+  it('shows where each event came from: client, server, or both', async () => {
+    useCatalogFixtures();
+    signIn();
+    renderApp(`/projects/${TEST_PROJECT.id}/events`);
+
+    await screen.findByRole('heading', { name: 'Events' });
+    const main = within(screen.getByRole('main'));
+
+    function sourceRow(event: string): HTMLElement {
+      const row = main.getByText(event).closest('tr');
+      if (!row) throw new Error(`row for "${event}" not found`);
+      return row as HTMLElement;
+    }
+
+    await main.findByText('checkout_completed');
+
+    // SDK-only volume.
+    expect(within(sourceRow('checkout_completed')).getByText('client')).toBeInTheDocument();
+
+    // Backend-only volume.
+    expect(within(sourceRow('legacy_signup')).getByText('server')).toBeInTheDocument();
+
+    // Written from both sides — the badge plus the exact split.
+    const mixed = within(sourceRow('product_viewed'));
+    expect(mixed.getByText('mixed')).toBeInTheDocument();
+    expect(mixed.getByText('14 client · 6 server')).toBeInTheDocument();
+
+    // No all-time row behind the name, so there is no source to report.
+    expect(within(sourceRow('app_opened')).getByText('—')).toBeInTheDocument();
+
+    // The client/server volume KPIs split the 60-event total: 32 + 14 client, 6 + 8 server.
+    function kpiValue(label: string): HTMLElement {
+      const tile = main.getByText(label).closest('div');
+      if (!tile) throw new Error(`KpiTile for "${label}" not found`);
+      return tile as HTMLElement;
+    }
+    expect(within(kpiValue('From client')).getByText('46')).toBeInTheDocument();
+    expect(within(kpiValue('From server')).getByText('14')).toBeInTheDocument();
   });
 
   it('search filters events by name', async () => {

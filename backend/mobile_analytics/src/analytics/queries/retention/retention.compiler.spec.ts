@@ -84,4 +84,16 @@ describe('compileRetentionQuery (contracts §15)', () => {
       expect(gridQuery.sql).not.toContain('DROP TABLE');
     });
   });
+
+  it('counts DEVICE events on both sides — a backend write is not a user coming back', () => {
+    const { sizesQuery, gridQuery } = compileRetentionQuery(baseQuery(), PROJECT_ID);
+    // Retention claims a person returned to the app. A backend writing about them in week 3 is not
+    // them returning, and counting it reported retention for people who never opened the app again.
+    for (const sql of [sizesQuery.sql, gridQuery.sql]) {
+      expect(sql).toContain("sdk_version = 'revenuecat-webhook'");
+      expect(sql).toContain("= 'client'");
+    }
+    // The return side too, not just the cohort definition.
+    expect(gridQuery.sql.match(/= 'client'/g) ?? []).toHaveLength(2);
+  });
 });

@@ -90,6 +90,19 @@ describe('Projects & minimal analytics read (e2e, contracts §12)', () => {
         .send({ events })
         .expect(202);
 
+      // The same event name, this time written by a BACKEND — a second token on the same project
+      // whose `source` is 'server'. `checkout_completed` therefore has volume on both sides, which
+      // is exactly the case a single per-name source label could not represent.
+      const serverToken = `mam_${randomUUID().replace(/-/g, '')}`;
+      await stack.prisma.sdkToken.create({
+        data: { projectId, token: serverToken, label: 'e2e-server', source: 'server' },
+      });
+      await request(stack.app.getHttpServer())
+        .post('/ingest/events')
+        .set('Authorization', `Bearer ${serverToken}`)
+        .send({ events: Array.from({ length: 2 }, () => makeEvent('checkout_completed')) })
+        .expect(202);
+
       const summaryRes = await request(stack.app.getHttpServer())
         .get(`/api/v1/projects/${projectId}/events/summary`)
         .set('Authorization', `Bearer ${accessToken}`)
@@ -97,10 +110,10 @@ describe('Projects & minimal analytics read (e2e, contracts §12)', () => {
 
       expect(summaryRes.body).toEqual({
         project_id: projectId,
-        total: 8,
+        total: 10,
         by_event: [
-          { event: 'checkout_completed', count: 5 },
-          { event: 'product_viewed', count: 3 },
+          { event: 'checkout_completed', count: 7, client_count: 5, server_count: 2 },
+          { event: 'product_viewed', count: 3, client_count: 3, server_count: 0 },
         ],
       });
     });

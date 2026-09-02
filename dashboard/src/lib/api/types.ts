@@ -65,6 +65,10 @@ export interface ListProjectsResponse {
 export interface EventSummaryRow {
   event: string;
   count: number;
+  /** Portion of `count` emitted by the SDK. `client_count + server_count === count`. */
+  client_count: number;
+  /** Portion of `count` emitted by a backend (app server, RevenueCat webhook writer). */
+  server_count: number;
 }
 
 /** `GET /projects/:projectId/events/summary` — all-time, no date filter in this MVP. */

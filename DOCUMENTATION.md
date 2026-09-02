@@ -452,6 +452,28 @@ with no installs in the window: those signups came from installs made *before* i
 The Flutter SDK's attribution store keeps first-touch values permanently and last-touch values per
 touch — see `sdk/flutter_analytics/lib/src/attribution/`.
 
+#### 6.1.6 Device events vs backend events, per surface
+
+Some numbers are claims about a **person** — they were active today, they came back in week 3,
+this is the path they walked, this is where they came from. A backend writing about someone (a like
+they received, a message, a RevenueCat webhook) is none of those things. On a project whose backend
+emits one event per recipient it is also nearly all the data: measured on this deployment, 15,484
+"daily active users" against 3 real devices, and 97% of every path step.
+
+So the people-centric surfaces read **client events only** (`CLIENT_EVENTS_ONLY` in
+`analytics/support/property-resolver.ts`, one shared predicate so the rule cannot drift per query):
+
+| Surface | Rule | Why |
+| ------- | ---- | --- |
+| Engagement (DAU/WAU/MAU, new vs returning, stickiness) | client only | "Active" means a person opened the app. The all-time first-seen scan is filtered too, so "new" is the day their device first appeared. |
+| Retention (both born and return sides) | client only | "Came back" is a person returning. A chart built on a backend-written event now reads empty rather than flattering. |
+| User paths / flows | client only | A path is what someone walked; a backend write is not a step. |
+| Journey report | client only | Its control group is "every user active in the range" — otherwise every id a backend mentioned joined the comparison. |
+| Attribution | client only | See §6.1.6a. |
+| **Insights, funnels, distributions, experiments, cohorts, revenue** | **both** | These count the events an analyst asked for, whoever wrote them — `like_received` is a real thing to chart. `source` is a filterable dimension there (§6.1.1) when you want to split the two. |
+| Sessions, heatmaps, screen paths, tap elements | unaffected | Already scoped to `$session_end` / `$tap` / `$screen_view`, which only a device sends. |
+| Live feed, Users list, event catalog | both | These show what exists; the live feed and the profile timeline badge each row's source. |
+
 #### 6.1.6a What counts as an install (client events only)
 
 `GET /metrics/attribution` reads **client** events only. An install, and the campaign behind it,

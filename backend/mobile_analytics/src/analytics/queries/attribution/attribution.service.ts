@@ -3,7 +3,7 @@ import { ClickHouseService, fromChDateTime64, toChDateTime64 } from '../../../cl
 import { ProjectsService } from '../../../projects/core/projects.service';
 import { parseDateOnlyUTC } from '../../support/bucket-grid';
 import { canonicalization } from '../../support/identity';
-import { EVENT_SOURCE_EXPR } from '../../support/property-resolver';
+import { CLIENT_EVENTS_ONLY } from '../../support/property-resolver';
 import { resolveDateOnlyRange } from '../../support/read-query.util';
 import type { HiddenUserSource } from '../../services/analytics.shared';
 import { UserAdminService } from '../../services/user-admin.service';
@@ -17,9 +17,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** The reserved event that marks an anonymous install becoming an account (contracts §4/§17). */
 const IDENTIFY_EVENT = '$identify';
-
-/** §6.1.1: the token kind an SDK on a device writes with. Attribution reads nothing else. */
-const CLIENT_SOURCE = 'client';
 
 /** How many recent accounts the response lists. Bounded — this is a "who signed up lately" panel,
  *  not an export; the breakdowns above it cover the whole window. */
@@ -146,9 +143,6 @@ export class AttributionService {
     const params: Record<string, unknown> = {
       projectId,
       identifyEvent: IDENTIFY_EVENT,
-      // Bound like `identifyEvent` rather than embedded: same doctrine, and it keeps the one place
-      // this query decides "a device did this" visible in the params.
-      clientSource: CLIENT_SOURCE,
       from: toChDateTime64(parseDateOnlyUTC(from)),
       toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
       accountsLimit: ACCOUNTS_LIMIT,
@@ -179,7 +173,7 @@ export class AttributionService {
         FROM events AS e
         ${canon.join}
         WHERE e.project_id = {projectId:UUID}
-          AND ${EVENT_SOURCE_EXPR} = {clientSource:String}
+          AND ${CLIENT_EVENTS_ONLY}
         GROUP BY uid${hiddenClause}
       )`;
 

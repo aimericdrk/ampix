@@ -301,7 +301,7 @@ export function FlowsPage() {
     <PageShell
       projectId={projectId}
       title="Flows"
-      description="Explore the common paths users take before or after a key event."
+      description="Explore the common paths users take before or after a key event. Built from device events only — a backend write is not a step the user took."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Flows' }]}
       dateRangeControl={<DateRangeControl />}
       actions={<CopyLinkButton />}

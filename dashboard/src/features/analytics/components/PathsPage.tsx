@@ -302,7 +302,7 @@ export function PathsPage() {
     <PageShell
       projectId={projectId}
       title="Paths"
-      description="See how users move between app screens — an interactive map of real screenshots, or the same paths as a flowchart."
+      description="See how users move between app screens — an interactive map of real screenshots, or the same paths as a flowchart. Device events only."
       breadcrumbs={[{ label: 'Explore' }, { label: 'Paths' }]}
       dateRangeControl={<DateRangeControl />}
       actions={<CopyLinkButton />}

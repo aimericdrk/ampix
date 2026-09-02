@@ -206,12 +206,12 @@ describe('AttributionService', () => {
   it('counts only what a DEVICE did — a backend writing about someone is not an install', async () => {
     const { service, clickhouse } = make(EMPTY_QUEUE);
     await service.getAttribution(USER, PROJECT, '2026-06-01', '2026-06-30');
-    const [sql, params] = clickhouse.query.mock.calls[0] as [string, Record<string, unknown>];
+    const [sql] = clickhouse.query.mock.calls[0] as [string];
     // Without this, every user id a backend ever mentioned became an install on the day it first
     // wrote about them — and, because a server row carries no utm columns and lands ahead of the
     // device, argMin picked it as the first touch and wiped a real campaign to Direct / unknown.
-    expect(params.clientSource).toBe('client');
-    expect(sql).toContain('{clientSource:String}');
+    // Shared with retention / engagement / flows / journey, so the rule cannot drift per surface.
+    expect(sql).toContain("= 'client'");
     // Classified through the shared expression, so rows written before the `source` column existed
     // still resolve via the RevenueCat sdk_version stamp rather than counting as devices.
     expect(sql).toContain("sdk_version = 'revenuecat-webhook'");

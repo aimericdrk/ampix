@@ -34,6 +34,26 @@
 export const EVENT_SOURCE_EXPR =
   "if(source != '', source, if(sdk_version = 'revenuecat-webhook', 'server', 'client'))";
 
+/**
+ * `WHERE …` predicate restricting a query to events a DEVICE sent (contracts §6.1.1).
+ *
+ * Some metrics are claims about a person: they were active today, they came back in week 3, this
+ * is the path they walked. A backend writing about someone — a like they received, a message, a
+ * RevenueCat webhook — is none of those things, and on a project whose backend emits per-recipient
+ * events it drowns out the real signal completely (measured here: 15,484 "daily active users"
+ * against 3 devices).
+ *
+ * So the people-centric surfaces filter to client events: engagement (DAU/WAU/MAU, new vs
+ * returning, stickiness), retention, user paths / flows, the journey report, and attribution. The
+ * event-centric ones do NOT — insights, funnels, distributions, experiments, cohorts and revenue
+ * count the events an analyst asked for, whoever wrote them, and `source` is a filterable
+ * dimension there when they want to split the two.
+ *
+ * `'client'` is OUR OWN fixed constant (the token kind, §6.1.1), embedded as a literal exactly like
+ * `$session_end` and `$identify` in the shared SQL — no caller input reaches this text.
+ */
+export const CLIENT_EVENTS_ONLY = `${EVENT_SOURCE_EXPR} = 'client'`;
+
 // Keys are the only valid *input*; each value is our OWN literal column-name constant or fixed
 // expression (never the caller's string), so a "whitelist hit" can only ever emit one of these
 // fixed SQL fragments.

@@ -60,6 +60,15 @@ describe('journey SQL', () => {
     }
   });
 
+  it('builds its populations from DEVICE events only', () => {
+    // The control group is "every user active in the range", so without this every user id a
+    // backend ever wrote about joined the comparison as a person who did nothing.
+    for (const sql of Object.values(ALL_STATEMENTS('subscribe'))) {
+      expect(sql).toContain("= 'client'");
+      expect(sql).toContain("sdk_version = 'revenuecat-webhook'");
+    }
+  });
+
   it('excludes subscription lifecycle events from the behavioural window', () => {
     for (const sql of Object.values(ALL_STATEMENTS('subscribe'))) {
       expect(sql).toContain("e.event NOT LIKE '$rc%'");

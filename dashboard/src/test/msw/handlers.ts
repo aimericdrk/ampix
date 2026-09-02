@@ -138,8 +138,8 @@ export const TEST_PROJECT: Project = {
 export const EVENT_SUMMARY_FIXTURE: Omit<EventSummaryResponse, 'project_id'> = {
   total: 52,
   by_event: [
-    { event: 'checkout_completed', count: 32 },
-    { event: 'product_viewed', count: 20 },
+    { event: 'checkout_completed', count: 32, client_count: 32, server_count: 0 },
+    { event: 'product_viewed', count: 20, client_count: 20, server_count: 0 },
   ],
 };
 
