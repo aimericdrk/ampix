@@ -75,7 +75,7 @@ describe('ProjectsController', () => {
       const summary = {
         project_id: 'p1',
         total: 3,
-        by_event: [{ event: 'checkout_completed', count: 3 }],
+        by_event: [{ event: 'checkout_completed', count: 3, client_count: 2, server_count: 1 }],
       };
       projects.getEventsSummary.mockResolvedValue(summary);
 

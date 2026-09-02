@@ -178,8 +178,20 @@ describe('AttributionService', () => {
     const { service, clickhouse } = make(EMPTY_QUEUE);
     await service.getAttribution(USER, PROJECT, '2026-06-01', '2026-06-30');
     const [sql] = clickhouse.query.mock.calls[0] as [string];
-    expect(sql).toContain('argMin(e.first_utm_source, e.timestamp)');
+    expect(sql).toContain('argMinIf(e.first_utm_source, e.timestamp');
     expect(sql).not.toContain('argMax(e.first_utm_source');
+  });
+
+  it('takes the earliest NON-EMPTY touch, so a late-resolving referrer is not lost', async () => {
+    const { service, clickhouse } = make(EMPTY_QUEUE);
+    await service.getAttribution(USER, PROJECT, '2026-06-01', '2026-06-30');
+    const [sql] = clickhouse.query.mock.calls[0] as [string];
+    // `first_utm_source` is written once and never overwritten, so any non-empty occurrence is the
+    // same first touch — but it does not always ride on the very first event. A plain argMin filed
+    // those users under Direct / unknown.
+    for (const column of ['first_utm_source', 'first_utm_campaign', 'install_referrer']) {
+      expect(sql).toContain(`argMinIf(e.${column}, e.timestamp, e.${column} != '')`);
+    }
   });
 
   it('counts each canonical user once, not once per event', async () => {
@@ -189,6 +201,20 @@ describe('AttributionService', () => {
     // The install/signup windows are evaluated over the per-user CTE, not over raw events.
     expect(sql).toContain('FROM first_touch');
     expect(sql).toContain('coalesce(aliases.canonical_id, e.distinct_id)');
+  });
+
+  it('counts only what a DEVICE did — a backend writing about someone is not an install', async () => {
+    const { service, clickhouse } = make(EMPTY_QUEUE);
+    await service.getAttribution(USER, PROJECT, '2026-06-01', '2026-06-30');
+    const [sql, params] = clickhouse.query.mock.calls[0] as [string, Record<string, unknown>];
+    // Without this, every user id a backend ever mentioned became an install on the day it first
+    // wrote about them — and, because a server row carries no utm columns and lands ahead of the
+    // device, argMin picked it as the first touch and wiped a real campaign to Direct / unknown.
+    expect(params.clientSource).toBe('client');
+    expect(sql).toContain('{clientSource:String}');
+    // Classified through the shared expression, so rows written before the `source` column existed
+    // still resolve via the RevenueCat sdk_version stamp rather than counting as devices.
+    expect(sql).toContain("sdk_version = 'revenuecat-webhook'");
   });
 
   it('binds the $identify event name as a param rather than embedding it', async () => {

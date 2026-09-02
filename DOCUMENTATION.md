@@ -452,6 +452,23 @@ with no installs in the window: those signups came from installs made *before* i
 The Flutter SDK's attribution store keeps first-touch values permanently and last-touch values per
 touch — see `sdk/flutter_analytics/lib/src/attribution/`.
 
+#### 6.1.6a What counts as an install (client events only)
+
+`GET /metrics/attribution` reads **client** events only. An install, and the campaign behind it,
+are facts about a device; a backend writing about a person is not one. Counting server rows there
+did two things, both wrong: every user id a backend ever mentioned (a like received, a message, a
+RevenueCat webhook) became an install on the day the backend first wrote about them — on this
+deployment that was 12,399 phantom installs against 6 real ones — and, because a server row carries
+no utm/referrer columns and typically lands *ahead* of the device reporting the same moment,
+`argMin` picked it as the first touch and re-labelled genuinely attributed installs as
+Direct / unknown.
+
+The first touch is also the earliest **non-empty** value rather than whatever sat on the earliest
+event. `first_utm_source` and friends are written once by the SDK and never overwritten, so any
+non-empty occurrence is the same first touch — but it does not always ride on the very first event
+(an install referrer or a deep link resolves a moment after the first `$app_open`), and a plain
+`argMin` filed those users under Direct / unknown too.
+
 #### 6.1.7 A/B tests
 
 `POST /api/v1/projects/:projectId/query/experiment` is the A/B readout. It is its own endpoint

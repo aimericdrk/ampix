@@ -12,11 +12,21 @@ export interface ProjectListItem {
   integrations: { revenuecat: boolean };
 }
 
+/** One `by_event` row: an event name, its all-time volume, and that volume split by emitter. */
+export interface EventsSummaryRow {
+  event: string;
+  count: number;
+  /** Rows emitted by the SDK. `client_count + server_count === count`. */
+  client_count: number;
+  /** Rows emitted by a backend (the app's server, the RevenueCat webhook writer). */
+  server_count: number;
+}
+
 /** GET /api/v1/projects/:projectId/events/summary response (contracts §12). */
 export interface EventsSummary {
   project_id: string;
   total: number;
-  by_event: { event: string; count: number }[];
+  by_event: EventsSummaryRow[];
 }
 
 /** Per-project list stats: distinct users + the most common `country` super property (or null). */

@@ -3,6 +3,7 @@ import { ClickHouseService, fromChDateTime64, toChDateTime64 } from '../../../cl
 import { ProjectsService } from '../../../projects/core/projects.service';
 import { parseDateOnlyUTC } from '../../support/bucket-grid';
 import { canonicalization } from '../../support/identity';
+import { EVENT_SOURCE_EXPR } from '../../support/property-resolver';
 import { resolveDateOnlyRange } from '../../support/read-query.util';
 import type { HiddenUserSource } from '../../services/analytics.shared';
 import { UserAdminService } from '../../services/user-admin.service';
@@ -16,6 +17,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** The reserved event that marks an anonymous install becoming an account (contracts §4/§17). */
 const IDENTIFY_EVENT = '$identify';
+
+/** §6.1.1: the token kind an SDK on a device writes with. Attribution reads nothing else. */
+const CLIENT_SOURCE = 'client';
 
 /** How many recent accounts the response lists. Bounded — this is a "who signed up lately" panel,
  *  not an export; the breakdowns above it cover the whole window. */
@@ -44,6 +48,16 @@ const BREAKDOWN_COLUMNS = Object.freeze({
 } as const);
 
 type BreakdownKey = keyof typeof BREAKDOWN_COLUMNS;
+
+/**
+ * `argMinIf(e.<column>, e.timestamp, e.<column> != '') AS <column>` — the value from the EARLIEST
+ * event that actually carried one. `column` is always one of OUR OWN fixed `analytics.events`
+ * identifiers (the CTE below passes literals), never caller input, so embedding it in the SQL text
+ * carries no injection risk.
+ */
+function earliestNonEmpty(column: string): string {
+  return `argMinIf(e.${column}, e.timestamp, e.${column} != '') AS ${column}`;
+}
 
 interface BreakdownRow {
   value: string;
@@ -77,15 +91,32 @@ interface TotalsRow {
  * The whole query rests on one CTE, `first_touch`: per CANONICAL user (§17, so an anon→identified
  * person is ONE account, attributed to the campaign that brought their anonymous install in — not
  * to whatever they had in hand on the day they logged in), the timestamp of their first-ever event,
- * the timestamp of their first `$identify`, and the attribution columns carried on that first
- * event via `argMin(…, timestamp)`.
+ * the timestamp of their first `$identify`, and their attribution columns.
  *
- * `argMin` and not "the last non-empty value": attribution is a fact about the FIRST touch, and
- * taking the latest would re-attribute a user to whatever campaign they most recently clicked.
+ * The EARLIEST NON-EMPTY value, not simply the value on the earliest event. `first_utm_source` and
+ * friends are written once by the SDK and never overwritten, so any non-empty occurrence is the
+ * same first touch — but it does not always ride on the very first event (an install referrer or a
+ * deep link resolves a moment after the app's first `$app_open`). A plain `argMin` read those
+ * users' attribution as empty and filed a real campaign under Direct / unknown. Never the LATEST
+ * value, which would re-attribute a user to whatever campaign they most recently clicked.
  *
  * The install/signup windows are evaluated over that per-user CTE rather than over raw events, so a
  * user is counted once, in the window their account was created — never once per event and never
  * once per day.
+ *
+ * CLIENT EVENTS ONLY. An install, and the campaign behind it, are facts about a DEVICE: they are
+ * carried on the events an SDK sends. A backend writing about a person is neither. Counting server
+ * rows here did two things, both wrong. It invented installs — every user id a backend ever
+ * mentioned (a like received, a message, a RevenueCat webhook) became an install on the day the
+ * backend first wrote about them, landing in the unattributed bucket. And because a server row
+ * carries no utm/referrer columns and typically lands BEFORE the device reports the same moment,
+ * `argMin` picked it as the first touch and re-labelled a genuinely attributed install as
+ * Direct / unknown.
+ *
+ * The trade-off, stated plainly: a backend that posts real utm data with a server token would no
+ * longer be attributed. That is not a loss today — server-written rows carry no attribution
+ * columns at all — and it is the right default, because "where did this install come from" is a
+ * question about a device.
  */
 @Injectable()
 export class AttributionService {
@@ -115,6 +146,9 @@ export class AttributionService {
     const params: Record<string, unknown> = {
       projectId,
       identifyEvent: IDENTIFY_EVENT,
+      // Bound like `identifyEvent` rather than embedded: same doctrine, and it keeps the one place
+      // this query decides "a device did this" visible in the params.
+      clientSource: CLIENT_SOURCE,
       from: toChDateTime64(parseDateOnlyUTC(from)),
       toExclusive: toChDateTime64(parseDateOnlyUTC(to) + MS_PER_DAY),
       accountsLimit: ACCOUNTS_LIMIT,
@@ -136,15 +170,16 @@ export class AttributionService {
           -- has_signup (not the timestamp) is what decides whether this user ever signed up.
           minIf(e.timestamp, e.event = {identifyEvent:String}) AS signed_up_at,
           maxIf(1, e.event = {identifyEvent:String}) AS has_signup,
-          argMin(e.first_utm_source, e.timestamp) AS first_utm_source,
-          argMin(e.first_utm_campaign, e.timestamp) AS first_utm_campaign,
-          argMin(e.utm_source, e.timestamp) AS utm_source,
-          argMin(e.utm_medium, e.timestamp) AS utm_medium,
-          argMin(e.utm_campaign, e.timestamp) AS utm_campaign,
-          argMin(e.install_referrer, e.timestamp) AS install_referrer
+          ${earliestNonEmpty('first_utm_source')},
+          ${earliestNonEmpty('first_utm_campaign')},
+          ${earliestNonEmpty('utm_source')},
+          ${earliestNonEmpty('utm_medium')},
+          ${earliestNonEmpty('utm_campaign')},
+          ${earliestNonEmpty('install_referrer')}
         FROM events AS e
         ${canon.join}
         WHERE e.project_id = {projectId:UUID}
+          AND ${EVENT_SOURCE_EXPR} = {clientSource:String}
         GROUP BY uid${hiddenClause}
       )`;
 

@@ -1,5 +1,6 @@
 import type { ClickHouseService } from '../../clickhouse/clickhouse.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { EVENT_SOURCE_EXPR } from '../../analytics/support/property-resolver';
 import { ProjectsService } from './projects.service';
 
 function makePrisma(overrides: Record<string, unknown> = {}) {
@@ -179,8 +180,8 @@ describe('ProjectsService', () => {
         },
       });
       const clickhouse = makeClickhouse([
-        { event: 'checkout_completed', count: '12' },
-        { event: 'product_viewed', count: 40 },
+        { event: 'checkout_completed', count: '12', client_count: '12', server_count: '0' },
+        { event: 'product_viewed', count: 40, client_count: 25, server_count: 15 },
       ]);
       const service = makeService(prisma, clickhouse);
 
@@ -194,10 +195,30 @@ describe('ProjectsService', () => {
         project_id: PROJECT_ID,
         total: 52,
         by_event: [
-          { event: 'checkout_completed', count: 12 },
-          { event: 'product_viewed', count: 40 },
+          { event: 'checkout_completed', count: 12, client_count: 12, server_count: 0 },
+          { event: 'product_viewed', count: 40, client_count: 25, server_count: 15 },
         ],
       });
+    });
+
+    it('splits each event count by emitter using the shared source expression', async () => {
+      const prisma = makePrisma({
+        project: { findUnique: jest.fn().mockResolvedValue(project) },
+        projectMembership: {
+          findMany: jest.fn(),
+          findUnique: jest.fn().mockResolvedValue(projectMembership),
+        },
+      });
+      const clickhouse = makeClickhouse([]);
+      const service = makeService(prisma, clickhouse);
+
+      await service.getEventsSummary('user-1', PROJECT_ID);
+
+      const [sql] = clickhouse.query.mock.calls[0] as [string];
+      // Legacy rows (written before the `source` column existed) must classify the same way here
+      // as in the §14 query engine, so the SAME expression has to appear on both split counts.
+      expect(sql).toContain(`uniqExactIf(insert_id, ${EVENT_SOURCE_EXPR} = 'client')`);
+      expect(sql).toContain(`uniqExactIf(insert_id, ${EVENT_SOURCE_EXPR} = 'server')`);
     });
 
     it('returns total: 0, by_event: [] for a project with no events', async () => {

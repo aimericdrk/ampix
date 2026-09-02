@@ -3,6 +3,7 @@ import type { ProjectRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClickHouseService } from '../../clickhouse/clickhouse.service';
 import { ProblemException } from '../../common/problem-details';
+import { EVENT_SOURCE_EXPR } from '../../analytics/support/property-resolver';
 import type { EventsSummary, ProjectListItem, ProjectStat } from './projects.types';
 
 /** UUID-shaped path param guard — a malformed id can never match a real project, so short-circuit
@@ -12,6 +13,8 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 interface ChEventCountRow {
   event: string;
   count: string | number;
+  client_count: string | number;
+  server_count: string | number;
 }
 
 /**
@@ -62,12 +65,23 @@ export class ProjectsService {
    * Real ClickHouse read over `analytics.events` for one project. `total` and per-event `count`
    * both use `count(DISTINCT insert_id)` (exact under SDK retries); `by_event` is ordered by
    * count desc. All-time, no date filter (MVP). Empty project → `{ total: 0, by_event: [] }`.
+   *
+   * Each row also splits that count by who emitted the event — `client_count` (SDK) vs
+   * `server_count` (a backend: the app's own server, the RevenueCat webhook writer) — via the
+   * same {@link EVENT_SOURCE_EXPR} the §14 query engine uses, so pre-`source`-column rows are
+   * classified identically here and there. The two split counts sum to `count`: the expression is
+   * total, every row resolves to exactly one of the two labels. An event name can legitimately
+   * appear on both sides (the same name tracked from the app AND from the backend), which is why
+   * this is a per-name split rather than a single label.
    */
   async getEventsSummary(userId: string, projectId: string): Promise<EventsSummary> {
     await this.assertMembership(userId, projectId);
 
     const rows = await this.clickhouse.query<ChEventCountRow>(
-      `SELECT event, count(DISTINCT insert_id) AS count
+      `SELECT event,
+              count(DISTINCT insert_id) AS count,
+              uniqExactIf(insert_id, ${EVENT_SOURCE_EXPR} = 'client') AS client_count,
+              uniqExactIf(insert_id, ${EVENT_SOURCE_EXPR} = 'server') AS server_count
        FROM events
        WHERE project_id = {projectId:UUID}
        GROUP BY event
@@ -75,7 +89,12 @@ export class ProjectsService {
       { projectId },
     );
 
-    const by_event = rows.map((row) => ({ event: row.event, count: Number(row.count) }));
+    const by_event = rows.map((row) => ({
+      event: row.event,
+      count: Number(row.count),
+      client_count: Number(row.client_count),
+      server_count: Number(row.server_count),
+    }));
     const total = by_event.reduce((sum, row) => sum + row.count, 0);
     return { project_id: projectId, total, by_event };
   }
