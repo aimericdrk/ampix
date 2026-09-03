@@ -113,10 +113,23 @@ describe('compileUserIdentityFilter', () => {
     expect(compileUserIdentityFilter('all', UID)).toBe('');
   });
 
-  it('splits on whether ANY profile property is held', () => {
+  it('splits on whether the person can be CONTACTED — an email or a phone', () => {
     expect(compileUserIdentityFilter('identified', UID)).toContain(`${UID} IN (`);
     expect(compileUserIdentityFilter('anonymous', UID)).toContain(`${UID} NOT IN (`);
-    // The definition itself: a profile row with at least one key. An empty row is not "identified".
-    expect(compileUserIdentityFilter('identified', UID)).toContain('JSONExtractKeys');
+    const sql = compileUserIdentityFilter('identified', UID);
+    // Every accepted spelling of both fields, matching what the list renders as the contact line.
+    for (const key of ['email', '$email', 'phone', '$phone', 'phone_number', 'phoneNumber']) {
+      expect(sql).toContain(`JSONExtractString(toJSONString(properties), '${key}') != ''`);
+    }
+  });
+
+  it('does NOT count a profile that holds only demographics as identified', () => {
+    const sql = compileUserIdentityFilter('identified', UID);
+    // Knowing a user id is 34 and in Paris still leaves you with an id — which is the row an
+    // operator filtering for "anonymous" is trying to find.
+    expect(sql).not.toContain('JSONExtractKeys');
+    for (const key of ['age', 'city', 'gender', 'name']) {
+      expect(sql).not.toContain(`'${key}'`);
+    }
   });
 });

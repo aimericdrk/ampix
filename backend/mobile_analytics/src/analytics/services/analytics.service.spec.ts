@@ -220,7 +220,7 @@ describe('AnalyticsService', () => {
       expect(sql).toContain('coalesce(aliases.canonical_id, e.distinct_id) IN (');
     });
 
-    it('splits identified from anonymous on whether ANY profile property is held', async () => {
+    it('splits identified from anonymous on whether we can CONTACT the person', async () => {
       const clickhouse = makeClickhouse([[]]);
       const service = makeService(clickhouse, makeProjects());
 
@@ -228,7 +228,11 @@ describe('AnalyticsService', () => {
 
       const [sql] = clickhouse.query.mock.calls[0];
       expect(sql).toContain('coalesce(aliases.canonical_id, e.distinct_id) NOT IN (');
-      expect(sql).toContain('JSONExtractKeys');
+      // An email or a phone — not "any profile property at all": an age and a city still leave you
+      // holding an id, which is the row this filter exists to separate out.
+      expect(sql).toContain(`JSONExtractString(toJSONString(properties), 'email') != ''`);
+      expect(sql).toContain(`JSONExtractString(toJSONString(properties), 'phone') != ''`);
+      expect(sql).not.toContain('JSONExtractKeys');
     });
 
     it('adds no identity clause at all for the default "all"', async () => {
@@ -590,7 +594,7 @@ describe('AnalyticsService', () => {
       expect(sql).toContain('ON up.distinct_id = coalesce(aliases.canonical_id, e.distinct_id)');
       expect(sql).toContain("any(JSONExtractString(toJSONString(up.properties), 'name')) AS name");
       expect(sql).toContain(
-        "any(JSONExtractString(toJSONString(up.properties), 'email')) AS email",
+        "nullIf(JSONExtractString(toJSONString(up.properties), 'email'), '')",
       );
     });
 

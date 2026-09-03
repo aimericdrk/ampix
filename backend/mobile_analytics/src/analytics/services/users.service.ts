@@ -23,6 +23,7 @@ import {
 import { UserAdminService } from './user-admin.service';
 import {
   firstProfileStringExpr,
+  USER_EMAIL_PROFILE_KEYS,
   USER_PHONE_PROFILE_KEYS,
   USER_SEARCH_PROFILE_KEYS,
   type HiddenUserSource,
@@ -278,7 +279,7 @@ export class UsersService {
               max(e.timestamp) AS last_seen,
               count(DISTINCT e.insert_id) AS event_count,
               any(JSONExtractString(toJSONString(up.properties), 'name')) AS name,
-              any(JSONExtractString(toJSONString(up.properties), 'email')) AS email,
+              any(${firstProfileStringExpr(USER_EMAIL_PROFILE_KEYS)}) AS email,
               any(${firstProfileStringExpr(USER_PHONE_PROFILE_KEYS)}) AS phone
        FROM events AS e
        ${canon.join}

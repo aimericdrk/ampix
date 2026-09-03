@@ -31,6 +31,14 @@ export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export const USER_SEARCH_PROFILE_KEYS = ['name', 'email', 'username', '$name', '$email'] as const;
 
 /**
+ * Profile keys `GET /users` reads an email from, in priority order — the same spellings the
+ * dashboard's `user-identity.ts` falls back through, so the list, the profile header and the
+ * "identified" filter all agree on whether a person has an email. Same injection doctrine as
+ * `USER_SEARCH_PROFILE_KEYS`: OUR OWN fixed constants, embedded as SQL literals, never caller input.
+ */
+export const USER_EMAIL_PROFILE_KEYS = ['email', '$email'] as const;
+
+/**
  * Profile keys `GET /users` reads a phone number from, in priority order. Apps set profile
  * properties free-form (`people.set({...})`), so there is no single canonical spelling — accept the
  * conventional ones rather than forcing one on every integrator. Same injection doctrine as

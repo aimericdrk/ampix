@@ -2,11 +2,15 @@ import { z } from 'zod';
 import { ProblemException } from '../../common/problem-details';
 import { FILTER_OPS, filterValueSchema } from '../queries/insights/insights-query.schema';
 import { profilePropertyPredicate } from './filter-compiler';
+import {
+  USER_EMAIL_PROFILE_KEYS,
+  USER_PHONE_PROFILE_KEYS,
+} from '../services/analytics.shared';
 
 /**
  * The audience list's filters (`GET /users`): the profile properties an operator narrows the Users
  * page by — age, gender, city, plan, anything an app has ever set through `people.set` — plus the
- * identity switch that separates the people you know something about from the ids you do not.
+ * identity switch that separates the people you can contact from the ids you cannot.
  *
  * INJECTION SAFETY: same doctrine as the cohort engine. A filter's PROPERTY NAME is bound as a
  * `{…Key:String}` param inside `JSONExtractString(toJSONString(properties), {key})` and its VALUE
@@ -33,11 +37,13 @@ const MAX_USER_FILTERS = 10;
 const userFiltersSchema = z.array(userFilterSchema).max(MAX_USER_FILTERS);
 
 /**
- * Who the list shows. `identified` is "we hold at least one profile property for this person";
- * `anonymous` is its exact complement — the rows that show up as a bare id with no name, which is
- * what an operator means when they ask to hide (or to look at) the anonymous ones. Note this is
- * about PROFILE data, not about the SDK's anon_id: a backend-written user id with no `people.set`
- * behind it is anonymous here, because nothing is known about them.
+ * Who the list shows. `identified` is "we can CONTACT this person" — their profile carries an email
+ * or a phone number; `anonymous` is its exact complement. Any other profile property (a city, an
+ * age, a plan) does not make someone identified: knowing that a user id is 34 and in Paris still
+ * leaves you with an id, which is exactly the row an operator is trying to filter out.
+ *
+ * Note this is about PROFILE data, not about the SDK's anon_id: a backend-written user id with no
+ * `people.set` behind it is anonymous here, however real the person is.
  */
 export const USER_IDENTITY_FILTERS = ['all', 'identified', 'anonymous'] as const;
 export type UserIdentityFilter = (typeof USER_IDENTITY_FILTERS)[number];
@@ -81,10 +87,21 @@ export function parseUserIdentityFilter(raw: string | undefined): UserIdentityFi
   return parsed.data;
 }
 
-/** A profile row with at least one property set — the SQL definition of "we know this person". */
-const HAS_PROFILE_SUBQUERY = `SELECT distinct_id FROM user_profiles FINAL
+/**
+ * `<key> != '' OR …` over the accepted spellings of one contact field. The keys are OUR OWN fixed
+ * constants (analytics.shared.ts), embedded as SQL literals exactly as the search whitelist is —
+ * never caller input.
+ */
+function anyKeySet(keys: readonly string[]): string {
+  return keys
+    .map((key) => `JSONExtractString(toJSONString(properties), '${key}') != ''`)
+    .join('\n              OR ');
+}
+
+/** The SQL definition of "we can reach this person": an email or a phone number on their profile. */
+const HAS_CONTACT_SUBQUERY = `SELECT distinct_id FROM user_profiles FINAL
        WHERE project_id = {projectId:UUID}
-         AND length(JSONExtractKeys(toJSONString(properties))) > 0`;
+         AND (${anyKeySet([...USER_EMAIL_PROFILE_KEYS, ...USER_PHONE_PROFILE_KEYS])})`;
 
 /**
  * The WHERE clauses for one request's filters, each as `<uid> IN (<profile subquery>)`.
@@ -116,6 +133,6 @@ export function compileUserIdentityFilter(identity: UserIdentityFilter, uidExpr:
   if (identity === 'all') return '';
   const membership = identity === 'identified' ? 'IN' : 'NOT IN';
   return `${uidExpr} ${membership} (
-         ${HAS_PROFILE_SUBQUERY}
+         ${HAS_CONTACT_SUBQUERY}
        )`;
 }

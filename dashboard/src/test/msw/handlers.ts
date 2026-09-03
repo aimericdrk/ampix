@@ -2624,12 +2624,14 @@ export const handlers = [
         !hiddenUsersState.some((entry) => entry.distinct_id === u.distinct_id) &&
         !erasedUsersState.has(u.distinct_id),
     );
-    // The audience filters. The fixture's only profile data is `user-001`'s (USER_PROFILE_FIXTURE),
-    // so "identified" is that row and "anonymous" is everyone else — enough to prove the page
-    // sends what it means and renders what comes back.
+    // The audience filters. Mirrors the server's rule: identified = the profile carries an email or
+    // a phone. `user-001` is the only fixture user with either, so it is that row against the rest.
     const identity = url.searchParams.get('identity');
-    if (identity === 'identified') pool = pool.filter((u) => u.distinct_id === 'user-001');
-    if (identity === 'anonymous') pool = pool.filter((u) => u.distinct_id !== 'user-001');
+    const contactable = (u: (typeof USERS_FIXTURE)[number]) =>
+      u.distinct_id === 'user-001' &&
+      Boolean(USER_PROFILE_FIXTURE.profile.email || USER_PROFILE_FIXTURE.profile.phone);
+    if (identity === 'identified') pool = pool.filter(contactable);
+    if (identity === 'anonymous') pool = pool.filter((u) => !contactable(u));
     const rawFilters = url.searchParams.get('filters');
     if (rawFilters) {
       const parsed = JSON.parse(rawFilters) as Array<{ property: string; op: string; value?: string }>;

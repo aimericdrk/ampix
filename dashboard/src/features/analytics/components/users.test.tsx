@@ -134,7 +134,7 @@ describe('Audience filters', () => {
 
   afterEach(() => server.events.removeAllListeners());
 
-  it('narrows to the people with no profile data when "anonymous" is chosen', async () => {
+  it('narrows to the people with no email or phone when "anonymous" is chosen', async () => {
     signIn();
     renderApp(`/projects/${TEST_PROJECT.id}/users`);
     const list = await screen.findByRole('list', { name: 'Users' });
@@ -142,7 +142,7 @@ describe('Audience filters', () => {
 
     await userEvent.selectOptions(screen.getByLabelText('Show'), 'anonymous');
 
-    // `user-001` is the only fixture user with profile data, so they are the one row that leaves.
+    // `user-001` is the only fixture user with an email or a phone, so they are the row that leaves.
     await waitFor(() => expect(screen.queryByText('Alex Chen')).not.toBeInTheDocument());
     expect(
       within(screen.getByRole('list', { name: 'Users' })).getAllByRole('listitem').length,

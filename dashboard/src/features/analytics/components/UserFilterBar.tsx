@@ -39,10 +39,11 @@ function isComplete(filter: UserFilter): boolean {
 /**
  * The audience filter bar: who the Users list shows.
  *
- * Two different questions sit side by side. `identity` splits the people you hold profile
- * properties for from the ids you hold nothing about — the rows that show as a bare id, which is
- * what "anonymous" means on this screen (a backend-written user id with no `people.set` behind it
- * is anonymous here, however real the person is). The filter rows then narrow by any profile
+ * Two different questions sit side by side. `identity` splits the people you can CONTACT — their
+ * profile carries an email or a phone number — from the ids you cannot. Other profile properties
+ * do not count: an age and a city still leave you holding an id, which is the row an operator
+ * filtering for "anonymous" is looking for (a backend-written user id with no `people.set` behind
+ * it is anonymous here, however real the person is). The filter rows then narrow by any profile
  * property the project actually has: age, gender, city, plan — the list comes from the data, so it
  * is whatever the app has set rather than a hardcoded guess.
  */
@@ -93,8 +94,8 @@ export function UserFilterBar({
             className={cn(fieldLook, 'h-11 w-auto')}
           >
             <option value="all">Everyone</option>
-            <option value="identified">Identified — we know something about them</option>
-            <option value="anonymous">Anonymous — no profile data</option>
+            <option value="identified">Identified — has an email or phone</option>
+            <option value="anonymous">Anonymous — no email or phone</option>
           </select>
         </div>
 
