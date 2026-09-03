@@ -44,10 +44,15 @@ export const EVENT_SOURCE_EXPR =
  * against 3 devices).
  *
  * So the people-centric surfaces filter to client events: engagement (DAU/WAU/MAU, new vs
- * returning, stickiness), retention, user paths / flows, the journey report, and attribution. The
- * event-centric ones do NOT — insights, funnels, distributions, experiments, cohorts and revenue
- * count the events an analyst asked for, whoever wrote them, and `source` is a filterable
- * dimension there when they want to split the two.
+ * returning, stickiness), retention, user paths / flows, and attribution. The event-centric ones
+ * do NOT — insights, funnels, distributions, experiments, cohorts and revenue count the events an
+ * analyst asked for, whoever wrote them, and `source` is a filterable dimension there when they
+ * want to split the two.
+ *
+ * The journey report is the one people-centric page that does NOT filter, and it cannot: the
+ * outcome it measures against IS a server row (the RevenueCat webhook writes every
+ * `$rc_initial_purchase` / `$rc_renewal` / `$rc_cancellation` / `$rc_expiration`), so a device
+ * filter left it with no cohort at all. `journey.sql.ts` carries the full argument.
  *
  * `'client'` is OUR OWN fixed constant (the token kind, §6.1.1), embedded as a literal exactly like
  * `$session_end` and `$identify` in the shared SQL — no caller input reaches this text.

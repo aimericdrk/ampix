@@ -6,7 +6,6 @@ import {
   RC_RENEWAL,
 } from '../../revenuecat/metrics/rc-metrics.constants';
 import type { JourneyOutcome } from './journey.types';
-import { CLIENT_EVENTS_ONLY } from '../support/property-resolver';
 
 /** The `rc-metrics.constants` property expressions read an unqualified `properties`; every scan
  *  here aliases the events table as `e` and joins `aliases` beside it, so the column needs the
@@ -19,6 +18,22 @@ const prop = (name: string) => `JSONExtractString(toJSONString(e.properties), '$
  * names, fixed JSON property expressions, and the outcome switch below. Nothing here interpolates
  * a request value: `projectId`, the date bounds, the window length and the step count are all
  * bound as ClickHouse query params by the caller. Same discipline as `identity.ts`.
+ *
+ * EVERY EVENT COUNTS HERE, whoever wrote it: this report deliberately does NOT apply
+ * `CLIENT_EVENTS_ONLY` (see that constant for the surfaces that do, and why they differ).
+ *
+ * The outcome is the reason. Every event this page keys on — `$rc_initial_purchase`,
+ * `$rc_renewal`, `$rc_cancellation`, `$rc_expiration` — is written by the RevenueCat webhook, so
+ * `EVENT_SOURCE_EXPR` reads all of them as 'server'. Restricting the scans to device events
+ * therefore matched no outcome at all: `cohort_users` came back empty and the page went blank
+ * (measured on this deployment: 257 `$rc_initial_purchase` rows, every one server-written).
+ *
+ * The behavioural window follows the same rule, and not just for consistency. A backend-emitted
+ * `message_sent` or `like_received` IS what happened to that person before they paid, and on a
+ * project whose product logic lives server-side it is nearly ALL of what happened (here: 970
+ * client rows against 987,873 server ones) — a "typical path" rebuilt from a thousandth of the
+ * evidence describes nobody. The cohort is the filter on this page; `source` stays a dimension an
+ * analyst can split on where that question belongs.
  */
 
 /** RevenueCat reports a refund as a cancellation (or, once the entitlement lapses, an expiration)
@@ -124,7 +139,7 @@ export function journeyCtes(spec: OutcomeSpec): string {
     ever_outcome AS (
       SELECT DISTINCT ${UID} AS uid
       FROM events AS e ${ALIAS_JOIN}
-      WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY} AND ${spec.predicate}
+      WHERE e.project_id = {projectId:UUID} AND ${spec.predicate}
     )`;
 
   const controlRequired = spec.controlRequires
@@ -132,7 +147,7 @@ export function journeyCtes(spec: OutcomeSpec): string {
     control_required AS (
       SELECT DISTINCT ${UID} AS uid
       FROM events AS e ${ALIAS_JOIN}
-      WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY} AND ${spec.controlRequires}
+      WHERE e.project_id = {projectId:UUID} AND ${spec.controlRequires}
     ),`
     : '';
 
@@ -147,14 +162,14 @@ export function journeyCtes(spec: OutcomeSpec): string {
     cohort_users AS (
       SELECT ${UID} AS uid, min(e.timestamp) AS anchor
       FROM events AS e ${ALIAS_JOIN}
-      WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY} AND ${spec.predicate}
+      WHERE e.project_id = {projectId:UUID} AND ${spec.predicate}
         AND e.timestamp >= {from:DateTime64} AND e.timestamp < {toExclusive:DateTime64}
       GROUP BY uid
     ),
     control_users AS (
       SELECT ${UID} AS uid, max(e.timestamp) AS anchor
       FROM events AS e ${ALIAS_JOIN}
-      WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY}
+      WHERE e.project_id = {projectId:UUID}
         AND e.timestamp >= {from:DateTime64} AND e.timestamp < {toExclusive:DateTime64}
       GROUP BY uid
       HAVING uid NOT IN (SELECT uid FROM ever_outcome) ${controlRequiredJoin}
@@ -170,7 +185,7 @@ export function journeyCtes(spec: OutcomeSpec): string {
       FROM events AS e
       ${ALIAS_JOIN}
       INNER JOIN anchors AS a ON ${UID} = a.uid
-      WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY}
+      WHERE e.project_id = {projectId:UUID}
         AND ${BEHAVIOUR_FILTER}
         AND e.timestamp >= {from:DateTime64} - toIntervalDay({windowDays:UInt16})
         AND e.timestamp < {toExclusive:DateTime64}
@@ -221,7 +236,7 @@ export function daysToOutcomeSql(spec: OutcomeSpec): string {
     origins AS (
       SELECT ${UID} AS uid, min(e.timestamp) AS origin
       FROM events AS e ${ALIAS_JOIN}
-      WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY} ${originFilter}
+      WHERE e.project_id = {projectId:UUID} ${originFilter}
       GROUP BY uid
     )
     SELECT quantileExact(0.25)(days) AS p25,
@@ -277,7 +292,7 @@ export function productsSql(spec: OutcomeSpec): string {
     FROM events AS e
     ${ALIAS_JOIN}
     INNER JOIN cohort_users AS c ON ${UID} = c.uid
-    WHERE e.project_id = {projectId:UUID} AND ${CLIENT_EVENTS_ONLY} AND ${spec.predicate}
+    WHERE e.project_id = {projectId:UUID} AND ${spec.predicate}
       AND e.timestamp = c.anchor
     GROUP BY product_id, period_type
     ORDER BY users DESC, product_id ASC

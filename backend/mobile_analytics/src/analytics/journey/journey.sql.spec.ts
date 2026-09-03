@@ -60,12 +60,14 @@ describe('journey SQL', () => {
     }
   });
 
-  it('builds its populations from DEVICE events only', () => {
-    // The control group is "every user active in the range", so without this every user id a
-    // backend ever wrote about joined the comparison as a person who did nothing.
+  it('counts events from every source, including the ones a backend wrote', () => {
+    // The outcome events are RevenueCat webhook rows, which EVENT_SOURCE_EXPR reads as 'server'.
+    // A device-only filter here matched no outcome at all, so the cohort was always empty and the
+    // page always blank — and on a server-heavy project it would also hide nearly every step of
+    // the behaviour it is meant to reconstruct. See the note at the top of journey.sql.ts.
     for (const sql of Object.values(ALL_STATEMENTS('subscribe'))) {
-      expect(sql).toContain("= 'client'");
-      expect(sql).toContain("sdk_version = 'revenuecat-webhook'");
+      expect(sql).not.toContain("= 'client'");
+      expect(sql).not.toContain("sdk_version = 'revenuecat-webhook'");
     }
   });
 

@@ -221,16 +221,22 @@ function buildSummary(
   };
 
   const metrics: JourneySummaryMetric[] = [
-    pair('steps_before', 'events', 'Events recorded in the window before the anchor.', [
-      'steps_p25',
-      'steps_p50',
-      'steps_p75',
-    ]),
-    pair('sessions_before', 'sessions', 'Distinct sessions in the window before the anchor.', [
-      'sessions_p25',
-      'sessions_p50',
-      'sessions_p75',
-    ]),
+    pair(
+      'steps_before',
+      'events',
+      'Events recorded in the window before the anchor, whoever wrote them — a backend-emitted ' +
+        'event counts here, because it is a thing that happened to this person before the outcome.',
+      ['steps_p25', 'steps_p50', 'steps_p75'],
+    ),
+    pair(
+      'sessions_before',
+      'sessions',
+      'Distinct session ids in the window before the anchor. Read this one against the event ' +
+        'count: a session is a device concept, and a server-written event carries whatever ' +
+        'session id its caller sent — often a fresh one per event, in which case this tracks the ' +
+        'event count rather than real app sessions.',
+      ['sessions_p25', 'sessions_p50', 'sessions_p75'],
+    ),
     pair(
       'distinct_events_before',
       'event_names',
