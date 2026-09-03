@@ -20,7 +20,8 @@ function redactKey(key: string): string {
 }
 
 /**
- * Distributed sliding-window rate limiter (contracts §4: 1000 req/min per token).
+ * Distributed sliding-window rate limiter (default 10000 req/min per token,
+ * INGEST_RATE_LIMIT_PER_MIN).
  * State lives in a Redis ZSET (`rl:<key>`, score = ms timestamp), so any number of
  * stateless Cloud Run instances share one window. One MULTI keeps it near-atomic;
  * an over-limit probe removes its own member so denied requests do not consume quota.

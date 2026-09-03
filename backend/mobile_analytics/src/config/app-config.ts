@@ -70,8 +70,10 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32).optional(),
   INGEST_MAX_BATCH: z.coerce.number().int().positive().default(100),
   INGEST_MAX_BODY_KB: z.coerce.number().int().positive().default(1024),
-  // Contracts §4 fixes this at 1000; the env override exists only so tests can exercise 429s cheaply.
-  INGEST_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(1000),
+  // Server-side callers post one request per event under a single project token, so the old 1000
+  // shared the whole minute between every user of a backend integration. Raised to 10000; override
+  // per environment (and in tests, to exercise 429s cheaply).
+  INGEST_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(10_000),
   // §18 — per-upload cap for automatic screenshots (JPEG bytes). Default 512 KB.
   SCREENSHOT_MAX_KB: z.coerce.number().int().positive().default(512),
   // §18 — Firebase Storage (GCS) bucket the screenshot bytes are written to. When unset the app

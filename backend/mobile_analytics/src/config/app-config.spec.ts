@@ -26,7 +26,7 @@ describe('loadConfig', () => {
     expect(config.port).toBe(8088);
     expect(config.ingestMaxBatch).toBe(100);
     expect(config.ingestMaxBodyKb).toBe(1024);
-    expect(config.ingestRateLimitPerMin).toBe(1000);
+    expect(config.ingestRateLimitPerMin).toBe(10_000);
     expect(config.screenshotMaxKb).toBe(512);
     expect(config.databaseUrl).toBe(validEnv.DATABASE_URL);
     expect(config.redisUrl).toBe('redis://localhost:6379');

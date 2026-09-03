@@ -333,7 +333,7 @@ openssl rand -hex 32      # 64 hex chars = 32 bytes → TOTP_ENC_KEY
 | --------------------------- | ------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `INGEST_MAX_BATCH`          | positive int | `100`   | Max events/profiles per batch                                                                                                                     |
 | `INGEST_MAX_BODY_KB`        | positive int | `1024`  | Wired into the JSON body parser in `main.ts`                                                                                                      |
-| `INGEST_RATE_LIMIT_PER_MIN` | positive int | `1000`  | Not in `.env.example`; override exists mainly for tests. Ingest limiter fails **open** on a Redis error (availability > throttling for analytics) |
+| `INGEST_RATE_LIMIT_PER_MIN` | positive int | `10000` | Per **token**, not per user: a backend integration posting one request per event spends this whole budget on one token, so raise it rather than the per-request size. Ingest limiter fails **open** on a Redis error (availability > throttling for analytics) |
 
 **Screenshots** (see §3): `SCREENSHOT_MAX_KB` (default 512), `FIREBASE_STORAGE_BUCKET` (unset → in-memory fake + warning; bytes not persisted), `GOOGLE_APPLICATION_CREDENTIALS` (service-account JSON path — never commit).
 
