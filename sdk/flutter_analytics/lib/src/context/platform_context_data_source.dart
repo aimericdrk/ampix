@@ -43,10 +43,19 @@ class PlatformContextDataSource implements ContextDataSource {
           osVersion: ios.systemVersion,
           model: ios.utsname.machine,
           manufacturer: 'Apple',
+          // Vendor-scoped and permission-free — the only stable id iOS hands
+          // out. Nullable per the platform: it reads null while the device is
+          // locked before first unlock, in which case `DeviceIdStore` mints
+          // a UUID instead.
+          id: ios.identifierForVendor,
         );
       }
       if (Platform.isAndroid) {
         final android = await _deviceInfoPlugin.androidInfo;
+        // No `id` on Android: `device_info_plus` dropped `androidId`
+        // (Settings.Secure.ANDROID_ID) on privacy grounds, and every
+        // remaining candidate is either permission-gated or not stable across
+        // reboots. `DeviceIdStore` mints and persists a UUID instead.
         return DeviceInfo(
           os: 'android',
           osVersion: android.version.release,
@@ -84,6 +93,19 @@ class PlatformContextDataSource implements ContextDataSource {
   String timezone() {
     try {
       return DateTime.now().timeZoneName;
+    } catch (_) {
+      // Deliberately swallowed: the SDK never throws into the host app.
+      return '';
+    }
+  }
+
+  @override
+  String theme() {
+    try {
+      return ui.PlatformDispatcher.instance.platformBrightness ==
+              ui.Brightness.dark
+          ? 'dark'
+          : 'light';
     } catch (_) {
       // Deliberately swallowed: the SDK never throws into the host app.
       return '';

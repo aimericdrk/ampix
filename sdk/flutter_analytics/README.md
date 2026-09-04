@@ -50,6 +50,19 @@ MyAmpix.instance.people.set({'plan': 'pro'});
 - **Token:** `pnpm dev` at the repo root seeds the demo token `mam_00000000000000000000000000000000`. Mint more via Prisma Studio (`Organization` → `Project` → `SdkToken`; token = `mam_` + 32 hex).
 - **Android emulator:** use `http://10.0.2.2:8088`, not `localhost`.
 
+## Device context (declare what the SDK can't see)
+
+```dart
+MyAmpix.instance.setTheme(MyAmpixTheme.dark); // context.theme; null = follow platform brightness
+MyAmpix.instance.setDeviceToken(fcmToken);    // context.device_token (call again on every refresh)
+MyAmpix.instance.setUniqueId(myDeviceId);     // context.unique_id — your own join key
+```
+
+Only needed for those three: the rest of the `context` block (OS, model, locale, screen, network,
+plus a stable per-install `device_id`) is automatic. The token and unique id are persisted and
+device-scoped, so they survive relaunches and `reset()`. Details in
+[`../../HOW-TO-USE.md`](../../HOW-TO-USE.md) §8.2.
+
 ## Autocapture (wire once)
 
 ```dart

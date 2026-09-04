@@ -199,6 +199,124 @@ void main() {
     expect(link['properties'][r'$rc_app_user_id'], 'rc-user-1');
   });
 
+  test('every event carries the persisted device id', () async {
+    await initSdk();
+    MyAmpix.instance.track('first_launch_event');
+    MyAmpix.instance.flush();
+    await waitFor(
+      () => sentEvents().any((e) => e['event'] == 'first_launch_event'),
+    );
+
+    final context =
+        sentEvents().firstWhere(
+              (e) => e['event'] == 'first_launch_event',
+            )['context']
+            as Map;
+    // The fake data source reports an iOS identifierForVendor, so that is
+    // what gets adopted and persisted rather than a minted UUID.
+    expect(context['device_id'], 'IDFV-1111');
+    expect(keyValueStore.values['mam_device_id'], 'IDFV-1111');
+  });
+
+  test('setDeviceToken stamps every subsequent event and survives a relaunch', () async {
+    await initSdk();
+    MyAmpix.instance.track('before_token');
+    MyAmpix.instance.setDeviceToken('fcm-token-abc');
+    MyAmpix.instance.track('after_token');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == 'after_token'));
+
+    Map context(String name) =>
+        sentEvents().firstWhere((e) => e['event'] == name)['context'] as Map;
+    // The token only exists from the moment the host declared it — the
+    // messaging SDK hands it over some way into the launch.
+    expect(context('before_token').containsKey('device_token'), isFalse);
+    expect(context('after_token')['device_token'], 'fcm-token-abc');
+
+    // Relaunch on the same store: the persisted token is back before the
+    // messaging SDK has had a chance to hand it over again.
+    await MyAmpix.shutdownForTesting();
+    await initSdk();
+    MyAmpix.instance.track('next_launch');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == 'next_launch'));
+    expect(context('next_launch')['device_token'], 'fcm-token-abc');
+  });
+
+  test('setUniqueId stamps every subsequent event and survives a relaunch', () async {
+    await initSdk();
+    MyAmpix.instance.setUniqueId('phone-mark-1');
+    MyAmpix.instance.track('with_unique_id');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == 'with_unique_id'));
+
+    Map context(String name) =>
+        sentEvents().firstWhere((e) => e['event'] == name)['context'] as Map;
+    expect(context('with_unique_id')['unique_id'], 'phone-mark-1');
+    expect(keyValueStore.values['mam_unique_id'], 'phone-mark-1');
+
+    // The host reads its identifier off a platform channel on every launch,
+    // but events sent before that lands must still carry it.
+    await MyAmpix.shutdownForTesting();
+    await initSdk();
+    MyAmpix.instance.track('next_launch_unique_id');
+    MyAmpix.instance.flush();
+    await waitFor(
+      () => sentEvents().any((e) => e['event'] == 'next_launch_unique_id'),
+    );
+    expect(context('next_launch_unique_id')['unique_id'], 'phone-mark-1');
+  });
+
+  test('clearUniqueId drops it from every later event', () async {
+    await initSdk();
+    MyAmpix.instance.setUniqueId('phone-mark-1');
+    MyAmpix.instance.clearUniqueId();
+    MyAmpix.instance.track('after_unique_id_clear');
+    MyAmpix.instance.flush();
+    await waitFor(
+      () => sentEvents().any((e) => e['event'] == 'after_unique_id_clear'),
+    );
+
+    final context =
+        sentEvents().firstWhere(
+              (e) => e['event'] == 'after_unique_id_clear',
+            )['context']
+            as Map;
+    expect(context.containsKey('unique_id'), isFalse);
+  });
+
+  test('clearDeviceToken drops it from every later event', () async {
+    await initSdk();
+    MyAmpix.instance.setDeviceToken('fcm-token-abc');
+    MyAmpix.instance.clearDeviceToken();
+    MyAmpix.instance.track('after_clear');
+    MyAmpix.instance.flush();
+    await waitFor(() => sentEvents().any((e) => e['event'] == 'after_clear'));
+
+    final context =
+        sentEvents().firstWhere((e) => e['event'] == 'after_clear')['context']
+            as Map;
+    expect(context.containsKey('device_token'), isFalse);
+  });
+
+  test('setTheme overrides the platform brightness on every later event', () async {
+    await initSdk();
+    // The fake platform reports light; the host app is forced to dark in-app.
+    MyAmpix.instance.setTheme(MyAmpixTheme.dark);
+    MyAmpix.instance.track('in_dark');
+    MyAmpix.instance.setTheme(null); // back to following the platform
+    MyAmpix.instance.track('following_system');
+    MyAmpix.instance.flush();
+    await waitFor(
+      () => sentEvents().any((e) => e['event'] == 'following_system'),
+    );
+
+    Map context(String name) =>
+        sentEvents().firstWhere((e) => e['event'] == name)['context'] as Map;
+    expect(context('in_dark')['theme'], 'dark');
+    expect(context('following_system')['theme'], 'light');
+  });
+
   test(r'identify re-emits $rc_link on the new identity', () async {
     await initSdk();
     MyAmpix.instance.setRevenueCatAppUserId('rc-user-1');
@@ -392,6 +510,11 @@ void main() {
       sdk.people.set({'k': 'v'});
       sdk.optOutTracking();
       sdk.optInTracking();
+      sdk.setDeviceToken('fcm-1');
+      sdk.clearDeviceToken();
+      sdk.setUniqueId('phone-mark-1');
+      sdk.clearUniqueId();
+      sdk.setTheme(MyAmpixTheme.dark);
     }, returnsNormally);
   });
 

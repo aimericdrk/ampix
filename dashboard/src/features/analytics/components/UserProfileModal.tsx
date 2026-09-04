@@ -204,6 +204,10 @@ const DEVICE_FIELDS: ReadonlyArray<readonly [keyof UserEventContext, string]> = 
   ['app_build', 'App build'],
   ['locale', 'Locale'],
   ['timezone', 'Timezone'],
+  ['theme', 'Appearance'],
+  ['device_id', 'Device ID'],
+  ['unique_id', 'Unique ID'],
+  ['device_token', 'Push token'],
   ['network', 'Network'],
   ['sdk_version', 'SDK version'],
   // Captured server-side from the connection, so it is present for SDK traffic and empty for rows

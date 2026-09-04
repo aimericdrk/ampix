@@ -73,8 +73,12 @@ interface RecentEventRow {
   app_build: string;
   device_model: string;
   device_manufacturer: string;
+  device_id: string;
+  device_token: string;
+  unique_id: string;
   locale: string;
   timezone: string;
+  theme: string;
   network: string;
   sdk_version: string;
   ip: string;
@@ -92,8 +96,11 @@ const RECENT_EVENT_COLUMNS = `e.insert_id AS insert_id, e.event AS event, e.time
                 e.properties AS properties,
                 e.os AS os, e.os_version AS os_version, e.app_version AS app_version,
                 e.app_build AS app_build, e.device_model AS device_model,
-                e.device_manufacturer AS device_manufacturer, e.locale AS locale,
-                e.timezone AS timezone, e.network AS network, e.sdk_version AS sdk_version,
+                e.device_manufacturer AS device_manufacturer,
+                e.device_id AS device_id, e.device_token AS device_token,
+                e.unique_id AS unique_id, e.locale AS locale,
+                e.timezone AS timezone, e.theme AS theme,
+                e.network AS network, e.sdk_version AS sdk_version,
                 e.ip AS ip,
                 ${EVENT_SOURCE_EXPR} AS source`;
 
@@ -572,8 +579,12 @@ function toRecentEvent(row: RecentEventRow): RecentEvent {
       app_build: row.app_build ?? '',
       device_model: row.device_model ?? '',
       device_manufacturer: row.device_manufacturer ?? '',
+      device_id: row.device_id ?? '',
+      device_token: row.device_token ?? '',
+      unique_id: row.unique_id ?? '',
       locale: row.locale ?? '',
       timezone: row.timezone ?? '',
+      theme: row.theme ?? '',
       network: row.network ?? '',
       sdk_version: row.sdk_version ?? '',
       ip: row.ip ?? '',

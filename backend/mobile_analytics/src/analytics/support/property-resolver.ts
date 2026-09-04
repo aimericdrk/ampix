@@ -74,6 +74,14 @@ const EVENT_COLUMNS: Readonly<Record<string, string>> = Object.freeze({
   app_build: 'app_build',
   device_model: 'device_model',
   device_manufacturer: 'device_manufacturer',
+  device_id: 'device_id',
+  // `device_token` is deliberately NOT here. It is not a dimension anyone can
+  // segment on — every device has its own — and whitelisting it would let
+  // /meta/property-values page the project's push tokens out as a filter
+  // autosuggest. It still reaches the read side as device context on a
+  // profile (users.service), which is where it is actually useful.
+  unique_id: 'unique_id',
+  theme: 'theme',
   locale: 'locale',
   timezone: 'timezone',
   network: 'network',

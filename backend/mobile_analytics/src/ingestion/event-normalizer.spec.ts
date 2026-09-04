@@ -108,6 +108,34 @@ describe('EventNormalizer.normalizeBatch', () => {
     expect(rows[0].os).toBe('');
     expect(rows[0].screen_width).toBe(0);
     expect(rows[0].install_referrer).toBe('');
+    // A pre-device-context SDK sends none of these; the columns are NOT NULL.
+    expect(rows[0].device_id).toBe('');
+    expect(rows[0].device_token).toBe('');
+    expect(rows[0].unique_id).toBe('');
+    expect(rows[0].theme).toBe('');
+  });
+
+  it('carries the device identity and appearance context onto the row', () => {
+    const { rows } = normalizer.normalizeBatch(
+      PROJECT_ID,
+      [
+        makeEvent({
+          context: {
+            device_id: 'IDFV-1111',
+            device_token: 'fcm-token-abc',
+            unique_id: 'phone-mark-1',
+            theme: 'dark',
+          },
+        }),
+      ],
+      'client',
+      IP,
+      NOW,
+    );
+    expect(rows[0].device_id).toBe('IDFV-1111');
+    expect(rows[0].device_token).toBe('fcm-token-abc');
+    expect(rows[0].unique_id).toBe('phone-mark-1');
+    expect(rows[0].theme).toBe('dark');
   });
 
   it('rejects an item missing insert_id with the contract reason style', () => {

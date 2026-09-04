@@ -74,6 +74,7 @@ void main() {
         'timezone': 'Europe/Paris',
         'screen_width': 393,
         'screen_height': 852,
+        'theme': 'light',
         'network': 'wifi',
         'sdk_version': '0.1.0',
       },

@@ -20,8 +20,12 @@ export interface EventRow {
   os_version: string;
   device_model: string;
   device_manufacturer: string;
+  device_id: string;
+  device_token: string;
+  unique_id: string;
   locale: string;
   timezone: string;
+  theme: string;
   screen_width: number;
   screen_height: number;
   network: string;

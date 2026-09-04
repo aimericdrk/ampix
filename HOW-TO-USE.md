@@ -160,6 +160,41 @@ control to **On the user profile** instead. Note that `reset()` clears super pro
 logout/login the assignment must be re-registered, which is another reason a long-running test may
 prefer the profile.
 
+## 8.2 Device context: appearance, push token, your own id
+
+Every event already carries a device/app `context` block (OS, model, locale, screen, network …)
+with no code at all. Three of its fields the SDK cannot fill in on its own, so declare them:
+
+```dart
+// The app's EFFECTIVE colour scheme -> context.theme.
+// ONLY needed if your app has its own in-app appearance setting: left
+// undeclared the SDK reports the platform brightness, which is right exactly
+// while the app follows the system. Re-declare it whenever the user changes it.
+MyAmpix.instance.setTheme(MyAmpixTheme.dark);   // null = follow the platform again
+
+// The push token -> context.device_token, so a device seen in the analytics
+// can be reached with a push. Call it on first registration AND on every
+// refresh (FirebaseMessaging.instance.onTokenRefresh).
+MyAmpix.instance.setDeviceToken(fcmToken);      // clearDeviceToken() when push is revoked
+
+// A free-form id of your own -> context.unique_id. The join key to whatever
+// system you ALREADY key on: your own device identifier, a CRM id, a licence
+// key. Never interpreted by the SDK or the backend.
+MyAmpix.instance.setUniqueId(myDeviceIdentifier); // clearUniqueId() to drop it
+```
+
+The token and the unique id are **persisted**, so they are back before the first event of the next
+launch; both are **device**-scoped, so `reset()` (logout) deliberately keeps them — the same
+physical device is still the same device after a logout.
+
+`context.device_id` needs no code: the SDK resolves a stable per-install id once (iOS
+`identifierForVendor`, a minted UUID elsewhere), persists it, and never changes it afterwards.
+
+All of these show up in the dashboard on a user's **Device properties** card, and `device_id`,
+`unique_id` and `theme` are also breakdown/filter dimensions. `device_token` deliberately is not —
+one value per device makes a useless segment, and a filter autosuggest over it would page a
+project's push tokens out.
+
 ## 9. Sessions
 
 Fully automatic — nothing to call. The SDK maintains a `session_id` and emits the reserved lifecycle events (`$first_open`, `$app_open`, `$app_background`, `$session_start`, `$session_end` with `$duration_ms`) on its own. A session rotates once the app has spent more than `sessionTimeout` (default 30 minutes) in the background.

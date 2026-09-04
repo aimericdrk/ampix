@@ -21,7 +21,16 @@ CREATE TABLE IF NOT EXISTS analytics.events (
   app_version   LowCardinality(String), app_build LowCardinality(String),
   os            LowCardinality(String), os_version LowCardinality(String),
   device_model  LowCardinality(String), device_manufacturer LowCardinality(String),
+  -- Install-scoped device identity. device_id is one value per install (high
+  -- cardinality, so a plain String, not LowCardinality); device_token is the
+  -- push token the host app declared, rewritten on every rotation.
+  device_id     String CODEC(ZSTD(3)), device_token String CODEC(ZSTD(3)),
+  -- Free-form host-declared identifier: whatever id the app already keys on
+  -- elsewhere, so an event here joins to that system. Never interpreted here.
+  unique_id     String CODEC(ZSTD(3)),
   locale        LowCardinality(String), timezone LowCardinality(String),
+  -- The app's effective colour scheme: 'light' | 'dark' (or '' when unknown).
+  theme         LowCardinality(String),
   screen_width  UInt16, screen_height UInt16,
   network       LowCardinality(String), sdk_version LowCardinality(String),
   utm_source    LowCardinality(String), utm_medium LowCardinality(String),
@@ -49,6 +58,10 @@ ORDER BY (project_id, event, timestamp, insert_id);
 -- idempotent via IF NOT EXISTS, exactly like the CREATEs above.
 ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS source LowCardinality(String) DEFAULT '';
 ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS ip String DEFAULT '' CODEC(ZSTD(3));
+ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS device_id String CODEC(ZSTD(3));
+ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS device_token String CODEC(ZSTD(3));
+ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS unique_id String CODEC(ZSTD(3));
+ALTER TABLE analytics.events ADD COLUMN IF NOT EXISTS theme LowCardinality(String);
 
 CREATE TABLE IF NOT EXISTS analytics.user_profiles (
   project_id UUID, distinct_id String,

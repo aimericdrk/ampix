@@ -11,8 +11,11 @@ const WHITELIST_COLUMNS = [
   'app_build',
   'device_model',
   'device_manufacturer',
+  'device_id',
+  'unique_id',
   'locale',
   'timezone',
+  'theme',
   'network',
   'sdk_version',
   'utm_source',
@@ -28,6 +31,14 @@ describe('resolveProperty', () => {
   it('exposes exactly the contracts §14 whitelist', () => {
     // `source` is whitelisted too, but resolves to a fixed expression, not a bare column.
     expect([...EVENT_COLUMN_WHITELIST].sort()).toEqual([...WHITELIST_COLUMNS, 'source'].sort());
+  });
+
+  it('keeps device_token OUT of the whitelist', () => {
+    // Not a dimension: one value per device, and whitelisting it would let
+    // /meta/property-values page a project's push tokens out as filter
+    // suggestions. It resolves as a custom JSON key (and so finds nothing).
+    expect(EVENT_COLUMN_WHITELIST.has('device_token')).toBe(false);
+    expect(resolveProperty('device_token', 'p', {}).isColumn).toBe(false);
   });
 
   it.each(WHITELIST_COLUMNS)(

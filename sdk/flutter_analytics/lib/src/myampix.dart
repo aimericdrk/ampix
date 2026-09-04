@@ -14,6 +14,9 @@ import 'autocapture/screenshot_autocapture.dart';
 import 'autocapture/screenshot_capturer.dart';
 import 'config.dart';
 import 'context/context_collector.dart';
+import 'context/device_id_store.dart';
+import 'context/host_context_value_store.dart';
+import 'context/myampix_theme.dart';
 import 'context/platform_context_data_source.dart';
 import 'identity/identity_manager.dart';
 import 'identity/rc_link_store.dart';
@@ -114,8 +117,17 @@ class MyAmpix {
   /// anything until the host explicitly opts in by calling it.
   bool _screenshotsArmed = false;
 
+  /// Host-declared appearance, or null while the SDK follows the platform
+  /// brightness. In memory only, by design: the host re-declares it on every
+  /// launch from its own persisted setting, so a stale value can never
+  /// outlive a setting the user changed while the app was closed.
+  MyAmpixTheme? _theme;
+
   late final AnalyticsDatabase _database;
   late final AttributionStore _attribution;
+  late final DeviceIdStore _deviceId;
+  late final HostContextValueStore _deviceToken;
+  late final HostContextValueStore _uniqueId;
   late final IdentityManager _identity;
   late final SuperPropertiesStore _superProperties;
   RcLinkStore? _rcLink;
@@ -185,6 +197,17 @@ class MyAmpix {
     await _identity.load();
     _rcLink = RcLinkStore(store: keyValueStore);
     await _rcLink!.load();
+    _deviceId = DeviceIdStore(store: keyValueStore, idFactory: idFactory);
+    _deviceToken = HostContextValueStore(
+      store: keyValueStore,
+      storageKey: HostContextValueStore.deviceTokenKey,
+    );
+    await _deviceToken.load();
+    _uniqueId = HostContextValueStore(
+      store: keyValueStore,
+      storageKey: HostContextValueStore.uniqueIdKey,
+    );
+    await _uniqueId.load();
     _attribution = AttributionStore(keyValueStore);
     try {
       await _attribution.load();
@@ -242,6 +265,10 @@ class MyAmpix {
       contextCollector: ContextCollector(
         contextDataSource,
         attribution: _attribution,
+        deviceId: _deviceId,
+        deviceToken: () => _deviceToken.value,
+        uniqueId: () => _uniqueId.value,
+        themeOverride: () => _theme?.wireValue,
       ),
       maxQueueSize: config.maxQueueSize,
       isOptedOut: () => _optOut.isOptedOut,
@@ -528,6 +555,69 @@ class MyAmpix {
       await _pipeline.track(r'$rc_link', {r'$rc_app_user_id': trimmed});
     });
   }
+
+  /// Declares the push notification token for this device — the FCM
+  /// registration token on Android, the APNs device token on iOS — so every
+  /// event carries it as `context.device_token` and a device can be reached
+  /// from the analytics side. The SDK cannot read it itself: it belongs to
+  /// the messaging SDK, so the host must hand it over.
+  ///
+  /// Call it once the messaging SDK yields a token AND on every refresh
+  /// (`FirebaseMessaging.instance.onTokenRefresh`): the value is persisted, so
+  /// a stale one would otherwise keep being reported until the next launch.
+  /// The token is device-scoped, not user-scoped, so [reset] deliberately
+  /// keeps it — the same physical device stays reachable after a logout. Use
+  /// [clearDeviceToken] when the host revokes push (permission withdrawn,
+  /// token deleted). A blank token is a no-op; use [clearDeviceToken] to
+  /// actually drop one.
+  void setDeviceToken(String token) {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) return;
+    _guard('setDeviceToken', () => _deviceToken.set(trimmed));
+  }
+
+  /// Drops the declared push token: subsequent events ship without
+  /// `context.device_token`. For when push is revoked or the token deleted.
+  void clearDeviceToken() =>
+      _guard('clearDeviceToken', () => _deviceToken.clear());
+
+  /// Declares a free-form identifier of the host's own choosing, stamped on
+  /// every subsequent event as `context.unique_id`.
+  ///
+  /// This is the join key to whatever system the app ALREADY keys on — its own
+  /// device identifier, a CRM id, a licence key. The SDK neither generates nor
+  /// interprets it (that is what `context.device_id` is for); it only carries
+  /// it. Persisted, so it survives relaunches, and device-scoped like the push
+  /// token: [reset] keeps it, [clearUniqueId] drops it. A blank value is a
+  /// no-op; use [clearUniqueId] to actually drop one.
+  void setUniqueId(String uniqueId) {
+    final trimmed = uniqueId.trim();
+    if (trimmed.isEmpty) return;
+    _guard('setUniqueId', () => _uniqueId.set(trimmed));
+  }
+
+  /// Drops the declared identifier: subsequent events ship without
+  /// `context.unique_id`.
+  void clearUniqueId() => _guard('clearUniqueId', () => _uniqueId.clear());
+
+  /// Declares the app's EFFECTIVE color scheme, stamped on every subsequent
+  /// event as `context.theme`.
+  ///
+  /// Only apps with their own in-app appearance setting need this. Left
+  /// undeclared (or set back to null) the SDK reports the platform
+  /// brightness, which is correct exactly while the app follows the system —
+  /// an app forced to light on a dark phone would otherwise be recorded as
+  /// dark. Call it at startup once the stored preference is restored, and
+  /// again whenever the user changes it or the system brightness flips under
+  /// a "follow system" setting.
+  ///
+  /// Routed through the same ordering chain as [track] and [identify], not
+  /// applied on the spot: `track()` bodies run deferred on that chain, so an
+  /// immediate field write would let a theme set AFTER an event still stamp
+  /// that earlier event. Like every other facade method it is a no-op before
+  /// [init] completes, so declare the restored preference once the SDK is up.
+  void setTheme(MyAmpixTheme? theme) =>
+      _guard('setTheme', () => _theme = theme);
 
   void identify(String userId) => _guard('identify', () async {
     final changed = await _identity.identify(userId);

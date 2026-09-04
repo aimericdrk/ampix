@@ -4,6 +4,8 @@ class FakeContextDataSource implements ContextDataSource {
   int appInfoCalls = 0;
   int deviceInfoCalls = 0;
   String networkValue = 'wifi';
+  String themeValue = 'light';
+  String? deviceIdValue = 'IDFV-1111';
 
   @override
   Future<AppInfo> appInfo() async {
@@ -14,11 +16,12 @@ class FakeContextDataSource implements ContextDataSource {
   @override
   Future<DeviceInfo> deviceInfo() async {
     deviceInfoCalls++;
-    return const DeviceInfo(
+    return DeviceInfo(
       os: 'ios',
       osVersion: '18.5',
       model: 'iPhone16,2',
       manufacturer: 'Apple',
+      id: deviceIdValue,
     );
   }
 
@@ -27,6 +30,9 @@ class FakeContextDataSource implements ContextDataSource {
 
   @override
   String timezone() => 'Europe/Paris';
+
+  @override
+  String theme() => themeValue;
 
   @override
   ScreenSize screenSize() => const ScreenSize(width: 393, height: 852);
@@ -50,6 +56,9 @@ class ThrowingContextDataSource implements ContextDataSource {
 
   @override
   String timezone() => throw StateError('timezone failed');
+
+  @override
+  String theme() => throw StateError('theme failed');
 
   @override
   ScreenSize screenSize() => throw StateError('screenSize failed');

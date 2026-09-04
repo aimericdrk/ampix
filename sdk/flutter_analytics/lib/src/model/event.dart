@@ -8,10 +8,14 @@ class EventContext {
     this.osVersion,
     this.deviceModel,
     this.deviceManufacturer,
+    this.deviceId,
+    this.deviceToken,
+    this.uniqueId,
     this.locale,
     this.timezone,
     this.screenWidth,
     this.screenHeight,
+    this.theme,
     this.network,
     this.sdkVersion,
     this.utmSource,
@@ -31,10 +35,14 @@ class EventContext {
     osVersion: json['os_version'] as String?,
     deviceModel: json['device_model'] as String?,
     deviceManufacturer: json['device_manufacturer'] as String?,
+    deviceId: json['device_id'] as String?,
+    deviceToken: json['device_token'] as String?,
+    uniqueId: json['unique_id'] as String?,
     locale: json['locale'] as String?,
     timezone: json['timezone'] as String?,
     screenWidth: json['screen_width'] as int?,
     screenHeight: json['screen_height'] as int?,
+    theme: json['theme'] as String?,
     network: json['network'] as String?,
     sdkVersion: json['sdk_version'] as String?,
     utmSource: json['utm_source'] as String?,
@@ -53,10 +61,33 @@ class EventContext {
   final String? osVersion;
   final String? deviceModel;
   final String? deviceManufacturer;
+
+  /// Stable per-install device identifier: iOS `identifierForVendor`, or a
+  /// UUID minted and persisted by the SDK where the OS supplies none
+  /// (Android and everything else). See `DeviceIdStore`.
+  final String? deviceId;
+
+  /// Push notification token the host app declared via
+  /// `MyAmpix.setDeviceToken` (FCM registration token / APNs device token).
+  /// Null until the host declares one — the SDK cannot obtain it itself.
+  final String? deviceToken;
+
+  /// Free-form identifier the host app declared via `MyAmpix.setUniqueId` —
+  /// whatever id the app already keys on elsewhere (its own device
+  /// identifier, a CRM id, a licence key), so an event here can be joined to
+  /// that system. Never interpreted by the SDK or the backend.
+  final String? uniqueId;
+
   final String? locale;
   final String? timezone;
   final int? screenWidth;
   final int? screenHeight;
+
+  /// The app's effective color scheme: `'light'` or `'dark'`. Follows the
+  /// platform brightness unless the host declared its own via
+  /// `MyAmpix.setTheme` (apps with an in-app appearance setting).
+  final String? theme;
+
   final String? network;
   final String? sdkVersion;
   final String? utmSource;
@@ -75,10 +106,14 @@ class EventContext {
     'os_version': osVersion,
     'device_model': deviceModel,
     'device_manufacturer': deviceManufacturer,
+    'device_id': deviceId,
+    'device_token': deviceToken,
+    'unique_id': uniqueId,
     'locale': locale,
     'timezone': timezone,
     'screen_width': screenWidth,
     'screen_height': screenHeight,
+    'theme': theme,
     'network': network,
     'sdk_version': sdkVersion,
     'utm_source': utmSource,

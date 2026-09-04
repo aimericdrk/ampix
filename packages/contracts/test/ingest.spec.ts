@@ -24,10 +24,14 @@ const validEvent = {
     os_version: '18.5',
     device_model: 'iPhone16,2',
     device_manufacturer: 'Apple',
+    device_id: '018f6b2e-cccc-7f3b-9c4d-1a2b3c4d5e6f',
+    device_token: 'fcm-token-abc',
+    unique_id: 'phone-mark-1',
     locale: 'fr_FR',
     timezone: 'Europe/Paris',
     screen_width: 393,
     screen_height: 852,
+    theme: 'dark',
     network: 'wifi',
     sdk_version: '0.1.0',
     utm_source: 'tiktok',
@@ -82,6 +86,16 @@ describe('ingestEventSchema', () => {
 
   it('accepts null UTM fields in context', () => {
     expect(eventContextSchema.safeParse({ utm_content: null, utm_term: null }).success).toBe(true);
+  });
+
+  it('accepts an FCM-length device_token in context', () => {
+    // Real FCM registration tokens run ~160+ chars; the cap must not clip one.
+    const token = `f${'a'.repeat(200)}`;
+    expect(eventContextSchema.safeParse({ device_token: token }).success).toBe(true);
+  });
+
+  it('rejects a device_token beyond the 512-char cap', () => {
+    expect(eventContextSchema.safeParse({ device_token: 'a'.repeat(513) }).success).toBe(false);
   });
 
   it('rejects a negative screen_width in context', () => {

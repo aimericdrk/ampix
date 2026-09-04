@@ -10,6 +10,7 @@ export 'src/autocapture/myampix_tracker.dart' show MyAmpixTracker;
 export 'src/autocapture/screenshot_capturer.dart'
     show CapturedScreenshot, ScreenshotCapturer;
 export 'src/config.dart';
+export 'src/context/myampix_theme.dart' show MyAmpixTheme;
 export 'src/myampix.dart' show MyAmpix, SdkOverrides;
 export 'src/people.dart' show People;
 export 'src/version.dart';
