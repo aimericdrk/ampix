@@ -1,5 +1,6 @@
 import { kubeGet, kubePatch } from './kube';
 import { loadEnv } from './env';
+import { SINGLETONS } from './ops-shared';
 
 /**
  * Operational actions (v2 design Phase 2): restart + scale, restricted to the release namespace.
@@ -65,8 +66,16 @@ export async function restartDeployment(name: string, now = new Date()): Promise
   await kubePatch(`/apis/apps/v1/namespaces/${ns}/deployments/${name}`, restartPatchBody(now.toISOString()));
 }
 
+export function assertNotOverSingletonLimit(name: string, replicas: number): void {
+  const why = SINGLETONS[name];
+  if (why !== undefined && replicas > 1) {
+    throw new OpsError(409, `"${name}" must stay at a single replica — ${why}`);
+  }
+}
+
 export async function scaleDeployment(name: string, replicas: number): Promise<void> {
   const n = validateReplicas(replicas);
+  assertNotOverSingletonLimit(name, n);
   const ns = await assertDeploymentInNamespace(name);
   await assertNotHpaManaged(ns, name);
   await kubePatch(

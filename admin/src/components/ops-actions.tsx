@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { SINGLETONS } from '@/lib/ops-shared';
+
 /** Confirmation-gated restart/scale controls for one deployment row (v2 design Phase 2). */
 export function DeploymentActions({
   name,
@@ -71,7 +73,9 @@ export function DeploymentActions({
         Restart
       </button>
       {!hpaManaged ? (
-        <ScalePicker onPick={(n) => setConfirming({ action: 'scale', replicas: n })} />
+        // Singletons cap at 1 here as well as in the API: the picker should not offer a number the
+        // server will refuse, but the server is still the one enforcing it.
+        <ScalePicker max={SINGLETONS[name] ? 1 : 10} title={SINGLETONS[name]} onPick={(n) => setConfirming({ action: 'scale', replicas: n })} />
       ) : (
         <span className="text-xs text-zinc-600" title="HPA-managed — adjust autoscaler bounds in values instead">
           scale: HPA
@@ -81,17 +85,25 @@ export function DeploymentActions({
   );
 }
 
-function ScalePicker({ onPick }: { onPick: (n: number) => void }) {
+function ScalePicker({
+  max,
+  title,
+  onPick,
+}: {
+  max: number;
+  title?: string;
+  onPick: (n: number) => void;
+}) {
   const [n, setN] = useState(1);
   return (
-    <span className="flex items-center gap-1 text-xs">
-      <span className="text-zinc-500">scale</span>
+    <span className="flex items-center gap-1 text-xs" title={title}>
+      <span className="text-zinc-500">scale{max === 1 ? ' (max 1)' : ''}</span>
       <input
         type="number"
         min={0}
-        max={10}
+        max={max}
         value={n}
-        onChange={(e) => setN(Number(e.target.value))}
+        onChange={(e) => setN(Math.min(max, Number(e.target.value)))}
         className="w-12 rounded border border-zinc-700 bg-zinc-950 px-1 py-0.5"
       />
       <button onClick={() => onPick(n)} className="text-zinc-300 hover:underline">go</button>

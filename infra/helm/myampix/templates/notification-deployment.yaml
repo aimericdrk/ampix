@@ -1,0 +1,107 @@
+{{- if .Values.notification.enabled }}
+{{- $n := .Values.notification }}
+{{- $sel := dict "root" . "name" "notification-sender" "component" "api" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-sender
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" $sel | nindent 4 }}
+spec:
+  # Exactly one replica, ever, and Recreate (old pod fully gone before the new one starts): the
+  # process serves HTTP *and* runs NotificationService.startScheduling() in-process, so a second
+  # copy would send every scheduled push twice. Duplicate notifications to real users are worse
+  # than the few seconds of API downtime a Recreate rollout costs. Not HPA-managed — scaling this
+  # deployment above 1 from the console would double-send, so leave it at 1.
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "myampix.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "myampix.labels" . | nindent 8 }}
+        {{- include "myampix.selectorLabels" $sel | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/notification-configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      {{- include "myampix.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "myampix.podSecurityContext" . | nindent 8 }}
+        runAsUser: {{ $n.runAsUser }}
+        runAsGroup: {{ $n.runAsGroup }}
+        {{- if $n.googleCredentials.enabled }}
+        # Secret volumes are projected root-owned; without an fsGroup the non-root container cannot
+        # read the service-account JSON at all (firebase-admin fails with EACCES). fsGroup makes the
+        # kubelet chown the volume to this GID, which is what the 0440 mode below grants.
+        fsGroup: {{ $n.runAsGroup }}
+        {{- end }}
+      containers:
+        - name: api
+          image: {{ include "myampix.image" (dict "root" . "name" "notification-sender") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-notification-config
+            - secretRef:
+                name: {{ $n.secretName }}
+          # Liveness never touches Mongo (see src/health/health.controller.ts), so a database blip
+          # cannot restart-loop a healthy pod; readiness does, so the Service drops the pod instead.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              # Let the ingress/endpoints drop this pod before SIGTERM (main.ts calls enableShutdownHooks).
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            {{- toYaml $n.resources | nindent 12 }}
+          securityContext:
+            {{- include "myampix.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if $n.googleCredentials.enabled }}
+            # firebase-admin reads the service-account JSON from the path in FIREBASE_CONFIG (set in
+            # the ConfigMap). Projected from a Secret, so it is neither in the image nor in values.
+            - name: google-credentials
+              mountPath: {{ $n.googleCredentials.mountPath }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if $n.googleCredentials.enabled }}
+        - name: google-credentials
+          secret:
+            secretName: {{ $n.googleCredentials.secretName }}
+            # 0440: owner root, group the pod's fsGroup (= runAsGroup), so only the container's own
+            # group can read it — the tightest mode the non-root user can actually open.
+            defaultMode: 0440
+            items:
+              - key: {{ $n.googleCredentials.secretKey }}
+                path: {{ $n.googleCredentials.fileName }}
+        {{- end }}
+{{- end }}

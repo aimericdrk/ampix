@@ -18,6 +18,7 @@ hosts:
   purchase: purchase.example.com
   app: app.example.com
   admin: admin.example.com
+  notification: notif.example.com
 
 ingress:
   # traefik on k3s; nginx in the kind smoke test. No controller-specific annotations are used by the chart.
@@ -142,6 +143,38 @@ dashboard:
   resources:
     requests: { cpu: 50m, memory: 32Mi }
     limits: { cpu: 200m, memory: 64Mi }
+
+# Push-notification sender (github.com/ATCLUB-INC/notification-sender). Lives in its own repo and
+# its own checkout on the host; this chart only deploys the image build-local-images.sh produces.
+notification:
+  enabled: true
+  # Secret with MONGODB_URI, MONGODB_DATABASE, SERVER_AUTH_SECRET (see src/appConfig.ts).
+  secretName: myampix-notification
+  # `node` user in the node:20-bookworm-slim image.
+  runAsUser: 1000
+  runAsGroup: 1000
+  # Firebase service-account JSON for FCM sends. The chart mounts the Secret read-only and derives
+  # FIREBASE_CONFIG from mountPath + fileName; you only create the Secret. Same shape as
+  # analytics.googleCredentials; load it with
+  #   SECRET_NAME=myampix-notification-google scripts/k8s/firebase-credentials.sh <sa.json>
+  googleCredentials:
+    enabled: true
+    secretName: myampix-notification-google
+    # Key inside the Secret holding the JSON. `kubectl create secret generic --from-file=<path>`
+    # names the key after the file, so keep these two consistent.
+    secretKey: service-account.json
+    fileName: service-account.json
+    mountPath: /var/run/secrets/firebase
+  ingress:
+    # The app backend signs its calls with X-Server-Signature (HMAC over X-Timestamp), so the
+    # service authenticates its own callers; the ingress only needs to reach it.
+    enabled: true
+  # Non-secret env (rendered into a ConfigMap; NODE_ENV, PORT and FIREBASE_CONFIG are set by the template).
+  env: {}
+  # replicas is pinned to 1 in the template — the in-process scheduler must never run twice.
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
 
 # Ops/admin console (docs/superpowers/specs/2026-08-24-admin-console-design.md).
 admin:

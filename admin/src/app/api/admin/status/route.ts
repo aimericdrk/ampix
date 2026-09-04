@@ -51,6 +51,7 @@ export async function GET(): Promise<NextResponse> {
     await Promise.all([
       probeService('mobile-analytics', env.ANALYTICS_INTERNAL_URL),
       probeService('mobile-purchase', env.PURCHASE_INTERNAL_URL),
+      probeService('notification-sender', env.NOTIFICATION_INTERNAL_URL),
     ])
   ).filter((s): s is ServiceHealth => s !== null);
 

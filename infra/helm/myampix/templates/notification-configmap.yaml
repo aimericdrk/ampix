@@ -1,0 +1,21 @@
+{{- if .Values.notification.enabled }}
+{{- $n := .Values.notification }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-notification-config
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "notification-sender" "component" "api") | nindent 4 }}
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  {{- if $n.googleCredentials.enabled }}
+  # firebase-admin is handed this path by src/appConfig.ts (admin.credential.cert). The file is
+  # projected from a Secret, so the service-account JSON never rides along in the image.
+  FIREBASE_CONFIG: {{ printf "%s/%s" $n.googleCredentials.mountPath $n.googleCredentials.fileName | quote }}
+  {{- end }}
+  {{- range $k, $v := $n.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+{{- end }}

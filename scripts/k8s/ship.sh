@@ -83,12 +83,17 @@ if [ -n "$CURRENT" ] && [ "$CURRENT" = "$TAG" ] && [ "$DIRTY" = 0 ] && [ "$REBUI
 fi
 
 # ── 2. build ─────────────────────────────────────────────────────────────────────────────────────
-# build-local-images.sh builds all 6 targets and imports each into k3s containerd.
+# build-local-images.sh builds every target and imports each into k3s containerd. The count is read
+# out of that script's TARGETS array rather than hardcoded here — hardcoding it meant that adding a
+# target left this check satisfied by the old number and skipped the build.
+WANT=$(awk '/^TARGETS=\(/{i=1;next} i&&/^\)/{exit} i&&/\|/{n++} END{print n+0}' \
+  "$ROOT/scripts/k8s/build-local-images.sh")
+[ "$WANT" -gt 0 ] || die "could not read the TARGETS list from build-local-images.sh"
 HAVE=$(sudo k3s ctr images ls -q 2>/dev/null | grep -c "myampix-.*:$TAG\$" || true)
-if [ "$HAVE" -ge 6 ] && [ "$REBUILD" = 0 ]; then
-  step "images for $TAG already in containerd ($HAVE/6) — skipping build (--rebuild to force)"
+if [ "$HAVE" -ge "$WANT" ] && [ "$REBUILD" = 0 ]; then
+  step "images for $TAG already in containerd ($HAVE/$WANT) — skipping build (--rebuild to force)"
 else
-  step "building 6 images at $TAG and importing them into k3s"
+  step "building $WANT images at $TAG and importing them into k3s"
   "$ROOT/scripts/k8s/build-local-images.sh" "$TAG"
 fi
 
@@ -112,6 +117,11 @@ if [ "$TESTS" = 1 ]; then
   check purchase "https://$(host purchase)/health/ready" 200
   check app      "https://$(host app)/"                  200
   check admin    "https://$(host admin)/"                200 302 307   # 307 → the login page
+  # Only when it is switched on — notification.enabled is false until its secrets exist, and a
+  # smoke test for a host with no backing Deployment would fail every deploy.
+  if kubectl -n "$NS" get deploy notification-sender >/dev/null 2>&1; then
+    check notif  "https://$(host notification)/health/ready" 200
+  fi
   if [ "$fail" = 1 ]; then
     echo
     echo "ship.sh: $TAG is deployed but a smoke test failed. Inspect, then roll back if needed:"

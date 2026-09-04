@@ -3,6 +3,7 @@
 #   infra/k8s/secrets/analytics.env → Secret myampix-analytics
 #   infra/k8s/secrets/purchase.env  → Secret myampix-purchase
 #   infra/k8s/secrets/admin.env     → Secret myampix-admin
+#   infra/k8s/secrets/notification.env → Secret myampix-notification
 #   $GHCR_USER + $GHCR_TOKEN         → docker-registry Secret ghcr-pull (skipped when unset)
 # Usage: [NAMESPACE=myampix] [GHCR_USER=… GHCR_TOKEN=…] scripts/k8s/secrets.sh
 # After rotating a value: re-run, then `kubectl -n myampix rollout restart deploy -l app.kubernetes.io/part-of=myampix`.
@@ -14,9 +15,17 @@ DIR="$ROOT/infra/k8s/secrets"
 command -v kubectl >/dev/null || { echo "secrets.sh: kubectl not found" >&2; exit 1; }
 kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
 
-for svc in analytics purchase admin; do
+# notification is OPTIONAL: it ships disabled in infra/values.prod.yaml until its Mongo URI exists,
+# and a missing file there must not block rotating the three services that are already running.
+OPTIONAL=" notification "
+for svc in analytics purchase admin notification; do
   f="$DIR/$svc.env"
-  [ -f "$f" ] || { echo "secrets.sh: missing $f — copy $svc.env.example and fill it" >&2; exit 1; }
+  if [ ! -f "$f" ]; then
+    case "$OPTIONAL" in
+      *" $svc "*) echo "secrets.sh: no $f — skipping Secret myampix-$svc (copy $svc.env.example to enable it)"; continue ;;
+    esac
+    echo "secrets.sh: missing $f — copy $svc.env.example and fill it" >&2; exit 1
+  fi
   if grep -q 'CHANGE_ME' "$f"; then echo "secrets.sh: $f still contains CHANGE_ME" >&2; exit 1; fi
   kubectl -n "$NS" create secret generic "myampix-$svc" --from-env-file="$f" \
     --dry-run=client -o yaml | kubectl apply -f -

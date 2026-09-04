@@ -15,6 +15,9 @@ data:
   CLICKHOUSE_USER: default
   ANALYTICS_INTERNAL_URL: http://mobile-analytics:8088
   PURCHASE_INTERNAL_URL: http://mobile-purchase-api:8090
+  {{- if .Values.notification.enabled }}
+  NOTIFICATION_INTERNAL_URL: http://notification-sender:3000
+  {{- end }}
   {{- if $a.dockerSock.enabled }}
   DOCKER_SOCK: {{ $a.dockerSock.path | quote }}
   {{- end }}

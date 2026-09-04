@@ -1,0 +1,34 @@
+{{- if and .Values.notification.enabled .Values.notification.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: notification-sender
+  labels:
+    {{- include "myampix.labels" . | nindent 4 }}
+    {{- include "myampix.selectorLabels" (dict "root" . "name" "notification-sender" "component" "api") | nindent 4 }}
+  annotations:
+    {{- if .Values.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.tls.issuer }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.hosts.notification | quote }}]
+      secretName: {{ include "myampix.tlsSecret" .Values.hosts.notification }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.hosts.notification | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: notification-sender
+                port:
+                  name: http
+{{- end }}

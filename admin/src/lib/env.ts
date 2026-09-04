@@ -25,6 +25,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().optional(),
   ANALYTICS_INTERNAL_URL: z.string().url().optional(),
   PURCHASE_INTERNAL_URL: z.string().url().optional(),
+  NOTIFICATION_INTERNAL_URL: z.string().url().optional(),
   // Unix socket path for the host Docker daemon; empty/unset disables the Docker page's data.
   DOCKER_SOCK: z.string().optional(),
   // Host backup directory, bind-mounted into the pod; empty/unset disables the Backups page's data.

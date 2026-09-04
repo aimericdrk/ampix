@@ -93,7 +93,7 @@ export async function collectSamples(): Promise<Record<string, number>> {
     }
   }
 
-  const [adminPg, analyticsPg, purchasePg, ch, redis, svcA, svcP] = await Promise.all([
+  const [adminPg, analyticsPg, purchasePg, ch, redis, svcA, svcP, svcN] = await Promise.all([
     probePostgres(env.DATABASE_URL),
     probePostgres(env.ANALYTICS_DATABASE_URL),
     probePostgres(env.PURCHASE_DATABASE_URL),
@@ -101,6 +101,7 @@ export async function collectSamples(): Promise<Record<string, number>> {
     probeRedis(),
     probeService('mobile-analytics', env.ANALYTICS_INTERNAL_URL),
     probeService('mobile-purchase', env.PURCHASE_INTERNAL_URL),
+    probeService('notification-sender', env.NOTIFICATION_INTERNAL_URL),
   ]);
   const up = (name: string, ok: boolean | undefined | null): void => {
     samples[name] = ok ? 1 : 0;
@@ -112,6 +113,7 @@ export async function collectSamples(): Promise<Record<string, number>> {
   if (redis) up('ds.up/redis', redis.ok);
   if (svcA) up('svc.up/mobile-analytics', svcA.ok);
   if (svcP) up('svc.up/mobile-purchase', svcP.ok);
+  if (svcN) up('svc.up/notification-sender', svcN.ok);
   // v3 chart series: sizes, connections, memory, latency, container count.
   for (const [name, pg] of [
     ['admin_console', adminPg],
@@ -131,6 +133,8 @@ export async function collectSamples(): Promise<Record<string, number>> {
   }
   if (svcA?.durationMs !== undefined) samples['svc.latency.ms/mobile-analytics'] = svcA.durationMs;
   if (svcP?.durationMs !== undefined) samples['svc.latency.ms/mobile-purchase'] = svcP.durationMs;
+  if (svcN?.durationMs !== undefined)
+    samples['svc.latency.ms/notification-sender'] = svcN.durationMs;
   const dockerN = await dockerRunningCount();
   if (dockerN !== null) samples['docker.containers.running'] = dockerN;
 
